@@ -1,8 +1,0 @@
-{
-  "schema": "./app/lib/schema.ts",
-  "out": "./drizzle",
-  "dialect": "postgresql",
-  "dbCredentials": {
-    "url": "postgresql://postgres:260682@localhost:5432/corex"
-  }
-}
