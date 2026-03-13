@@ -1,9 +1,10 @@
-// app/lib/seed.ts - Fixed Version with all required fields
+// app/lib/seed.ts - Fixed Version with all required fields and multi-program support
 
 import { db } from "./db";
 import { 
   categories, levels, degrees, programs, cities, institutes, 
-  boards, programInstitutes, programCities, admissions, adminRoles, adminUsers
+  boards, programInstitutes, programCities, admissions, admissionPrograms,
+  adminRoles, adminUsers
 } from "./schema";
 import { eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
@@ -18,6 +19,7 @@ async function seed() {
     console.log("🗑️ Cleaning up existing data...");
     
     // Pehle child tables delete karo
+    await db.delete(admissionPrograms);  // ✅ New junction table
     await db.delete(programCities);
     await db.delete(programInstitutes);
     await db.delete(admissions);
@@ -313,34 +315,81 @@ async function seed() {
     console.log(`✅ ${cityRelationCount} Program-City relations created`);
 
     /* =========================
-       12. ADMISSIONS - FIXED: Added name and slug fields
+       12. ADMISSIONS - ✅ FIXED: No programId, only name/slug/instituteId
        ========================= */
     console.log("Creating admissions...");
     const currentYear = new Date().getFullYear();
     let admissionCount = 0;
+    const admissionIds: number[] = [];
     
-    for (let i = 0; i < 10; i++) {
-      const randomProgram = allPrograms[Math.floor(Math.random() * allPrograms.length)];
+    // Create 15 admissions
+    for (let i = 0; i < 15; i++) {
       const randomInstitute = allInstitutes[Math.floor(Math.random() * allInstitutes.length)];
-      const programName = randomProgram?.name || "Program";
-      const instituteName = randomInstitute?.name || "Institute";
+      if (!randomInstitute) continue;
       
-      await db.insert(admissions).values({
-        programId: randomProgram.id,
+      const instituteName = randomInstitute.name;
+      const session = i % 3 === 0 ? "Spring" : i % 3 === 1 ? "Fall" : "Summer";
+      const status = i % 4 === 0 ? "Expected" : i % 4 === 1 ? "Closed" : "Open";
+      
+      // Generate clean slug
+      const slugBase = `${instituteName} ${session} Admissions ${currentYear}`;
+      const slug = slugBase
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      
+      // Insert admission without programId
+      const [admission] = await db.insert(admissions).values({
         instituteId: randomInstitute.id,
-        name: `${programName} Admissions ${currentYear} at ${instituteName}`,
-        slug: `${programName.toLowerCase().replace(/\s+/g, '-')}-admissions-${currentYear}-${instituteName.toLowerCase().replace(/\s+/g, '-')}`,
+        name: `${instituteName} ${session} Admissions ${currentYear}`,
+        slug: slug,
         year: currentYear,
-        session: "Fall",
-        status: "Open",
-        expectedCloseDate: new Date(currentYear, 8, 30),
+        session: session,
+        status: status,
+        expectedOpenDate: status === "Expected" ? new Date(currentYear, 1, 15) : null,
+        expectedCloseDate: status === "Open" ? new Date(currentYear, 8, 30) : 
+                          status === "Expected" ? new Date(currentYear, 3, 15) : null,
         officialLink: "https://www.example.edu/admissions",
-      }).catch((err) => {
-        console.error("Failed to insert admission:", err);
-      });
-      admissionCount++;
+      }).returning({ id: admissions.id });
+      
+      if (admission) {
+        admissionIds.push(admission.id);
+        admissionCount++;
+      }
     }
     console.log(`✅ ${admissionCount} Admissions created`);
+
+    /* =========================
+       13. ADMISSION-PROGRAM RELATIONS - ✅ NEW: Link admissions to multiple programs
+       ========================= */
+    console.log("Creating admission-program relations...");
+    let admissionProgramCount = 0;
+    
+    // For each admission, link it to 1-4 random programs
+    for (const admissionId of admissionIds) {
+      // Random number of programs (1 to 4)
+      const numPrograms = Math.floor(Math.random() * 4) + 1;
+      
+      // Shuffle programs and take random ones
+      const shuffled = [...allPrograms].sort(() => 0.5 - Math.random());
+      const selectedPrograms = shuffled.slice(0, numPrograms);
+      
+      for (const program of selectedPrograms) {
+        await db.insert(admissionPrograms).values({
+          admissionId: admissionId,
+          programId: program.id,
+        }).catch((err) => {
+          // Ignore duplicate errors
+          if (!err.message?.includes('duplicate')) {
+            console.error("Failed to insert admission-program relation:", err);
+          }
+        });
+        admissionProgramCount++;
+      }
+    }
+    console.log(`✅ ${admissionProgramCount} Admission-Program relations created`);
 
     /* =========================
        📊 SUMMARY
@@ -352,6 +401,7 @@ async function seed() {
     const finalRelations = await db.select().from(programInstitutes);
     const finalCityRelations = await db.select().from(programCities);
     const finalAdmissions = await db.select().from(admissions);
+    const finalAdmissionPrograms = await db.select().from(admissionPrograms);
 
     console.log("\n✅✅✅ Seed Completed Successfully! ✅✅✅");
     console.log("📊 Final Summary:");
@@ -365,6 +415,7 @@ async function seed() {
     console.log(`- Program-Institute Relations: ${finalRelations.length}`);
     console.log(`- Program-City Relations: ${finalCityRelations.length}`);
     console.log(`- Admissions: ${finalAdmissions.length}`);
+    console.log(`- Admission-Program Relations: ${finalAdmissionPrograms.length}`);
 
   } catch (error) {
     console.error("❌ Error during seed:", error);
