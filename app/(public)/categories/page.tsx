@@ -3,8 +3,18 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { categories, institutes, admissions, results, news, programs, degrees, levels } from '@/app/lib/schema';
-import { eq, and, count, sql, inArray } from 'drizzle-orm';
+import { 
+  categories, 
+  institutes, 
+  admissions, 
+  admissionPrograms,
+  results, 
+  news, 
+  programs, 
+  degrees, 
+  levels 
+} from '@/app/lib/schema';
+import { eq, and, sql, inArray, isNotNull } from 'drizzle-orm';
 
 export const metadata: Metadata = {
   title: 'Education Categories | Institutes, Admissions, Results & News | NextID.pk',
@@ -30,6 +40,10 @@ interface CategoryWithStats {
   programsCount: number;
 }
 
+// SQL helper functions
+const countAll = sql<number>`count(*)`;
+const countDistinct = (column: any) => sql<number>`count(distinct ${column})`;
+
 async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
   try {
     // Get all categories
@@ -49,7 +63,7 @@ async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
     // Calculate stats for each category
     const categoriesWithStats = await Promise.all(
       allCategories.map(async (category) => {
-        // Get institutes count through programs and degrees
+        // Get degrees in this category
         const degreesInCategory = await db
           .select({ id: degrees.id })
           .from(degrees)
@@ -57,108 +71,95 @@ async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
 
         const degreeIds = degreesInCategory.map(d => d.id);
 
+        // Get programs in these degrees
+        let programIds: number[] = [];
+        if (degreeIds.length > 0) {
+          const programsInDegrees = await db
+            .select({ id: programs.id })
+            .from(programs)
+            .where(inArray(programs.degreeId, degreeIds));
+          programIds = programsInDegrees.map(p => p.id);
+        }
+
+        // Get institutes count
         let institutesCount = 0;
-        if (degreeIds.length > 0) {
-          const programsInDegrees = await db
-            .select({ id: programs.id })
-            .from(programs)
-            .where(inArray(programs.degreeId, degreeIds));
-
-          const programIds = programsInDegrees.map(p => p.id);
-
-          if (programIds.length > 0) {
-            const institutesResult = await db
-              .select({ count: count() })
-              .from(institutes)
-              .innerJoin(programs, eq(institutes.id, programs.id))
-              .where(
-                and(
-                  eq(institutes.status, true),
-                  inArray(programs.id, programIds)
-                )
-              );
-            institutesCount = institutesResult[0]?.count || 0;
-          }
+        if (programIds.length > 0) {
+          const institutesResult = await db
+            .select({ value: countAll })
+            .from(institutes)
+            .innerJoin(programs, eq(institutes.id, programs.id))
+            .where(
+              and(
+                eq(institutes.status, true),
+                inArray(programs.id, programIds)
+              )
+            );
+          institutesCount = Number(institutesResult[0]?.value) || 0;
         }
 
-        // Get admissions count through programs
+        // Get admissions count using junction table
         let admissionsCount = 0;
-        if (degreeIds.length > 0) {
-          const programsInDegrees = await db
-            .select({ id: programs.id })
-            .from(programs)
-            .where(inArray(programs.degreeId, degreeIds));
-
-          const programIds = programsInDegrees.map(p => p.id);
-
-          if (programIds.length > 0) {
-            const admissionsResult = await db
-              .select({ count: count() })
-              .from(admissions)
-              .where(
-                and(
-                  eq(admissions.status, 'open'),
-                  inArray(admissions.programId, programIds)
-                )
-              );
-            admissionsCount = admissionsResult[0]?.count || 0;
-          }
+        if (programIds.length > 0) {
+          const admissionsResult = await db
+            .select({ value: countDistinct(admissions.id) })
+            .from(admissions)
+            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
+            .where(
+              and(
+                eq(admissions.status, 'Open'),
+                inArray(admissionPrograms.programId, programIds),
+                isNotNull(admissionPrograms.programId)
+              )
+            );
+          admissionsCount = Number(admissionsResult[0]?.value) || 0;
         }
 
-        // Get results count through programs
+        // Get results count
         let resultsCount = 0;
-        if (degreeIds.length > 0) {
-          const programsInDegrees = await db
-            .select({ id: programs.id })
-            .from(programs)
-            .where(inArray(programs.degreeId, degreeIds));
-
-          const programIds = programsInDegrees.map(p => p.id);
-
-          if (programIds.length > 0) {
-            const resultsResult = await db
-              .select({ count: count() })
-              .from(results)
-              .where(
-                and(
-                  eq(results.status, true),
-                  inArray(results.programId, programIds)
-                )
-              );
-            resultsCount = resultsResult[0]?.count || 0;
-          }
+        if (programIds.length > 0) {
+          const resultsResult = await db
+            .select({ value: countAll })
+            .from(results)
+            .where(
+              and(
+                eq(results.status, true),
+                inArray(results.programId, programIds)
+              )
+            );
+          resultsCount = Number(resultsResult[0]?.value) || 0;
         }
 
-        // Get news count (news can be related to programs or directly to categories via title/content)
+        // Get news count
         const newsResult = await db
-          .select({ count: count() })
+          .select({ value: countAll })
           .from(news)
           .where(
             and(
               eq(news.status, true),
               sql`${news.title} ILIKE ${`%${category.name}%`} OR 
-                  ${news.content} ILIKE ${`%${category.name}%`}`
+                  ${news.content} ILIKE ${`%${category.name}%`} OR
+                  ${news.excerpt} ILIKE ${`%${category.name}%`}`
             )
           );
 
         // Get degrees count
         const degreesResult = await db
-          .select({ count: count() })
+          .select({ value: countAll })
           .from(degrees)
           .where(eq(degrees.categoryId, category.id));
 
-        // Get programs count through degrees
+        // Get programs count
         let programsCount = 0;
         if (degreeIds.length > 0) {
           const programsResult = await db
-            .select({ count: count() })
+            .select({ value: countAll })
             .from(programs)
             .where(inArray(programs.degreeId, degreeIds));
-          programsCount = programsResult[0]?.count || 0;
+          programsCount = Number(programsResult[0]?.value) || 0;
         }
 
-        const newsCount = newsResult[0]?.count || 0;
-        const degreesCount = degreesResult[0]?.count || 0;
+        const newsCount = Number(newsResult[0]?.value) || 0;
+        const degreesCount = Number(degreesResult[0]?.value) || 0;
         const totalCount = institutesCount + admissionsCount + resultsCount + newsCount + degreesCount + programsCount;
 
         return {
