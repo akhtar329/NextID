@@ -31,21 +31,29 @@ export default function LatestAdmissionsSection() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUniversity, setSelectedUniversity] = useState('All');
 
-  // ✅ Helper function ko sab se upar declare karo
+  // ==================== HELPER FUNCTIONS ====================
+  
+  // ✅ Fixed getDaysLeft function - counts until end of day
   const getDaysLeft = (dateString: string | null): number | null => {
     if (!dateString) return null;
     try {
-      const deadline = new Date(dateString).getTime();
-      const now = new Date().getTime(); // currentDate ki jagah direct new Date()
-      const diffTime = deadline - now;
+      const deadline = new Date(dateString);
+      const now = new Date();
+      
+      // Set deadline to end of day (23:59:59)
+      deadline.setHours(23, 59, 59, 999);
+      
+      const diffTime = deadline.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays > 0 ? diffDays : null;
-    } catch {
+      
+      return diffDays >= 0 ? diffDays : null;
+    } catch (error) {
+      console.error('🔥 Date parsing error:', error);
       return null;
     }
   };
 
-  // Format date function bhi upar le aao
+  // Format date function
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'TBA';
     try {
@@ -68,6 +76,8 @@ export default function LatestAdmissionsSection() {
     return `${programs[0].name} +${programs.length - 1} more`;
   };
 
+  // ==================== DATA FETCHING ====================
+  
   // Fetch admissions from API
   useEffect(() => {
     const fetchAdmissions = async () => {
@@ -98,6 +108,8 @@ export default function LatestAdmissionsSection() {
     fetchAdmissions();
   }, []);
 
+  // ==================== MEMOIZED VALUES ====================
+  
   // Get current date for comparison
   const currentDate = new Date();
 
@@ -106,7 +118,7 @@ export default function LatestAdmissionsSection() {
     return admissions.filter(ad => ad.status === 'Open');
   }, [admissions]);
 
-  // ✅ Calculate closing soon counts (ab getDaysLeft available hai)
+  // Calculate closing soon stats
   const closingSoonStats = useMemo(() => {
     const allOpen = openAdmissions;
     
@@ -147,11 +159,18 @@ export default function LatestAdmissionsSection() {
 
   // Get closing soon admissions (all within 30 days)
   const closingSoonAdmissions = useMemo(() => {
-    return sortedAdmissions.filter(ad => {
+    const soon = sortedAdmissions.filter(ad => {
       if (!ad.expectedCloseDate) return false;
       const daysLeft = getDaysLeft(ad.expectedCloseDate);
       return daysLeft !== null && daysLeft <= 30;
     }).slice(0, 5);
+    
+    // If no closing soon, show any open admissions
+    if (soon.length === 0 && sortedAdmissions.length > 0) {
+      return sortedAdmissions.slice(0, 5);
+    }
+    
+    return soon;
   }, [sortedAdmissions]);
 
   // Get unique universities
@@ -179,7 +198,8 @@ export default function LatestAdmissionsSection() {
     });
   }, [closingSoonAdmissions, searchQuery, selectedUniversity]);
 
-  // Loading state
+  // ==================== LOADING STATE ====================
+  
   if (loading) {
     return (
       <section className="py-12 bg-white">
@@ -200,6 +220,8 @@ export default function LatestAdmissionsSection() {
     );
   }
 
+  // ==================== RENDER ====================
+  
   return (
     <section className="py-12 bg-white">
       <div className="container mx-auto px-4 max-w-6xl">
@@ -321,8 +343,8 @@ export default function LatestAdmissionsSection() {
               <tbody className="divide-y divide-gray-200">
                 {filteredAdmissions.map((admission, index) => {
                   const daysLeft = getDaysLeft(admission.expectedCloseDate);
-                  const isUrgent = daysLeft && daysLeft <= 3;
-                  const isWarning = daysLeft && daysLeft <= 7 && daysLeft > 3;
+                  const isUrgent = daysLeft !== null && daysLeft <= 3;
+                  const isWarning = daysLeft !== null && daysLeft <= 7 && daysLeft > 3;
                   
                   return (
                     <tr 
@@ -370,7 +392,10 @@ export default function LatestAdmissionsSection() {
                               {daysLeft} {daysLeft === 1 ? 'day' : 'days'}
                             </span>
                             {isUrgent && (
-                              <span className="text-xs text-red-600 font-medium">⚠️ Hurry!</span>
+                              <span className="text-xs text-red-600 font-medium">⚠️ Last day!</span>
+                            )}
+                            {daysLeft === 1 && !isUrgent && (
+                              <span className="text-xs text-orange-600 font-medium">Closes tonight</span>
                             )}
                           </div>
                         ) : (
@@ -391,7 +416,7 @@ export default function LatestAdmissionsSection() {
               </tbody>
             </table>
 
-            {/* Status Bar with SEO text */}
+            {/* Status Bar */}
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
               <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-4">
@@ -409,7 +434,7 @@ export default function LatestAdmissionsSection() {
                   </span>
                 </div>
                 <span className="text-gray-700 font-medium">
-                  {closingSoonStats.thisWeek} admissions closing this week • Apply before deadline
+                  {closingSoonStats.thisWeek} admissions closing this week • Apply before midnight
                 </span>
               </div>
             </div>
@@ -430,7 +455,7 @@ export default function LatestAdmissionsSection() {
           </div>
         )}
 
-        {/* View All Link with SEO text */}
+        {/* View All Link */}
         {sortedAdmissions.length > 5 && (
           <div className="text-center mt-8">
             <Link
