@@ -4,20 +4,26 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
-// Types for API data
+// Updated types for API data
+interface Program {
+  id: number;
+  name: string;
+  slug: string;
+}
+
 interface Admission {
   id: number;
+  name: string;           // Full admission name
   slug: string;
-  name?: string;
-  programName: string;
-  programSlug: string;
-  instituteName: string;
-  instituteSlug: string;
   year: number;
   session: string | null;
   status: string;
   expectedCloseDate: string | null;
   expectedOpenDate?: string | null;
+  instituteId: number;
+  instituteName: string;
+  instituteSlug: string;
+  programs: Program[];     // ✅ Array of programs
 }
 
 export default function LatestAdmissionsSection() {
@@ -91,9 +97,15 @@ export default function LatestAdmissionsSection() {
     return closingSoonAdmissions.filter(admission => {
       const searchLower = searchQuery.toLowerCase();
       
-      const matchesSearch = searchQuery === '' || 
-        admission.instituteName?.toLowerCase().includes(searchLower) ||
-        admission.programName?.toLowerCase().includes(searchLower);
+      // Search in institute name
+      const matchesInstitute = admission.instituteName?.toLowerCase().includes(searchLower);
+      
+      // Search in all program names
+      const matchesProgram = admission.programs?.some(program => 
+        program.name.toLowerCase().includes(searchLower)
+      );
+      
+      const matchesSearch = searchQuery === '' || matchesInstitute || matchesProgram;
       
       const matchesUniversity = selectedUniversity === 'All' || 
         admission.instituteName === selectedUniversity;
@@ -129,6 +141,14 @@ export default function LatestAdmissionsSection() {
     } catch {
       return null;
     }
+  };
+
+  // Get program display text
+  const getProgramDisplay = (programs: Program[]): string => {
+    if (!programs || programs.length === 0) return 'Program';
+    if (programs.length === 1) return programs[0].name;
+    if (programs.length === 2) return `${programs[0].name} & ${programs[1].name}`;
+    return `${programs[0].name} +${programs.length - 1} more`;
   };
 
   // Loading state
@@ -223,7 +243,7 @@ export default function LatestAdmissionsSection() {
                     University
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Program
+                    Program(s)
                   </th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
                     Session
@@ -253,14 +273,22 @@ export default function LatestAdmissionsSection() {
                       }`}
                     >
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
+                        <Link 
+                          href={`/universities/${admission.instituteSlug}`}
+                          className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline"
+                        >
                           {admission.instituteName}
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
-                          {admission.programName}
+                          {getProgramDisplay(admission.programs || [])}
                         </div>
+                        {admission.programs && admission.programs.length > 1 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {admission.programs.length} programs available
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-600">
@@ -295,7 +323,7 @@ export default function LatestAdmissionsSection() {
                           href={`/admissions/${admission.slug}`}
                           className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                          Apply Now
+                          View Details
                         </Link>
                       </td>
                     </tr>
