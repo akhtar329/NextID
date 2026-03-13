@@ -274,8 +274,8 @@ export const admissions = pgTable("admissions", {
 	officialLink: varchar("official_link", { length: 255 }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-	name: varchar({ length: 500 }).default(').notNull(),
-	slug: varchar({ length: 500 }).default(').notNull(),
+	name: varchar({ length: 500 }).default('').notNull(),
+slug: varchar({ length: 500 }).default('').notNull(),
 }, (table) => [
 	foreignKey({
 			columns: [table.programId],
