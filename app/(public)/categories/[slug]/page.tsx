@@ -9,7 +9,8 @@ import {
   degrees, 
   programs, 
   institutes, 
-  admissions, 
+  admissions,
+  admissionPrograms,  // ✅ Add this
   results, 
   news,
   programInstitutes 
@@ -120,11 +121,10 @@ async function getCategoryData(slug: string) {
       }
     }
 
-    // Get active admissions in this category - FIXED VERSION
+    // ✅ FIXED: Get active admissions using junction table
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {
-        // First check if any admissions exist with these program IDs
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
@@ -138,11 +138,12 @@ async function getCategoryData(slug: string) {
               status: admissions.status,
             })
             .from(admissions)
+            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
             .where(
               and(
-                inArray(admissions.programId, validProgramIds),
-                eq(admissions.status, 'open'),
-                isNotNull(admissions.programId)
+                inArray(admissionPrograms.programId, validProgramIds),
+                eq(admissions.status, 'Open'),
+                isNotNull(admissionPrograms.programId)
               )
             )
             .orderBy(desc(admissions.createdAt))
@@ -154,7 +155,7 @@ async function getCategoryData(slug: string) {
       }
     }
 
-    // Get recent results in this category - FIXED VERSION
+    // ✅ FIXED: Get recent results using junction table
     let resultsList: any[] = [];
     if (programIds.length > 0) {
       try {
@@ -170,9 +171,10 @@ async function getCategoryData(slug: string) {
               resultDate: results.resultDate,
             })
             .from(results)
+            .innerJoin(programs, eq(results.programId, programs.id))
             .where(
               and(
-                inArray(results.programId, validProgramIds),
+                inArray(programs.id, validProgramIds),
                 eq(results.status, true),
                 isNotNull(results.programId)
               )

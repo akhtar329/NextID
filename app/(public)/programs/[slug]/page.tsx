@@ -2,9 +2,20 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { 
+  programs, 
+  degrees, 
+  levels, 
+  categories, 
+  institutes, 
+  admissions,
+  admissionPrograms,  // ✅ Add this
+  results, 
+  cities,
+  programInstitutes  // ✅ Add this if not already
+} from '@/app/lib/schema';
+import { eq, and, desc, count, sql, inArray, isNotNull } from 'drizzle-orm';
 import { db } from '@/app/lib/db';
-import { programs, degrees, levels, categories, institutes, admissions, results, cities } from '@/app/lib/schema';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
 
 // ==================== FORMAT DATE FUNCTION ====================
 function formatDate(date: Date | null) {
@@ -123,24 +134,33 @@ async function getInstitutesWithStats(programId: number) {
         citySlug: cities.slug,
       })
       .from(institutes)
+      .innerJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .where(eq(institutes.status, true))
+      .where(
+        and(
+          eq(institutes.status, true),
+          eq(programInstitutes.programId, programId)
+        )
+      )
       .orderBy(desc(institutes.isFeatured), institutes.name);
 
     // Get admission counts for each institute for this program
     const institutesWithStats = await Promise.all(
       institutesList.map(async (inst) => {
+        // ✅ FIXED: Count admissions through junction table
         const [admissionsResult] = await db
           .select({ count: count() })
           .from(admissions)
+          .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
           .where(
             and(
               eq(admissions.instituteId, inst.id),
-              eq(admissions.programId, programId),
+              eq(admissionPrograms.programId, programId),
               eq(admissions.status, 'Open')
             )
           );
 
+        // Count results (results still use direct programId)
         const [resultsResult] = await db
           .select({ count: count() })
           .from(results)
@@ -175,7 +195,7 @@ async function getAdmissions(programId: number, limit = 5) {
     return await db
       .select({
         id: admissions.id,
-        title: programs.name,
+        title: admissions.name,
         slug: admissions.slug,
         year: admissions.year,
         session: admissions.session,
@@ -186,13 +206,14 @@ async function getAdmissions(programId: number, limit = 5) {
         cityName: cities.name,
       })
       .from(admissions)
+      .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .innerJoin(programs, eq(admissions.programId, programs.id))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .where(
         and(
-          eq(admissions.programId, programId),
-          eq(admissions.status, 'Open')
+          eq(admissionPrograms.programId, programId),
+          eq(admissions.status, 'Open'),
+          isNotNull(admissionPrograms.programId)
         )
       )
       .orderBy(admissions.expectedCloseDate)
@@ -233,16 +254,17 @@ async function getResults(programId: number, limit = 5) {
 // ==================== GET STATS ====================
 async function getStats(programId: number) {
   try {
+    // ✅ FIXED: Count institutes through programInstitutes
     const [institutesCount] = await db
       .select({ count: count() })
-      .from(institutes)
-      .innerJoin(admissions, eq(institutes.id, admissions.instituteId))
-      .where(eq(admissions.programId, programId));
+      .from(programInstitutes)
+      .where(eq(programInstitutes.programId, programId));
 
+    // ✅ FIXED: Count admissions through junction table
     const [admissionsCount] = await db
       .select({ count: count() })
-      .from(admissions)
-      .where(eq(admissions.programId, programId));
+      .from(admissionPrograms)
+      .where(eq(admissionPrograms.programId, programId));
 
     const [resultsCount] = await db
       .select({ count: count() })

@@ -3,8 +3,16 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
-import { institutes, cities, programs, admissions, results, programInstitutes } from '@/app/lib/schema';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { 
+  institutes, 
+  cities, 
+  programs, 
+  admissions,
+  admissionPrograms,  // ✅ Add this
+  results, 
+  programInstitutes 
+} from '@/app/lib/schema';
+import { eq, and, desc, count, sql, inArray, isNotNull } from 'drizzle-orm';
 
 // ==================== FORMAT DATE FUNCTION ====================
 function formatDate(date: Date | null) {
@@ -137,13 +145,15 @@ async function getProgramsWithStats(universityId: number): Promise<Program[]> {
 
     const programsWithStats = await Promise.all(
       programsList.map(async (prog) => {
+        // ✅ FIXED: Count admissions through junction table
         const [admissionsResult] = await db
           .select({ count: count() })
           .from(admissions)
+          .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
           .where(
             and(
               eq(admissions.instituteId, universityId),
-              eq(admissions.programId, prog.id),
+              eq(admissionPrograms.programId, prog.id),
               eq(admissions.status, 'Open')
             )
           );
@@ -188,11 +198,13 @@ async function getAdmissions(universityId: number, limit = 5): Promise<Admission
         expectedCloseDate: admissions.expectedCloseDate,
       })
       .from(admissions)
-      .innerJoin(programs, eq(admissions.programId, programs.id))
+      .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
+      .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
       .where(
         and(
           eq(admissions.instituteId, universityId),
-          eq(admissions.status, 'Open')
+          eq(admissions.status, 'Open'),
+          isNotNull(admissionPrograms.programId)
         )
       )
       .orderBy(admissions.expectedCloseDate)
@@ -235,9 +247,11 @@ async function getStats(universityId: number) {
       .from(programInstitutes)
       .where(eq(programInstitutes.instituteId, universityId));
 
+    // ✅ FIXED: Count admissions through junction table
     const [admissionsCount] = await db
       .select({ count: count() })
-      .from(admissions)
+      .from(admissionPrograms)
+      .innerJoin(admissions, eq(admissionPrograms.admissionId, admissions.id))
       .where(eq(admissions.instituteId, universityId));
 
     const [resultsCount] = await db
@@ -245,9 +259,11 @@ async function getStats(universityId: number) {
       .from(results)
       .where(eq(results.instituteId, universityId));
 
+    // ✅ FIXED: Count open admissions through junction table
     const [openAdmissions] = await db
       .select({ count: count() })
-      .from(admissions)
+      .from(admissionPrograms)
+      .innerJoin(admissions, eq(admissionPrograms.admissionId, admissions.id))
       .where(
         and(
           eq(admissions.instituteId, universityId),
@@ -340,9 +356,9 @@ export default async function UniversityDetailPage({ params }: { params: Promise
     getSimilarUniversities(university.cityId, university.id, 3),
   ]);
 
-  // ✅ FIXED: Properly typed grouped programs
+  // Group programs by level (will need to fetch level data properly)
   const groupedPrograms = programs.reduce((acc: Record<string, Program[]>, prog) => {
-    const level = prog.levelName || 'Other';
+    const level = prog.levelName || 'Other Programs';
     if (!acc[level]) {
       acc[level] = [];
     }
@@ -387,7 +403,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                 </span>
               )}
               {university.website && (
-                <a href={university.website} target="_blank" rel="noopener" className="text-blue-300 hover:text-white flex items-center gap-2">
+                <a href={university.website} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-white flex items-center gap-2">
                   <span>🌐</span> Official Website
                 </a>
               )}
@@ -446,7 +462,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                 {university.website && (
                   <div>
                     <div className="text-sm text-gray-500">Website</div>
-                    <a href={university.website} target="_blank" rel="noopener" className="text-blue-600 hover:underline text-sm">
+                    <a href={university.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm break-all">
                       {university.website.replace(/^https?:\/\//, '')}
                     </a>
                   </div>

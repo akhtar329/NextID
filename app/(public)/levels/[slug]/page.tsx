@@ -11,6 +11,7 @@ import {
   categories,
   institutes,
   admissions,
+  admissionPrograms,  // ✅ Add this
   results,
   programInstitutes 
 } from '@/app/lib/schema';
@@ -140,7 +141,7 @@ async function getLevelData(slug: string) {
       }
     }
 
-    // Get active admissions in this level
+    // ✅ FIXED: Get active admissions using junction table
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {
@@ -157,11 +158,12 @@ async function getLevelData(slug: string) {
               status: admissions.status,
             })
             .from(admissions)
+            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
             .where(
               and(
-                inArray(admissions.programId, validProgramIds),
-                eq(admissions.status, 'open'),
-                isNotNull(admissions.programId)
+                inArray(admissionPrograms.programId, validProgramIds),
+                eq(admissions.status, 'Open'),
+                isNotNull(admissionPrograms.programId)
               )
             )
             .orderBy(desc(admissions.createdAt))
