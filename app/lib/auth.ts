@@ -1,5 +1,5 @@
 // Simple authentication utilities
-
+// app/lib/auth.ts
 export const isAuthenticated = (): boolean => {
   if (typeof window === 'undefined') return false;
   

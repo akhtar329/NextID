@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: 'https://nextid.pk/programs',
+    canonical: 'https://www.nextid.pk/programs',
   },
   openGraph: {
     title: 'Academic Programs 2026 in Pakistan | BS, MBA, MS',

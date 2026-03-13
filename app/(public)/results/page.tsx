@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: 'Check latest board and university results 2026 in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results with roll number slip.',
   keywords: 'results 2026, exam results Pakistan, board results, university results, BISE results, FBISE results, matric results, intermediate results, BA results, BSc results, MA results, MSc results, check result online, roll number slip',
   robots: { index: true, follow: true },
-  alternates: { canonical: 'https://nextid.pk/results' },
+  alternates: { canonical: 'https://www.nextid.pk/results' },
   openGraph: {
     title: 'Exam Results 2026 Pakistan | Board & University Results',
     description: 'Check latest board and university results online. BISE Lahore, Karachi, Islamabad, FBISE and more. Matric to Masters results.',

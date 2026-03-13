@@ -9,10 +9,23 @@ import PrimaryButton from "@/app/component/ui/Button";
 import SearchInput from "@/app/component/ui/SearchInput";
 import Table from "@/app/component/ui/Table";
 
+type Program = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
+type Institute = {
+  id: number;
+  name: string;
+  cityName: string;
+  slug: string;
+};
+
 type Admission = {
   id: number;
-  name: string;           // ✅ Added
-  slug: string;            // ✅ Added
+  name: string;
+  slug: string;
   year: number;
   session: string | null;
   status: "Expected" | "Open" | "Closed";
@@ -21,22 +34,16 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  program: {
-    id: number;
-    name: string;
-  };
-  institute: {
-    id: number;
-    name: string;
-    cityName: string;
-  };
+  // 👇 Changed from single program to programs array
+  programs: Program[];
+  institute: Institute;
 };
 
 // Flattened type for Table component
 type FlatAdmission = {
   id: number;
-  name: string;           // ✅ Added
-  slug: string;            // ✅ Added
+  name: string;
+  slug: string;
   year: number;
   session: string | null;
   status: "Expected" | "Open" | "Closed";
@@ -45,11 +52,14 @@ type FlatAdmission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  programName: string;
+  // 👇 For display
+  programNames: string;
+  programIds: number[];
+  firstProgramId: number; // For linking
   instituteName: string;
   instituteCity: string;
-  programId: number;
   instituteId: number;
+  programCount: number;
 };
 
 export default function AdmissionsPage() {
@@ -81,6 +91,7 @@ export default function AdmissionsPage() {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch admissions");
       const data = await res.json();
+      console.log('Admissions data:', data); // Debug log
       setAdmissions(data.admissions || []);
       setError(null);
     } catch (err) {
@@ -135,29 +146,38 @@ export default function AdmissionsPage() {
   };
 
   // Transform data for table
-  const flattenedData: FlatAdmission[] = admissions.map(ad => ({
-    id: ad.id,
-    name: ad.name || `${ad.program.name} Admissions ${ad.year}`, // Fallback
-    slug: ad.slug || '',  // Fallback
-    year: ad.year,
-    session: ad.session,
-    status: ad.status,
-    expectedOpenDate: ad.expectedOpenDate,
-    expectedCloseDate: ad.expectedCloseDate,
-    meritInfo: ad.meritInfo,
-    note: ad.note,
-    officialLink: ad.officialLink,
-    programName: ad.program.name,
-    instituteName: ad.institute.name,
-    instituteCity: ad.institute.cityName,
-    programId: ad.program.id,
-    instituteId: ad.institute.id,
-  }));
+  const flattenedData: FlatAdmission[] = admissions.map(ad => {
+    const programNames = ad.programs?.map(p => p.name).join(', ') || 'No programs';
+    const programIds = ad.programs?.map(p => p.id) || [];
+    const firstProgramId = programIds[0] || 0;
+    const programCount = ad.programs?.length || 0;
+    
+    return {
+      id: ad.id,
+      name: ad.name || `${ad.institute.name} Admissions ${ad.year}`,
+      slug: ad.slug || '',
+      year: ad.year,
+      session: ad.session,
+      status: ad.status,
+      expectedOpenDate: ad.expectedOpenDate,
+      expectedCloseDate: ad.expectedCloseDate,
+      meritInfo: ad.meritInfo,
+      note: ad.note,
+      officialLink: ad.officialLink,
+      programNames,
+      programIds,
+      firstProgramId,
+      programCount,
+      instituteName: ad.institute.name,
+      instituteCity: ad.institute.cityName,
+      instituteId: ad.institute.id,
+    };
+  });
 
-  // Filter by search (client-side) - search in name, program, institute
+  // Filter by search (client-side) - search in name, program names, institute
   const filteredData = flattenedData.filter(ad => 
     ad.name.toLowerCase().includes(search.toLowerCase()) ||
-    ad.programName.toLowerCase().includes(search.toLowerCase()) ||
+    ad.programNames.toLowerCase().includes(search.toLowerCase()) ||
     ad.instituteName.toLowerCase().includes(search.toLowerCase()) ||
     ad.year.toString().includes(search)
   );
@@ -188,15 +208,27 @@ export default function AdmissionsPage() {
       )
     },
     {
-      header: "Program",
-      accessor: "programName",
+      header: "Programs",
+      accessor: "programNames",
       render: (value: string, row: FlatAdmission) => (
-        <button
-          onClick={() => router.push(`/admin/programs/${row.programId}`)}
-          className="text-gray-700 hover:text-blue-600 hover:underline text-sm"
-        >
-          {value}
-        </button>
+        <div>
+          <div className="text-sm text-gray-700 max-w-xs truncate" title={value}>
+            {value}
+          </div>
+          {row.programCount > 1 && (
+            <div className="text-xs text-blue-600 mt-1">
+              {row.programCount} programs
+            </div>
+          )}
+          {row.firstProgramId > 0 && (
+            <button
+              onClick={() => router.push(`/admin/programs/${row.firstProgramId}`)}
+              className="text-xs text-gray-500 hover:text-blue-600 hover:underline mt-1 block"
+            >
+              View first program →
+            </button>
+          )}
+        </div>
       )
     },
     {
@@ -307,6 +339,7 @@ export default function AdmissionsPage() {
   const expectedAdmissions = admissions.filter(a => a.status === 'Expected').length;
   const openAdmissions = admissions.filter(a => a.status === 'Open').length;
   const closedAdmissions = admissions.filter(a => a.status === 'Closed').length;
+  const totalProgramsLinked = admissions.reduce((sum, ad) => sum + (ad.programs?.length || 0), 0);
 
   if (loading && admissions.length === 0) {
     return (
@@ -335,7 +368,7 @@ export default function AdmissionsPage() {
 
       {/* Stats Cards */}
       {!loading && admissions.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Total Admissions</div>
             <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
@@ -351,6 +384,10 @@ export default function AdmissionsPage() {
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Closed</div>
             <div className="text-2xl font-semibold mt-1 text-red-600">{closedAdmissions}</div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-4">
+            <div className="text-sm text-gray-500">Programs Linked</div>
+            <div className="text-2xl font-semibold mt-1 text-blue-600">{totalProgramsLinked}</div>
           </div>
         </div>
       )}
@@ -417,8 +454,11 @@ export default function AdmissionsPage() {
           <Table columns={columns} data={filteredData} />
           
           {/* Summary */}
-          <div className="p-4 border-t text-sm text-gray-500">
-            Showing {filteredData.length} of {flattenedData.length} admissions
+          <div className="p-4 border-t text-sm text-gray-500 flex justify-between">
+            <span>Showing {filteredData.length} of {flattenedData.length} admissions</span>
+            <span className="font-medium">
+              Total Programs: {totalProgramsLinked}
+            </span>
           </div>
         </div>
       )}

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
   description: 'Browse all educational degrees in Pakistan including BS, BA, BSc, MA, MSc, and professional degrees.',
   alternates: {
-    canonical: 'https://nextid.pk/degrees',
+    canonical: 'https://www.nextid.pk/degrees',
   },
 };
 

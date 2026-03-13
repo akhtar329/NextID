@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Education Categories | Institutes, Admissions, Results & News | NextID.pk',
   description: 'Browse educational categories including institutes, universities, admissions, results, and news in Pakistan.',
   alternates: {
-    canonical: 'https://nextid.pk/categories',
+    canonical: 'https://www.nextid.pk/categories',
   },
 };
 

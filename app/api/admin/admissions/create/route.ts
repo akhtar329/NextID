@@ -1,6 +1,8 @@
+// app/api/admin/admissions/route.ts (POST method)
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
-import { admissions } from '@/app/lib/schema';
+import { admissions, admissionPrograms } from '@/app/lib/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -10,9 +12,22 @@ export async function POST(request: NextRequest) {
     console.log('📦 Request body:', body);
     
     // Validation
-    if (!body.name || !body.slug || !body.programId || !body.instituteId || !body.year || !body.status) {
+    if (!body.name || !body.slug || !body.programIds || !body.instituteId || !body.year || !body.status) {
       return NextResponse.json(
-        { error: 'Missing required fields', details: 'Name, slug, programId, instituteId, year, and status are required' },
+        { 
+          error: 'Missing required fields', 
+          details: 'Name, slug, programIds (array), instituteId, year, and status are required' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Ensure programIds is an array
+    const programIds = Array.isArray(body.programIds) ? body.programIds : [body.programIds];
+    
+    if (programIds.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one program is required' },
         { status: 400 }
       );
     }
@@ -31,33 +46,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create admission
-    const newAdmission = await db
-      .insert(admissions)
-      .values({
-        name: body.name,
-        slug: body.slug,
-        programId: Number(body.programId),
-        instituteId: Number(body.instituteId),
-        year: Number(body.year),
-        session: body.session || null,
-        status: body.status,
-        expectedOpenDate: body.expectedOpenDate ? new Date(body.expectedOpenDate) : null,
-        expectedCloseDate: body.expectedCloseDate ? new Date(body.expectedCloseDate) : null,
-        meritInfo: body.meritInfo || null,
-        note: body.note || null,
-        officialLink: body.officialLink || null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+    // ✅ Start a transaction to ensure data consistency
+    const result = await db.transaction(async (tx) => {
+      // 1. Create admission (without programId)
+      const [newAdmission] = await tx
+        .insert(admissions)
+        .values({
+          name: body.name,
+          slug: body.slug,
+          instituteId: Number(body.instituteId),
+          year: Number(body.year),
+          session: body.session || null,
+          status: body.status,
+          expectedOpenDate: body.expectedOpenDate ? new Date(body.expectedOpenDate) : null,
+          expectedCloseDate: body.expectedCloseDate ? new Date(body.expectedCloseDate) : null,
+          meritInfo: body.meritInfo || null,
+          note: body.note || null,
+          officialLink: body.officialLink || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
 
-    console.log('✅ Admission created:', newAdmission[0]);
+      console.log('✅ Admission created:', newAdmission);
+
+      // 2. Insert into junction table for each program
+      const junctionRecords = await Promise.all(
+        programIds.map(async (programId: number) => {
+          const [record] = await tx
+            .insert(admissionPrograms)
+            .values({
+              admissionId: newAdmission.id,
+              programId: Number(programId),
+              createdAt: new Date(),
+            })
+            .returning();
+          return record;
+        })
+      );
+
+      console.log(`✅ Linked ${junctionRecords.length} programs to admission`);
+
+      return { newAdmission, junctionRecords };
+    });
 
     return NextResponse.json({
       success: true,
-      admission: newAdmission[0],
-      message: 'Admission created successfully'
+      admission: result.newAdmission,
+      programCount: result.junctionRecords.length,
+      message: `Admission created successfully with ${result.junctionRecords.length} program(s)`
     });
 
   } catch (error: any) {
@@ -65,10 +102,33 @@ export async function POST(request: NextRequest) {
     
     // Handle unique constraint violation
     if (error.code === '23505') {
+      // Check which unique constraint failed
+      if (error.message?.includes('admissions_slug_unique')) {
+        return NextResponse.json(
+          { 
+            error: 'Duplicate slug', 
+            details: 'An admission with this slug already exists. Please use a different slug.' 
+          },
+          { status: 400 }
+        );
+      }
+      if (error.message?.includes('admission_programs_admission_id_program_id_unique')) {
+        return NextResponse.json(
+          { 
+            error: 'Duplicate program', 
+            details: 'This program is already linked to this admission.' 
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Handle foreign key violation
+    if (error.code === '23503') {
       return NextResponse.json(
         { 
-          error: 'Duplicate slug', 
-          details: 'An admission with this slug already exists. Please use a different slug.' 
+          error: 'Invalid reference', 
+          details: 'One or more program IDs or institute ID do not exist.' 
         },
         { status: 400 }
       );

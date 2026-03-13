@@ -1,11 +1,11 @@
 // app/api/admin/admissions/route.ts
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { admissions, programs, institutes, cities } from "@/app/lib/schema";
-import { eq, desc } from "drizzle-orm";
+import { admissions, admissionPrograms, programs, institutes, cities } from "@/app/lib/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   console.log("🚀 GET /api/admin/admissions called");
   
   try {
@@ -15,10 +15,28 @@ export async function GET(request: Request) {
     const programId = searchParams.get("programId");
     const instituteId = searchParams.get("instituteId");
 
-    // Base query - select all admissions with joins
-    const allAdmissions = await db
+    // Build conditions array
+    const conditions = [];
+
+    if (year) {
+      conditions.push(eq(admissions.year, parseInt(year)));
+    }
+    if (status) {
+      conditions.push(eq(admissions.status, status));
+    }
+    if (instituteId) {
+      conditions.push(eq(admissions.instituteId, parseInt(instituteId)));
+    }
+
+    // Where clause
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // First fetch admissions with institute details
+    const admissionsList = await db
       .select({
         id: admissions.id,
+        name: admissions.name,
+        slug: admissions.slug,
         year: admissions.year,
         session: admissions.session,
         status: admissions.status,
@@ -28,60 +46,64 @@ export async function GET(request: Request) {
         note: admissions.note,
         officialLink: admissions.officialLink,
         createdAt: admissions.createdAt,
-        programId: admissions.programId,
         instituteId: admissions.instituteId,
-        programName: programs.name,
-        instituteName: institutes.name,
-        instituteCity: cities.name,
+        institute: {
+          id: institutes.id,
+          name: institutes.name,
+          slug: institutes.slug,
+          cityName: cities.name,
+        },
       })
       .from(admissions)
-      .leftJoin(programs, eq(admissions.programId, programs.id))
-      .leftJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .leftJoin(cities, eq(institutes.cityId, cities.id))
+      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+      .innerJoin(cities, eq(institutes.cityId, cities.id))
+      .where(whereClause)
       .orderBy(desc(admissions.year), desc(admissions.createdAt));
 
-    // Apply filters in memory with null checks
-    let filteredAdmissions = allAdmissions;
+    console.log(`✅ Found ${admissionsList.length} admissions`);
 
-    if (year) {
-      filteredAdmissions = filteredAdmissions.filter(ad => ad.year === parseInt(year));
-    }
-    if (status) {
-      filteredAdmissions = filteredAdmissions.filter(ad => ad.status === status);
-    }
+    // Now fetch programs for each admission
+    const admissionsWithPrograms = await Promise.all(
+      admissionsList.map(async (ad) => {
+        let programList: { id: number; name: string; slug: string }[] = [];
+        
+        try {
+          programList = await db
+            .select({
+              id: programs.id,
+              name: programs.name,
+              slug: programs.slug,
+            })
+            .from(admissionPrograms)
+            .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
+            .where(eq(admissionPrograms.admissionId, ad.id));
+        } catch (err) {
+          console.error(`Error fetching programs for admission ${ad.id}:`, err);
+        }
+
+        // Filter by programId if needed (client-side)
+        if (programId && programList.length > 0) {
+          programList = programList.filter(p => p.id === parseInt(programId));
+        }
+
+        return {
+          ...ad,
+          programs: programList,
+        };
+      })
+    );
+
+    // Filter out admissions with no programs if programId filter is applied
+    let finalAdmissions = admissionsWithPrograms;
     if (programId) {
-      filteredAdmissions = filteredAdmissions.filter(ad => ad.programId === parseInt(programId));
+      finalAdmissions = admissionsWithPrograms.filter(ad => 
+        ad.programs.some(p => p.id === parseInt(programId))
+      );
     }
-    if (instituteId) {
-      filteredAdmissions = filteredAdmissions.filter(ad => ad.instituteId === parseInt(instituteId));
-    }
-
-    // Transform data to match the expected format
-    const transformedAdmissions = filteredAdmissions.map(ad => ({
-      id: ad.id,
-      year: ad.year,
-      session: ad.session,
-      status: ad.status,
-      expectedOpenDate: ad.expectedOpenDate,
-      expectedCloseDate: ad.expectedCloseDate,
-      meritInfo: ad.meritInfo,
-      note: ad.note,
-      officialLink: ad.officialLink,
-      createdAt: ad.createdAt,
-      program: {
-        id: ad.programId,
-        name: ad.programName || "Unknown Program",
-      },
-      institute: {
-        id: ad.instituteId,
-        name: ad.instituteName || "Unknown Institute",
-        cityName: ad.instituteCity || "Unknown City",
-      },
-    }));
 
     return NextResponse.json({
       success: true,
-      admissions: transformedAdmissions,
+      admissions: finalAdmissions,
     });
 
   } catch (error) {

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Find answers to commonly asked questions about admissions, results, programs, universities, and education in Pakistan.',
   keywords: 'FAQs, frequently asked questions, education help, admissions help, results help, Pakistan education',
   alternates: {
-    canonical: 'https://nextid.pk/faqs',
+    canonical: 'https://www.nextid.pk/faqs',
   },
   openGraph: {
     title: 'FAQs - Education Pakistan | NextID.pk',

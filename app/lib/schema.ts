@@ -1,4 +1,4 @@
-// app/lib/schema.ts
+// app/lib/schema.ts (Updated version)
 import {
   pgTable,
   serial,
@@ -29,7 +29,7 @@ export const levels = pgTable("levels", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 50 }).notNull().unique(),
   slug: varchar("slug", { length: 100 }).notNull().unique(),
-  fullForm: varchar("full_form", { length: 255 }), // 👈 ADD THIS
+  fullForm: varchar("full_form", { length: 255 }),
   displayOrder: integer("display_order").default(0),
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -165,25 +165,32 @@ export const boards = pgTable("boards", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-
 /* =========================
-   📁 ADMISSIONS
+   📁 ADMISSION ↔ PROGRAM (Junction Table - NEW)
    ========================= */
-   
-export const admissions = pgTable("admissions", {
+export const admissionPrograms = pgTable("admission_programs", {
   id: serial("id").primaryKey(),
-
+  admissionId: integer("admission_id")
+    .notNull()
+    .references(() => admissions.id, { onDelete: 'cascade' }),
   programId: integer("program_id")
     .notNull()
-    .references(() => programs.id),
+    .references(() => programs.id, { onDelete: 'cascade' }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
+/* =========================
+   📁 ADMISSIONS (Updated)
+   ========================= */
+export const admissions = pgTable("admissions", {
+  id: serial("id").primaryKey(),
+  
   instituteId: integer("institute_id")
     .notNull()
     .references(() => institutes.id),
 
-  // ✅ ADD THESE TWO FIELDS
-  name: varchar("name", { length: 500 }).notNull(), // e.g. "BDS Admissions 2026 at Air University"
-  slug: varchar("slug", { length: 500 }).notNull().unique(), // e.g. "bds-air-university-admissions-2026"
+  name: varchar("name", { length: 500 }).notNull(),
+  slug: varchar("slug", { length: 500 }).notNull().unique(),
 
   year: integer("year").notNull(),
   session: varchar("session", { length: 50 }),
@@ -223,6 +230,7 @@ export const results = pgTable("results", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
 /* =========================
    📁 DATE SHEETS
    ========================= */

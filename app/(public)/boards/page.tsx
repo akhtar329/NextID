@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: 'https://nextid.pk/boards',
+    canonical: 'https://www.nextid.pk/boards',
   },
   openGraph: {
     title: 'Education Boards in Pakistan | BISE, FBISE Results 2026',

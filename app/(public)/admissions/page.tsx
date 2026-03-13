@@ -1,11 +1,11 @@
 // app/(public)/admissions/page.tsx
-// ✅ Updated - Showing full admission names
+// ✅ Updated with multi-program support and Drizzle ORM
 
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { admissions, programs, institutes, cities, degrees, levels } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql } from 'drizzle-orm';
+import { admissions, admissionPrograms, programs, institutes, degrees , cities } from '@/app/lib/schema';
+import { eq, desc, like, and, or, sql, } from 'drizzle-orm';
 
 // ==================== METADATA ====================
 export const metadata: Metadata = {
@@ -24,12 +24,35 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: 'https://nextid.pk/admissions',
+    canonical: 'https://www.nextid.pk/admissions',
   },
 };
 
 // ==================== TYPES ====================
 type LevelType = 'matric' | 'inter' | 'ba' | 'bs' | 'bba' | 'mba' | 'ms' | 'medical' | 'engineering' | 'law';
+
+type AdmissionWithDetails = {
+  id: number;
+  name: string;
+  slug: string;
+  year: number;
+  session: string | null;
+  status: string;
+  expectedCloseDate: Date | null;
+  instituteId: number;
+  instituteName: string;
+  instituteSlug: string;
+  instituteType: string | null;
+  cityId: number;
+  cityName: string;
+  citySlug: string;
+  programs: {
+    id: number;
+    name: string;
+    slug: string;
+    degreeName: string | null;
+  }[];
+};
 
 // ==================== CONSTANTS ====================
 const PROGRAM_TYPES: { slug: LevelType | ''; name: string; icon: string; description: string }[] = [
@@ -86,48 +109,26 @@ const ENTRY_TEST: Record<LevelType, string> = {
 };
 
 // ==================== GET CITIES WITH ADMISSION COUNTS ====================
+
 async function getCitiesWithAdmissionCounts() {
   try {
-    // Get all active cities
-    const allCities = await db
+    const result = await db
       .select({
         id: cities.id,
         name: cities.name,
         slug: cities.slug,
         province: cities.province,
         isPopular: cities.isPopular,
+        count: sql<number>`count(distinct ${admissions.id})`.as('count')
       })
       .from(cities)
-      .where(eq(cities.status, true))
-      .orderBy(cities.name);
+      .innerJoin(institutes, eq(institutes.cityId, cities.id))
+      .innerJoin(admissions, eq(admissions.instituteId, institutes.id))
+      .where(eq(admissions.status, 'Open'))
+      .groupBy(cities.id, cities.name, cities.slug, cities.province, cities.isPopular)
+      .orderBy(sql`count desc`);
 
-    // Get admission counts for each city
-    const citiesWithCounts = await Promise.all(
-      allCities.map(async (city) => {
-        const result = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(admissions)
-          .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-          .where(
-            and(
-              eq(admissions.status, 'Open'),
-              eq(institutes.cityId, city.id)
-            )
-          );
-        
-        const count = Number(result[0]?.count) || 0;
-        
-        return {
-          ...city,
-          count,
-        };
-      })
-    );
-
-    // Filter cities with admissions and sort by count
-    return citiesWithCounts
-      .filter(city => city.count > 0)
-      .sort((a, b) => b.count - a.count);
+    return result;
   } catch (error) {
     console.error('Error getting city counts:', error);
     return [];
@@ -135,74 +136,101 @@ async function getCitiesWithAdmissionCounts() {
 }
 
 // ==================== DATA FETCHING ====================
+
 async function getAdmissions(filters: {
   city?: string;
   level?: LevelType;
   q?: string;
 }) {
   try {
-    const conditions: any[] = [eq(admissions.status, 'Open')];
+    // Base conditions
+    const conditions: any[] = [eq(admissions.status, 'Open')];  // ✅ Type any[] use karo
 
+    // Add city filter
     if (filters.city) {
       conditions.push(eq(cities.slug, filters.city));
     }
 
-    if (filters.level) {
-      const keywords = LEVEL_KEYWORDS[filters.level] || [];
-      if (keywords.length > 0) {
-        const levelConditions = keywords.map(keyword => 
-          like(programs.name, `%${keyword}%`)
-        );
-        conditions.push(or(...levelConditions));
-      }
-    }
-
+    // Add search filter
     if (filters.q) {
       const words = filters.q.trim().split(/\s+/);
       const searchConditions = words.flatMap(word => {
         const term = `%${word}%`;
         return [
           like(institutes.name, term),
-          like(programs.name, term),
-          like(cities.name, term),
+          like(admissions.name, term),
         ];
       });
       conditions.push(or(...searchConditions));
     }
 
-    const data = await db
+    // ✅ Safe WHERE clause - hamesha kam se kam ek condition hogi (status = 'Open')
+    const whereClause = conditions.length === 1 
+      ? conditions[0]  // Sirf status condition
+      : and(...conditions);  // Multiple conditions
+
+    // Execute main query with all conditions
+    const admissionsList = await db
       .select({
         id: admissions.id,
-        // ✅ Get all needed fields
         name: admissions.name,
         slug: admissions.slug,
-        // Program details
-        program: programs.name,
-        programSlug: programs.slug,
-        // Institute details
-        university: institutes.name,
-        universitySlug: institutes.slug,
-        universityType: institutes.type,
-        // City details
-        city: cities.name,
-        citySlug: cities.slug,
-        // Admission details
-        deadline: admissions.expectedCloseDate,
-        status: admissions.status,
         year: admissions.year,
         session: admissions.session,
-        // ✅ Additional fields for full name
-        degreeName: programs.name, // This will be enhanced
+        status: admissions.status,
+        expectedCloseDate: admissions.expectedCloseDate,
+        instituteId: admissions.instituteId,
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
+        instituteType: institutes.type,
+        cityId: cities.id,
+        cityName: cities.name,
+        citySlug: cities.slug,
       })
       .from(admissions)
-      .innerJoin(programs, eq(admissions.programId, programs.id))
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
       .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .where(and(...conditions))
+      .where(whereClause)  // ✅ Ab safe hai
       .orderBy(admissions.expectedCloseDate)
       .limit(100);
 
-    return data;
+    if (admissionsList.length === 0) return [];
+
+    // Ab har admission ke liye programs fetch karo
+    const admissionsWithPrograms = await Promise.all(
+      admissionsList.map(async (ad) => {
+        const admissionProgramsList = await db
+          .select({
+            id: programs.id,
+            name: programs.name,
+            slug: programs.slug,
+            degreeName: degrees.name,
+          })
+          .from(admissionPrograms)
+          .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
+          .innerJoin(degrees, eq(programs.degreeId, degrees.id))
+          .where(eq(admissionPrograms.admissionId, ad.id));
+
+        return {
+          ...ad,
+          programs: admissionProgramsList,
+        };
+      })
+    );
+
+    // Apply level filter
+    if (filters.level && filters.level in LEVEL_KEYWORDS) {
+      const keywords = LEVEL_KEYWORDS[filters.level];
+      return admissionsWithPrograms.filter(ad => 
+        ad.programs.some(program => 
+          keywords.some(keyword => 
+            program.name.toLowerCase().includes(keyword.toLowerCase())
+          )
+        )
+      );
+    }
+
+    return admissionsWithPrograms;
   } catch (error) {
     console.error('Database error:', error);
     return [];
@@ -211,9 +239,20 @@ async function getAdmissions(filters: {
 
 async function getStats() {
   try {
-    const totalAdmissions = await db.$count(admissions, eq(admissions.status, 'Open'));
-    const totalUniversities = await db.$count(institutes, eq(institutes.status, true));
-    const totalCities = await db.$count(cities, eq(cities.status, true));
+    const totalAdmissions = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(admissions)
+      .where(eq(admissions.status, 'Open'));
+
+    const totalUniversities = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(institutes)
+      .where(eq(institutes.status, true));
+
+    const totalCities = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(cities)
+      .where(eq(cities.status, true));
 
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
@@ -226,50 +265,40 @@ async function getStats() {
           eq(admissions.status, 'Open'),
           sql`${admissions.expectedCloseDate} < ${thirtyDaysFromNow}`
         )
-      )
-      .then(result => Number(result[0]?.count) || 0);
+      );
 
     return { 
-      totalAdmissions: Number(totalAdmissions) || 0, 
-      totalUniversities: Number(totalUniversities) || 0, 
-      totalCities: Number(totalCities) || 0, 
-      closingSoon: Number(closingSoon) || 0 
+      totalAdmissions: Number(totalAdmissions[0]?.count) || 0, 
+      totalUniversities: Number(totalUniversities[0]?.count) || 0, 
+      totalCities: Number(totalCities[0]?.count) || 0, 
+      closingSoon: Number(closingSoon[0]?.count) || 0 
     };
   } catch (error) {
+    console.error('Stats error:', error);
     return { totalAdmissions: 0, totalUniversities: 0, totalCities: 0, closingSoon: 0 };
   }
 }
 
 // ==================== HELPER FUNCTION TO FORMAT ADMISSION NAME ====================
-function formatAdmissionName(ad: any): string {
+function formatAdmissionName(ad: AdmissionWithDetails): string {
   // If name exists in database, use it
   if (ad.name) return ad.name;
   
-  // Otherwise generate a nice name
-  const program = ad.program || 'Program';
-  const university = ad.university || 'University';
-  const city = ad.city || '';
+  // Otherwise generate a nice name from programs
+  const university = ad.instituteName || 'University';
+  const city = ad.cityName || '';
   const year = ad.year || '2026';
   
-  // Determine degree type from program name
-  let degreeType = '';
-  if (program.toLowerCase().includes('bs ') || program.includes('BS ')) degreeType = 'BS';
-  else if (program.toLowerCase().includes('ba ') || program.includes('BA ')) degreeType = 'BA';
-  else if (program.toLowerCase().includes('bsc ') || program.includes('BSc ')) degreeType = 'BSc';
-  else if (program.toLowerCase().includes('ma ') || program.includes('MA ')) degreeType = 'MA';
-  else if (program.toLowerCase().includes('ms ') || program.includes('MS ')) degreeType = 'MS';
-  else if (program.toLowerCase().includes('mba')) degreeType = 'MBA';
-  else if (program.toLowerCase().includes('mbbs')) degreeType = 'MBBS';
-  else if (program.toLowerCase().includes('bds')) degreeType = 'BDS';
-  else if (program.toLowerCase().includes('llb')) degreeType = 'LLB';
-  else if (program.toLowerCase().includes('bed') || program.includes('B.Ed')) degreeType = 'B.Ed';
-  else if (program.toLowerCase().includes('pharm')) degreeType = 'Pharm.D';
-  
-  if (degreeType) {
-    return `${degreeType} ${program.replace(degreeType, '').trim()} Admissions ${year} at ${university}, ${city}`;
+  if (ad.programs && ad.programs.length > 0) {
+    if (ad.programs.length === 1) {
+      return `${ad.programs[0].name} Admissions ${year} at ${university}, ${city}`;
+    } else {
+      const programCount = ad.programs.length;
+      return `Multiple Programs (${programCount}) Admissions ${year} at ${university}, ${city}`;
+    }
   }
   
-  return `${program} Admissions ${year} at ${university}, ${city}`;
+  return `Admissions ${year} at ${university}, ${city}`;
 }
 
 // ==================== BREADCRUMBS COMPONENT ====================
@@ -335,13 +364,14 @@ export default async function AdmissionsPage({
     q: typeof params.q === 'string' ? params.q : '',
   };
 
-  const [admissions, stats, citiesWithCounts] = await Promise.all([
+  const [admissionsList, stats, citiesWithCounts] = await Promise.all([
     getAdmissions(filters),
     getStats(),
     getCitiesWithAdmissionCounts(),
   ]);
 
-  const uniqueUniversities = new Set(admissions.map(a => a.university)).size;
+  const uniqueUniversities = new Set(admissionsList.map(a => a.instituteName)).size;
+  const totalPrograms = admissionsList.reduce((sum, ad) => sum + ad.programs.length, 0);
 
   // Build filter URLs
   const buildUrl = (key: string, value: string) => {
@@ -396,7 +426,7 @@ export default async function AdmissionsPage({
                     type="text"
                     name="q"
                     defaultValue={filters.q}
-                    placeholder="Search by university, program or city..."
+                    placeholder="Search by university or program..."
                     className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
                     aria-label="Search admissions"
                   />
@@ -512,7 +542,7 @@ export default async function AdmissionsPage({
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-800">
-                    {admissions.length} Admissions Found
+                    {admissionsList.length} Admissions Found
                   </h2>
                   <p className="text-sm text-gray-500">
                     {filters.level && `Level: ${PROGRAM_TYPES.find(l => l.slug === filters.level)?.name}`}
@@ -522,91 +552,121 @@ export default async function AdmissionsPage({
                 </div>
                 <div className="text-sm text-gray-500">
                   <span className="font-medium">{uniqueUniversities}</span> Universities • 
-                  <span className="font-medium ml-1">{admissions.length}</span> Programs
+                  <span className="font-medium ml-1">{totalPrograms}</span> Programs
                 </div>
               </div>
             </div>
 
             {/* Admissions Cards with Full Names */}
             <div className="space-y-4">
-              {admissions.length > 0 ? (
-                admissions.map((ad) => {
-                  const daysLeft = ad.deadline
-                    ? Math.ceil((new Date(ad.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+              {admissionsList.length > 0 ? (
+                admissionsList.map((ad) => {
+                  const daysLeft = ad.expectedCloseDate
+                    ? Math.ceil((new Date(ad.expectedCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
                     : null;
                   const isUrgent = daysLeft && daysLeft <= 30;
                   
-                  // ✅ Use slug from database
-                  const admissionSlug = ad.slug;
-                  
-                  // ✅ Get full admission name
+                  // Get full admission name
                   const fullName = formatAdmissionName(ad);
+                  
+                  // Get first few programs to display
+                  const displayPrograms = ad.programs.slice(0, 3);
+                  const remainingCount = ad.programs.length - 3;
 
                   return (
                     <article key={ad.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
                       <div className="p-5">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                           <div className="flex-1">
-                            {/* ✅ Show full name with degree, program, university, city */}
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">
-                              <Link href={`/admissions/${admissionSlug}`} className="hover:text-blue-600">
+                            {/* Admission Name */}
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">
+                              <Link href={`/admissions/${ad.slug}`} className="hover:text-blue-600">
                                 {fullName}
                               </Link>
                             </h3>
                             
-                            {/* ✅ Also show program/university/city separately for quick reference */}
-                            <div className="flex items-center gap-2 text-gray-600 text-sm mb-2">
-                              <span className="font-medium text-gray-700">{ad.program}</span>
-                              <span>•</span>
-                              <Link href={`/universities/${ad.universitySlug}`} className="text-blue-600 hover:underline">
-                                {ad.university}
+                            {/* University and City */}
+                            <div className="flex items-center gap-2 text-gray-600 text-sm mb-3">
+                              <Link href={`/universities/${ad.instituteSlug}`} className="text-blue-600 hover:underline font-medium">
+                                {ad.instituteName}
                               </Link>
                               <span>•</span>
                               <Link href={`/cities/${ad.citySlug}`} className="hover:text-blue-600">
-                                {ad.city}
+                                {ad.cityName}
                               </Link>
+                              {ad.instituteType && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-gray-500">{ad.instituteType}</span>
+                                </>
+                              )}
                             </div>
                             
-                            {/* Program Details Grid */}
+                            {/* Programs List */}
+                            <div className="mb-3">
+                              <div className="flex flex-wrap gap-2">
+                                {displayPrograms.map(program => (
+                                  <Link
+                                    key={program.id}
+                                    href={`/programs/${program.slug}`}
+                                    className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs hover:bg-blue-100"
+                                  >
+                                    {program.name}
+                                  </Link>
+                                ))}
+                                {remainingCount > 0 && (
+                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs">
+                                    +{remainingCount} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Details Grid */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-sm">
                               <div className="bg-gray-50 rounded-lg p-2">
                                 <span className="text-gray-500 text-xs">Last Date</span>
                                 <div className="font-medium">
-                                  {ad.deadline ? new Date(ad.deadline).toLocaleDateString() : 'TBA'}
-                                </div>
-                              </div>
-                              <div className="bg-gray-50 rounded-lg p-2">
-                                <span className="text-gray-500 text-xs">Fee Range</span>
-                                <div className="font-medium">
-                                  {filters.level && FEE_RANGES[filters.level as LevelType]
-                                    ? FEE_RANGES[filters.level as LevelType]
-                                    : 'Contact university'}
-                                </div>
-                              </div>
-                              <div className="bg-gray-50 rounded-lg p-2">
-                                <span className="text-gray-500 text-xs">Entry Test</span>
-                                <div className="font-medium">
-                                  {filters.level && ENTRY_TEST[filters.level as LevelType]
-                                    ? ENTRY_TEST[filters.level as LevelType]
-                                    : 'Check requirements'}
+                                  {ad.expectedCloseDate 
+                                    ? new Date(ad.expectedCloseDate).toLocaleDateString('en-PK', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric'
+                                      })
+                                    : 'TBA'}
                                 </div>
                               </div>
                               <div className="bg-gray-50 rounded-lg p-2">
                                 <span className="text-gray-500 text-xs">Session</span>
                                 <div className="font-medium">{ad.session || 'Fall 2026'}</div>
                               </div>
+                              <div className="bg-gray-50 rounded-lg p-2">
+                                <span className="text-gray-500 text-xs">Year</span>
+                                <div className="font-medium">{ad.year}</div>
+                              </div>
+                              <div className="bg-gray-50 rounded-lg p-2">
+                                <span className="text-gray-500 text-xs">Status</span>
+                                <div className="font-medium">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                    ${ad.status === 'Open' ? 'bg-green-100 text-green-800' : 
+                                      ad.status === 'Expected' ? 'bg-yellow-100 text-yellow-800' : 
+                                      'bg-red-100 text-red-800'}`}>
+                                    {ad.status}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                           
                           <div className="flex flex-col items-end gap-2">
                             {isUrgent && (
-                              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
+                              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium whitespace-nowrap">
                                 ⏰ {daysLeft} days left
                               </span>
                             )}
                             <Link
-                              href={`/admissions/${admissionSlug}`}
-                              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                              href={`/admissions/${ad.slug}`}
+                              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium whitespace-nowrap"
                             >
                               View Details →
                             </Link>
@@ -682,14 +742,9 @@ export default async function AdmissionsPage({
               </p>
               
               <p>
-                <strong>Top universities accepting admissions 2026</strong> include {citiesWithCounts.slice(0, 3).map((city, i, arr) => (
-                  <span key={city.slug}>
-                    <Link href={`/admissions?city=${city.slug}`} className="text-blue-600 hover:underline">
-                      {city.name}
-                    </Link>
-                    {i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' and ' : ''}
-                  </span>
-                ))}. Check individual university pages for program-specific merit, fee structure, and scholarship opportunities.
+                <strong>Top universities accepting admissions 2026</strong> include NUST, FAST, LUMS, University of the Punjab, 
+                and Karachi University. Check individual university pages for program-specific merit, fee structure, and 
+                scholarship opportunities.
               </p>
             </div>
 
@@ -758,8 +813,8 @@ export default async function AdmissionsPage({
             "@type": "ItemList",
             "name": "Admissions 2026 in Pakistan",
             "description": "Latest admissions in Pakistani universities and colleges",
-            "numberOfItems": admissions.length,
-            "itemListElement": admissions.slice(0, 10).map((ad, index) => ({
+            "numberOfItems": admissionsList.length,
+            "itemListElement": admissionsList.slice(0, 10).map((ad, index) => ({
               "@type": "ListItem",
               "position": index + 1,
               "url": `https://nextid.pk/admissions/${ad.slug}`,

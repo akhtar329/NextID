@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: 'https://nextid.pk/universities',
+    canonical: 'https://www.nextid.pk/universities',
   },
   openGraph: {
     title: 'Top Universities in Pakistan 2026 | Rankings & Admissions',

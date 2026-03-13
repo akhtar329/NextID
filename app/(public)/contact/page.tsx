@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Get in touch with NextID.pk team. Have questions about admissions, results, or any educational queries? Contact us now for prompt assistance.',
   keywords: 'contact us, help, support, education help, Pakistan education, help desk',
   alternates: {
-    canonical: 'https://nextid.pk/contact',
+    canonical: 'https://www.nextid.pk/contact',
   },
   openGraph: {
     title: 'Contact NextID.pk - Education Portal',

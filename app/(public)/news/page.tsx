@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title: 'Education News Pakistan 2026 | Latest Updates | NextID.pk',
   description: 'Stay updated with latest education news in Pakistan: admissions, results, scholarships, board announcements & university updates.',
   alternates: {
-    canonical: 'https://nextid.pk/news',
+    canonical: 'https://www.nextid.pk/news',
   },
   openGraph: {
     title: 'Education News Pakistan - Latest Updates',

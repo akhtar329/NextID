@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Education Cities in Pakistan | Institutes, Admissions & Results | NextID.pk',
   description: 'Find institutes, universities, admissions, results, and educational news by city in Pakistan.',
   alternates: {
-    canonical: 'https://nextid.pk/cities',
+    canonical: 'https://www.nextid.pk/cities',
   },
 };
 

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Learn about how NextID.pk collects, uses, and protects your personal information. Our privacy policy explains our data practices and your rights.',
   keywords: 'privacy policy, data protection, privacy, terms, education portal privacy',
   alternates: {
-    canonical: 'https://nextid.pk/privacy',
+    canonical: 'https://www.nextid.pk/privacy',
   },
   openGraph: {
     title: 'Privacy Policy - NextID.pk',

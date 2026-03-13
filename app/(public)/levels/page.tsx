@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Education Levels | Matric, Intermediate, Bachelor, Master | NextID.pk',
   description: 'Browse educational levels including Matric, Intermediate, Bachelor, Master, and PhD programs in Pakistan.',
   alternates: {
-    canonical: 'https://nextid.pk/levels',
+    canonical: 'https://www.nextid.pk/levels',
   },
 };
 

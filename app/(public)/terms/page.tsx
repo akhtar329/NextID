@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Read the terms and conditions for using NextID.pk. Understand your rights and responsibilities when accessing our education portal.',
   keywords: 'terms of service, terms and conditions, legal, user agreement, education portal terms',
   alternates: {
-    canonical: 'https://nextid.pk/terms',
+    canonical: 'https://www.nextid.pk/terms',
   },
   openGraph: {
     title: 'Terms of Service - NextID.pk',

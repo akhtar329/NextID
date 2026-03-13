@@ -25,8 +25,8 @@ type Institute = {
 
 type Admission = {
   id: number;
-  name: string;           // ✅ Add this
-  slug: string;            // ✅ Add this
+  name: string;
+  slug: string;
   year: number;
   session: string | null;
   status: "Expected" | "Open" | "Closed";
@@ -35,9 +35,9 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  programId: number;
+  // 👇 Changed from programId to programs array
+  programs: Program[];
   instituteId: number;
-  program: Program;
   institute: Institute;
 };
 
@@ -47,7 +47,7 @@ export default function EditAdmissionPage() {
   const admissionId = params.id as string;
 
   // Form states
-  const [programId, setProgramId] = useState<number | null>(null);
+  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]); // 👈 Changed to array
   const [instituteId, setInstituteId] = useState<number | null>(null);
   const [year, setYear] = useState("");
   const [session, setSession] = useState("");
@@ -58,7 +58,7 @@ export default function EditAdmissionPage() {
   const [note, setNote] = useState("");
   const [officialLink, setOfficialLink] = useState("");
   
-  // ✅ Name and Slug states
+  // Name and Slug states
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [manualName, setManualName] = useState(false);
@@ -67,14 +67,14 @@ export default function EditAdmissionPage() {
   // Data states
   const [programs, setPrograms] = useState<Program[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [filteredInstitutes, setFilteredInstitutes] = useState<Institute[]>([]);
+  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]); // 👈 Programs for selected institute
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Selected items for preview
-  const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedInstitute, setSelectedInstitute] = useState<Institute | null>(null);
+  const [selectedProgramsList, setSelectedProgramsList] = useState<Program[]>([]);
 
   // Slug generator
   const generateSlug = (text: string): string => {
@@ -103,24 +103,46 @@ export default function EditAdmissionPage() {
     setSlug(generateSlug(e.target.value));
   };
 
-  // Auto-generate name when program/institute/year changes (if not manually edited)
+  // Auto-generate name when institute/year/programs change (if not manually edited)
   useEffect(() => {
-    if (selectedProgram && selectedInstitute && year && !manualName) {
-      const generatedName = `${selectedProgram.name} Admissions ${year} at ${selectedInstitute.name}`;
+    if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
+      // 📝 NAME - Sirf institute name aur year (programs ka zikar nahi)
+      const sessionText = session ? ` ${session}` : '';
+      const generatedName = `Admissions Open at ${selectedInstitute.name}${sessionText} ${year}`;
+      
+      // 🔗 SLUG - Clean URL (institute + session + year)
+      const cleanInstituteName = selectedInstitute.name
+        .replace(/University|College|Institute|of|the|and|&/gi, '')
+        .trim();
+      
+      const sessionSlug = session ? `-${session.toLowerCase()}` : '';
+      const slugBase = `admissions-open-at-${cleanInstituteName}${sessionSlug}-${year}`;
+      const generatedSlug = generateSlug(slugBase);
+      
       setName(generatedName);
-      setSlug(generateSlug(generatedName));
+      setSlug(generatedSlug);
     }
-  }, [selectedProgram, selectedInstitute, year, manualName]);
+  }, [selectedInstitute, selectedProgramsList, year, session, manualName]);
 
-  // Update selected program when programId changes
-  useEffect(() => {
-    if (programId) {
-      const program = programs.find(p => p.id === programId);
-      setSelectedProgram(program || null);
+  // Handle program selection (multi-select)
+  const handleProgramSelect = (programId: number) => {
+    if (selectedPrograms.includes(programId)) {
+      setSelectedPrograms(selectedPrograms.filter(id => id !== programId));
     } else {
-      setSelectedProgram(null);
+      setSelectedPrograms([...selectedPrograms, programId]);
     }
-  }, [programId, programs]);
+    setManualName(false);
+  };
+
+  // Handle select all programs
+  const handleSelectAllPrograms = () => {
+    if (selectedPrograms.length === filteredPrograms.length) {
+      setSelectedPrograms([]);
+    } else {
+      setSelectedPrograms(filteredPrograms.map(p => p.id));
+    }
+    setManualName(false);
+  };
 
   // Update selected institute when instituteId changes
   useEffect(() => {
@@ -131,6 +153,16 @@ export default function EditAdmissionPage() {
       setSelectedInstitute(null);
     }
   }, [instituteId, institutes]);
+
+  // Update selected programs list
+  useEffect(() => {
+    if (selectedPrograms.length > 0) {
+      const programsList = programs.filter(p => selectedPrograms.includes(p.id));
+      setSelectedProgramsList(programsList);
+    } else {
+      setSelectedProgramsList([]);
+    }
+  }, [selectedPrograms, programs]);
 
   // Fetch programs, institutes, and admission data
   useEffect(() => {
@@ -146,7 +178,7 @@ export default function EditAdmissionPage() {
         const institutesData = await institutesRes.json();
         setInstitutes(institutesData.institutes || []);
 
-        // ✅ Fetch admission details - MAKE SURE API RETURNS name AND slug
+        // ✅ Fetch admission details - API should return programs array
         const admissionRes = await fetch(`/api/admin/admissions/${admissionId}`);
         const admissionData = await admissionRes.json();
         
@@ -156,7 +188,8 @@ export default function EditAdmissionPage() {
           const ad: Admission = admissionData.admission;
           
           // Set form fields
-          setProgramId(ad.programId);
+          // 👇 Set selected programs from programs array
+          setSelectedPrograms(ad.programs?.map(p => p.id) || []);
           setInstituteId(ad.instituteId);
           setYear(ad.year.toString());
           setSession(ad.session || "");
@@ -167,7 +200,7 @@ export default function EditAdmissionPage() {
           setNote(ad.note || "");
           setOfficialLink(ad.officialLink || "");
           
-          // ✅ Set name and slug - THESE WERE MISSING!
+          // Set name and slug
           setName(ad.name || "");
           setSlug(ad.slug || "");
           setOriginalSlug(ad.slug || "");
@@ -186,33 +219,36 @@ export default function EditAdmissionPage() {
     }
   }, [admissionId]);
 
-  // Filter institutes when program changes
+  // Filter programs when institute changes
   useEffect(() => {
-    if (programId) {
-      const fetchProgramInstitutes = async () => {
+    if (instituteId) {
+      const fetchInstitutePrograms = async () => {
         try {
-          const res = await fetch(`/api/admin/program-institutes/by-program/${programId}`);
+          const res = await fetch(`/api/admin/program-institutes/by-institute/${instituteId}`);
           const data = await res.json();
           if (data.success) {
-            setFilteredInstitutes(data.institutes || []);
+            setFilteredPrograms(data.programs || []);
+          } else {
+            setFilteredPrograms(programs);
           }
         } catch (err) {
-          console.error("Error fetching program institutes:", err);
+          console.error("Error fetching institute programs:", err);
+          setFilteredPrograms([]);
         }
       };
-      fetchProgramInstitutes();
+      fetchInstitutePrograms();
     } else {
-      setFilteredInstitutes(institutes);
+      setFilteredPrograms([]);
     }
-  }, [programId, institutes]);
+  }, [instituteId, programs]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    if (!programId || !instituteId || !year || !status) {
-      setError("Program, Institute, Year, and Status are required.");
+    if (!instituteId || selectedPrograms.length === 0 || !year || !status) {
+      setError("Institute, at least one Program, Year, and Status are required.");
       setLoading(false);
       return;
     }
@@ -232,7 +268,7 @@ export default function EditAdmissionPage() {
         body: JSON.stringify({
           name,
           slug,
-          programId: Number(programId),
+          programIds: selectedPrograms, // 👈 Send array of program IDs
           instituteId: Number(instituteId),
           year: Number(year),
           session: session || null,
@@ -279,7 +315,7 @@ export default function EditAdmissionPage() {
 
   if (fetchLoading) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className="p-6 max-w-4xl mx-auto">
         <div className="flex justify-center items-center h-64">
           <div className="text-gray-500">Loading...</div>
         </div>
@@ -288,7 +324,7 @@ export default function EditAdmissionPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       {/* Breadcrumb */}
       <div className="mb-6">
         <div className="flex items-center text-sm text-gray-500 mb-2">
@@ -321,23 +357,7 @@ export default function EditAdmissionPage() {
       )}
 
       <form className="bg-white p-6 rounded-lg shadow-sm border space-y-4" onSubmit={handleSubmit}>
-        <Select
-          label="Program *"
-          value={programId ?? 0}
-          onChange={(val: number) => {
-            setProgramId(val);
-            setManualName(false);
-          }}
-          options={[
-            { value: 0, label: "Select Program" },
-            ...programs.map(p => ({
-              value: p.id,
-              label: p.name,
-            }))
-          ]}
-          required
-        />
-
+        {/* Institute Selection */}
         <Select
           label="Institute *"
           value={instituteId ?? 0}
@@ -347,7 +367,7 @@ export default function EditAdmissionPage() {
           }}
           options={[
             { value: 0, label: "Select Institute" },
-            ...filteredInstitutes.map(i => ({
+            ...institutes.map(i => ({
               value: i.id,
               label: `${i.name} (${i.cityName})`,
             }))
@@ -355,6 +375,52 @@ export default function EditAdmissionPage() {
           required
         />
 
+        {/* Multi-Program Selection */}
+        {instituteId && (
+          <div className="border rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Select Programs * ({selectedPrograms.length} selected)
+              </label>
+              {filteredPrograms.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSelectAllPrograms}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  {selectedPrograms.length === filteredPrograms.length ? 'Deselect All' : 'Select All'}
+                </button>
+              )}
+            </div>
+            
+            {filteredPrograms.length === 0 ? (
+              <p className="text-sm text-gray-500 py-2">No programs found for this institute</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded">
+                {filteredPrograms.map((program) => (
+                  <label
+                    key={program.id}
+                    className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
+                      selectedPrograms.includes(program.id)
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPrograms.includes(program.id)}
+                      onChange={() => handleProgramSelect(program.id)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
+                    />
+                    <span className="text-sm">{program.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Year and Session */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -386,7 +452,7 @@ export default function EditAdmissionPage() {
           />
         </div>
 
-        {/* ✅ Name Field - NOW WILL SHOW DATA */}
+        {/* Name Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Admission Name *
@@ -395,7 +461,7 @@ export default function EditAdmissionPage() {
             type="text"
             value={name}
             onChange={handleNameChange}
-            placeholder="e.g. BS Computer Science Admissions 2026 at FAST NUCES"
+            placeholder="e.g. FAST NUCES Spring Admissions 2026"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
@@ -404,7 +470,7 @@ export default function EditAdmissionPage() {
           </p>
         </div>
 
-        {/* ✅ Slug Field - NOW WILL SHOW DATA */}
+        {/* Slug Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Slug *
@@ -415,7 +481,7 @@ export default function EditAdmissionPage() {
               type="text"
               value={slug}
               onChange={handleSlugChange}
-              placeholder="bs-computer-science-fast-nuces-admissions-2026"
+              placeholder="fast-nuces-spring-admissions-2026"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
               required
             />
@@ -425,7 +491,19 @@ export default function EditAdmissionPage() {
           </p>
         </div>
 
-        {/* ✅ Preview */}
+        {/* Selected Programs Summary */}
+        {selectedProgramsList.length > 0 && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm text-green-800 font-medium mb-1">Selected Programs:</p>
+            <ul className="text-sm text-green-700 list-disc list-inside">
+              {selectedProgramsList.map(program => (
+                <li key={program.id}>{program.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Preview */}
         {slug && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-800">
