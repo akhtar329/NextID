@@ -1,19 +1,20 @@
-// app/robots.txt/route.ts
+// app/(public)/sitemap.xml/route.ts
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const robotsTxt = `User-agent: *
-Allow: /
-Disallow: /admin/
-Disallow: /login/
-Disallow: /api/
-Disallow: /_next/
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>https://nextid.pk/</loc>
+        <lastmod>2026-03-13</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+      </url>
+    </urlset>`;
 
-Sitemap: https://nextid.pk/sitemap.xml`;
-
-  return new NextResponse(robotsTxt, {
+  return new NextResponse(sitemap, {
     headers: {
-      'Content-Type': 'text/plain',
+      'Content-Type': 'application/xml',   // ← XML - sitemap ki pehchan
     },
   });
 }
