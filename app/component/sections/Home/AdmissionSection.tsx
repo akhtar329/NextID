@@ -4,7 +4,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
-// Updated types for API data
 interface Program {
   id: number;
   name: string;
@@ -13,7 +12,7 @@ interface Program {
 
 interface Admission {
   id: number;
-  name: string;           // Full admission name
+  name: string;
   slug: string;
   year: number;
   session: string | null;
@@ -23,7 +22,7 @@ interface Admission {
   instituteId: number;
   instituteName: string;
   instituteSlug: string;
-  programs: Program[];     // ✅ Array of programs
+  programs: Program[];
 }
 
 export default function LatestAdmissionsSection() {
@@ -32,6 +31,43 @@ export default function LatestAdmissionsSection() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUniversity, setSelectedUniversity] = useState('All');
 
+  // ✅ Helper function ko sab se upar declare karo
+  const getDaysLeft = (dateString: string | null): number | null => {
+    if (!dateString) return null;
+    try {
+      const deadline = new Date(dateString).getTime();
+      const now = new Date().getTime(); // currentDate ki jagah direct new Date()
+      const diffTime = deadline - now;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Format date function bhi upar le aao
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'TBA';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-PK', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  };
+
+  // Get program display text
+  const getProgramDisplay = (programs: Program[]): string => {
+    if (!programs || programs.length === 0) return 'Program';
+    if (programs.length === 1) return programs[0].name;
+    if (programs.length === 2) return `${programs[0].name} & ${programs[1].name}`;
+    return `${programs[0].name} +${programs.length - 1} more`;
+  };
+
   // Fetch admissions from API
   useEffect(() => {
     const fetchAdmissions = async () => {
@@ -39,7 +75,7 @@ export default function LatestAdmissionsSection() {
         setLoading(true);
         console.log('📡 Fetching admissions...');
         
-        const response = await fetch('/api/public/admissions?limit=20');
+        const response = await fetch('/api/public/admissions?limit=50');
         const data = await response.json();
         
         console.log('📦 API Response:', data);
@@ -70,6 +106,36 @@ export default function LatestAdmissionsSection() {
     return admissions.filter(ad => ad.status === 'Open');
   }, [admissions]);
 
+  // ✅ Calculate closing soon counts (ab getDaysLeft available hai)
+  const closingSoonStats = useMemo(() => {
+    const allOpen = openAdmissions;
+    
+    const closingThisWeek = allOpen.filter(ad => {
+      if (!ad.expectedCloseDate) return false;
+      const daysLeft = getDaysLeft(ad.expectedCloseDate);
+      return daysLeft !== null && daysLeft <= 7;
+    });
+
+    const closingThisMonth = allOpen.filter(ad => {
+      if (!ad.expectedCloseDate) return false;
+      const daysLeft = getDaysLeft(ad.expectedCloseDate);
+      return daysLeft !== null && daysLeft <= 30;
+    });
+
+    const urgentToday = allOpen.filter(ad => {
+      if (!ad.expectedCloseDate) return false;
+      const daysLeft = getDaysLeft(ad.expectedCloseDate);
+      return daysLeft !== null && daysLeft <= 3;
+    });
+
+    return {
+      thisWeek: closingThisWeek.length,
+      thisMonth: closingThisMonth.length,
+      urgent: urgentToday.length,
+      total: allOpen.length
+    };
+  }, [openAdmissions]);
+
   // Sort admissions - closing soon first
   const sortedAdmissions = useMemo(() => {
     return [...openAdmissions].sort((a, b) => {
@@ -79,9 +145,13 @@ export default function LatestAdmissionsSection() {
     });
   }, [openAdmissions]);
 
-  // Get closing soon admissions (top 5)
+  // Get closing soon admissions (all within 30 days)
   const closingSoonAdmissions = useMemo(() => {
-    return sortedAdmissions.slice(0, 5);
+    return sortedAdmissions.filter(ad => {
+      if (!ad.expectedCloseDate) return false;
+      const daysLeft = getDaysLeft(ad.expectedCloseDate);
+      return daysLeft !== null && daysLeft <= 30;
+    }).slice(0, 5);
   }, [sortedAdmissions]);
 
   // Get unique universities
@@ -97,59 +167,17 @@ export default function LatestAdmissionsSection() {
     return closingSoonAdmissions.filter(admission => {
       const searchLower = searchQuery.toLowerCase();
       
-      // Search in institute name
       const matchesInstitute = admission.instituteName?.toLowerCase().includes(searchLower);
-      
-      // Search in all program names
       const matchesProgram = admission.programs?.some(program => 
         program.name.toLowerCase().includes(searchLower)
       );
-      
       const matchesSearch = searchQuery === '' || matchesInstitute || matchesProgram;
-      
       const matchesUniversity = selectedUniversity === 'All' || 
         admission.instituteName === selectedUniversity;
       
       return matchesSearch && matchesUniversity;
     });
   }, [closingSoonAdmissions, searchQuery, selectedUniversity]);
-
-  // Format date
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBA';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-PK', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
-
-  // Calculate days left
-  const getDaysLeft = (dateString: string | null): number | null => {
-    if (!dateString) return null;
-    try {
-      const deadline = new Date(dateString).getTime();
-      const now = currentDate.getTime();
-      const diffTime = deadline - now;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays > 0 ? diffDays : null;
-    } catch {
-      return null;
-    }
-  };
-
-  // Get program display text
-  const getProgramDisplay = (programs: Program[]): string => {
-    if (!programs || programs.length === 0) return 'Program';
-    if (programs.length === 1) return programs[0].name;
-    if (programs.length === 2) return `${programs[0].name} & ${programs[1].name}`;
-    return `${programs[0].name} +${programs.length - 1} more`;
-  };
 
   // Loading state
   if (loading) {
@@ -158,7 +186,7 @@ export default function LatestAdmissionsSection() {
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-10">
             <h2 className="text-3xl font-bold text-gray-900 mb-3">
-              Latest Admissions Open in Pakistan
+              Latest Admissions in Pakistan 2026
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
               Loading latest admissions...
@@ -176,15 +204,46 @@ export default function LatestAdmissionsSection() {
     <section className="py-12 bg-white">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Section Heading */}
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">
-            ⏰ Closing Soon - Top 5 Admissions
+        {/* SEO Optimized Headings */}
+        <div className="text-center mb-6">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            Admissions 2026 in Pakistan
           </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Don't miss out! These admissions are closing in the next few days
+          
+          <h2 className="text-3xl font-bold text-gray-800 mb-3">
+            ⏰ {closingSoonStats.thisWeek} Admissions Closing This Week
+          </h2>
+          
+          <p className="text-gray-600 max-w-3xl mx-auto text-lg">
+            Find latest university admissions 2026 in Pakistan. {closingSoonStats.urgent > 0 && (
+              <span className="text-red-600 font-semibold">{closingSoonStats.urgent} urgent admissions</span>
+            )} closing in next 3 days. Apply now for {openAdmissions.length} open admissions across Pakistan.
           </p>
         </div>
+
+        {/* Stats Cards - Dynamic Counts */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-100">
+            <div className="text-3xl font-bold text-blue-600">{openAdmissions.length}</div>
+            <div className="text-sm text-gray-600">Open Admissions</div>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-4 text-center border border-orange-100">
+            <div className="text-3xl font-bold text-orange-600">{closingSoonStats.thisWeek}</div>
+            <div className="text-sm text-gray-600">Closing This Week</div>
+          </div>
+          <div className="bg-yellow-50 rounded-xl p-4 text-center border border-yellow-100">
+            <div className="text-3xl font-bold text-yellow-600">{closingSoonStats.thisMonth}</div>
+            <div className="text-sm text-gray-600">Closing This Month</div>
+          </div>
+          <div className="bg-red-50 rounded-xl p-4 text-center border border-red-100">
+            <div className="text-3xl font-bold text-red-600">{closingSoonStats.urgent}</div>
+            <div className="text-sm text-gray-600">Urgent (≤3 days)</div>
+          </div>
+        </div>
+
+        <h3 className="text-2xl font-bold text-gray-900 mb-4">
+          Top Admissions Closing Soon
+        </h3>
 
         {/* Search and Filters */}
         {closingSoonAdmissions.length > 0 && (
@@ -332,9 +391,9 @@ export default function LatestAdmissionsSection() {
               </tbody>
             </table>
 
-            {/* Status Bar */}
-            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
-              <div className="flex items-center justify-between text-sm">
+            {/* Status Bar with SEO text */}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1">
                     <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
@@ -349,8 +408,8 @@ export default function LatestAdmissionsSection() {
                     <span className="text-gray-600">Normal (8+ days)</span>
                   </span>
                 </div>
-                <span className="text-gray-500">
-                  Showing {filteredAdmissions.length} of {closingSoonAdmissions.length} closing soon
+                <span className="text-gray-700 font-medium">
+                  {closingSoonStats.thisWeek} admissions closing this week • Apply before deadline
                 </span>
               </div>
             </div>
@@ -358,27 +417,27 @@ export default function LatestAdmissionsSection() {
         ) : (
           <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
             <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">No Closing Soon Admissions</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">No Admissions Closing Soon</h3>
             <p className="text-gray-500 mb-6">
-              There are currently no admissions closing in the next few days.
+              Check back later for upcoming admission deadlines.
             </p>
             <Link
               href="/admissions"
               className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
-              View All Admissions
+              View All {openAdmissions.length} Open Admissions
             </Link>
           </div>
         )}
 
-        {/* View All Link */}
+        {/* View All Link with SEO text */}
         {sortedAdmissions.length > 5 && (
           <div className="text-center mt-8">
             <Link
-              href="/admissions?sort=closing-soon"
-              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+              href="/admissions"
+              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium text-lg"
             >
-              View all {sortedAdmissions.length} open admissions
+              Browse all {openAdmissions.length} university admissions 2026 in Pakistan
               <span>→</span>
             </Link>
           </div>

@@ -43,7 +43,7 @@ export default function CoursesSection() {
         const data = await response.json();
         console.log('📦 API Response:', data);
         
-        // ✅ Handle both response formats
+        // Handle both response formats
         if (Array.isArray(data)) {
           console.log('✅ Programs found (array):', data.length);
           setPrograms(data);
@@ -65,6 +65,27 @@ export default function CoursesSection() {
     fetchPrograms();
   }, []);
 
+  // Calculate stats
+  const programStats = useMemo(() => {
+    const total = programs.length;
+    const featured = programs.filter(p => p.isFeatured).length;
+    const byLevel = programs.reduce((acc: Record<string, number>, p) => {
+      if (p.levelName) {
+        acc[p.levelName] = (acc[p.levelName] || 0) + 1;
+      }
+      return acc;
+    }, {});
+    
+    const byCategory = programs.reduce((acc: Record<string, number>, p) => {
+      if (p.categoryName) {
+        acc[p.categoryName] = (acc[p.categoryName] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    return { total, featured, byLevel, byCategory };
+  }, [programs]);
+
   // Get unique values for filters
   const uniqueLevels = useMemo(() => {
     const levels = programs
@@ -78,6 +99,13 @@ export default function CoursesSection() {
       .map(p => p.categoryName)
       .filter((cat): cat is string => cat !== null && cat !== undefined);
     return ['All', ...new Set(categories)];
+  }, [programs]);
+
+  // Featured programs for carousel
+  const featuredPrograms = useMemo(() => {
+    return programs
+      .filter(p => p.isFeatured)
+      .slice(0, 3);
   }, [programs]);
 
   // Filter programs
@@ -117,12 +145,13 @@ export default function CoursesSection() {
 
   const getLevelColor = (level: string | null) => {
     const colors: Record<string, { bg: string; text: string }> = {
-      'BS': { bg: 'bg-indigo-100', text: 'text-indigo-800' },
-      'MS': { bg: 'bg-teal-100', text: 'text-teal-800' },
+      'Bachelor': { bg: 'bg-indigo-100', text: 'text-indigo-800' },
+      'Master': { bg: 'bg-teal-100', text: 'text-teal-800' },
       'PhD': { bg: 'bg-amber-100', text: 'text-amber-800' },
       'Diploma': { bg: 'bg-violet-100', text: 'text-violet-800' },
-      'Bachelor': { bg: 'bg-sky-100', text: 'text-sky-800' },
-      'Master': { bg: 'bg-emerald-100', text: 'text-emerald-800' },
+      'Certificate': { bg: 'bg-sky-100', text: 'text-sky-800' },
+      'BS': { bg: 'bg-emerald-100', text: 'text-emerald-800' },
+      'MS': { bg: 'bg-cyan-100', text: 'text-cyan-800' },
     };
     return colors[level || ''] || { bg: 'bg-gray-100', text: 'text-gray-800' };
   };
@@ -133,9 +162,9 @@ export default function CoursesSection() {
       <section className="py-12 bg-white">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">
-              Popular Courses & Degree Programs
-            </h2>
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              Degree Programs in Pakistan 2026
+            </h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
               Loading courses and programs...
             </p>
@@ -152,32 +181,112 @@ export default function CoursesSection() {
     <section className="py-12 bg-white">
       <div className="container mx-auto px-4 max-w-6xl">
         
+        {/* Hidden H1 for SEO */}
+        <h2 className="sr-only">
+          Pakistan Degree Programs 2026 - BS, MS, PhD, Diploma Courses
+        </h2>
+        
         {/* Section Heading */}
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">
-            Popular Courses & Degree Programs
+        <div className="text-center mb-6">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            Degree Programs in Pakistan 2026
           </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Explore top educational programs from leading universities
+          
+          <h2 className="text-3xl font-bold text-gray-800 mb-3">
+            📚 {programStats.total} Academic Programs Available
+          </h2>
+          
+          <p className="text-gray-600 max-w-3xl mx-auto text-lg">
+            Explore {programStats.featured} featured programs across {
+              Object.keys(programStats.byCategory).length
+            } categories including BS, MS, PhD, and diploma courses.
           </p>
         </div>
+
+        {/* Stats Cards - Like Admissions Section */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-100">
+            <div className="text-3xl font-bold text-blue-600">{programStats.total}</div>
+            <div className="text-sm text-gray-600">Total Programs</div>
+          </div>
+          <div className="bg-green-50 rounded-xl p-4 text-center border border-green-100">
+            <div className="text-3xl font-bold text-green-600">{programStats.featured}</div>
+            <div className="text-sm text-gray-600">Featured Programs</div>
+          </div>
+          <div className="bg-purple-50 rounded-xl p-4 text-center border border-purple-100">
+            <div className="text-3xl font-bold text-purple-600">
+              {Object.keys(programStats.byLevel).length}
+            </div>
+            <div className="text-sm text-gray-600">Levels</div>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-4 text-center border border-orange-100">
+            <div className="text-3xl font-bold text-orange-600">
+              {Object.keys(programStats.byCategory).length}
+            </div>
+            <div className="text-sm text-gray-600">Categories</div>
+          </div>
+        </div>
+
+        {/* Featured Programs Section */}
+        {featuredPrograms.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-yellow-500 rounded-full"></span>
+              ⭐ Featured Programs
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {featuredPrograms.map((program) => (
+                <Link
+                  key={program.id}
+                  href={`/programs/${program.slug}`}
+                  className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl p-5 border border-yellow-200 hover:shadow-lg transition-all group"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-bold text-gray-900 group-hover:text-blue-600">
+                      {program.name}
+                    </h4>
+                    <span className="text-yellow-500">⭐</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {program.levelName && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                        {program.levelName}
+                      </span>
+                    )}
+                    {program.categoryName && (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                        {program.categoryName}
+                      </span>
+                    )}
+                  </div>
+                  {program.duration && (
+                    <p className="text-sm text-gray-600">Duration: {program.duration}</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters */}
         {programs.length > 0 && (
           <div className="bg-gray-50 rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Find Your Program
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
               {/* Search Input */}
               <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search
+                  Search Programs
                 </label>
                 <div className="relative">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search programs..."
+                    placeholder="BS Computer Science, MBA..."
                     className="w-full px-4 py-3 pl-10 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -190,7 +299,7 @@ export default function CoursesSection() {
               {uniqueLevels.length > 1 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Level
+                    Education Level
                   </label>
                   <select
                     value={selectedLevel}
@@ -198,9 +307,7 @@ export default function CoursesSection() {
                     className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     {uniqueLevels.map(level => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
+                      <option key={level} value={level}>{level}</option>
                     ))}
                   </select>
                 </div>
@@ -218,9 +325,7 @@ export default function CoursesSection() {
                     className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     {uniqueCategories.map(cat => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
+                      <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                 </div>
@@ -238,14 +343,21 @@ export default function CoursesSection() {
                   }}
                   className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                 >
-                  Clear filters
+                  Clear all filters
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* Programs Table - Simplified with 5 rows only */}
+        {/* Results Count */}
+        {programs.length > 0 && (
+          <div className="mb-4 text-sm text-gray-600">
+            Showing {filteredPrograms.slice(0, 5).length} of {filteredPrograms.length} programs
+          </div>
+        )}
+
+        {/* Programs Table - 5 rows only */}
         {filteredPrograms.length > 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -256,6 +368,7 @@ export default function CoursesSection() {
                     <th scope="col" className="px-6 py-4">Level</th>
                     <th scope="col" className="px-6 py-4">Category</th>
                     <th scope="col" className="px-6 py-4">Duration</th>
+                    <th scope="col" className="px-6 py-4">Fee Range</th>
                     <th scope="col" className="px-6 py-4">Action</th>
                   </tr>
                 </thead>
@@ -270,14 +383,14 @@ export default function CoursesSection() {
                         className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} border-b border-gray-200 hover:bg-gray-100 transition-colors`}
                       >
                         <td className="px-6 py-4 font-medium text-gray-900">
-                          <div>
+                          <Link href={`/programs/${program.slug}`} className="hover:text-blue-600 hover:underline">
                             {program.name}
-                            {program.degreeName && (
-                              <span className="block text-xs text-gray-500 mt-1">
-                                {program.degreeName}
-                              </span>
-                            )}
-                          </div>
+                          </Link>
+                          {program.degreeName && (
+                            <span className="block text-xs text-gray-500 mt-1">
+                              {program.degreeName}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           {program.levelName && (
@@ -293,8 +406,11 @@ export default function CoursesSection() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-gray-600">
                           {program.duration || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {program.feeRange || 'Contact uni'}
                         </td>
                         <td className="px-6 py-4">
                           <Link
@@ -311,23 +427,40 @@ export default function CoursesSection() {
               </table>
             </div>
             
-            {/* Table Footer with "More Courses" Link */}
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-              <p className="text-sm text-gray-600">
-                Showing 5 of {filteredPrograms.length} programs
-              </p>
-              
-              {filteredPrograms.length > 5 && (
-                <Link
-                  href="/programs"
-                  className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
-                >
-                  View All Courses
-                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
-              )}
+            {/* Table Footer with Stats */}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span className="text-xs text-gray-600">Bachelor's</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span className="text-xs text-gray-600">Master's</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                    <span className="text-xs text-gray-600">PhD</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    <span className="text-xs text-gray-600">Featured</span>
+                  </span>
+                </div>
+                
+                {filteredPrograms.length > 5 && (
+                  <Link
+                    href="/programs"
+                    className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    View All {filteredPrograms.length} Programs
+                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -354,14 +487,14 @@ export default function CoursesSection() {
           </div>
         )}
 
-        {/* Optional: Alternative "More Courses" button if table is empty */}
-        {programs.length === 0 && (
-          <div className="text-center mt-8">
+        {/* View All Link */}
+        {programs.length > 0 && (
+          <div className="text-center mt-10">
             <Link
               href="/programs"
               className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors shadow-md"
             >
-              Browse All Programs
+              Browse All {programs.length} Degree Programs
               <span className="ml-2">→</span>
             </Link>
           </div>

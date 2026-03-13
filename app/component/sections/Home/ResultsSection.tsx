@@ -34,7 +34,7 @@ export default function LatestResultsSection() {
         setLoading(true);
         console.log('📡 Fetching results...');
         
-        const response = await fetch('/api/public/results?limit=20&sort=latest');
+        const response = await fetch('/api/public/results?limit=50&sort=latest');
         const data = await response.json();
         
         console.log('📦 API Response:', data);
@@ -56,6 +56,29 @@ export default function LatestResultsSection() {
 
     fetchResults();
   }, []);
+
+  // Get current date for calculations
+  const currentDate = new Date();
+
+  // Calculate stats
+  const resultsStats = useMemo(() => {
+    const total = results.length;
+    const thisMonth = results.filter(r => {
+      if (!r.resultDate) return false;
+      const date = new Date(r.resultDate);
+      const now = new Date();
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    }).length;
+    
+    const popular = results.filter(r => r.isPopular).length;
+    
+    const byType = {
+      boards: results.filter(r => r.boardName).length,
+      universities: results.filter(r => r.universityName).length
+    };
+
+    return { total, thisMonth, popular, byType };
+  }, [results]);
 
   // Get unique values for filters
   const uniqueTypes = useMemo(() => {
@@ -97,15 +120,22 @@ export default function LatestResultsSection() {
         result.year.toString().includes(searchLower);
       
       const matchesType = selectedType === 'All' || resultType === selectedType;
-      
       const matchesYear = selectedYear === 'All' || result.year.toString() === selectedYear;
-      
-      const matchesInstitution = selectedInstitution === 'All' || 
-        resultName === selectedInstitution;
+      const matchesInstitution = selectedInstitution === 'All' || resultName === selectedInstitution;
       
       return matchesSearch && matchesType && matchesYear && matchesInstitution;
     });
   }, [results, searchQuery, selectedType, selectedYear, selectedInstitution]);
+
+  // Get latest results (last 30 days)
+  const latestResults = useMemo(() => {
+    return results.filter(r => {
+      if (!r.resultDate) return false;
+      const date = new Date(r.resultDate);
+      const diffDays = Math.ceil((currentDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays <= 30;
+    }).slice(0, 5);
+  }, [results, currentDate]);
 
   // Format date
   const formatDate = (dateString: string | null) => {
@@ -119,6 +149,24 @@ export default function LatestResultsSection() {
       });
     } catch {
       return 'Invalid Date';
+    }
+  };
+
+  // Get time ago
+  const getTimeAgo = (dateString: string | null) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffDays = Math.ceil((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+      return formatDate(dateString);
+    } catch {
+      return '';
     }
   };
 
@@ -137,9 +185,9 @@ export default function LatestResultsSection() {
       <section className="py-12 bg-gray-50">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-gray-900 mb-3">
-              Latest Exam Results in Pakistan
-            </h2>
+            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+              Exam Results in Pakistan 2026
+            </h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
               Loading latest results...
             </p>
@@ -156,19 +204,95 @@ export default function LatestResultsSection() {
     <section className="py-12 bg-gray-50">
       <div className="container mx-auto px-4 max-w-6xl">
         
+        {/* Hidden H1 for SEO */}
+        <h2 className="sr-only">
+          Pakistan Exam Results 2026 - Board and University Results
+        </h2>
+        
         {/* Section Heading */}
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3">
-            Latest Exam Results in Pakistan
+        <div className="text-center mb-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+            📊 Latest Exam Results in Pakistan
           </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Check recently published results from educational boards and universities across Pakistan
+          <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+            Check {resultsStats.thisMonth} new results announced this month. 
+            {resultsStats.popular > 0 && ` ${resultsStats.popular} popular results available.`}
           </p>
         </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
+            <div className="text-3xl font-bold text-blue-600">{resultsStats.total}</div>
+            <div className="text-sm text-gray-600">Total Results</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
+            <div className="text-3xl font-bold text-green-600">{resultsStats.byType.boards}</div>
+            <div className="text-sm text-gray-600">Board Results</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
+            <div className="text-3xl font-bold text-purple-600">{resultsStats.byType.universities}</div>
+            <div className="text-sm text-gray-600">University Results</div>
+          </div>
+          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
+            <div className="text-3xl font-bold text-orange-600">{resultsStats.thisMonth}</div>
+            <div className="text-sm text-gray-600">This Month</div>
+          </div>
+        </div>
+
+        {/* Latest Results Preview */}
+        {latestResults.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+              🔥 Latest Results ({latestResults.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {latestResults.map((result) => {
+                const { name, type } = getInstitutionInfo(result);
+                return (
+                  <Link
+                    key={result.id}
+                    href={`/results/${result.slug}`}
+                    className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-lg transition-all group hover:border-blue-400"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${
+                          type === 'Board' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {type}
+                        </span>
+                        <h4 className="font-bold text-gray-900 group-hover:text-blue-600">
+                          {name}
+                        </h4>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {result.programName || result.title || 'Results Announced'}
+                        </p>
+                      </div>
+                      {result.isPopular && (
+                        <span className="text-yellow-500 text-xl">⭐</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Year: {result.year}</span>
+                      <span className="text-green-600 font-medium">
+                        {getTimeAgo(result.resultDate)}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters */}
         {results.length > 0 && (
           <div className="bg-white rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Filter Results
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               
               {/* Search Input */}
@@ -203,9 +327,7 @@ export default function LatestResultsSection() {
                   className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {uniqueTypes.map(type => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
+                    <option key={type} value={type}>{type}</option>
                   ))}
                 </select>
               </div>
@@ -222,9 +344,7 @@ export default function LatestResultsSection() {
                   className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {uniqueYears.map(year => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
+                    <option key={year} value={year}>{year}</option>
                   ))}
                 </select>
               </div>
@@ -242,9 +362,7 @@ export default function LatestResultsSection() {
                 className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {uniqueInstitutions.map(inst => (
-                  <option key={inst} value={inst}>
-                    {inst}
-                  </option>
+                  <option key={inst} value={inst}>{inst}</option>
                 ))}
               </select>
             </div>
@@ -317,9 +435,11 @@ export default function LatestResultsSection() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {name}
-                        </div>
+                        <Link href={`/${type === 'Board' ? 'boards' : 'universities'}/${slug}`}>
+                          <div className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline">
+                            {name}
+                          </div>
+                        </Link>
                         {result.isPopular && (
                           <span className="inline-flex items-center px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full mt-1">
                             ⭐ Popular
@@ -354,6 +474,29 @@ export default function LatestResultsSection() {
                 })}
               </tbody>
             </table>
+
+            {/* Status Bar */}
+            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span className="text-gray-600">Board Results</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span className="text-gray-600">University Results</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    <span className="text-gray-600">Popular</span>
+                  </span>
+                </div>
+                <span className="text-gray-500">
+                  {resultsStats.thisMonth} results this month
+                </span>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
@@ -387,7 +530,7 @@ export default function LatestResultsSection() {
               href="/results"
               className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors shadow-md"
             >
-              View All Results
+              Browse All {results.length} Results in Pakistan
               <span className="ml-2">→</span>
             </Link>
           </div>

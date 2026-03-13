@@ -1,355 +1,248 @@
 // app/(public)/page.tsx
-'use client';
-
+import { Metadata } from 'next';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { Suspense } from 'react';
 import HeroSection from '@/app/component/sections/Home/HeroSection';
 import AdmissionSection from '@/app/component/sections/Home/AdmissionSection';
 import ResultsSection from '@/app/component/sections/Home/ResultsSection';
 import CoursesSection from '@/app/component/sections/Home/CoursesSection';
 import UniversitiesSection from '@/app/component/sections/Home/UniversitiesSection';
-//import ScholarshipsSection from '@/app/component/sections/Home/ScholarshipsSection';
+import SidebarWidgets from '@/app/component/sections/Home/SidebarWidgets';
 
-// Types for API data
-interface City {
-  id: number;
-  name: string;
-  slug: string;
-  universityCount: number;  // Kitni universities is city mein
-}
 
-interface Board {
-  id: number;
-  name: string;
-  slug: string;
-  resultCount: number;      // Kitne results is board ke
-  dateSheetCount: number;   // Kitni date sheets is board ki
-}
+// ==================== METADATA FOR SEO ====================
+export const metadata: Metadata = {
+  metadataBase: new URL('https://www.nextid.pk'),
+  title: {
+    default: 'Pakistan Latest Admissions 2026, Results, Date Sheets & University Updates | NextID.pk',
+    template: '%s | NextID.pk'
+  },
+  description: 'Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan. NUST, FAST, LUMS, Punjab University admissions open. Check merit lists, fee structure, and apply online.',
+  keywords: [
+    'admissions 2026 pakistan',
+    'university admissions pakistan 2026',
+    'board results 2026',
+    'date sheets 2026',
+    'nust admissions 2026',
+    'fast admissions 2026',
+    'lums admissions 2026',
+    'punjab university admissions',
+    'karachi university admissions',
+    'bs programs pakistan',
+    'mba admissions pakistan',
+    'ms programs pakistan',
+    'medical admissions pakistan 2026',
+    'engineering admissions pakistan',
+    'education portal pakistan',
+    'admission alerts',
+    'merit lists 2026',
+    'entry test preparation',
+    'scholarship 2026 pakistan'
+  ].join(', '),
+  
+  authors: [{ name: 'NextID.pk', url: 'https://www.nextid.pk' }],
+  creator: 'NextID.pk',
+  publisher: 'NextID.pk',
+  
+  openGraph: {
+    title: 'Pakistan Latest Admissions 2026, Results & University Updates | NextID.pk',
+    description: 'Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan. Apply online for NUST, FAST, LUMS admissions.',
+    url: 'https://www.nextid.pk',
+    siteName: 'NextID.pk',
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'NextID.pk - Pakistan Education Portal',
+      },
+    ],
+    locale: 'en_PK',
+    type: 'website',
+  },
+  
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Pakistan Latest Admissions 2026, Results & University Updates | NextID.pk',
+    description: 'Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan.',
+    images: ['/twitter-image.jpg'],
+    creator: '@nextidpk',
+    site: '@nextidpk',
+  },
+  
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': 160,
+      'max-video-preview': -1,
+    },
+  },
+  
+  alternates: {
+    canonical: 'https://www.nextid.pk',
+  },
+  
+  category: 'education',
+  
+  verification: {
+    google: 'your-google-verification-code',
+    yandex: 'your-yandex-verification',
+  },
+};
 
-interface Program {
-  id: number;
-  name: string;
-  slug: string;
-  categoryName: string | null;
-  universityCount: number;  // Kitni universities ye program offer karti hain
-}
+// ==================== SCHEMA MARKUP ====================
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "NextID.pk",
+  "url": "https://www.nextid.pk",
+  "description": "Pakistan's #1 education portal for admissions, results, date sheets, and degree programs.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "https://www.nextid.pk/search?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
+};
 
-interface FeaturedUniversity {
-  id: number;
-  name: string;
-  slug: string;
-  programCount: number;     // Kitne programs is university mein
-  admissionCount: number;   // Kitni admissions is university mein
-}
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "EducationalOrganization",
+  "name": "NextID.pk",
+  "url": "https://www.nextid.pk",
+  "logo": "https://www.nextid.pk/logo.png",
+  "sameAs": [
+    "https://www.facebook.com/nextidpk",
+    "https://twitter.com/nextidpk",
+    "https://www.instagram.com/nextidpk"
+  ],
+  "address": {
+    "@type": "PostalAddress",
+    "addressCountry": "PK"
+  }
+};
 
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://www.nextid.pk"
+    }
+  ]
+};
+
+// ==================== MAIN PAGE ====================
 export default function HomePage() {
-  const [email, setEmail] = useState('');
-  
-  // State for sidebar data
-  const [cities, setCities] = useState<City[]>([]);
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [universities, setUniversities] = useState<FeaturedUniversity[]>([]);
-  
-  // Loading states
-  const [loadingCities, setLoadingCities] = useState(true);
-  const [loadingBoards, setLoadingBoards] = useState(true);
-  const [loadingPrograms, setLoadingPrograms] = useState(true);
-  const [loadingUniversities, setLoadingUniversities] = useState(true);
-
-  // Fetch all data
-  useEffect(() => {
-    // Cities with university counts
-    const fetchCities = async () => {
-      try {
-        setLoadingCities(true);
-        const res = await fetch('/api/public/cities?limit=5&withUniversityCount=true');
-        const data = await res.json();
-        setCities(data.success ? data.data : (Array.isArray(data) ? data : []));
-      } catch (error) {
-        console.error('Error:', error);
-        setCities([]);
-      } finally {
-        setLoadingCities(false);
-      }
-    };
-
-    // Boards with result counts
-    const fetchBoards = async () => {
-      try {
-        setLoadingBoards(true);
-        const res = await fetch('/api/public/boards?limit=5&withStats=true');
-        const data = await res.json();
-        setBoards(data.success ? data.data : (Array.isArray(data) ? data : []));
-      } catch (error) {
-        console.error('Error:', error);
-        setBoards([]);
-      } finally {
-        setLoadingBoards(false);
-      }
-    };
-
-    // Programs with university counts
-    const fetchPrograms = async () => {
-      try {
-        setLoadingPrograms(true);
-        const res = await fetch('/api/public/programs?limit=5&withUniversityCount=true');
-        const data = await res.json();
-        setPrograms(data.success ? data.data : (Array.isArray(data) ? data : []));
-      } catch (error) {
-        console.error('Error:', error);
-        setPrograms([]);
-      } finally {
-        setLoadingPrograms(false);
-      }
-    };
-
-    // Universities with program counts
-    const fetchUniversities = async () => {
-      try {
-        setLoadingUniversities(true);
-        const res = await fetch('/api/public/institutes?limit=5&featured=true&withCounts=true');
-        const data = await res.json();
-        setUniversities(data.success ? data.data : (Array.isArray(data) ? data : []));
-      } catch (error) {
-        console.error('Error:', error);
-        setUniversities([]);
-      } finally {
-        setLoadingUniversities(false);
-      }
-    };
-
-    fetchCities();
-    fetchBoards();
-    fetchPrograms();
-    fetchUniversities();
-  }, []);
-
   return (
-    <div className="min-h-screen">
-      <HeroSection />
+    <>
+      {/* Schema Markup */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
       
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex flex-col lg:flex-row gap-8">
+      {/* Hidden H1 for SEO - Using Tailwind's sr-only */}
+      <h1 className="sr-only">
+        NextID.pk - Pakistan's Largest Education Portal for Admissions 2026, Results, Date Sheets and Degree Programs
+      </h1>
+      
+      {/* Main Content */}
+      <div className="min-h-screen bg-gray-50">
+        <HeroSection />
+        
+        <div className="max-w-7xl mx-auto px-4">
+          {/* Breadcrumb Navigation */}
+          <nav aria-label="Breadcrumb" className="py-4">
+            <ol className="flex text-sm text-gray-600">
+              <li className="flex items-center">
+                <Link href="/" className="hover:text-blue-600">Home</Link>
+              </li>
+            </ol>
+          </nav>
           
-          {/* Main Content */}
-          <main className="lg:w-8/12">
-            <section className="mb-12"><AdmissionSection /></section>
-            <section className="mb-12"><ResultsSection /></section>
-            <section className="mb-12"><CoursesSection /></section>
-            <section className="mb-12"><UniversitiesSection /></section>
-         {/* Hide  <section className="mb-12"><ScholarshipsSection /></section>*/}  
-          </main>
-          
-          {/* Sidebar */}
-          <aside className="lg:w-4/12 space-y-8 lg:sticky lg:top-6">
+          <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* 1. Cities Widget - University Counts */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b">
-                <h3 className="text-xl font-bold text-gray-900">Popular Cities</h3>
-                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Top 5</span>
-              </div>
-              
-              {loadingCities ? (
-                <div className="space-y-3">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="animate-pulse flex justify-between p-3">
-                      <div className="h-4 bg-gray-200 rounded w-24"></div>
-                      <div className="h-4 bg-gray-200 rounded w-16"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {cities.map((city) => (
-                    <Link
-                      key={city.id}
-                      href={`/city/${city.slug}`}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 group"
-                    >
-                      <span className="font-medium text-gray-800 group-hover:text-blue-600">
-                        {city.name}
-                      </span>
-                      <span className="text-sm bg-gray-100 px-3 py-1 rounded-full text-gray-700">
-                        {city.universityCount} {city.universityCount === 1 ? 'University' : 'Universities'}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-              
-              <div className="mt-4 pt-3 border-t text-center">
-                <Link href="/cities" className="text-sm text-blue-600 hover:text-blue-800">
-                  View All Cities →
-                </Link>
-              </div>
-            </div>
+            {/* Main Content */}
+            <main className="lg:w-8/12">
+              <section className="mb-12">
+                <Suspense fallback={<div className="animate-pulse h-96 bg-gray-200 rounded-xl"></div>}>
+                  <AdmissionSection />
+                </Suspense>
+              </section>
+              <section className="mb-12">
+                <Suspense fallback={<div className="animate-pulse h-96 bg-gray-200 rounded-xl"></div>}>
+                  <ResultsSection />
+                </Suspense>
+              </section>
+              <section className="mb-12">
+                <Suspense fallback={<div className="animate-pulse h-96 bg-gray-200 rounded-xl"></div>}>
+                  <CoursesSection />
+                </Suspense>
+              </section>
+              <section className="mb-12">
+                <Suspense fallback={<div className="animate-pulse h-96 bg-gray-200 rounded-xl"></div>}>
+                  <UniversitiesSection />
+                </Suspense>
+              </section>
+            </main>
             
-            {/* 2. Boards Widget - Result Counts */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b">
-                <h3 className="text-xl font-bold text-gray-900">Education Boards</h3>
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Active</span>
-              </div>
-              
-              {loadingBoards ? (
-                <div className="space-y-3">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="animate-pulse p-3">
-                      <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-32"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {boards.map((board) => (
-                    <Link
-                      key={board.id}
-                      href={`/boards/${board.slug}`}
-                      className="block p-3 rounded-lg hover:bg-gray-50 group"
-                    >
-                      <div className="font-medium text-gray-800 group-hover:text-blue-600">
-                        {board.name}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs mt-2">
-                        <span className="bg-blue-50 px-2 py-1 rounded-full text-blue-700">
-                          📊 {board.resultCount} Results
-                        </span>
-                        <span className="bg-orange-50 px-2 py-1 rounded-full text-orange-700">
-                          📅 {board.dateSheetCount} Date Sheets
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-              
-              <div className="mt-4 pt-3 border-t text-center">
-                <Link href="/boards" className="text-sm text-blue-600 hover:text-blue-800">
-                  View All Boards →
-                </Link>
-              </div>
-            </div>
-            
-            {/* 3. Programs Widget - University Counts */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b">
-                <h3 className="text-xl font-bold text-gray-900">Top Programs</h3>
-                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Most Offered</span>
-              </div>
-              
-              {loadingPrograms ? (
-                <div className="space-y-3">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="animate-pulse p-3">
-                      <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-20"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {programs.map((program) => (
-                    <Link
-                      key={program.id}
-                      href={`/programs/${program.slug}`}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 group"
-                    >
-                      <div>
-                        <div className="font-medium text-gray-800 group-hover:text-blue-600">
-                          {program.name}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {program.categoryName || 'Program'}
-                        </div>
-                      </div>
-                      <span className="text-sm bg-blue-100 px-3 py-1 rounded-full text-blue-700">
-                        🏛️ {program.universityCount} {program.universityCount === 1 ? 'Uni' : 'Unis'}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-              
-              <div className="mt-4 pt-3 border-t text-center">
-                <Link href="/programs" className="text-sm text-blue-600 hover:text-blue-800">
-                  View All Programs →
-                </Link>
-              </div>
-            </div>
-            
-            {/* 4. Universities Widget - Program Counts */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b">
-                <h3 className="text-xl font-bold text-gray-900">Featured Universities</h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Top Picks</span>
-              </div>
-              
-              {loadingUniversities ? (
-                <div className="space-y-3">
-                  {[1,2,3,4,5].map(i => (
-                    <div key={i} className="animate-pulse p-3">
-                      <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
-                      <div className="h-3 bg-gray-200 rounded w-32"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {universities.map((uni) => (
-                    <Link
-                      key={uni.id}
-                      href={`/universities/${uni.slug}`}
-                      className="block p-3 rounded-lg hover:bg-gray-50 group"
-                    >
-                      <div className="font-medium text-gray-800 group-hover:text-blue-600">
-                        {uni.name}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs mt-2">
-                        <span className="bg-purple-50 px-2 py-1 rounded-full text-purple-700">
-                          📚 {uni.programCount} Programs
-                        </span>
-                        <span className="bg-green-50 px-2 py-1 rounded-full text-green-700">
-                          🎯 {uni.admissionCount} Admissions
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-              
-              <div className="mt-4 pt-3 border-t text-center">
-                <Link href="/universities" className="text-sm text-blue-600 hover:text-blue-800">
-                  View All Universities →
-                </Link>
-              </div>
-            </div>
-            
-            {/* 5. Newsletter */}
-            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white">
-              <h3 className="text-xl font-bold mb-3">Stay Updated</h3>
-              <p className="text-blue-100 text-sm mb-4">
-                Get admission alerts, results, and educational news
-              </p>
-              <form onSubmit={(e) => { e.preventDefault(); setEmail(''); }} className="space-y-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Your email address"
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-blue-200"
-                  required
-                />
-                <button className="w-full bg-white text-blue-600 font-semibold py-3 rounded-lg hover:bg-gray-100">
-                  Subscribe Now
-                </button>
-              </form>
-            </div>
-          </aside>
+            {/* Sidebar */}
+            <aside className="lg:w-4/12 space-y-8 lg:sticky lg:top-6" aria-label="Quick Links">
+              <Suspense fallback={<div className="animate-pulse h-[600px] bg-gray-200 rounded-xl"></div>}>
+                <SidebarWidgets />
+              </Suspense>
+            </aside>
+          </div>
         </div>
+        
+        {/* SEO Content Section - For Better Ranking */}
+        <section className="bg-white py-8 border-t border-gray-200 mt-8">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="prose prose-blue max-w-none text-gray-600 text-sm">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">
+                Pakistan Education Portal - Admissions 2026, Results, Date Sheets
+              </h2>
+              <p className="mb-2">
+                <strong>NextID.pk</strong> is Pakistan's premier education portal providing latest updates on 
+                <strong> admissions 2026</strong> in top universities including 
+                <Link href="/universities/nust" className="text-blue-600 hover:underline mx-1">NUST</Link>,
+                <Link href="/universities/fast-nuces" className="text-blue-600 hover:underline mx-1">FAST</Link>,
+                <Link href="/universities/lums" className="text-blue-600 hover:underline mx-1">LUMS</Link>,
+                <Link href="/universities/punjab-university" className="text-blue-600 hover:underline mx-1">Punjab University</Link>, and
+                <Link href="/universities/karachi-university" className="text-blue-600 hover:underline mx-1">Karachi University</Link>. 
+                Find complete information about <strong>BS programs</strong>, <strong>MBA admissions</strong>, 
+                <strong>MS programs</strong>, <strong>medical admissions</strong>, and <strong>engineering admissions</strong>.
+              </p>
+              <p>
+                Check <strong>board results 2026</strong> for FBISE, BISE Lahore, BISE Karachi, BISE Rawalpindi, 
+                and all other boards. Download <strong>date sheets 2026</strong> for annual and supplementary examinations. 
+                Get <strong>merit lists</strong>, <strong>fee structures</strong>, and <strong>entry test schedules</strong> 
+                for all major universities. Stay updated with latest <strong>education news</strong> and 
+                <strong>scholarship opportunities</strong> in Pakistan.
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
-    </div>
+    
+    </>
   );
 }
