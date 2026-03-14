@@ -232,6 +232,24 @@ export const results = pgTable("results", {
 });
 
 /* =========================
+   📁 RESULT JUNCTION 
+   ========================= */
+
+
+export const resultPrograms = pgTable("result_programs", {
+  id: serial("id").primaryKey(),
+  resultId: integer("result_id")
+    .notNull()
+    .references(() => results.id, { onDelete: 'cascade' }),
+  programId: integer("program_id")
+    .notNull()
+    .references(() => programs.id, { onDelete: 'cascade' }),
+  groupName: varchar("group_name", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
+/* =========================
    📁 DATE SHEETS
    ========================= */
 export const dateSheets = pgTable("date_sheets", {
