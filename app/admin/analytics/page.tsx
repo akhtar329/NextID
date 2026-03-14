@@ -345,7 +345,7 @@ export default function AnalyticsDashboard() {
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span>🏙️</span>
-            <span>Top Cities in Pakistan</span>
+            <span>Top Cities</span>
           </h2>
           <div className="h-80">
             {Object.keys(data?.cityBreakdown || {}).length > 0 ? (
@@ -367,7 +367,7 @@ export default function AnalyticsDashboard() {
                 <div className="text-center">
                   <div className="text-4xl mb-2">🏙️</div>
                   <p>No city data available</p>
-                  <p className="text-xs mt-2">Waiting for visitors from Pakistan</p>
+                  <p className="text-xs mt-2">Waiting for visitor data</p>
                 </div>
               </div>
             )}
@@ -444,7 +444,7 @@ export default function AnalyticsDashboard() {
             <div className="text-center py-8 text-gray-400">
               <div className="text-4xl mb-2">🏙️</div>
               <p>No city data available yet</p>
-              <p className="text-xs mt-2">Waiting for visitors from Pakistan</p>
+              <p className="text-xs mt-2">Waiting for visitor data</p>
             </div>
           )}
         </div>

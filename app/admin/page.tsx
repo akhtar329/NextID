@@ -60,15 +60,7 @@ export default function SuperAdminSidebar() {
     { label: "Admissions", icon: <CalendarCheck size={20} />, path: "/admin/admissions" },
     
     // ✅ NEW - Analytics Menu Item
-    { 
-      label: "Analytics", 
-      icon: <BarChart3 size={20} />, 
-      path: "/admin/analytics",
-      badge: activeVisitors > 0 ? activeVisitors : undefined,
-      badgeColor: "bg-green-500",
-    },
-    
-    { label: "Pages", icon: <FileText size={20} />, path: "/admin/pages" },
+    { label: "Analytics", icon: <BarChart3 size={20} />, path: "/admin/analytics",},  
     { label: "Admin Users", icon: <Users size={20} />, path: "/admin/admin-users" },
     { label: "SEO & Settings", icon: <Settings size={20} />, path: "/admin/settings" },
   ];
