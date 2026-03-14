@@ -42,7 +42,7 @@ interface AnalyticsData {
   }[];
   deviceBreakdown: Record<string, number>;
   countryBreakdown: Record<string, number>;
-  cityBreakdown: Record<string, number>; // ✅ NEW
+  cityBreakdown: Record<string, number>;
   recentViews: {
     id: number;
     pagePath: string;
@@ -55,7 +55,6 @@ interface AnalyticsData {
     date: string;
     pageViews: number;
     visitors: number;
-    cityBreakdown?: Record<string, number>;
   }[];
 }
 
@@ -153,7 +152,6 @@ export default function AnalyticsDashboard() {
     ],
   };
 
-  // ✅ NEW - City Chart Data
   const cityChartData = {
     labels: data ? Object.keys(data.cityBreakdown).slice(0, 8) : [],
     datasets: [
@@ -218,7 +216,7 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards - Added City Stats */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="text-sm text-gray-500 mb-1">Active Visitors</div>
@@ -254,7 +252,6 @@ export default function AnalyticsDashboard() {
           <div className="text-xs text-gray-400 mt-1">Average</div>
         </div>
 
-        {/* ✅ NEW - Cities Stat Card */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="text-sm text-gray-500 mb-1">Cities</div>
           <div className="text-3xl font-bold text-emerald-600">
@@ -311,7 +308,7 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Charts Row 2 - Added City Chart */}
+      {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Top Pages Bar Chart */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -344,7 +341,7 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
 
-        {/* ✅ NEW - City Breakdown Chart */}
+        {/* City Breakdown Chart */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span>🏙️</span>
@@ -378,7 +375,7 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Charts Row 3 - Country and City Details */}
+      {/* Charts Row 3 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Country Breakdown */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -403,7 +400,7 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
 
-        {/* ✅ NEW - City Details List */}
+        {/* City Details List */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span>📍</span>

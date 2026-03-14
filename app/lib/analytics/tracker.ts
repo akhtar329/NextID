@@ -3,6 +3,9 @@
 
 import { v4 as uuidv4 } from 'uuid';
 
+// Safe browser check for SSR
+const isBrowser = typeof window !== 'undefined';
+
 export interface VisitorInfo {
   visitorId: string;
   sessionId: string;
@@ -25,6 +28,16 @@ export interface PageViewData {
  * Visitor aur session IDs manage karta hai
  */
 export function getVisitorInfo(): VisitorInfo {
+  // SSR ke liye default values
+  if (!isBrowser) {
+    return {
+      visitorId: 'ssr-placeholder',
+      sessionId: 'ssr-placeholder',
+      isNewVisitor: false,
+      isNewSession: false,
+    };
+  }
+
   // localStorage se visitorId
   let visitorId = localStorage.getItem('visitor_id');
   const isNewVisitor = !visitorId;
@@ -52,6 +65,20 @@ export function getVisitorInfo(): VisitorInfo {
  * Page view data collect karta hai
  */
 export function getPageViewData(path: string): PageViewData {
+  // SSR ke liye default values
+  if (!isBrowser) {
+    return {
+      pagePath: path,
+      pageTitle: '',
+      referrer: '',
+      deviceType: 'server',
+      browser: 'server',
+      os: 'server',
+      screenSize: '0x0',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   const ua = navigator.userAgent;
   
   return {
@@ -107,6 +134,9 @@ function getOS(ua: string): string {
  * Track page view - API ko call karega
  */
 export async function trackPageView(visitorInfo: VisitorInfo, pageData: PageViewData) {
+  // SSR mein skip karo
+  if (!isBrowser) return;
+  
   try {
     const response = await fetch('/api/analytics/track', {
       method: 'POST',
@@ -115,7 +145,6 @@ export async function trackPageView(visitorInfo: VisitorInfo, pageData: PageView
         ...visitorInfo,
         ...pageData,
       }),
-      // keepalive true ensures request completes even if page unloads
       keepalive: true,
     });
     
@@ -132,6 +161,9 @@ export async function trackPageView(visitorInfo: VisitorInfo, pageData: PageView
  * Session update - heartbeat
  */
 export async function updateSession(visitorInfo: VisitorInfo) {
+  // SSR mein skip karo
+  if (!isBrowser) return;
+  
   try {
     await fetch('/api/analytics/session', {
       method: 'POST',
@@ -143,7 +175,3 @@ export async function updateSession(visitorInfo: VisitorInfo) {
     // Silent fail
   }
 }
-
-/**
- * Dependencies install karo
- */

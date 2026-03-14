@@ -1,15 +1,15 @@
 // app/component/analyticstraker/AnalyticsTracker.tsx
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react'; // ✅ ADDED: useEffect import
 import { usePathname, useSearchParams } from 'next/navigation';
-import { getVisitorInfo, getPageViewData, trackPageView, updateSession } from '@/app/lib/analytics/tracker';
+import { getVisitorInfo, getPageViewData, trackPageView, updateSession } from '@/app/lib/analytics/tracker'; // ✅ ADDED: functions import
 
 export function AnalyticsTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const previousPathRef = useRef<string>(''); // ✅ Correct: string initial value
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined); // ✅ Fixed: Timeout | undefined
+  const previousPathRef = useRef<string>('');
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
     // Skip analytics for admin and api routes
@@ -82,7 +82,7 @@ export function AnalyticsTracker() {
 
   // Scroll tracking (optional)
   useEffect(() => {
-    let scrollTimeout: NodeJS.Timeout | undefined; // ✅ Fixed: Add undefined
+    let scrollTimeout: NodeJS.Timeout | undefined;
     let maxScroll = 0;
     
     const handleScroll = () => {
@@ -94,16 +94,13 @@ export function AnalyticsTracker() {
         maxScroll = scrollPercent;
       }
       
-      // Clear previous timeout
       if (scrollTimeout) {
         clearTimeout(scrollTimeout);
       }
       
-      // Send scroll depth after user stops scrolling
       scrollTimeout = setTimeout(() => {
         if (maxScroll > 0) {
-          // Track scroll depth (optional - uncomment if needed)
-          // trackScrollDepth(maxScroll);
+          // Track scroll depth (optional)
         }
       }, 1000);
     };
@@ -123,48 +120,12 @@ export function AnalyticsTracker() {
     const startTime = Date.now();
     
     return () => {
-      const timeSpent = Math.round((Date.now() - startTime) / 1000); // seconds
-      if (timeSpent > 5) { // Only track if more than 5 seconds
+      const timeSpent = Math.round((Date.now() - startTime) / 1000);
+      if (timeSpent > 5) {
         console.log(`⏱️ Time on ${pathname}: ${timeSpent}s`);
-        // Optional: track time on page
       }
     };
   }, [pathname]);
 
-  // This component doesn't render anything
   return null;
-}
-
-// Optional: Track outbound links
-export function OutboundLinkTracker({ href, children }: { href: string; children: React.ReactNode }) {
-  const handleClick = async (e: React.MouseEvent) => {
-    e.preventDefault(); // ✅ Add preventDefault to avoid navigation issues
-    try {
-      const visitorInfo = getVisitorInfo();
-      await fetch('/api/analytics/outbound', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...visitorInfo,
-          target: href,
-          page: window.location.pathname,
-          timestamp: new Date().toISOString()
-        }),
-        keepalive: true,
-      });
-      
-      // Navigate after tracking
-      window.open(href, '_blank', 'noopener,noreferrer');
-      
-    } catch (error) {
-      // Silent fail - still navigate
-      window.open(href, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  return (
-    <a href={href} onClick={handleClick} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  );
 }
