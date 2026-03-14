@@ -5,9 +5,20 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
+import dynamic from 'next/dynamic'; // ✅ ADD THIS
+import { Suspense } from 'react'; // ✅ ADD THIS
 
 import { generateSEO } from "../app/lib/seo";
-import { AnalyticsTracker } from '@/app/component/analyticstraker/AnalyticsTracker';
+
+// ✅ FIX: Dynamically import AnalyticsTracker with SSR disabled
+const AnalyticsTracker = dynamic(
+  () => import('@/app/component/analyticstraker/AnalyticsTracker').then(mod => mod.AnalyticsTracker),
+  { 
+    ssr: false, // ✅ This prevents server-side rendering
+    loading: () => null // ✅ No loading UI needed
+  }
+);
+
 export const metadata = generateSEO();
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,7 +33,12 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
         <Providers>
           {children}
-          <AnalyticsTracker />
+          
+          {/* ✅ Wrap in Suspense for better performance */}
+          <Suspense fallback={null}>
+            <AnalyticsTracker />
+          </Suspense>
+          
           <Toaster 
             position="top-right"
             richColors
@@ -33,7 +49,7 @@ export default function RootLayout({
           />
         </Providers>
 
-        {/* GOOGLE ANALYTICS CODE */}
+        {/* GOOGLE ANALYTICS CODE - Already safe */}
         <Script
           strategy="afterInteractive"
           src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
