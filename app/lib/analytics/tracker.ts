@@ -138,7 +138,7 @@ export async function trackPageView(visitorInfo: VisitorInfo, pageData: PageView
   if (!isBrowser) return;
   
   try {
-    const response = await fetch('/api/analytics/track', {
+    const response = await fetch('/api/admin/analytics/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -165,7 +165,7 @@ export async function updateSession(visitorInfo: VisitorInfo) {
   if (!isBrowser) return;
   
   try {
-    await fetch('/api/analytics/session', {
+    await fetch('/api/admin/analytics/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(visitorInfo),

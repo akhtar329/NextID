@@ -5,19 +5,10 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
-import dynamic from 'next/dynamic'; // ✅ ADD THIS
-import { Suspense } from 'react'; // ✅ ADD THIS
 
 import { generateSEO } from "../app/lib/seo";
-
-// ✅ FIX: Dynamically import AnalyticsTracker with SSR disabled
-const AnalyticsTracker = dynamic(
-  () => import('@/app/component/analyticstraker/AnalyticsTracker').then(mod => mod.AnalyticsTracker),
-  { 
-    ssr: false, // ✅ This prevents server-side rendering
-    loading: () => null // ✅ No loading UI needed
-  }
-);
+// ✅ Import the client wrapper instead
+import ClientAnalyticsTracker from '@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker';
 
 export const metadata = generateSEO();
 
@@ -34,10 +25,8 @@ export default function RootLayout({
         <Providers>
           {children}
           
-          {/* ✅ Wrap in Suspense for better performance */}
-          <Suspense fallback={null}>
-            <AnalyticsTracker />
-          </Suspense>
+          {/* ✅ Use the client wrapper - no Suspense needed here */}
+          <ClientAnalyticsTracker />
           
           <Toaster 
             position="top-right"
