@@ -7,7 +7,7 @@ import "./globals.css";
 import Script from "next/script";
 
 import { generateSEO } from "../app/lib/seo";
-
+import { AnalyticsTracker } from '@/app/component/analyticstraker/AnalyticsTracker';
 export const metadata = generateSEO();
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,6 +22,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
         <Providers>
           {children}
+          <AnalyticsTracker />
           <Toaster 
             position="top-right"
             richColors

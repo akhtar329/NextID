@@ -6,6 +6,7 @@ import {
   varchar,
   timestamp,
   integer,
+  jsonb, 
   boolean,
 } from "drizzle-orm/pg-core";
 
@@ -326,6 +327,92 @@ export const adminUsers = pgTable("admin_users", {
     .references(() => adminRoles.id),
 
   status: boolean("status").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+/* =========================
+   📁 PAGE VIEWS (Analytics) - ✅ FIXED (Single Definition)
+   ========================= */
+export const pageViews = pgTable("page_views", {
+  id: serial("id").primaryKey(),
+  
+  // Visitor identification
+  visitorId: varchar("visitor_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  
+  // Page details
+  pagePath: varchar("page_path", { length: 255 }).notNull(),
+  pageTitle: varchar("page_title", { length: 255 }),
+  
+  // Device info
+  deviceType: varchar("device_type", { length: 50 }),
+  browser: varchar("browser", { length: 50 }),
+  os: varchar("os", { length: 50 }),
+  
+  // 🌍 LOCATION INFO - Complete
+  country: varchar("country", { length: 100 }),
+  countryCode: varchar("country_code", { length: 10 }),
+  city: varchar("city", { length: 100 }),
+  region: varchar("region", { length: 100 }),
+  latitude: varchar("latitude", { length: 50 }),
+  longitude: varchar("longitude", { length: 50 }),
+  timezone: varchar("timezone", { length: 100 }),
+  
+  // Referrer
+  referrer: varchar("referrer", { length: 500 }),
+  
+  // Timestamps
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/* =========================
+   📁 VISITOR SESSIONS
+   ========================= */
+export const visitorSessions = pgTable("visitor_sessions", {
+  id: serial("id").primaryKey(),
+  
+  visitorId: varchar("visitor_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
+  
+  // Session info
+  entryPage: varchar("entry_page", { length: 255 }),
+  exitPage: varchar("exit_page", { length: 255 }),
+  pageViews: integer("page_views").default(1),
+  
+  // Timestamps
+  startedAt: timestamp("started_at").defaultNow(),
+  lastActive: timestamp("last_active").defaultNow(),
+  endedAt: timestamp("ended_at"),
+  
+  // Duration in seconds
+  duration: integer("duration").default(0),
+});
+
+/* =========================
+   📁 DAILY STATS (Aggregated)
+   ========================= */
+
+   export const dailyStats = pgTable("daily_stats", {
+  id: serial("id").primaryKey(),
+  
+  date: varchar("date", { length: 10 }).notNull().unique(), // YYYY-MM-DD
+  
+  totalVisitors: integer("total_visitors").default(0),
+  newVisitors: integer("new_visitors").default(0),
+  returningVisitors: integer("returning_visitors").default(0),
+  
+  totalPageViews: integer("total_page_views").default(0),
+  avgTimeOnSite: integer("avg_time_on_site").default(0), // seconds
+  
+  topPages: jsonb("top_pages"),
+  deviceBreakdown: jsonb("device_breakdown"),
+  countryBreakdown: jsonb("country_breakdown"),
+  
+  // ✅ NEW - City breakdown (Pakistan cities specifically)
+  cityBreakdown: jsonb("city_breakdown"), // { "Karachi": 150, "Lahore": 120, "Islamabad": 80 }
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
