@@ -331,11 +331,12 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
   }
 
   return (
+    
     <section className="relative py-2 md:py-2 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
       
       {/* Hidden H1 for SEO */}
       <h1 className="sr-only">
-        NextID.pk - Pakistan's Largest Education Portal for Admissions 2026, Results, Date Sheets and Educational News
+        Latest Admissions 2026 in Pakistan | Universities, Results & Date Sheets updates – NextID.pk
       </h1>
       
       {/* 🔴 BREAKING NEWS BAR - Sirf breaking news */}
@@ -381,42 +382,6 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           
           {/* Left Column - Search & Carousel */}
           <div className="lg:col-span-2 space-y-6">
-            
-            {/* Search Bar */}
-            <div className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-slate-200">
-              <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
-                <div className="flex-1 relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">🔍</span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search for programs, universities, results..."
-                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
-                  />
-                </div>
-                <select
-                  value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value)}
-                  className="px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
-                >
-                  <option value="All Cities">All Cities</option>
-                  {cities.length > 0 ? (
-                    cities.map((city) => (
-                      <option key={city.id} value={city.name}>{city.name}</option>
-                    ))
-                  ) : (
-                    <option value="All Cities">All Cities</option>
-                  )}
-                </select>
-                <button
-                  type="submit"
-                  className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
-                >
-                  Search
-                </button>
-              </form>
-            </div>
 
             {/* 🎠 CAROUSEL - Random items from recent news (max 4) */}
             {carouselItems.length > 0 ? (
@@ -539,7 +504,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                       }
 
                       // Show top 4 most recent news items
-                      return sortedNews.slice(0, 4).map((newsItem) => (
+                      return sortedNews.slice(0, 3).map((newsItem) => (
                         <NewsCard
                           key={`news-${newsItem.id}`}
                           title={newsItem.title}

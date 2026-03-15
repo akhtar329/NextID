@@ -64,7 +64,8 @@ export default function SidebarWidgets() {
         const res = await fetch('/api/public/cities?limit=5&withUniversityCount=true');
         const data = await res.json();
         const citiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        setCities(citiesData);
+        // Sirf pehle 5 cities lo
+        setCities(citiesData.slice(0, 5));
         setHasCities(citiesData.length > 0);
       } catch (error) {
         console.error('Error fetching cities:', error);
@@ -82,7 +83,8 @@ export default function SidebarWidgets() {
         const res = await fetch('/api/public/boards?limit=5&withStats=true');
         const data = await res.json();
         const boardsData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        setBoards(boardsData);
+        // Sirf pehle 5 boards lo
+        setBoards(boardsData.slice(0, 5));
         setHasBoards(boardsData.length > 0);
       } catch (error) {
         console.error('Error fetching boards:', error);
@@ -100,7 +102,8 @@ export default function SidebarWidgets() {
         const res = await fetch('/api/public/programs?limit=5&withUniversityCount=true');
         const data = await res.json();
         const programsData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        setPrograms(programsData);
+        // Sirf pehle 5 programs lo
+        setPrograms(programsData.slice(0, 5));
         setHasPrograms(programsData.length > 0);
       } catch (error) {
         console.error('Error fetching programs:', error);
@@ -118,7 +121,8 @@ export default function SidebarWidgets() {
         const res = await fetch('/api/public/institutes?limit=5&featured=true&withCounts=true');
         const data = await res.json();
         const universitiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        setUniversities(universitiesData);
+        // Sirf pehle 5 universities lo
+        setUniversities(universitiesData.slice(0, 5));
         setHasUniversities(universitiesData.length > 0);
       } catch (error) {
         console.error('Error fetching universities:', error);
@@ -165,7 +169,7 @@ export default function SidebarWidgets() {
             </div>
           ) : (
             <div className="space-y-2">
-              {cities.map((city) => (
+              {cities.slice(0, 5).map((city) => (
                 <Link
                   key={city.id}
                   href={`/city/${city.slug}`}
@@ -211,7 +215,7 @@ export default function SidebarWidgets() {
             </div>
           ) : (
             <div className="space-y-2">
-              {boards.map((board) => (
+              {boards.slice(0, 5).map((board) => (
                 <Link
                   key={board.id}
                   href={`/boards/${board.slug}`}
@@ -262,7 +266,7 @@ export default function SidebarWidgets() {
             </div>
           ) : (
             <div className="space-y-2">
-              {programs.map((program) => (
+              {programs.slice(0, 5).map((program) => (
                 <Link
                   key={program.id}
                   href={`/programs/${program.slug}`}
@@ -315,7 +319,7 @@ export default function SidebarWidgets() {
             </div>
           ) : (
             <div className="space-y-2">
-              {universities.map((uni) => (
+              {universities.slice(0, 5).map((uni) => (
                 <Link
                   key={uni.id}
                   href={`/universities/${uni.slug}`}
