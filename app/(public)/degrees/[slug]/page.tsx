@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: `${deg.name} ${deg.fullForm || ''} Degree Programs, Admissions & Institutes | NextID.pk`,
       description: `Find ${deg.name} ${deg.fullForm || ''} degree programs, admissions, institutes and results in Pakistan.`,
       alternates: {
-        canonical: `https://nextid.pk/degrees/${deg.slug}`,
+        canonical: `https://www.nextid.pk/degrees/${deg.slug}`,
       },
     };
   } catch (error) {

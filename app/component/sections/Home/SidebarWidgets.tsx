@@ -49,6 +49,12 @@ export default function SidebarWidgets() {
   const [loadingUniversities, setLoadingUniversities] = useState(true);
   const [email, setEmail] = useState('');
 
+  // Track which widgets have data
+  const [hasCities, setHasCities] = useState(false);
+  const [hasBoards, setHasBoards] = useState(false);
+  const [hasPrograms, setHasPrograms] = useState(false);
+  const [hasUniversities, setHasUniversities] = useState(false);
+
   // Fetch all data
   useEffect(() => {
     // Cities with university counts
@@ -57,10 +63,13 @@ export default function SidebarWidgets() {
         setLoadingCities(true);
         const res = await fetch('/api/public/cities?limit=5&withUniversityCount=true');
         const data = await res.json();
-        setCities(data.success ? data.data : (Array.isArray(data) ? data : []));
+        const citiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
+        setCities(citiesData);
+        setHasCities(citiesData.length > 0);
       } catch (error) {
         console.error('Error fetching cities:', error);
         setCities([]);
+        setHasCities(false);
       } finally {
         setLoadingCities(false);
       }
@@ -72,10 +81,13 @@ export default function SidebarWidgets() {
         setLoadingBoards(true);
         const res = await fetch('/api/public/boards?limit=5&withStats=true');
         const data = await res.json();
-        setBoards(data.success ? data.data : (Array.isArray(data) ? data : []));
+        const boardsData = data.success ? data.data : (Array.isArray(data) ? data : []);
+        setBoards(boardsData);
+        setHasBoards(boardsData.length > 0);
       } catch (error) {
         console.error('Error fetching boards:', error);
         setBoards([]);
+        setHasBoards(false);
       } finally {
         setLoadingBoards(false);
       }
@@ -87,10 +99,13 @@ export default function SidebarWidgets() {
         setLoadingPrograms(true);
         const res = await fetch('/api/public/programs?limit=5&withUniversityCount=true');
         const data = await res.json();
-        setPrograms(data.success ? data.data : (Array.isArray(data) ? data : []));
+        const programsData = data.success ? data.data : (Array.isArray(data) ? data : []);
+        setPrograms(programsData);
+        setHasPrograms(programsData.length > 0);
       } catch (error) {
         console.error('Error fetching programs:', error);
         setPrograms([]);
+        setHasPrograms(false);
       } finally {
         setLoadingPrograms(false);
       }
@@ -102,10 +117,13 @@ export default function SidebarWidgets() {
         setLoadingUniversities(true);
         const res = await fetch('/api/public/institutes?limit=5&featured=true&withCounts=true');
         const data = await res.json();
-        setUniversities(data.success ? data.data : (Array.isArray(data) ? data : []));
+        const universitiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
+        setUniversities(universitiesData);
+        setHasUniversities(universitiesData.length > 0);
       } catch (error) {
         console.error('Error fetching universities:', error);
         setUniversities([]);
+        setHasUniversities(false);
       } finally {
         setLoadingUniversities(false);
       }
@@ -117,28 +135,37 @@ export default function SidebarWidgets() {
     fetchUniversities();
   }, []);
 
+  // ✅ Check if any widget has data
+  const hasAnyData = hasCities || hasBoards || hasPrograms || hasUniversities;
+
+  // Agar koi data nahi hai to kuch nahi dikhao
+  if (!hasAnyData && 
+      !loadingCities && !loadingBoards && !loadingPrograms && !loadingUniversities) {
+    return null;
+  }
+
   return (
     <div className="space-y-8">
-      {/* 1. Cities Widget - University Counts */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 className="text-xl font-bold text-gray-900">Popular Cities</h3>
-          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Top 5</span>
-        </div>
-        
-        {loadingCities ? (
-          <div className="space-y-3">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className="animate-pulse flex justify-between p-3">
-                <div className="h-4 bg-gray-200 rounded w-24"></div>
-                <div className="h-4 bg-gray-200 rounded w-16"></div>
-              </div>
-            ))}
+      {/* 1. Cities Widget - Only show if has data or loading */}
+      {(hasCities || loadingCities) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 className="text-xl font-bold text-gray-900">Popular Cities</h3>
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Top 5</span>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {cities.length > 0 ? (
-              cities.map((city) => (
+          
+          {loadingCities ? (
+            <div className="space-y-3">
+              {[1,2,3,4,5].map(i => (
+                <div key={i} className="animate-pulse flex justify-between p-3">
+                  <div className="h-4 bg-gray-200 rounded w-24"></div>
+                  <div className="h-4 bg-gray-200 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {cities.map((city) => (
                 <Link
                   key={city.id}
                   href={`/city/${city.slug}`}
@@ -151,42 +178,40 @@ export default function SidebarWidgets() {
                     {city.universityCount} {city.universityCount === 1 ? 'University' : 'Universities'}
                   </span>
                 </Link>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                No cities available
-              </div>
-            )}
-          </div>
-        )}
-        
-        <div className="mt-4 pt-3 border-t text-center">
-          <Link href="/cities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-            View All Cities →
-          </Link>
+              ))}
+            </div>
+          )}
+          
+          {hasCities && (
+            <div className="mt-4 pt-3 border-t text-center">
+              <Link href="/cities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                View All Cities →
+              </Link>
+            </div>
+          )}
         </div>
-      </div>
+      )}
       
-      {/* 2. Boards Widget - Result Counts */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 className="text-xl font-bold text-gray-900">Education Boards</h3>
-          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Active</span>
-        </div>
-        
-        {loadingBoards ? (
-          <div className="space-y-3">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className="animate-pulse p-3">
-                <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-32"></div>
-              </div>
-            ))}
+      {/* 2. Boards Widget - Only show if has data or loading */}
+      {(hasBoards || loadingBoards) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 className="text-xl font-bold text-gray-900">Education Boards</h3>
+            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Active</span>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {boards.length > 0 ? (
-              boards.map((board) => (
+          
+          {loadingBoards ? (
+            <div className="space-y-3">
+              {[1,2,3,4,5].map(i => (
+                <div key={i} className="animate-pulse p-3">
+                  <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-32"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {boards.map((board) => (
                 <Link
                   key={board.id}
                   href={`/boards/${board.slug}`}
@@ -204,42 +229,40 @@ export default function SidebarWidgets() {
                     </span>
                   </div>
                 </Link>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                No boards available
-              </div>
-            )}
-          </div>
-        )}
-        
-        <div className="mt-4 pt-3 border-t text-center">
-          <Link href="/boards" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-            View All Boards →
-          </Link>
+              ))}
+            </div>
+          )}
+          
+          {hasBoards && (
+            <div className="mt-4 pt-3 border-t text-center">
+              <Link href="/boards" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                View All Boards →
+              </Link>
+            </div>
+          )}
         </div>
-      </div>
+      )}
       
-      {/* 3. Programs Widget - University Counts */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 className="text-xl font-bold text-gray-900">Top Programs</h3>
-          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Most Offered</span>
-        </div>
-        
-        {loadingPrograms ? (
-          <div className="space-y-3">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className="animate-pulse p-3">
-                <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-20"></div>
-              </div>
-            ))}
+      {/* 3. Programs Widget - Only show if has data or loading */}
+      {(hasPrograms || loadingPrograms) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 className="text-xl font-bold text-gray-900">Top Programs</h3>
+            <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">Most Offered</span>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {programs.length > 0 ? (
-              programs.map((program) => (
+          
+          {loadingPrograms ? (
+            <div className="space-y-3">
+              {[1,2,3,4,5].map(i => (
+                <div key={i} className="animate-pulse p-3">
+                  <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-20"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {programs.map((program) => (
                 <Link
                   key={program.id}
                   href={`/programs/${program.slug}`}
@@ -259,42 +282,40 @@ export default function SidebarWidgets() {
                     🏛️ {program.universityCount} {program.universityCount === 1 ? 'Uni' : 'Unis'}
                   </span>
                 </Link>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                No programs available
-              </div>
-            )}
-          </div>
-        )}
-        
-        <div className="mt-4 pt-3 border-t text-center">
-          <Link href="/programs" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-            View All Programs →
-          </Link>
+              ))}
+            </div>
+          )}
+          
+          {hasPrograms && (
+            <div className="mt-4 pt-3 border-t text-center">
+              <Link href="/programs" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                View All Programs →
+              </Link>
+            </div>
+          )}
         </div>
-      </div>
+      )}
       
-      {/* 4. Universities Widget - Program Counts */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 className="text-xl font-bold text-gray-900">Featured Universities</h3>
-          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Top Picks</span>
-        </div>
-        
-        {loadingUniversities ? (
-          <div className="space-y-3">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className="animate-pulse p-3">
-                <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-32"></div>
-              </div>
-            ))}
+      {/* 4. Universities Widget - Only show if has data or loading */}
+      {(hasUniversities || loadingUniversities) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 className="text-xl font-bold text-gray-900">Featured Universities</h3>
+            <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">Top Picks</span>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {universities.length > 0 ? (
-              universities.map((uni) => (
+          
+          {loadingUniversities ? (
+            <div className="space-y-3">
+              {[1,2,3,4,5].map(i => (
+                <div key={i} className="animate-pulse p-3">
+                  <div className="h-4 bg-gray-200 rounded w-40 mb-2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-32"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {universities.map((uni) => (
                 <Link
                   key={uni.id}
                   href={`/universities/${uni.slug}`}
@@ -312,23 +333,21 @@ export default function SidebarWidgets() {
                     </span>
                   </div>
                 </Link>
-              ))
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                No universities available
-              </div>
-            )}
-          </div>
-        )}
-        
-        <div className="mt-4 pt-3 border-t text-center">
-          <Link href="/universities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-            View All Universities →
-          </Link>
+              ))}
+            </div>
+          )}
+          
+          {hasUniversities && (
+            <div className="mt-4 pt-3 border-t text-center">
+              <Link href="/universities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                View All Universities →
+              </Link>
+            </div>
+          )}
         </div>
-      </div>
+      )}
       
-      {/* 5. Newsletter */}
+      {/* 5. Newsletter - Always show (static) */}
       <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white">
         <h3 className="text-xl font-bold mb-3">Stay Updated</h3>
         <p className="text-blue-100 text-sm mb-4">

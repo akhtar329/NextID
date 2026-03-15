@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const BASE_URL = "https://nextid.pk";
+const BASE_URL = "https://www.nextid.pk";
 
 type SEOProps = {
   title?: string;

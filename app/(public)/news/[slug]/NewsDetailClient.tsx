@@ -36,7 +36,7 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
   const contentParagraphs = newsItem.content.split('\n\n').filter(p => p.trim());
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(`https://nextid.pk/news/${newsItem.slug}`);
+    navigator.clipboard.writeText(`https://www.nextid.pk/news/${newsItem.slug}`);
     alert('Link copied to clipboard!');
   };
 
@@ -274,7 +274,7 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
               <h3 className="text-lg font-bold text-gray-900 mb-4">Share This Article</h3>
               <div className="flex gap-3">
                 <a
-                  href={`https://www.facebook.com/sharer/sharer.php?u=https://nextid.pk/news/${newsItem.slug}`}
+                  href={`https://www.facebook.com/sharer/sharer.php?u=https://www.nextid.pk/news/${newsItem.slug}`}
                   target="_blank"
                   rel="noopener"
                   className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 transition text-center"
@@ -282,7 +282,7 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
                   Facebook
                 </a>
                 <a
-                  href={`https://twitter.com/intent/tweet?url=https://nextid.pk/news/${newsItem.slug}&text=${encodeURIComponent(newsItem.title)}`}
+                  href={`https://twitter.com/intent/tweet?url=https://www.nextid.pk/news/${newsItem.slug}&text=${encodeURIComponent(newsItem.title)}`}
                   target="_blank"
                   rel="noopener"
                   className="flex-1 bg-black text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-800 transition text-center"
@@ -312,7 +312,7 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
             "@type": "NewsArticle",
             "headline": newsItem.title,
             "description": newsItem.excerpt,
-            "image": newsItem.imageUrl || "https://nextid.pk/images/news-og.jpg",
+            "image": newsItem.imageUrl || "https://www.nextid.pk/images/news-og.jpg",
             "datePublished": newsItem.publishedAt?.toISOString(),
             "dateModified": newsItem.updatedAt?.toISOString(),
             "author": {
@@ -324,12 +324,12 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
               "name": "NextID.pk",
               "logo": {
                 "@type": "ImageObject",
-                "url": "https://nextid.pk/logo.png"
+                "url": "https://www.nextid.pk/logo.png"
               }
             },
             "mainEntityOfPage": {
               "@type": "WebPage",
-              "@id": `https://nextid.pk/news/${newsItem.slug}`
+              "@id": `https://www.nextid.pk/news/${newsItem.slug}`
             },
             "keywords": [
               newsItem.programName,

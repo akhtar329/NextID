@@ -1,7 +1,75 @@
 // app/component/sections/CTASection.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 const CTASection = () => {
+  const [hasActiveContent, setHasActiveContent] = useState(true); // Default true for static
+  const [loading, setLoading] = useState(false);
+
+  // Agar aap chahte hain ke CTA tabhi show ho jab kuch active ho
+  useEffect(() => {
+    const checkActiveContent = async () => {
+      try {
+        setLoading(true);
+        
+        // Check if there are any active admissions
+        const admissionsRes = await fetch('/api/public/admissions?limit=1&status=open');
+        const admissionsData = await admissionsRes.json();
+        
+        // Check if there are any recent results
+        const resultsRes = await fetch('/api/public/results?limit=1');
+        const resultsData = await resultsRes.json();
+        
+        // Check if there are any programs
+        const programsRes = await fetch('/api/public/programs?limit=1');
+        const programsData = await programsRes.json();
+        
+        // Agar kuch bhi data hai to CTA show karo
+        const hasAdmissions = admissionsData.success && admissionsData.data?.length > 0;
+        const hasResults = resultsData.success && resultsData.data?.length > 0;
+        const hasPrograms = programsData.success && programsData.data?.length > 0;
+        
+        setHasActiveContent(hasAdmissions || hasResults || hasPrograms);
+        
+      } catch (error) {
+        console.error('Error checking content:', error);
+        // Error ki surat mein bhi CTA show karo
+        setHasActiveContent(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Agar conditional banana ho to ye uncomment karo
+    // checkActiveContent();
+    
+  }, []);
+
+  // Agar loading ho to skeleton show karo
+  if (loading) {
+    return (
+      <section className="py-16 bg-gradient-to-r from-blue-600 to-indigo-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="h-12 w-96 bg-white/20 rounded-lg animate-pulse mx-auto mb-6"></div>
+            <div className="h-6 w-2/3 bg-white/20 rounded-lg animate-pulse mx-auto mb-10"></div>
+            <div className="flex justify-center gap-6 mb-12">
+              <div className="h-14 w-48 bg-white/20 rounded-lg animate-pulse"></div>
+              <div className="h-14 w-48 bg-white/20 rounded-lg animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Agar content nahi hai to hide karo
+  if (!hasActiveContent) {
+    return null;
+  }
+
   return (
     <section className="py-16 bg-gradient-to-r from-blue-600 to-indigo-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

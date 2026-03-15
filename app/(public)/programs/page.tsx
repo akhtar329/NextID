@@ -584,7 +584,7 @@ export default async function ProgramsPage({
             "itemListElement": programs.slice(0, 10).map((program, index) => ({
               "@type": "ListItem",
               "position": index + 1,
-              "url": `https://nextid.pk/programs/${program.slug}`,
+              "url": `https://www.nextid.pk/programs/${program.slug}`,
               "name": program.name
             }))
           })

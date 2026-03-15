@@ -601,7 +601,7 @@ export default async function UniversitiesPage({
             "itemListElement": universities.slice(0, 10).map((uni, index) => ({
               "@type": "ListItem",
               "position": index + 1,
-              "url": `https://nextid.pk/universities/${uni.slug}`,
+              "url": `https://www.nextid.pk/universities/${uni.slug}`,
               "name": uni.name
             }))
           })

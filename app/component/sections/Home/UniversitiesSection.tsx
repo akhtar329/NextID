@@ -26,6 +26,7 @@ export default function UniversitiesSection() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [hasData, setHasData] = useState(false);
 
   // Fetch universities from API
   useEffect(() => {
@@ -45,19 +46,26 @@ export default function UniversitiesSection() {
         console.log('📦 API Response:', data);
         
         // Handle API response format
-        if (Array.isArray(data)) {
+        let universitiesData: University[] = [];
+        
+        if (Array.isArray(data) && data.length > 0) {
           console.log('✅ Universities found (array):', data.length);
-          setUniversities(data);
-        } else if (data.success && Array.isArray(data.data)) {
+          universitiesData = data;
+        } else if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           console.log('✅ Universities found (data.data):', data.data.length);
-          setUniversities(data.data);
+          universitiesData = data.data;
         } else {
           console.log('⚠️ No universities found');
-          setUniversities([]);
+          universitiesData = [];
         }
+        
+        setUniversities(universitiesData);
+        setHasData(universitiesData.length > 0);
+        
       } catch (error) {
         console.error('🔥 Fetch error:', error);
         setUniversities([]);
+        setHasData(false);
       } finally {
         setLoading(false);
       }
@@ -109,6 +117,11 @@ export default function UniversitiesSection() {
         ? { bg: 'bg-purple-100', text: 'text-purple-800' }
         : { bg: 'bg-blue-100', text: 'text-blue-800' };
   };
+
+  // ✅ AGAR DATA NAHI HAI AUR LOADING BHI NAHI TO KUCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
 
   // Loading state
   if (loading) {
@@ -226,6 +239,13 @@ export default function UniversitiesSection() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Results Count - Only show if universities exist */}
+        {universities.length > 0 && (
+          <div className="mb-4 text-sm text-gray-600">
+            Showing {filteredUniversities.slice(0, 5).length} of {filteredUniversities.length} universities
           </div>
         )}
 
@@ -406,15 +426,13 @@ export default function UniversitiesSection() {
           </>
         ) : (
           /* No Results */
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-            <div className="text-6xl mb-4">🏛️</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">No Universities Found</h3>
-            <p className="text-gray-500 mb-6">
-              {universities.length === 0 
-                ? 'No universities available at the moment.'
-                : 'No universities match your search criteria.'}
-            </p>
-            {universities.length > 0 && (
+          universities.length > 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+              <div className="text-6xl mb-4">🏛️</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">No Universities Found</h3>
+              <p className="text-gray-500 mb-6">
+                No universities match your search criteria.
+              </p>
               <button
                 onClick={() => {
                   setSearchQuery('');
@@ -425,11 +443,11 @@ export default function UniversitiesSection() {
               >
                 Clear Filters
               </button>
-            )}
-          </div>
+            </div>
+          ) : null // Agar total universities hi zero hain to kuch na dikhao
         )}
 
-        {/* View All CTA */}
+        {/* View All CTA - Only show if universities exist and no filtered results */}
         {universities.length > 0 && filteredUniversities.length === 0 && (
           <div className="text-center mt-8">
             <Link

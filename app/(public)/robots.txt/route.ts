@@ -9,7 +9,7 @@ Disallow: /login/
 Disallow: /api/
 Disallow: /_next/
 
-Sitemap: https://nextid.pk/sitemap.xml`;
+Sitemap: https://www.nextid.pk/sitemap.xml`;
 
   return new NextResponse(robotsTxt, {
     headers: {

@@ -416,7 +416,7 @@ export default async function ResultsPage({
             "@type": "CollectionPage",
             "name": "Exam Results Pakistan",
             "description": "Latest board and university results in Pakistan",
-            "url": "https://nextid.pk/results",
+            "url": "https://www.nextid.pk/results",
           })
         }}
         suppressHydrationWarning

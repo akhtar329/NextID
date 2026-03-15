@@ -478,7 +478,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     keywords,
     
     alternates: {
-      canonical: `https://nextid.pk/results/${result.slug}`,
+      canonical: `https://www.nextid.pk/results/${result.slug}`,
     },
     
     openGraph: {

@@ -30,22 +30,18 @@ export default function LatestAdmissionsSection() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUniversity, setSelectedUniversity] = useState('All');
+  const [hasData, setHasData] = useState(false);
 
   // ==================== HELPER FUNCTIONS ====================
   
-  // ✅ Fixed getDaysLeft function - counts until end of day
   const getDaysLeft = (dateString: string | null): number | null => {
     if (!dateString) return null;
     try {
       const deadline = new Date(dateString);
       const now = new Date();
-      
-      // Set deadline to end of day (23:59:59)
       deadline.setHours(23, 59, 59, 999);
-      
       const diffTime = deadline.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
       return diffDays >= 0 ? diffDays : null;
     } catch (error) {
       console.error('🔥 Date parsing error:', error);
@@ -53,7 +49,6 @@ export default function LatestAdmissionsSection() {
     }
   };
 
-  // Format date function
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'TBA';
     try {
@@ -68,7 +63,6 @@ export default function LatestAdmissionsSection() {
     }
   };
 
-  // Get program display text
   const getProgramDisplay = (programs: Program[]): string => {
     if (!programs || programs.length === 0) return 'Program';
     if (programs.length === 1) return programs[0].name;
@@ -78,7 +72,6 @@ export default function LatestAdmissionsSection() {
 
   // ==================== DATA FETCHING ====================
   
-  // Fetch admissions from API
   useEffect(() => {
     const fetchAdmissions = async () => {
       try {
@@ -90,16 +83,19 @@ export default function LatestAdmissionsSection() {
         
         console.log('📦 API Response:', data);
         
-        if (data.success && Array.isArray(data.data)) {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           console.log('✅ Admissions found:', data.data.length);
           setAdmissions(data.data);
+          setHasData(true); // ✅ Data mil gaya
         } else {
           console.log('⚠️ No admissions found');
           setAdmissions([]);
+          setHasData(false); // ✅ Data nahi mila
         }
       } catch (error) {
         console.error('🔥 Fetch error:', error);
         setAdmissions([]);
+        setHasData(false); // ✅ Error par bhi hide
       } finally {
         setLoading(false);
       }
@@ -110,15 +106,12 @@ export default function LatestAdmissionsSection() {
 
   // ==================== MEMOIZED VALUES ====================
   
-  // Get current date for comparison
   const currentDate = new Date();
 
-  // Get open admissions
   const openAdmissions = useMemo(() => {
     return admissions.filter(ad => ad.status === 'Open');
   }, [admissions]);
 
-  // Calculate closing soon stats
   const closingSoonStats = useMemo(() => {
     const allOpen = openAdmissions;
     
@@ -148,7 +141,6 @@ export default function LatestAdmissionsSection() {
     };
   }, [openAdmissions]);
 
-  // Sort admissions - closing soon first
   const sortedAdmissions = useMemo(() => {
     return [...openAdmissions].sort((a, b) => {
       if (!a.expectedCloseDate) return 1;
@@ -157,7 +149,6 @@ export default function LatestAdmissionsSection() {
     });
   }, [openAdmissions]);
 
-  // Get closing soon admissions (all within 30 days)
   const closingSoonAdmissions = useMemo(() => {
     const soon = sortedAdmissions.filter(ad => {
       if (!ad.expectedCloseDate) return false;
@@ -165,7 +156,6 @@ export default function LatestAdmissionsSection() {
       return daysLeft !== null && daysLeft <= 30;
     }).slice(0, 5);
     
-    // If no closing soon, show any open admissions
     if (soon.length === 0 && sortedAdmissions.length > 0) {
       return sortedAdmissions.slice(0, 5);
     }
@@ -173,7 +163,6 @@ export default function LatestAdmissionsSection() {
     return soon;
   }, [sortedAdmissions]);
 
-  // Get unique universities
   const uniqueUniversities = useMemo(() => {
     const unis = closingSoonAdmissions
       .map(item => item.instituteName)
@@ -181,11 +170,9 @@ export default function LatestAdmissionsSection() {
     return ['All', ...new Set(unis)];
   }, [closingSoonAdmissions]);
 
-  // Filter admissions based on search
   const filteredAdmissions = useMemo(() => {
     return closingSoonAdmissions.filter(admission => {
       const searchLower = searchQuery.toLowerCase();
-      
       const matchesInstitute = admission.instituteName?.toLowerCase().includes(searchLower);
       const matchesProgram = admission.programs?.some(program => 
         program.name.toLowerCase().includes(searchLower)
@@ -198,8 +185,12 @@ export default function LatestAdmissionsSection() {
     });
   }, [closingSoonAdmissions, searchQuery, selectedUniversity]);
 
-  // ==================== LOADING STATE ====================
-  
+  // ✅ AGAR DATA NAHI HAI TO KUCCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
+
+  // ✅ LOADING STATE - TAB BHI SHOW HOGA
   if (loading) {
     return (
       <section className="py-12 bg-white">

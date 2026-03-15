@@ -26,6 +26,7 @@ export default function CoursesSection() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [hasData, setHasData] = useState(false);
 
   // Fetch programs from API
   useEffect(() => {
@@ -44,19 +45,26 @@ export default function CoursesSection() {
         console.log('📦 API Response:', data);
         
         // Handle both response formats
-        if (Array.isArray(data)) {
+        let programsData: Program[] = [];
+        
+        if (Array.isArray(data) && data.length > 0) {
           console.log('✅ Programs found (array):', data.length);
-          setPrograms(data);
-        } else if (data.success && Array.isArray(data.data)) {
+          programsData = data;
+        } else if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           console.log('✅ Programs found (data.data):', data.data.length);
-          setPrograms(data.data);
+          programsData = data.data;
         } else {
           console.log('⚠️ No programs found');
-          setPrograms([]);
+          programsData = [];
         }
+        
+        setPrograms(programsData);
+        setHasData(programsData.length > 0);
+        
       } catch (error) {
         console.error('🔥 Fetch error:', error);
         setPrograms([]);
+        setHasData(false);
       } finally {
         setLoading(false);
       }
@@ -156,7 +164,12 @@ export default function CoursesSection() {
     return colors[level || ''] || { bg: 'bg-gray-100', text: 'text-gray-800' };
   };
 
-  // Loading state
+  // ✅ AGAR DATA NAHI HAI TO KUCCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
+
+  // ✅ LOADING STATE
   if (loading) {
     return (
       <section className="py-12 bg-white">
@@ -203,7 +216,7 @@ export default function CoursesSection() {
           </p>
         </div>
 
-        {/* Stats Cards - Like Admissions Section */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-blue-50 rounded-xl p-4 text-center border border-blue-100">
             <div className="text-3xl font-bold text-blue-600">{programStats.total}</div>
@@ -268,7 +281,7 @@ export default function CoursesSection() {
           </div>
         )}
 
-        {/* Search and Filters */}
+        {/* Search and Filters - Sirf tab show jab programs hon */}
         {programs.length > 0 && (
           <div className="bg-gray-50 rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -350,14 +363,14 @@ export default function CoursesSection() {
           </div>
         )}
 
-        {/* Results Count */}
+        {/* Results Count - Sirf tab show jab programs hon */}
         {programs.length > 0 && (
           <div className="mb-4 text-sm text-gray-600">
             Showing {filteredPrograms.slice(0, 5).length} of {filteredPrograms.length} programs
           </div>
         )}
 
-        {/* Programs Table - 5 rows only */}
+        {/* Programs Table */}
         {filteredPrograms.length > 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -427,7 +440,7 @@ export default function CoursesSection() {
               </table>
             </div>
             
-            {/* Table Footer with Stats */}
+            {/* Table Footer */}
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -464,15 +477,14 @@ export default function CoursesSection() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-            <div className="text-6xl mb-4">📚</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">No Programs Found</h3>
-            <p className="text-gray-500 mb-6">
-              {programs.length === 0 
-                ? 'No programs available at the moment.'
-                : 'No programs match your search criteria.'}
-            </p>
-            {programs.length > 0 && (
+          // No results after filtering
+          programs.length > 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+              <div className="text-6xl mb-4">📚</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">No Programs Found</h3>
+              <p className="text-gray-500 mb-6">
+                No programs match your search criteria.
+              </p>
               <button
                 onClick={() => {
                   setSearchQuery('');
@@ -483,11 +495,11 @@ export default function CoursesSection() {
               >
                 Clear Filters
               </button>
-            )}
-          </div>
+            </div>
+          ) : null // Agar total programs hi zero hain to kuch na dikhao
         )}
 
-        {/* View All Link */}
+        {/* View All Link - Sirf tab show jab programs hon */}
         {programs.length > 0 && (
           <div className="text-center mt-10">
             <Link

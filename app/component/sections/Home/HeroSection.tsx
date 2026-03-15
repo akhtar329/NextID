@@ -11,7 +11,7 @@ interface NewsItem {
   id: number;
   title: string;
   slug: string;
-  excerpt: string;
+  excerpt: string | null;  // ✅ FIXED: Allow null
   isBreaking: boolean;
   publishedAt: string;
 }
@@ -70,6 +70,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
   const [cities, setCities] = useState<CityItem[]>([]);
   const [carouselItems, setCarouselItems] = useState<CarouselItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState(false);
 
   // Background colors array
   const bgColors = [
@@ -88,16 +89,35 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
 
   // Format time ago for news
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    if (!dateString) return 'Recently';
+    
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return 'Recently';
+      }
+      
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      if (diffMins < 60) return `${diffMins} min ago`;
+      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+      
+      return date.toLocaleDateString('en-PK', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return 'Recently';
+    }
   };
 
   // Create random carousel items
@@ -128,7 +148,9 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
         return {
           id: `news-${newsItem.id}`,
           title: newsItem.title,
-          subtitle: newsItem.excerpt?.substring(0, 60) + '...' || 'Latest News',
+          subtitle: newsItem.excerpt 
+            ? newsItem.excerpt.substring(0, 60) + '...' 
+            : newsItem.title.substring(0, 60) + '...', // ✅ FIX: Use title if excerpt is null
           description: getTimeAgo(newsItem.publishedAt),
           bgColor,
           cta: 'Read More',
@@ -200,12 +222,22 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
         setOpenAdmissions(admissions);
         if (citiesData.success) setCities(citiesData.data);
 
+        // Check if any data exists
+        const hasAnyData = news.length > 0 || results.length > 0 || admissions.length > 0;
+        setHasData(hasAnyData);
+
         // SIRF EK BAAR random carousel banao - initial load par
-        const randomItems = createRandomCarousel(news, results, admissions);
-        setCarouselItems(randomItems);
+        if (hasAnyData) {
+          const randomItems = createRandomCarousel(news, results, admissions);
+          setCarouselItems(randomItems);
+        } else {
+          setCarouselItems([]);
+        }
 
       } catch (error) {
         console.error('Error fetching data:', error);
+        setHasData(false);
+        setCarouselItems([]);
       } finally {
         setLoading(false);
       }
@@ -254,9 +286,13 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
     setCurrentSlide((prev) => (prev - 1 + carouselItems.length) % carouselItems.length);
   };
 
+  // ✅ AGAR DATA NAHI HAI AUR LOADING BHI NAHI TO KUCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
+
   return (
     <>
-
 
       <section className="relative py-2 md:py-2 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
         
@@ -266,38 +302,42 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
         </h1>
         
         {/* Emergency Notification Bar - Breaking News */}
-        <div className="relative bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4">
-          <div className="container mx-auto flex items-center justify-center gap-3">
-            <span className="animate-pulse">⚠️</span>
-            <span className="font-semibold text-sm md:text-base">
-              {breakingNews ? breakingNews.title : 'URGENT: BISE Lahore Results Tomorrow at 10:00 AM - Stay Tuned'}
-            </span>
+        {(breakingNews || !loading) && (
+          <div className="relative bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4">
+            <div className="container mx-auto flex items-center justify-center gap-3">
+              <span className="animate-pulse">⚠️</span>
+              <span className="font-semibold text-sm md:text-base">
+                {breakingNews ? breakingNews.title : 'URGENT: BISE Lahore Results Tomorrow at 10:00 AM - Stay Tuned'}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Live Ticker - Latest News */}
-        <div className="bg-slate-900 text-white py-2 px-4 overflow-hidden">
-          <div className="flex animate-marquee whitespace-nowrap">
-            {tickerNews.length > 0 ? (
-              tickerNews.map((news) => (
-                <Link 
-                  key={news.id} 
-                  href={`/news/${news.slug}`}
-                  className="mx-6 hover:underline cursor-pointer"
-                >
-                  📢 {news.title}
-                </Link>
-              ))
-            ) : (
-              <>
-                <span className="mx-6">📢 BISE Karachi Results Out</span>
-                <span className="mx-6">📢 FBISE Date Sheet Released</span>
-                <span className="mx-6">📢 HEC Scholarship Deadline Extended</span>
-                <span className="mx-6">📢 Punjab Boards Announce New Policy</span>
-              </>
-            )}
+        {(tickerNews.length > 0 || !loading) && (
+          <div className="bg-slate-900 text-white py-2 px-4 overflow-hidden">
+            <div className="flex animate-marquee whitespace-nowrap">
+              {tickerNews.length > 0 ? (
+                tickerNews.map((news) => (
+                  <Link 
+                    key={news.id} 
+                    href={`/news/${news.slug}`}
+                    className="mx-6 hover:underline cursor-pointer"
+                  >
+                    📢 {news.title}
+                  </Link>
+                ))
+              ) : (
+                <>
+                  <span className="mx-6">📢 BISE Karachi Results Out</span>
+                  <span className="mx-6">📢 FBISE Date Sheet Released</span>
+                  <span className="mx-6">📢 HEC Scholarship Deadline Extended</span>
+                  <span className="mx-6">📢 Punjab Boards Announce New Policy</span>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="container relative z-10 mx-auto px-4 max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -326,9 +366,13 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                     className="px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
                   >
                     <option value="All Cities">All Cities</option>
-                    {cities.map((city) => (
-                      <option key={city.id} value={city.name}>{city.name}</option>
-                    ))}
+                    {cities.length > 0 ? (
+                      cities.map((city) => (
+                        <option key={city.id} value={city.name}>{city.name}</option>
+                      ))
+                    ) : (
+                      <option value="All Cities">All Cities</option>
+                    )}
                   </select>
                   <button
                     type="submit"
@@ -339,7 +383,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                 </form>
               </div>
 
-              {/* Random Carousel - Fixed on initial load */}
+              {/* Carousel */}
               {carouselItems.length > 0 ? (
                 <div className="relative h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl group">
                   {carouselItems.map((slide, index) => (
@@ -416,89 +460,114 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                   </div>
                 </div>
               ) : (
+                // Loading state ya fallback
                 <div className="h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center">
                   <div className="text-white text-center">
                     <div className="text-5xl mb-4">🎓</div>
                     <h2 className="text-2xl font-bold">Welcome to NextID.pk</h2>
-                    <p className="mt-2">Loading latest updates...</p>
+                    <p className="mt-2">
+                      {loading ? 'Loading latest updates...' : 'Discover educational opportunities'}
+                    </p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Right Column - News & Updates */}
-            <div className="space-y-6">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-xl shadow-lg">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <span className="text-2xl">📢</span>
-                  LATEST UPDATES
-                </h2>
-              </div>
+            {(latestResults.length > 0 || openAdmissions.length > 0 || newsData.length > 0 || loading) && (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-xl shadow-lg">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <span className="text-2xl">📢</span>
+                    LATEST UPDATES
+                  </h2>
+                </div>
 
-              {/* News Cards */}
-              <div className="space-y-3">
-                {loading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Show mix of latest items - sirf initial load par random */}
-                    {[...latestResults.slice(0, 2), ...openAdmissions.slice(0, 2), ...newsData.slice(0, 2)]
-                      .sort(() => 0.5 - Math.random())
-                      .slice(0, 4)
-                      .map((item) => {
-                        // Type guard for AdmissionItem
-                        if ('programName' in item) {
-                          const admissionItem = item as AdmissionItem;
+                {/* News Cards */}
+                <div className="space-y-3">
+                  {loading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : (
+                    <>
+                      {(() => {
+                        // Sirf wahi items lo jinme data ho
+                        const availableItems = [
+                          ...(latestResults.length > 0 ? latestResults.slice(0, 2) : []),
+                          ...(openAdmissions.length > 0 ? openAdmissions.slice(0, 2) : []),
+                          ...(newsData.length > 0 ? newsData.slice(0, 2) : [])
+                        ];
+                        
+                        // Agar koi item nahi to kuch mat dikhao
+                        if (availableItems.length === 0) {
                           return (
-                            <NewsCard
-                              key={`admission-${admissionItem.id}`}
-                              title={admissionItem.programName}
-                              description={`${admissionItem.instituteName} • ${admissionItem.status}`}
-                              time={admissionItem.expectedCloseDate ? new Date(admissionItem.expectedCloseDate).toLocaleDateString() : 'Open'}
-                              icon="🎓"
-                              type="admission"
-                              link={`/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`}
-                            />
-                          );
-                        } 
-                        // Type guard for ResultItem
-                        else if ('boardName' in item || 'universityName' in item) {
-                          const resultItem = item as ResultItem;
-                          return (
-                            <NewsCard
-                              key={`result-${resultItem.id}`}
-                              title={resultItem.title}
-                              description={resultItem.boardName || resultItem.universityName || 'Results'}
-                              time={resultItem.year.toString()}
-                              icon="📊"
-                              type="result"
-                              link={`/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`}
-                            />
-                          );
-                        } 
-                        // Type guard for NewsItem
-                        else {
-                          const newsItem = item as NewsItem;
-                          return (
-                            <NewsCard
-                              key={`news-${newsItem.id}`}
-                              title={newsItem.title}
-                              description={newsItem.excerpt || 'Latest News'}
-                              time={getTimeAgo(newsItem.publishedAt)}
-                              icon="📰"
-                              type="news"
-                              link={`/news/${newsItem.slug}`}
-                            />
+                            <div className="text-center py-8 bg-white/50 rounded-xl">
+                              <p className="text-gray-500 text-sm">No updates available</p>
+                            </div>
                           );
                         }
-                      })}
-                  </>
-                )}
+                        
+                        // Random shuffle and show max 4
+                        return availableItems
+                          .sort(() => 0.5 - Math.random())
+                          .slice(0, 4)
+                          .map((item) => {
+                            // Type guard for AdmissionItem
+                            if ('programName' in item) {
+                              const admissionItem = item as AdmissionItem;
+                              return (
+                                <NewsCard
+                                  key={`admission-${admissionItem.id}`}
+                                  title={admissionItem.programName}
+                                  description={`${admissionItem.instituteName} • ${admissionItem.status}`}
+                                  time={admissionItem.expectedCloseDate 
+                                    ? new Date(admissionItem.expectedCloseDate).toLocaleDateString() 
+                                    : 'Open'}
+                                  icon="🎓"
+                                  type="admission"
+                                  link={`/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`}
+                                />
+                              );
+                            } 
+                            // Type guard for ResultItem
+                            else if ('boardName' in item || 'universityName' in item) {
+                              const resultItem = item as ResultItem;
+                              return (
+                                <NewsCard
+                                  key={`result-${resultItem.id}`}
+                                  title={resultItem.title}
+                                  description={resultItem.boardName || resultItem.universityName || 'Results'}
+                                  time={resultItem.year.toString()}
+                                  icon="📊"
+                                  type="result"
+                                  link={`/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`}
+                                />
+                              );
+                            } 
+                            // Type guard for NewsItem
+                            else {
+                              const newsItem = item as NewsItem;
+                              return (
+                                <NewsCard
+                                  key={`news-${newsItem.id}`}
+                                  title={newsItem.title}
+                                  description={newsItem.excerpt || newsItem.title} // ✅ FIX: Use title if excerpt is null
+                                  time={getTimeAgo(newsItem.publishedAt)}
+                                  icon="📰"
+                                  type="news"
+                                  link={`/news/${newsItem.slug}`}
+                                />
+                              );
+                            }
+                          });
+                      })()}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -551,6 +620,14 @@ function NewsCard({ title, description, time, icon, type, link }: NewsCardProps)
     }
   };
 
+  // Handle invalid time
+  const displayTime = !time || time === 'NaN day ago' || time.includes('NaN') ? 'Recent' : time;
+
+  // Don't show card if title is invalid
+  if (!title || title === 'Latest News') {
+    return null;
+  }
+
   return (
     <Link href={link}>
       <div className={`bg-white/95 backdrop-blur-sm p-4 rounded-xl border-l-4 ${getBorderColor()} border border-slate-200 hover:shadow-lg transition-shadow duration-300 cursor-pointer group`}>
@@ -558,11 +635,11 @@ function NewsCard({ title, description, time, icon, type, link }: NewsCardProps)
           <div className="text-xl mt-1">{icon}</div>
           <div className="flex-1">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+              <h3 className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
                 {title}
               </h3>
-              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                {time}
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded whitespace-nowrap ml-2">
+                {displayTime}
               </span>
             </div>
             <p className="text-sm text-slate-600 mb-2 line-clamp-2">

@@ -817,7 +817,7 @@ export default async function AdmissionsPage({
             "itemListElement": admissionsList.slice(0, 10).map((ad, index) => ({
               "@type": "ListItem",
               "position": index + 1,
-              "url": `https://nextid.pk/admissions/${ad.slug}`,
+              "url": `https://www.nextid.pk/admissions/${ad.slug}`,
               "name": formatAdmissionName(ad)
             }))
           })
@@ -836,13 +836,13 @@ export default async function AdmissionsPage({
                 "@type": "ListItem",
                 "position": 1,
                 "name": "Home",
-                "item": "https://nextid.pk/"
+                "item": "https://www.nextid.pk/"
               },
               {
                 "@type": "ListItem",
                 "position": 2,
                 "name": "Admissions",
-                "item": "https://nextid.pk/admissions"
+                "item": "https://www.nextid.pk/admissions"
               }
             ]
           })

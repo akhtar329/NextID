@@ -477,7 +477,7 @@ useEffect(() => {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
                   <span className="font-medium">Preview URL:</span>{' '}
-                  <span className="font-mono">https://nextid.pk/admissions/{slug}</span>
+                  <span className="font-mono">https://www.nextid.pk/admissions/{slug}</span>
                 </p>
               </div>
             )}

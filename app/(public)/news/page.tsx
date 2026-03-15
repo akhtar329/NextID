@@ -251,7 +251,7 @@ export default async function NewsPage({
             "@context": "https://schema.org",
             "@type": "NewsMediaOrganization",
             "name": "NextID.pk",
-            "url": "https://nextid.pk/news",
+            "url": "https://www.nextid.pk/news",
             "description": "Pakistan's leading education news platform"
           })
         }}

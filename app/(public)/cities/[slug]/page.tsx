@@ -348,7 +348,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       type: 'website',
     },
     alternates: {
-      canonical: `https://nextid.pk/cities/${city.slug}`,
+      canonical: `https://www.nextid.pk/cities/${city.slug}`,
     },
   };
 }

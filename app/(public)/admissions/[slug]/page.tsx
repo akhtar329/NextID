@@ -442,19 +442,19 @@ function generateBreadcrumbData(admission: AdmissionWithPrograms) {
         "@type": "ListItem",
         "position": 1,
         "name": "Home",
-        "item": "https://nextid.pk/"
+        "item": "https://www.nextid.pk/"
       },
       {
         "@type": "ListItem",
         "position": 2,
         "name": "Admissions",
-        "item": "https://nextid.pk/admissions"
+        "item": "https://www.nextid.pk/admissions"
       },
       {
         "@type": "ListItem",
         "position": 3,
         "name": `${admission.institute?.name} Admissions ${admission.year}`,
-        "item": `https://nextid.pk/admissions/${admission.slug}`
+        "item": `https://www.nextid.pk/admissions/${admission.slug}`
       }
     ]
   };
@@ -556,7 +556,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const title = generateMetaTitle(admission);
   const description = generateMetaDescription(admission);
   const keywords = generateMetaKeywords(admission);
-  const canonicalUrl = `https://nextid.pk/admissions/${admission.slug}`;
+  const canonicalUrl = `https://www.nextid.pk/admissions/${admission.slug}`;
 
   return {
     title,

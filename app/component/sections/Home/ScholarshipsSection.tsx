@@ -1,7 +1,7 @@
 // app/component/sections/Home/ScholarshipsSection.tsx
 "use client"; 
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 
 // Mock data for latest scholarships (3-5 items)
@@ -73,13 +73,21 @@ export default function ScholarshipsSection() {
   const [selectedLevel, setSelectedLevel] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedLocation, setSelectedLocation] = useState('All');
+  const [scholarships, setScholarships] = useState(initialScholarships);
+  const [loading, setLoading] = useState(false);
+  const [hasData, setHasData] = useState(true); // Mock data hai isliye true
+
+  // ✅ AGAR DATA NAHI HAI TO KUCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
 
   // Get current date for deadline comparison
   const currentDate = new Date();
 
   // Filter scholarships based on search and filters
   const filteredScholarships = useMemo(() => {
-    return initialScholarships.filter(scholarship => {
+    return scholarships.filter(scholarship => {
       // Search filter
       const matchesSearch = searchQuery === '' || 
         scholarship.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -100,7 +108,7 @@ export default function ScholarshipsSection() {
       
       return matchesSearch && matchesLevel && matchesType && matchesLocation;
     });
-  }, [searchQuery, selectedLevel, selectedType, selectedLocation]);
+  }, [searchQuery, selectedLevel, selectedType, selectedLocation, scholarships]);
 
   // Format date for display
   const formatDate = (dateString: string) => {

@@ -228,7 +228,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: newsItem.imageUrl ? [newsItem.imageUrl] : ['/images/news-og.jpg'],
     },
     alternates: {
-      canonical: `https://nextid.pk/news/${newsItem.slug}`,
+      canonical: `https://www.nextid.pk/news/${newsItem.slug}`,
     },
   };
 }

@@ -26,6 +26,7 @@ export default function LatestResultsSection() {
   const [selectedType, setSelectedType] = useState('All');
   const [selectedYear, setSelectedYear] = useState('All');
   const [selectedInstitution, setSelectedInstitution] = useState('All');
+  const [hasData, setHasData] = useState(false);
 
   // Fetch results from API
   useEffect(() => {
@@ -39,16 +40,19 @@ export default function LatestResultsSection() {
         
         console.log('📦 API Response:', data);
         
-        if (data.success && Array.isArray(data.data)) {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           console.log('✅ Results found:', data.data.length);
           setResults(data.data);
+          setHasData(true);
         } else {
           console.log('⚠️ No results found');
           setResults([]);
+          setHasData(false);
         }
       } catch (error) {
         console.error('🔥 Fetch error:', error);
         setResults([]);
+        setHasData(false);
       } finally {
         setLoading(false);
       }
@@ -179,6 +183,11 @@ export default function LatestResultsSection() {
     };
   };
 
+  // ✅ AGAR DATA NAHI HAI AUR LOADING BHI NAHI TO KUCH NAHI DIKHAO
+  if (!hasData && !loading) {
+    return null;
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -240,7 +249,7 @@ export default function LatestResultsSection() {
           </div>
         </div>
 
-        {/* Latest Results Preview */}
+        {/* Latest Results Preview - Sirf tab show jab latest results hon */}
         {latestResults.length > 0 && (
           <div className="mb-8">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -287,7 +296,7 @@ export default function LatestResultsSection() {
           </div>
         )}
 
-        {/* Search and Filters */}
+        {/* Search and Filters - Sirf tab show jab results hon */}
         {results.length > 0 && (
           <div className="bg-white rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -386,7 +395,7 @@ export default function LatestResultsSection() {
           </div>
         )}
 
-        {/* Results Count */}
+        {/* Results Count - Sirf tab show jab results hon */}
         {results.length > 0 && (
           <div className="mb-4 text-sm text-gray-600">
             Showing {filteredResults.length} of {results.length} results
@@ -499,15 +508,14 @@ export default function LatestResultsSection() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
-            <p className="text-gray-500 mb-6">
-              {results.length === 0 
-                ? 'No results available at the moment.'
-                : 'No results match your search criteria.'}
-            </p>
-            {results.length > 0 && (
+          // No results after filtering
+          results.length > 0 ? (
+            <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+              <div className="text-6xl mb-4">📭</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
+              <p className="text-gray-500 mb-6">
+                No results match your search criteria.
+              </p>
               <button
                 onClick={() => {
                   setSearchQuery('');
@@ -519,11 +527,11 @@ export default function LatestResultsSection() {
               >
                 Clear Filters
               </button>
-            )}
-          </div>
+            </div>
+          ) : null // Agar total results hi zero hain to kuch na dikhao
         )}
 
-        {/* View All Link */}
+        {/* View All Link - Sirf tab show jab results hon */}
         {results.length > 0 && (
           <div className="text-center mt-10">
             <Link

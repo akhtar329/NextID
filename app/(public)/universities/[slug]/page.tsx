@@ -336,7 +336,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       type: 'website',
     },
     alternates: {
-      canonical: `https://nextid.pk/universities/${university.slug}`,
+      canonical: `https://www.nextid.pk/universities/${university.slug}`,
     },
   };
 }

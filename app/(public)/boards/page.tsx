@@ -632,7 +632,7 @@ export default async function BoardsPage({
             "itemListElement": boards.slice(0, 10).map((board, index) => ({
               "@type": "ListItem",
               "position": index + 1,
-              "url": `https://nextid.pk/boards/${board.slug}`,
+              "url": `https://www.nextid.pk/boards/${board.slug}`,
               "name": board.name
             }))
           })
