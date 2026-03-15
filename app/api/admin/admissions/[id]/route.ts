@@ -66,14 +66,12 @@ export async function GET(
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        // ✅ Fix: Remove degreeName if it doesn't exist in schema
-        // degreeName: degrees.name, // Comment out if you need degree name
       })
       .from(admissionPrograms)
       .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
       .where(eq(admissionPrograms.admissionId, admissionId));
 
-    // If you need degree name, join with degrees table
+    // Get degree names
     const programListWithDegrees = await Promise.all(
       programList.map(async (p) => {
         const degreeInfo = await db
@@ -110,6 +108,92 @@ export async function GET(
         success: false, 
         error: "Failed to fetch admission",
         details: error instanceof Error ? error.message : "Unknown error"
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH - Update only admission status (for inline editing)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  console.log("🚀 PATCH /api/admin/admissions/[id] called - Status Update");
+  
+  try {
+    const { id } = await params;
+    const admissionId = parseInt(id);
+
+    if (isNaN(admissionId)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid admission ID" },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    console.log("📦 PATCH data:", body);
+
+    // Validate status
+    const { status } = body;
+    const validStatuses = ["Expected", "Open", "Closed"];
+    
+    if (!status || !validStatuses.includes(status)) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Valid status is required (Expected, Open, or Closed)" 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if admission exists
+    const existing = await db
+      .select()
+      .from(admissions)
+      .where(eq(admissions.id, admissionId))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Admission not found" },
+        { status: 404 }
+      );
+    }
+
+    // Update only the status
+    const updated = await db
+      .update(admissions)
+      .set({
+        status: status,
+        updatedAt: new Date(),
+      })
+      .where(eq(admissions.id, admissionId))
+      .returning({
+        id: admissions.id,
+        name: admissions.name,
+        status: admissions.status,
+        updatedAt: admissions.updatedAt,
+      });
+
+    console.log(`✅ Admission status updated to: ${status}`);
+
+    return NextResponse.json({
+      success: true,
+      admission: updated[0],
+      message: `Status updated to ${status}`,
+    });
+
+  } catch (error: any) {
+    console.error("❌ Error updating admission status:", error);
+    
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to update admission status",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );
@@ -201,7 +285,7 @@ export async function PUT(
 
     // Start transaction for update
     const result = await db.transaction(async (tx) => {
-      // 1. Update admission (without programId)
+      // 1. Update admission
       const updated = await tx
         .update(admissions)
         .set({
@@ -243,7 +327,7 @@ export async function PUT(
 
       console.log(`✅ Updated admission with ${newLinks.length} programs`);
 
-      return { updated: updated[0], programCount: newLinks.length }; // ✅ Fix: updated[0] instead of updated
+      return { updated: updated[0], programCount: newLinks.length };
     });
 
     return NextResponse.json({
@@ -295,7 +379,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete admission (cascade will handle junction table)
+// DELETE - Delete admission
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

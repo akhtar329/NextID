@@ -1,4 +1,5 @@
 // app/admin/admissions/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -34,7 +35,6 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  // 👇 Changed from single program to programs array
   programs: Program[];
   institute: Institute;
 };
@@ -52,10 +52,9 @@ type FlatAdmission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  // 👇 For display
   programNames: string;
   programIds: number[];
-  firstProgramId: number; // For linking
+  firstProgramId: number;
   instituteName: string;
   instituteCity: string;
   instituteId: number;
@@ -69,6 +68,7 @@ export default function AdmissionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
 
   // Filters
   const [yearFilter, setYearFilter] = useState<string>("");
@@ -91,7 +91,7 @@ export default function AdmissionsPage() {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch admissions");
       const data = await res.json();
-      console.log('Admissions data:', data); // Debug log
+      console.log('Admissions data:', data);
       setAdmissions(data.admissions || []);
       setError(null);
     } catch (err) {
@@ -106,6 +106,42 @@ export default function AdmissionsPage() {
   useEffect(() => {
     fetchAdmissions();
   }, [yearFilter, statusFilter]);
+
+  // Update admission status
+  const updateStatus = async (id: number, newStatus: "Expected" | "Open" | "Closed") => {
+    setUpdatingStatus(id);
+    toast.loading("Updating status...", { id: `status-${id}` });
+
+    try {
+      const res = await fetch(`/api/admin/admissions/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update status");
+      }
+
+      toast.success(`Status updated to ${newStatus}`, { 
+        id: `status-${id}`,
+        duration: 2000 
+      });
+      
+      await fetchAdmissions();
+    } catch (err) {
+      console.error("Error updating status:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to update status", { 
+        id: `status-${id}` 
+      });
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
 
   // Delete admission
   const deleteAdmission = async (id: number, name: string) => {
@@ -174,7 +210,7 @@ export default function AdmissionsPage() {
     };
   });
 
-  // Filter by search (client-side) - search in name, program names, institute
+  // Filter by search
   const filteredData = flattenedData.filter(ad => 
     ad.name.toLowerCase().includes(search.toLowerCase()) ||
     ad.programNames.toLowerCase().includes(search.toLowerCase()) ||
@@ -263,16 +299,42 @@ export default function AdmissionsPage() {
     {
       header: "Status",
       accessor: "status",
-      render: (value: string) => {
+      render: (value: string, row: FlatAdmission) => {
         const colors = {
           Expected: "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300",
           Open: "bg-green-100 text-green-700 ring-1 ring-green-300",
           Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
         };
+        
         return (
-          <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${colors[value as keyof typeof colors]}`}>
-            {value}
-          </span>
+          <div className="relative">
+            {updatingStatus === row.id ? (
+              <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400 ring-1 ring-gray-200">
+                <span className="flex items-center gap-1">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Updating</span>
+                </span>
+              </span>
+            ) : (
+              <select
+                value={value}
+                onChange={(e) => updateStatus(row.id, e.target.value as "Expected" | "Open" | "Closed")}
+                className={`
+                  px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
+                  ${colors[value as keyof typeof colors]}
+                  hover:ring-2 hover:ring-offset-1 transition-all
+                `}
+                title="Change status"
+              >
+                <option value="Expected" className="bg-white text-gray-700">Expected</option>
+                <option value="Open" className="bg-white text-gray-700">Open</option>
+                <option value="Closed" className="bg-white text-gray-700">Closed</option>
+              </select>
+            )}
+          </div>
         );
       }
     },
@@ -302,7 +364,6 @@ export default function AdmissionsPage() {
           <button
             onClick={() => router.push(`/admin/admissions/${row.id}/edit`)}
             className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 transition-colors ring-1 ring-blue-200"
-            title={`Edit: ${row.name}`}
           >
             Edit
           </button>
@@ -317,17 +378,7 @@ export default function AdmissionsPage() {
               }
             `}
           >
-            {deleteLoading === row.id ? (
-              <span className="flex items-center gap-1">
-                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>...</span>
-              </span>
-            ) : (
-              "Delete"
-            )}
+            {deleteLoading === row.id ? "..." : "Delete"}
           </button>
         </div>
       ),
