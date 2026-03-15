@@ -505,8 +505,8 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
             )}
           </div>
 
-          {/* Right Column - News Cards - FIXED: Show all recent items without carousel exclusion */}
-          {(latestResults.length > 0 || openAdmissions.length > 0 || newsData.length > 0 || loading) && (
+          {/* ✅ RIGHT COLUMN - SIRF NEWS */}
+          {(newsData.length > 0 || loading) && (
             <div className="space-y-6">
               {/* Header */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-xl shadow-lg">
@@ -516,7 +516,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                 </h2>
               </div>
 
-              {/* News Cards - Show all recent items (no carousel exclusion) */}
+              {/* News Cards - Sirf News Items */}
               <div className="space-y-3">
                 {loading ? (
                   <div className="flex justify-center py-8">
@@ -525,74 +525,31 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                 ) : (
                   <>
                     {(() => {
-                      // Sabse recent items lo (sorted by date)
-                      const allRecentItems: MixedItem[] = [
-                        ...newsData.map(item => ({ ...item, type: 'news' as const })),
-                        ...latestResults.map(item => ({ ...item, type: 'result' as const })),
-                        ...openAdmissions.map(item => ({ ...item, type: 'admission' as const }))
-                      ].sort((a, b) => {
-                        const dateA = getItemDate(a);
-                        const dateB = getItemDate(b);
-                        return dateB.getTime() - dateA.getTime();
-                      });
+                      // Sirf news items lo, date ke hisaab se sort karo
+                      const sortedNews = [...newsData].sort((a, b) => 
+                        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+                      );
 
-                      if (allRecentItems.length === 0) {
+                      if (sortedNews.length === 0) {
                         return (
                           <div className="text-center py-8 bg-white/50 rounded-xl">
-                            <p className="text-gray-500 text-sm">No updates available</p>
+                            <p className="text-gray-500 text-sm">No news available</p>
                           </div>
                         );
                       }
 
-                      // Show top 4 most recent items
-                      return allRecentItems.slice(0, 4).map((item) => {
-                        if (item.type === 'admission') {
-                          const admissionItem = item as AdmissionItem & { type: 'admission' };
-                          return (
-                            <NewsCard
-                              key={`admission-${admissionItem.id}`}
-                              title={admissionItem.programName}
-                              description={`${admissionItem.instituteName} • ${admissionItem.status}`}
-                              time={admissionItem.expectedCloseDate 
-                                ? new Date(admissionItem.expectedCloseDate).toLocaleDateString() 
-                                : 'Open'}
-                              icon="🎓"
-                              type="admission"
-                              link={admissionItem.slug 
-                                ? `/admissions/${admissionItem.slug}` 
-                                : `/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`}
-                            />
-                          );
-                        } else if (item.type === 'result') {
-                          const resultItem = item as ResultItem & { type: 'result' };
-                          return (
-                            <NewsCard
-                              key={`result-${resultItem.id}`}
-                              title={resultItem.title}
-                              description={resultItem.boardName || resultItem.universityName || 'Results'}
-                              time={resultItem.year.toString()}
-                              icon="📊"
-                              type="result"
-                              link={resultItem.slug 
-                                ? `/results/${resultItem.slug}` 
-                                : `/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`}
-                            />
-                          );
-                        } else {
-                          const newsItem = item as NewsItem & { type: 'news' };
-                          return (
-                            <NewsCard
-                              key={`news-${newsItem.id}`}
-                              title={newsItem.title}
-                              description={newsItem.excerpt || newsItem.title}
-                              time={getTimeAgo(newsItem.publishedAt)}
-                              icon="📰"
-                              type="news"
-                              link={`/news/${newsItem.slug}`}
-                            />
-                          );
-                        }
-                      });
+                      // Show top 4 most recent news items
+                      return sortedNews.slice(0, 4).map((newsItem) => (
+                        <NewsCard
+                          key={`news-${newsItem.id}`}
+                          title={newsItem.title}
+                          description={newsItem.excerpt || newsItem.title}
+                          time={getTimeAgo(newsItem.publishedAt)}
+                          icon="📰"
+                          type="news"
+                          link={`/news/${newsItem.slug}`}
+                        />
+                      ));
                     })()}
                   </>
                 )}
