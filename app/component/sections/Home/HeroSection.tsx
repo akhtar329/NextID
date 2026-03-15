@@ -11,7 +11,7 @@ interface NewsItem {
   id: number;
   title: string;
   slug: string;
-  excerpt: string | null;  // ✅ FIXED: Allow null
+  excerpt: string | null;
   isBreaking: boolean;
   publishedAt: string;
 }
@@ -19,6 +19,7 @@ interface NewsItem {
 interface ResultItem {
   id: number;
   title: string;
+  slug?: string;
   year: number;
   boardName?: string;
   universityName?: string;
@@ -30,6 +31,7 @@ interface AdmissionItem {
   programName: string;
   instituteName: string;
   status: string;
+  slug?: string;
   expectedCloseDate?: string;
 }
 
@@ -51,6 +53,12 @@ interface CarouselItem {
   link: string;
   type: 'news' | 'admission' | 'result';
 }
+
+// Extended type for mixed items
+type MixedItem = 
+  | (NewsItem & { type: 'news' })
+  | (ResultItem & { type: 'result' })
+  | (AdmissionItem & { type: 'admission' });
 
 interface Props {
   category?: string;
@@ -95,7 +103,6 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
       const date = new Date(dateString);
       const now = new Date();
       
-      // Check if date is valid
       if (isNaN(date.getTime())) {
         return 'Recently';
       }
@@ -120,16 +127,28 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
     }
   };
 
-  // Create random carousel items
+  // Filter news from last 2 weeks for carousel
+  const getRecentNews = (news: NewsItem[]) => {
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    
+    return news.filter(item => {
+      const itemDate = new Date(item.publishedAt);
+      return itemDate >= twoWeeksAgo;
+    });
+  };
+
+  // Create random carousel items (max 4)
   const createRandomCarousel = (news: NewsItem[], results: ResultItem[], admissions: AdmissionItem[]) => {
-    // Create array of all items with their types
+    // Sirf recent news (2 weeks) consider karo
+    const recentNews = getRecentNews(news);
+    
     const allItems: { item: any; type: 'news' | 'admission' | 'result' }[] = [
-      ...news.map(item => ({ item, type: 'news' as const })),
+      ...recentNews.map(item => ({ item, type: 'news' as const })),
       ...results.map(item => ({ item, type: 'result' as const })),
       ...admissions.map(item => ({ item, type: 'admission' as const }))
     ];
 
-    // Agar koi data nahi to empty array
     if (allItems.length === 0) return [];
 
     // Randomly shuffle
@@ -138,8 +157,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
     // Take first 4 for carousel
     const selected = shuffled.slice(0, 4);
     
-    // Convert to carousel items
-    const newCarouselItems: CarouselItem[] = selected.map((item) => {
+    return selected.map((item) => {
       const bgColor = bgColors[Math.floor(Math.random() * bgColors.length)];
       const icon = icons[Math.floor(Math.random() * icons.length)];
       
@@ -150,13 +168,13 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           title: newsItem.title,
           subtitle: newsItem.excerpt 
             ? newsItem.excerpt.substring(0, 60) + '...' 
-            : newsItem.title.substring(0, 60) + '...', // ✅ FIX: Use title if excerpt is null
+            : newsItem.title.substring(0, 60) + '...',
           description: getTimeAgo(newsItem.publishedAt),
           bgColor,
           cta: 'Read More',
           icon,
           link: `/news/${newsItem.slug}`,
-          type: 'news'
+          type: 'news' as const
         };
       } else if (item.type === 'admission') {
         const admissionItem = item.item as AdmissionItem;
@@ -170,8 +188,10 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           bgColor,
           cta: 'Apply Now',
           icon,
-          link: `/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`,
-          type: 'admission'
+          link: admissionItem.slug 
+            ? `/admissions/${admissionItem.slug}` 
+            : `/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`,
+          type: 'admission' as const
         };
       } else {
         const resultItem = item.item as ResultItem;
@@ -183,22 +203,21 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           bgColor,
           cta: 'View Results',
           icon,
-          link: `/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`,
-          type: 'result'
+          link: resultItem.slug 
+            ? `/results/${resultItem.slug}` 
+            : `/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`,
+          type: 'result' as const
         };
       }
     });
-
-    return newCarouselItems;
   };
 
-  // Fetch data - sirf ek baar random generate hoga
+  // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Fetch all data in parallel
         const [newsRes, resultsRes, admissionsRes, citiesRes] = await Promise.all([
           fetch('/api/public/news?limit=20'),
           fetch('/api/public/results?limit=20&sort=latest'),
@@ -222,17 +241,12 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
         setOpenAdmissions(admissions);
         if (citiesData.success) setCities(citiesData.data);
 
-        // Check if any data exists
         const hasAnyData = news.length > 0 || results.length > 0 || admissions.length > 0;
         setHasData(hasAnyData);
 
-        // SIRF EK BAAR random carousel banao - initial load par
-        if (hasAnyData) {
-          const randomItems = createRandomCarousel(news, results, admissions);
-          setCarouselItems(randomItems);
-        } else {
-          setCarouselItems([]);
-        }
+        // Create carousel with recent news only
+        const randomItems = createRandomCarousel(news, results, admissions);
+        setCarouselItems(randomItems);
 
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -245,16 +259,35 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
 
     fetchData();
     
-    // Refresh every 5 minutes (data update hoga lekin carousel wahi rahega)
+    // Refresh every 5 minutes
     const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []); // Empty dependency array - sirf ek baar
+  }, []);
 
-  // Get breaking news
-  const breakingNews = newsData.find(news => news.isBreaking);
+  // Get breaking news (sab se recent breaking news)
+  const breakingNews = newsData
+    .filter(news => news.isBreaking)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())[0];
   
-  // Get ticker news
-  const tickerNews = newsData.slice(0, 4);
+  // Get featured items for ticker (latest 4 items from news, results, admissions)
+  const getTickerItems = () => {
+    const allItems: { title: string; slug: string; type: string }[] = [
+      ...newsData.slice(0, 2).map(n => ({ title: n.title, slug: n.slug, type: 'news' })),
+      ...latestResults.slice(0, 1).map(r => ({ 
+        title: r.title, 
+        slug: r.slug || r.title.toLowerCase().replace(/ /g, '-'), 
+        type: 'result' 
+      })),
+      ...openAdmissions.slice(0, 1).map(a => ({ 
+        title: a.programName, 
+        slug: a.slug || a.programName.toLowerCase().replace(/ /g, '-'), 
+        type: 'admission' 
+      }))
+    ];
+    return allItems.slice(0, 4);
+  };
+
+  const tickerItems = getTickerItems();
 
   // Auto rotate carousel
   useEffect(() => {
@@ -286,316 +319,313 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
     setCurrentSlide((prev) => (prev - 1 + carouselItems.length) % carouselItems.length);
   };
 
-  // ✅ AGAR DATA NAHI HAI AUR LOADING BHI NAHI TO KUCH NAHI DIKHAO
+  // Helper function to get date for sorting
+  const getItemDate = (item: MixedItem): Date => {
+    if (item.type === 'news') return new Date(item.publishedAt);
+    if (item.type === 'result') return item.resultDate ? new Date(item.resultDate) : new Date();
+    return item.expectedCloseDate ? new Date(item.expectedCloseDate) : new Date();
+  };
+
   if (!hasData && !loading) {
     return null;
   }
 
   return (
-    <>
-
-      <section className="relative py-2 md:py-2 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
-        
-        {/* ✅ Hidden H1 for SEO - Main Heading of the Page */}
-        <h1 className="sr-only">
-          NextID.pk - Pakistan's Largest Education Portal for Admissions 2026, Results, Date Sheets and Educational News
-        </h1>
-        
-        {/* Emergency Notification Bar - Breaking News */}
-        {(breakingNews || !loading) && (
-          <div className="relative bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4">
-            <div className="container mx-auto flex items-center justify-center gap-3">
-              <span className="animate-pulse">⚠️</span>
-              <span className="font-semibold text-sm md:text-base">
-                {breakingNews ? breakingNews.title : 'URGENT: BISE Lahore Results Tomorrow at 10:00 AM - Stay Tuned'}
-              </span>
-            </div>
+    <section className="relative py-2 md:py-2 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      
+      {/* Hidden H1 for SEO */}
+      <h1 className="sr-only">
+        NextID.pk - Pakistan's Largest Education Portal for Admissions 2026, Results, Date Sheets and Educational News
+      </h1>
+      
+      {/* 🔴 BREAKING NEWS BAR - Sirf breaking news */}
+      {breakingNews && (
+        <div className="relative bg-gradient-to-r from-red-600 to-orange-600 text-white py-3 px-4">
+          <div className="container mx-auto flex items-center justify-center gap-3">
+            <span className="animate-pulse">🔴</span>
+            <span className="font-semibold text-sm md:text-base">
+              BREAKING: {breakingNews.title}
+            </span>
+            <Link 
+              href={`/news/${breakingNews.slug}`}
+              className="text-white/90 hover:text-white underline ml-2 text-sm"
+            >
+              Read More →
+            </Link>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Live Ticker - Latest News */}
-        {(tickerNews.length > 0 || !loading) && (
-          <div className="bg-slate-900 text-white py-2 px-4 overflow-hidden">
-            <div className="flex animate-marquee whitespace-nowrap">
-              {tickerNews.length > 0 ? (
-                tickerNews.map((news) => (
-                  <Link 
-                    key={news.id} 
-                    href={`/news/${news.slug}`}
-                    className="mx-6 hover:underline cursor-pointer"
-                  >
-                    📢 {news.title}
-                  </Link>
-                ))
-              ) : (
-                <>
-                  <span className="mx-6">📢 BISE Karachi Results Out</span>
-                  <span className="mx-6">📢 FBISE Date Sheet Released</span>
-                  <span className="mx-6">📢 HEC Scholarship Deadline Extended</span>
-                  <span className="mx-6">📢 Punjab Boards Announce New Policy</span>
-                </>
-              )}
-            </div>
+      {/* ⚡ FEATURES TICKER - Latest updates from all sections */}
+      {tickerItems.length > 0 && (
+        <div className="bg-slate-900 text-white py-2 px-4 overflow-hidden">
+          <div className="flex animate-marquee whitespace-nowrap">
+            {tickerItems.map((item, index) => (
+              <Link 
+                key={index}
+                href={`/${item.type === 'news' ? 'news' : item.type === 'result' ? 'results' : 'admissions'}/${item.slug}`}
+                className="mx-6 hover:underline cursor-pointer flex items-center gap-2"
+              >
+                {item.type === 'news' && '📰'}
+                {item.type === 'result' && '📊'}
+                {item.type === 'admission' && '🎓'}
+                {item.title}
+              </Link>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="container relative z-10 mx-auto px-4 max-w-7xl">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="container relative z-10 mx-auto px-4 max-w-7xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Left Column - Search & Carousel */}
+          <div className="lg:col-span-2 space-y-6">
             
-            {/* Left Column - Search & Carousel */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              {/* Search Bar */}
-              <div className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-slate-200">
-                <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">
-                      🔍
-                    </span>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search for programs, universities, results..."
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
-                    />
-                  </div>
-                  <select
-                    value={selectedCity}
-                    onChange={(e) => setSelectedCity(e.target.value)}
-                    className="px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
-                  >
+            {/* Search Bar */}
+            <div className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-slate-200">
+              <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
+                <div className="flex-1 relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">🔍</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search for programs, universities, results..."
+                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none"
+                  />
+                </div>
+                <select
+                  value={selectedCity}
+                  onChange={(e) => setSelectedCity(e.target.value)}
+                  className="px-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all outline-none bg-white"
+                >
+                  <option value="All Cities">All Cities</option>
+                  {cities.length > 0 ? (
+                    cities.map((city) => (
+                      <option key={city.id} value={city.name}>{city.name}</option>
+                    ))
+                  ) : (
                     <option value="All Cities">All Cities</option>
-                    {cities.length > 0 ? (
-                      cities.map((city) => (
-                        <option key={city.id} value={city.name}>{city.name}</option>
-                      ))
-                    ) : (
-                      <option value="All Cities">All Cities</option>
-                    )}
-                  </select>
-                  <button
-                    type="submit"
-                    className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
-                  >
-                    Search
-                  </button>
-                </form>
-              </div>
-
-              {/* Carousel */}
-              {carouselItems.length > 0 ? (
-                <div className="relative h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl group">
-                  {carouselItems.map((slide, index) => (
-                    <div
-                      key={slide.id}
-                      className={`absolute inset-0 transition-all duration-500 ease-in-out ${
-                        index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                      }`}
-                    >
-                      <div className={`absolute inset-0 bg-gradient-to-br ${slide.bgColor}`}></div>
-                      <div className="absolute inset-0 bg-black/20"></div>
-                      
-                      {/* Floating shapes */}
-                      <div className="absolute top-10 right-10 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
-                      <div className="absolute bottom-10 left-10 w-48 h-48 bg-white/5 rounded-full blur-xl"></div>
-                      
-                      {/* Content */}
-                      <div className="relative h-full flex flex-col justify-center p-8 md:p-12 text-white">
-                        <div className="text-5xl md:text-6xl mb-4 transform transition-transform duration-500">
-                          {slide.icon}
-                        </div>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3">
-                          {slide.title}
-                        </h2>
-                        <h3 className="text-xl md:text-2xl mb-4 opacity-90">
-                          {slide.subtitle}
-                        </h3>
-                        <p className="text-lg mb-8 opacity-80">
-                          {slide.description}
-                        </p>
-                        <Link 
-                          href={slide.link}
-                          className="inline-flex items-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all duration-300 hover:scale-105 active:scale-95 max-w-max"
-                        >
-                          {slide.cta}
-                          <span className="text-lg">→</span>
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Navigation */}
-                  <button
-                    onClick={prevSlide}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-white/30"
-                  >
-                    ←
-                  </button>
-                  <button
-                    onClick={nextSlide}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-white/30"
-                  >
-                    →
-                  </button>
-
-                  {/* Dots */}
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-                    {carouselItems.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentSlide(index)}
-                        className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                          index === currentSlide 
-                            ? 'bg-white w-8' 
-                            : 'bg-white/50 hover:bg-white/80'
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Counter */}
-                  <div className="absolute bottom-6 right-6 bg-black/30 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm">
-                    {currentSlide + 1} / {carouselItems.length}
-                  </div>
-                </div>
-              ) : (
-                // Loading state ya fallback
-                <div className="h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center">
-                  <div className="text-white text-center">
-                    <div className="text-5xl mb-4">🎓</div>
-                    <h2 className="text-2xl font-bold">Welcome to NextID.pk</h2>
-                    <p className="mt-2">
-                      {loading ? 'Loading latest updates...' : 'Discover educational opportunities'}
-                    </p>
-                  </div>
-                </div>
-              )}
+                  )}
+                </select>
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
+                >
+                  Search
+                </button>
+              </form>
             </div>
 
-            {/* Right Column - News & Updates */}
-            {(latestResults.length > 0 || openAdmissions.length > 0 || newsData.length > 0 || loading) && (
-              <div className="space-y-6">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-xl shadow-lg">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <span className="text-2xl">📢</span>
-                    LATEST UPDATES
-                  </h2>
+            {/* 🎠 CAROUSEL - Random items from recent news (max 4) */}
+            {carouselItems.length > 0 ? (
+              <div className="relative h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl group">
+                {carouselItems.map((slide, index) => (
+                  <div
+                    key={slide.id}
+                    className={`absolute inset-0 transition-all duration-500 ease-in-out ${
+                      index === currentSlide ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-br ${slide.bgColor}`}></div>
+                    <div className="absolute inset-0 bg-black/20"></div>
+                    
+                    {/* Floating shapes */}
+                    <div className="absolute top-10 right-10 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+                    <div className="absolute bottom-10 left-10 w-48 h-48 bg-white/5 rounded-full blur-xl"></div>
+                    
+                    {/* Content */}
+                    <div className="relative h-full flex flex-col justify-center p-8 md:p-12 text-white">
+                      <div className="text-5xl md:text-6xl mb-4 transform transition-transform duration-500">
+                        {slide.icon}
+                      </div>
+                      <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3 line-clamp-2">
+                        {slide.title}
+                      </h2>
+                      <h3 className="text-xl md:text-2xl mb-4 opacity-90 line-clamp-1">
+                        {slide.subtitle}
+                      </h3>
+                      <p className="text-lg mb-8 opacity-80">
+                        {slide.description}
+                      </p>
+                      <Link 
+                        href={slide.link}
+                        className="inline-flex items-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all duration-300 hover:scale-105 active:scale-95 max-w-max"
+                      >
+                        {slide.cta}
+                        <span className="text-lg">→</span>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Navigation */}
+                <button
+                  onClick={prevSlide}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-white/30"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={nextSlide}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 hover:bg-white/30"
+                >
+                  →
+                </button>
+
+                {/* Dots */}
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+                  {carouselItems.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentSlide(index)}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        index === currentSlide ? 'bg-white w-8' : 'bg-white/50 hover:bg-white/80'
+                      }`}
+                    />
+                  ))}
                 </div>
 
-                {/* News Cards */}
-                <div className="space-y-3">
-                  {loading ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    </div>
-                  ) : (
-                    <>
-                      {(() => {
-                        // Sirf wahi items lo jinme data ho
-                        const availableItems = [
-                          ...(latestResults.length > 0 ? latestResults.slice(0, 2) : []),
-                          ...(openAdmissions.length > 0 ? openAdmissions.slice(0, 2) : []),
-                          ...(newsData.length > 0 ? newsData.slice(0, 2) : [])
-                        ];
-                        
-                        // Agar koi item nahi to kuch mat dikhao
-                        if (availableItems.length === 0) {
-                          return (
-                            <div className="text-center py-8 bg-white/50 rounded-xl">
-                              <p className="text-gray-500 text-sm">No updates available</p>
-                            </div>
-                          );
-                        }
-                        
-                        // Random shuffle and show max 4
-                        return availableItems
-                          .sort(() => 0.5 - Math.random())
-                          .slice(0, 4)
-                          .map((item) => {
-                            // Type guard for AdmissionItem
-                            if ('programName' in item) {
-                              const admissionItem = item as AdmissionItem;
-                              return (
-                                <NewsCard
-                                  key={`admission-${admissionItem.id}`}
-                                  title={admissionItem.programName}
-                                  description={`${admissionItem.instituteName} • ${admissionItem.status}`}
-                                  time={admissionItem.expectedCloseDate 
-                                    ? new Date(admissionItem.expectedCloseDate).toLocaleDateString() 
-                                    : 'Open'}
-                                  icon="🎓"
-                                  type="admission"
-                                  link={`/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`}
-                                />
-                              );
-                            } 
-                            // Type guard for ResultItem
-                            else if ('boardName' in item || 'universityName' in item) {
-                              const resultItem = item as ResultItem;
-                              return (
-                                <NewsCard
-                                  key={`result-${resultItem.id}`}
-                                  title={resultItem.title}
-                                  description={resultItem.boardName || resultItem.universityName || 'Results'}
-                                  time={resultItem.year.toString()}
-                                  icon="📊"
-                                  type="result"
-                                  link={`/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`}
-                                />
-                              );
-                            } 
-                            // Type guard for NewsItem
-                            else {
-                              const newsItem = item as NewsItem;
-                              return (
-                                <NewsCard
-                                  key={`news-${newsItem.id}`}
-                                  title={newsItem.title}
-                                  description={newsItem.excerpt || newsItem.title} // ✅ FIX: Use title if excerpt is null
-                                  time={getTimeAgo(newsItem.publishedAt)}
-                                  icon="📰"
-                                  type="news"
-                                  link={`/news/${newsItem.slug}`}
-                                />
-                              );
-                            }
-                          });
-                      })()}
-                    </>
-                  )}
+                {/* Counter */}
+                <div className="absolute bottom-6 right-6 bg-black/30 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm">
+                  {currentSlide + 1} / {carouselItems.length}
+                </div>
+              </div>
+            ) : (
+              <div className="h-[400px] md:h-[450px] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center">
+                <div className="text-white text-center">
+                  <div className="text-5xl mb-4">🎓</div>
+                  <h2 className="text-2xl font-bold">Welcome to NextID.pk</h2>
+                  <p className="mt-2">
+                    {loading ? 'Loading latest updates...' : 'Discover educational opportunities'}
+                  </p>
                 </div>
               </div>
             )}
           </div>
-        </div>
 
-        {/* CSS Animations */}
-        <style jsx>{`
-          @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-          
-          .animate-marquee {
-            animation: marquee 20s linear infinite;
-          }
-          
-          .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border-width: 0;
-          }
-        `}</style>
-      </section>
-    </>
+          {/* Right Column - News Cards - FIXED: Show all recent items without carousel exclusion */}
+          {(latestResults.length > 0 || openAdmissions.length > 0 || newsData.length > 0 || loading) && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 rounded-xl shadow-lg">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <span className="text-2xl">📢</span>
+                  LATEST UPDATES
+                </h2>
+              </div>
+
+              {/* News Cards - Show all recent items (no carousel exclusion) */}
+              <div className="space-y-3">
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : (
+                  <>
+                    {(() => {
+                      // Sabse recent items lo (sorted by date)
+                      const allRecentItems: MixedItem[] = [
+                        ...newsData.map(item => ({ ...item, type: 'news' as const })),
+                        ...latestResults.map(item => ({ ...item, type: 'result' as const })),
+                        ...openAdmissions.map(item => ({ ...item, type: 'admission' as const }))
+                      ].sort((a, b) => {
+                        const dateA = getItemDate(a);
+                        const dateB = getItemDate(b);
+                        return dateB.getTime() - dateA.getTime();
+                      });
+
+                      if (allRecentItems.length === 0) {
+                        return (
+                          <div className="text-center py-8 bg-white/50 rounded-xl">
+                            <p className="text-gray-500 text-sm">No updates available</p>
+                          </div>
+                        );
+                      }
+
+                      // Show top 4 most recent items
+                      return allRecentItems.slice(0, 4).map((item) => {
+                        if (item.type === 'admission') {
+                          const admissionItem = item as AdmissionItem & { type: 'admission' };
+                          return (
+                            <NewsCard
+                              key={`admission-${admissionItem.id}`}
+                              title={admissionItem.programName}
+                              description={`${admissionItem.instituteName} • ${admissionItem.status}`}
+                              time={admissionItem.expectedCloseDate 
+                                ? new Date(admissionItem.expectedCloseDate).toLocaleDateString() 
+                                : 'Open'}
+                              icon="🎓"
+                              type="admission"
+                              link={admissionItem.slug 
+                                ? `/admissions/${admissionItem.slug}` 
+                                : `/admissions/${admissionItem.programName?.toLowerCase().replace(/ /g, '-')}`}
+                            />
+                          );
+                        } else if (item.type === 'result') {
+                          const resultItem = item as ResultItem & { type: 'result' };
+                          return (
+                            <NewsCard
+                              key={`result-${resultItem.id}`}
+                              title={resultItem.title}
+                              description={resultItem.boardName || resultItem.universityName || 'Results'}
+                              time={resultItem.year.toString()}
+                              icon="📊"
+                              type="result"
+                              link={resultItem.slug 
+                                ? `/results/${resultItem.slug}` 
+                                : `/results/${resultItem.boardName?.toLowerCase().replace(/ /g, '-') || resultItem.universityName?.toLowerCase().replace(/ /g, '-')}`}
+                            />
+                          );
+                        } else {
+                          const newsItem = item as NewsItem & { type: 'news' };
+                          return (
+                            <NewsCard
+                              key={`news-${newsItem.id}`}
+                              title={newsItem.title}
+                              description={newsItem.excerpt || newsItem.title}
+                              time={getTimeAgo(newsItem.publishedAt)}
+                              icon="📰"
+                              type="news"
+                              link={`/news/${newsItem.slug}`}
+                            />
+                          );
+                        }
+                      });
+                    })()}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CSS Animations */}
+      <style jsx>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        
+        .animate-marquee {
+          animation: marquee 20s linear infinite;
+        }
+        
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border-width: 0;
+        }
+      `}</style>
+    </section>
   );
 }
 
@@ -620,10 +650,8 @@ function NewsCard({ title, description, time, icon, type, link }: NewsCardProps)
     }
   };
 
-  // Handle invalid time
   const displayTime = !time || time === 'NaN day ago' || time.includes('NaN') ? 'Recent' : time;
 
-  // Don't show card if title is invalid
   if (!title || title === 'Latest News') {
     return null;
   }
