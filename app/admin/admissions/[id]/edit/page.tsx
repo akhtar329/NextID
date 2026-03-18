@@ -594,19 +594,7 @@ export default function EditAdmissionPage() {
             placeholder="Add formatted notes, instructions, deadlines, or additional information..."
             minHeight={200}
           />
-          <div className="mt-1 text-xs text-gray-500">
-            You can use the toolbar above to format your notes.
-          </div>
-          
-          {note && (
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-xs font-medium text-gray-500 mb-2">Preview:</p>
-              <div 
-                className="prose prose-sm max-w-none text-gray-700"
-                dangerouslySetInnerHTML={{ __html: note }}
-              />
-            </div>
-          )}
+
         </div>
 
         {/* Form Actions */}
