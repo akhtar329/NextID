@@ -4,6 +4,8 @@ const BASE_URL = "https://www.nextid.pk"
 
 export async function GET() {
 
+  const today = new Date().toISOString().split("T")[0]
+
   const sitemaps = [
     "pages",
     "admissions",
@@ -18,18 +20,19 @@ export async function GET() {
   const urls = sitemaps.map((name) => `
     <sitemap>
       <loc>${BASE_URL}/sitemaps/${name}.xml</loc>
-      <lastmod>${new Date().toISOString()}</lastmod>
+      <lastmod>${today}</lastmod>
     </sitemap>
   `)
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  ${urls.join("")}
+    ${urls.join("")}
   </sitemapindex>`
 
   return new NextResponse(xml, {
     headers: {
-      "Content-Type": "application/xml"
+      "Content-Type": "application/xml",
+      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
     }
   })
 }

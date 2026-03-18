@@ -1,4 +1,5 @@
-// app/admin/admissions/create/page.tsx
+// app/admin/admissions/create/page.tsx (Complete Fixed Version)
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -8,8 +9,9 @@ import { toast } from "sonner";
 import PrimaryButton from "@/app/component/ui/Button";
 import Select from "@/app/component/ui/select";
 import BulkUpload from "@/app/component/ui/BulkUpload";
-import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
+import RichTextEditor from "@/app/component/ui/RichTextEditor";
 
+// Types
 type Program = {
   id: number;
   name: string;
@@ -24,12 +26,28 @@ type Institute = {
   slug: string;
 };
 
+// Form data type for single creation
+type AdmissionFormData = {
+  name: string;
+  slug: string;
+  programIds: number[];
+  instituteId: number;
+  year: number;
+  session: string | null;
+  status: "Expected" | "Open" | "Closed";
+  expectedOpenDate: string | null;
+  expectedCloseDate: string | null;
+  meritInfo: string | null;
+  note: string | null;
+  officialLink: string | null;
+};
+
 export default function CreateAdmissionPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"single" | "bulk">("single");
 
   // Form states for single creation
-  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]); // 👈 Changed to array
+  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]);
   const [instituteId, setInstituteId] = useState<number | null>(null);
   const [year, setYear] = useState("");
   const [session, setSession] = useState("");
@@ -47,6 +65,12 @@ export default function CreateAdmissionPage() {
   
   const [singleLoading, setSingleLoading] = useState(false);
 
+  // Bulk upload states
+  const [bulkData, setBulkData] = useState("");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+
   // Preview states
   const [selectedInstitute, setSelectedInstitute] = useState<Institute | null>(null);
   const [selectedProgramsList, setSelectedProgramsList] = useState<Program[]>([]);
@@ -54,7 +78,7 @@ export default function CreateAdmissionPage() {
   // Data states
   const [programs, setPrograms] = useState<Program[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]); // 👈 Programs for selected institute
+  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,34 +93,24 @@ export default function CreateAdmissionPage() {
       .replace(/^-|-$/g, "");
   };
 
-// Auto-generate name and slug when institute/year/programs change
-
-useEffect(() => {
-  if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
-    // 📝 NAME - Institute + Session + Year
-    const sessionText = session ? ` ${session}` : '';
-    const generatedName = `Admissions Open at ${selectedInstitute.name}${sessionText} ${year}`;
-    
-    // 🔗 SLUG - Clean URL (institute + session + year)
-    const cleanInstituteName = selectedInstitute.name
-      .replace(/University|College|Institute|of|the|and|&/gi, '')
-      .trim();
-    
-    const sessionSlug = session ? `-${session.toLowerCase()}` : '';
-    const slugBase = `Admissions-Open-at-${cleanInstituteName}${sessionSlug}-${year}`;
-    const generatedSlug = generateSlug(slugBase);
-    
-    setName(generatedName);
-    setSlug(generatedSlug);
-  }
-}, [
-  selectedInstitute, 
-  selectedProgramsList, 
-  year, 
-  session,  // ✅ Session ab yahan permanently add ho gaya
-  manualName
-]);
-// 👆 Added 'session' to dependencies
+  // Auto-generate name and slug
+  useEffect(() => {
+    if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
+      const sessionText = session ? ` ${session}` : '';
+      const generatedName = `Admissions Open at ${selectedInstitute.name}${sessionText} ${year}`;
+      
+      const cleanInstituteName = selectedInstitute.name
+        .replace(/University|College|Institute|of|the|and|&/gi, '')
+        .trim();
+      
+      const sessionSlug = session ? `-${session.toLowerCase()}` : '';
+      const slugBase = `Admissions-Open-at-${cleanInstituteName}${sessionSlug}-${year}`;
+      const generatedSlug = generateSlug(slugBase);
+      
+      setName(generatedName);
+      setSlug(generatedSlug);
+    }
+  }, [selectedInstitute, selectedProgramsList, year, session, manualName]);
 
   // Handle manual name change
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +123,6 @@ useEffect(() => {
     }
   };
 
-  // Handle manual slug change
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSlug(generateSlug(e.target.value));
   };
@@ -153,10 +166,7 @@ useEffect(() => {
           if (data.success) {
             setFilteredPrograms(data.programs || []);
           } else {
-            // Fallback: filter programs that might be in this institute
-            setFilteredPrograms(programs.filter(p => 
-              p.name // Simple filter, you may need better logic
-            ));
+            setFilteredPrograms([]);
           }
         } catch (err) {
           console.error("Error fetching institute programs:", err);
@@ -167,7 +177,7 @@ useEffect(() => {
     } else {
       setFilteredPrograms([]);
     }
-  }, [instituteId, programs]);
+  }, [instituteId]);
 
   // Update selected institute
   useEffect(() => {
@@ -189,7 +199,7 @@ useEffect(() => {
     }
   }, [selectedPrograms, programs]);
 
-  // Handle program selection (multi-select)
+  // Handle program selection
   const handleProgramSelect = (programId: number) => {
     if (selectedPrograms.includes(programId)) {
       setSelectedPrograms(selectedPrograms.filter(id => id !== programId));
@@ -198,7 +208,6 @@ useEffect(() => {
     }
   };
 
-  // Handle select all programs
   const handleSelectAllPrograms = () => {
     if (selectedPrograms.length === filteredPrograms.length) {
       setSelectedPrograms([]);
@@ -207,13 +216,101 @@ useEffect(() => {
     }
   };
 
+  // File upload handler for bulk
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setBulkFile(file);
+      setBulkFileName(file.name);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setBulkData(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // Bulk submit handler
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkLoading(true);
+    
+    try {
+      const lines = bulkData.split('\n').filter(l => l.trim());
+      if (lines.length < 2) {
+        toast.error("No data to upload");
+        setBulkLoading(false);
+        return;
+      }
+      
+      const headers = lines[0].split(',').map(h => h.trim());
+      const requiredFields = ['name', 'instituteId', 'year', 'status'];
+      const missingFields = requiredFields.filter(f => !headers.includes(f));
+      
+      if (missingFields.length > 0) {
+        toast.error(`CSV missing required columns: ${missingFields.join(', ')}`);
+        setBulkLoading(false);
+        return;
+      }
+      
+      const admissions = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        const admission: any = {};
+        
+        headers.forEach((header, index) => {
+          admission[header] = values[index] || '';
+        });
+        
+        admissions.push(admission);
+      }
+      
+      toast.loading("Uploading admissions...", { id: "bulk-upload" });
+      
+      const response = await fetch("/api/admin/admissions/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admissions }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success(`Successfully created ${data.count} admissions!`, { id: "bulk-upload" });
+        router.push("/admin/admissions");
+      } else {
+        throw new Error(data.error || "Bulk upload failed");
+      }
+      
+    } catch (error) {
+      console.error("Bulk upload error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to upload", { id: "bulk-upload" });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   const handleSingleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSingleLoading(true);
     setError(null);
 
-    if (!instituteId || selectedPrograms.length === 0 || !year || !status) {
-      setError("Institute, at least one Program, Year, and Status are required.");
+    if (!instituteId) {
+      setError("Institute is required.");
+      setSingleLoading(false);
+      return;
+    }
+
+    if (selectedPrograms.length === 0) {
+      setError("At least one Program is required.");
+      setSingleLoading(false);
+      return;
+    }
+
+    if (!year) {
+      setError("Year is required.");
       setSingleLoading(false);
       return;
     }
@@ -224,26 +321,28 @@ useEffect(() => {
       return;
     }
 
+    const formData: AdmissionFormData = {
+      name,
+      slug,
+      programIds: selectedPrograms,
+      instituteId: Number(instituteId),
+      year: Number(year),
+      session: session || null,
+      status,
+      expectedOpenDate: expectedOpenDate || null,
+      expectedCloseDate: expectedCloseDate || null,
+      meritInfo: meritInfo || null,
+      note: note || null,
+      officialLink: officialLink || null,
+    };
+
     toast.loading("Creating admission...", { id: "create-admission" });
 
     try {
       const res = await fetch("/api/admin/admissions/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          slug,
-          programIds: selectedPrograms, // 👈 Send array of program IDs
-          instituteId: Number(instituteId),
-          year: Number(year),
-          session: session || null,
-          status,
-          expectedOpenDate: expectedOpenDate || null,
-          expectedCloseDate: expectedCloseDate || null,
-          meritInfo: meritInfo || null,
-          note: note || null,
-          officialLink: officialLink || null,
-        }),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
@@ -272,8 +371,6 @@ useEffect(() => {
       setSingleLoading(false);
     }
   };
-
-  // ... (rest of the code remains same: parseAdmissionsCSV, transformBulkItem, etc.)
 
   if (fetchLoading) {
     return (
@@ -562,18 +659,15 @@ useEffect(() => {
               />
             </div>
 
-            {/* Additional Notes */}
+            {/* Additional Notes with Rich Text Editor */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Additional Notes
-              </label>
-              <textarea
+              <RichTextEditor
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Any additional information..."
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={setNote}
+                placeholder="Add formatted notes, instructions, deadlines, or additional information..."
+                minHeight={200}
               />
+
             </div>
 
             {/* Form Actions */}
@@ -593,10 +687,59 @@ useEffect(() => {
         </>
       )}
 
-      {/* Bulk Upload Form - You'll need to update this separately */}
+      {/* Bulk Upload Section */}
       {activeTab === "bulk" && (
-        <div className="max-w-2xl">
-          {/* ... bulk upload code remains same for now ... */}
+        <div className="bg-white p-6 rounded-lg shadow-sm border">
+          <BulkUpload
+            title="Bulk Upload Admissions"
+            description="Upload multiple admissions using CSV file or manual data entry"
+            sampleData={[
+              ["FAST NUCES CS 2026", "5", "3", "BS Computer Science", "2026", "Open"],
+              ["LUMS MBA 2026", "6", "4", "MBA", "2026", "Expected"],
+              ["NED Engineering 2026", "3", "1", "BE", "2026", "Closed"],
+            ]}
+            onDownloadSample={() => {
+              const headers = ['name', 'instituteId', 'programId', 'fullForm', 'year', 'status'];
+              const sampleRows = [
+                ['FAST NUCES CS 2026', '5', '3', 'BS Computer Science', '2026', 'Open'],
+                ['LUMS MBA 2026', '6', '4', 'MBA', '2026', 'Expected'],
+              ];
+              
+              const csvContent = [headers.join(','), ...sampleRows.map(row => row.join(','))].join('\n');
+              const blob = new Blob([csvContent], { type: 'text/csv' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'admissions-sample.csv';
+              a.click();
+            }}
+            bulkData={bulkData}
+            onBulkDataChange={setBulkData}
+            file={bulkFile}
+            fileName={bulkFileName}
+            onFileChange={handleFileChange}
+            onClearFile={() => {
+              setBulkFile(null);
+              setBulkFileName("");
+              setBulkData("");
+            }}
+            onSubmit={handleBulkSubmit}
+            onClear={() => {
+              setBulkData("");
+              setBulkFile(null);
+              setBulkFileName("");
+            }}
+            loading={bulkLoading}
+            itemName="Admissions"
+            hideSampleButton={false}
+          />
+          
+          {/* Help Text */}
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-xs text-yellow-700">
+              <strong>CSV Format:</strong> name, instituteId, programId, fullForm, year, status
+            </p>
+          </div>
         </div>
       )}
     </div>

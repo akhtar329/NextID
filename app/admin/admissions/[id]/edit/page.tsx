@@ -8,6 +8,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import PrimaryButton from "@/app/component/ui/Button";
 import Select from "@/app/component/ui/select";
+import RichTextEditor from "@/app/component/ui/RichTextEditor";
 
 type Program = {
   id: number;
@@ -35,7 +36,6 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  // 👇 Changed from programId to programs array
   programs: Program[];
   instituteId: number;
   institute: Institute;
@@ -47,7 +47,7 @@ export default function EditAdmissionPage() {
   const admissionId = params.id as string;
 
   // Form states
-  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]); // 👈 Changed to array
+  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]);
   const [instituteId, setInstituteId] = useState<number | null>(null);
   const [year, setYear] = useState("");
   const [session, setSession] = useState("");
@@ -67,7 +67,7 @@ export default function EditAdmissionPage() {
   // Data states
   const [programs, setPrograms] = useState<Program[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]); // 👈 Programs for selected institute
+  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,14 +103,12 @@ export default function EditAdmissionPage() {
     setSlug(generateSlug(e.target.value));
   };
 
-  // Auto-generate name when institute/year/programs change (if not manually edited)
+  // Auto-generate name when institute/year/programs change
   useEffect(() => {
     if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
-      // 📝 NAME - Sirf institute name aur year (programs ka zikar nahi)
       const sessionText = session ? ` ${session}` : '';
       const generatedName = `Admissions Open at ${selectedInstitute.name}${sessionText} ${year}`;
       
-      // 🔗 SLUG - Clean URL (institute + session + year)
       const cleanInstituteName = selectedInstitute.name
         .replace(/University|College|Institute|of|the|and|&/gi, '')
         .trim();
@@ -178,17 +176,15 @@ export default function EditAdmissionPage() {
         const institutesData = await institutesRes.json();
         setInstitutes(institutesData.institutes || []);
 
-        // ✅ Fetch admission details - API should return programs array
+        // Fetch admission details
         const admissionRes = await fetch(`/api/admin/admissions/${admissionId}`);
         const admissionData = await admissionRes.json();
         
-        console.log('Admission data from API:', admissionData); // Debug log
+        console.log('Admission data from API:', admissionData);
         
         if (admissionData.success && admissionData.admission) {
           const ad: Admission = admissionData.admission;
           
-          // Set form fields
-          // 👇 Set selected programs from programs array
           setSelectedPrograms(ad.programs?.map(p => p.id) || []);
           setInstituteId(ad.instituteId);
           setYear(ad.year.toString());
@@ -199,8 +195,6 @@ export default function EditAdmissionPage() {
           setMeritInfo(ad.meritInfo || "");
           setNote(ad.note || "");
           setOfficialLink(ad.officialLink || "");
-          
-          // Set name and slug
           setName(ad.name || "");
           setSlug(ad.slug || "");
           setOriginalSlug(ad.slug || "");
@@ -268,7 +262,7 @@ export default function EditAdmissionPage() {
         body: JSON.stringify({
           name,
           slug,
-          programIds: selectedPrograms, // 👈 Send array of program IDs
+          programIds: selectedPrograms,
           instituteId: Number(instituteId),
           year: Number(year),
           session: session || null,
@@ -518,6 +512,7 @@ export default function EditAdmissionPage() {
           </div>
         )}
 
+        {/* Status */}
         <Select
           label="Status *"
           value={status}
@@ -530,6 +525,7 @@ export default function EditAdmissionPage() {
           required
         />
 
+        {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -556,6 +552,7 @@ export default function EditAdmissionPage() {
           </div>
         </div>
 
+        {/* Official Link */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Official Link
@@ -569,6 +566,7 @@ export default function EditAdmissionPage() {
           />
         </div>
 
+        {/* Merit Information */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Merit Information
@@ -582,19 +580,36 @@ export default function EditAdmissionPage() {
           />
         </div>
 
+        {/* Additional Notes with Rich Text Editor */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Additional Notes
+            <span className="text-xs text-gray-500 ml-2">
+              (Supports HTML formatting - bold, italic, lists, links, headings)
+            </span>
           </label>
-          <textarea
+          <RichTextEditor
             value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Any additional information..."
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={setNote}
+            placeholder="Add formatted notes, instructions, deadlines, or additional information..."
+            minHeight={200}
           />
+          <div className="mt-1 text-xs text-gray-500">
+            You can use the toolbar above to format your notes.
+          </div>
+          
+          {note && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs font-medium text-gray-500 mb-2">Preview:</p>
+              <div 
+                className="prose prose-sm max-w-none text-gray-700"
+                dangerouslySetInnerHTML={{ __html: note }}
+              />
+            </div>
+          )}
         </div>
 
+        {/* Form Actions */}
         <div className="pt-4 flex items-center gap-3">
           <PrimaryButton type="submit" disabled={loading}>
             {loading ? "Updating..." : "Update Admission"}

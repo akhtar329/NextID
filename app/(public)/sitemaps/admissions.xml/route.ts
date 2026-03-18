@@ -1,26 +1,38 @@
 import { NextResponse } from "next/server"
-import { db } from "@/app/lib/db"
-import { admissions } from "@/app/lib/schema"
 
 const BASE_URL = "https://www.nextid.pk"
 
 export async function GET() {
-  const data = await db.select({ slug: admissions.slug, updatedAt: admissions.updatedAt })
-    .from(admissions)
 
-  const urls = data.map(a => `
-    <url>
-      <loc>${BASE_URL}/admissions/${a.slug}</loc>
-      <lastmod>${a.updatedAt?.toISOString() ?? new Date().toISOString()}</lastmod>
-      <changefreq>weekly</changefreq>
-      <priority>0.8</priority>
-    </url>
-  `)
+  const today = new Date().toISOString().split("T")[0]
+
+  const sitemaps = [
+    "pages",
+    "admissions",
+    "universities",
+    "boards",
+    "cities",
+    "programs",
+    "results",
+    "news"
+  ]
+
+  const urls = sitemaps.map((name) => `
+    <sitemap>
+      <loc>${BASE_URL}/sitemaps/${name}.xml</loc>
+      <lastmod>${today}</lastmod>
+    </sitemap>
+  `).join("") // 👈 small optimization
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-  <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    ${urls.join("")}
-  </urlset>`
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</sitemapindex>`
 
-  return new NextResponse(xml, { headers: { "Content-Type": "application/xml" } })
+  return new NextResponse(xml, {
+    headers: {
+      "Content-Type": "application/xml",
+      "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+    }
+  })
 }
