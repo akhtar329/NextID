@@ -1,4 +1,4 @@
-// app/admin/analytics/page.tsx (Professional Version)
+// app/admin/analytics/page.tsx
 
 'use client';
 

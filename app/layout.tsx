@@ -5,9 +5,9 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next"; // 👈 Add this
 
 import { generateSEO } from "../app/lib/seo";
-// ✅ Import the client wrapper instead
 import ClientAnalyticsTracker from '@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker';
 
 export const metadata = generateSEO();
@@ -25,8 +25,11 @@ export default function RootLayout({
         <Providers>
           {children}
           
-          {/* ✅ Use the client wrapper - no Suspense needed here */}
+          {/* Your custom analytics tracker */}
           <ClientAnalyticsTracker />
+          
+          {/* 👇 Vercel Analytics - Auto tracks page views */}
+          <Analytics />
           
           <Toaster 
             position="top-right"
@@ -38,7 +41,7 @@ export default function RootLayout({
           />
         </Providers>
 
-        {/* GOOGLE ANALYTICS CODE - Already safe */}
+        {/* Google Analytics */}
         <Script
           strategy="afterInteractive"
           src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"

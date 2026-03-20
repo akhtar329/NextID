@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { 
-  sessions, 
   adminUsers, 
   pageViews, 
   systemStats,
-  visitorSessions 
+  visitorSessions  // ✅ Use this instead of sessions
 } from "@/app/lib/schema";
 import { eq, gte, count, sql, desc } from "drizzle-orm";
 import { getServerSession } from "next-auth";
@@ -23,13 +22,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get active users (last 5 minutes)
+    // ✅ FIX: Use visitorSessions instead of sessions
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
     const activeUsersResult = await db
       .select({ count: count() })
-      .from(sessions)
-      .where(gte(sessions.lastActive, fiveMinutesAgo));
+      .from(visitorSessions)  // 👈 Changed from 'sessions' to 'visitorSessions'
+      .where(gte(visitorSessions.lastActive, fiveMinutesAgo));
 
     // Get total users
     const totalUsersResult = await db
@@ -59,7 +58,6 @@ export async function GET(request: NextRequest) {
     const freeMem = os.freemem();
     const memoryUsage = Math.round(((totalMem - freeMem) / totalMem) * 100);
     
-    // Disk usage as number
     const diskUsage: number = 67;
 
     // Get latest recorded stats
@@ -69,7 +67,7 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(systemStats.recordedAt))
       .limit(1);
 
-    // Prepare stats with proper types
+    // Prepare stats
     const stats = {
       activeUsers: activeUsersResult[0]?.count ?? 0,
       totalUsers: totalUsersResult[0]?.count ?? 0,
@@ -82,7 +80,7 @@ export async function GET(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
     };
 
-    // Store stats with explicit type casting
+    // Store stats
     await db.insert(systemStats).values({
       activeUsers: stats.activeUsers,
       totalSessions: stats.totalSessions,
@@ -90,7 +88,7 @@ export async function GET(request: NextRequest) {
       errorRate: 0,
       cpuUsage: stats.cpuUsage,
       memoryUsage: stats.memoryUsage,
-      diskUsage: stats.diskUsage, // 👈 Now explicitly a number
+      diskUsage: stats.diskUsage,
       uptime: stats.uptime,
       recordedAt: new Date(),
     });
