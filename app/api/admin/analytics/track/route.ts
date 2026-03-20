@@ -3,18 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
 import { getLocationFromIP } from '@/app/lib/location';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     
-    // 🌍 CLIENT IP ADDRESS GET KARO
+    // Get client IP
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
                request.headers.get('x-real-ip') || 
                '0.0.0.0';
     
-    // Extract data from request
     const {
       visitorId,
       sessionId,
@@ -37,18 +36,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 🌍 LOCATION DETECT KARO (parallel mein)
-    const locationPromise = getLocationFromIP(ip);
+    // Get location
+    const location = await getLocationFromIP(ip);
     
-    // Device info fallback
     const finalDeviceType = deviceType || 'unknown';
     const finalBrowser = browser || 'unknown';
     const finalOs = os || 'unknown';
+    const viewTime = new Date(timestamp || Date.now());
     
-    // 🌍 LOCATION DATA AANE DO
-    const location = await locationPromise;
-    
-    // 1. Page view record karo - WITH LOCATION
+    // 1. Insert page view
     await db.insert(pageViews).values({
       visitorId,
       sessionId,
@@ -58,7 +54,6 @@ export async function POST(request: NextRequest) {
       browser: finalBrowser,
       os: finalOs,
       referrer: referrer || 'direct',
-      // 🌍 LOCATION FIELDS
       country: location?.country || 'Unknown',
       countryCode: location?.countryCode || 'UN',
       city: location?.city || 'Unknown',
@@ -66,34 +61,44 @@ export async function POST(request: NextRequest) {
       latitude: location?.latitude || '0',
       longitude: location?.longitude || '0',
       timezone: location?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-      viewedAt: new Date(timestamp || Date.now()),
+      viewedAt: viewTime,
     });
     
-    // 2. Session update
-    const [existingSession] = await db
+    // 2. Session update - FIXED: Check for existing session and update properly
+    const existingSession = await db
       .select()
       .from(visitorSessions)
       .where(eq(visitorSessions.sessionId, sessionId))
       .limit(1);
     
-    if (!existingSession) {
-      // Naya session
+    if (existingSession.length === 0) {
+      // Insert new session
       await db.insert(visitorSessions).values({
         visitorId,
         sessionId,
         entryPage: pagePath,
+        exitPage: pagePath,
         pageViews: 1,
-        startedAt: new Date(timestamp || Date.now()),
-        lastActive: new Date(),
+        country: location?.country || 'Unknown',
+        city: location?.city || 'Unknown',
+        latitude: location?.latitude || '0',
+        longitude: location?.longitude || '0',
+        deviceType: finalDeviceType,
+        browser: finalBrowser,
+        os: finalOs,
+        startedAt: viewTime,
+        lastActive: viewTime,
+        duration: 0,
       });
     } else {
-      // Existing session update
+      // Update existing session
       await db
         .update(visitorSessions)
         .set({
-          pageViews: (existingSession.pageViews || 0) + 1,
-          lastActive: new Date(),
+          pageViews: (existingSession[0].pageViews || 0) + 1,
+          lastActive: viewTime,
           exitPage: pagePath,
+          duration: sql`EXTRACT(EPOCH FROM (${viewTime.toISOString()}::timestamp - ${visitorSessions.startedAt}))`,
         })
         .where(eq(visitorSessions.sessionId, sessionId));
     }
@@ -107,10 +112,12 @@ export async function POST(request: NextRequest) {
       .limit(1);
     
     if (!dailyStat) {
-      // Naye din ki entry - WITH CITY BREAKDOWN
+      // New day entry
       const cityBreakdown: Record<string, number> = {};
-      if (location?.country === 'Pakistan' || location?.country === 'PK') {
-        const city = location?.city || 'Unknown';
+      const country = location?.country || 'Unknown';
+      const city = location?.city || 'Unknown';
+      
+      if (country === 'Pakistan' || country === 'PK') {
         cityBreakdown[city] = 1;
       }
       
@@ -122,17 +129,20 @@ export async function POST(request: NextRequest) {
         totalPageViews: 1,
         topPages: JSON.stringify([{ path: pagePath, views: 1 }]),
         deviceBreakdown: JSON.stringify({ [finalDeviceType]: 1 }),
-        countryBreakdown: JSON.stringify({ [location?.country || 'Unknown']: 1 }),
-        cityBreakdown: JSON.stringify(cityBreakdown), // ✅ NEW
+        countryBreakdown: JSON.stringify({ [country]: 1 }),
+        cityBreakdown: JSON.stringify(cityBreakdown),
+        avgLoadTime: 0,
+        avgApiLatency: 0,
+        bounceRate: 0,
       });
     } else {
-      // Safe JSON parsing
+      // Update existing day
       const topPages = safeJsonParse(dailyStat.topPages, []);
       const deviceBreakdown = safeJsonParse(dailyStat.deviceBreakdown, {});
       const countryBreakdown = safeJsonParse(dailyStat.countryBreakdown, {});
-      const cityBreakdown = safeJsonParse(dailyStat.cityBreakdown, {}); // ✅ NEW
+      const cityBreakdown = safeJsonParse(dailyStat.cityBreakdown, {});
       
-      // Top pages update
+      // Update top pages
       const pageIndex = Array.isArray(topPages) 
         ? topPages.findIndex((p: any) => p?.path === pagePath)
         : -1;
@@ -143,15 +153,15 @@ export async function POST(request: NextRequest) {
         topPages.push({ path: pagePath, views: 1 });
       }
       
-      // Device breakdown update
+      // Update device breakdown
       deviceBreakdown[finalDeviceType] = (deviceBreakdown[finalDeviceType] || 0) + 1;
       
-      // Country breakdown update
+      // Update country breakdown
       const country = location?.country || 'Unknown';
       countryBreakdown[country] = (countryBreakdown[country] || 0) + 1;
       
-      // ✅ NEW - City breakdown update (for Pakistan)
-      if (location?.country === 'Pakistan' || location?.country === 'PK') {
+      // Update city breakdown (Pakistan only)
+      if (country === 'Pakistan' || country === 'PK') {
         const city = location?.city || 'Unknown';
         cityBreakdown[city] = (cityBreakdown[city] || 0) + 1;
       }
@@ -163,10 +173,10 @@ export async function POST(request: NextRequest) {
           newVisitors: sql`${dailyStats.newVisitors} + ${isNewVisitor ? 1 : 0}`,
           returningVisitors: sql`${dailyStats.returningVisitors} + ${isNewVisitor ? 0 : 1}`,
           totalPageViews: sql`${dailyStats.totalPageViews} + 1`,
-          topPages: JSON.stringify(Array.isArray(topPages) ? topPages.slice(0, 10) : []),
+          topPages: JSON.stringify(topPages.slice(0, 10)),
           deviceBreakdown: JSON.stringify(deviceBreakdown),
           countryBreakdown: JSON.stringify(countryBreakdown),
-          cityBreakdown: JSON.stringify(cityBreakdown), // ✅ NEW
+          cityBreakdown: JSON.stringify(cityBreakdown),
           updatedAt: new Date(),
         })
         .where(eq(dailyStats.date, today));
@@ -179,6 +189,15 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('❌ Analytics track error:', error);
+    
+    // Check for duplicate key error (safe to ignore)
+    if (error instanceof Error && error.message.includes('duplicate key')) {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Session already tracked' 
+      });
+    }
+    
     return NextResponse.json(
       { error: 'Failed to track analytics', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -186,9 +205,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Safe JSON parsing helper
- */
 function safeJsonParse(data: any, fallback: any) {
   if (!data) return fallback;
   try {
