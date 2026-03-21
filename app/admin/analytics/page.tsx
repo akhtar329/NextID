@@ -15,10 +15,12 @@ import {
   Tooltip,
   Legend,
   ArcElement,
+  Filler,
 } from 'chart.js';
 import { Line, Bar, Pie } from 'react-chartjs-2';
 import { GoogleMap, HeatmapLayer, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
 
+// ✅ Register Filler plugin
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -28,7 +30,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  Filler,
 );
 
 interface AnalyticsData {
@@ -139,7 +142,7 @@ export default function AnalyticsDashboard() {
 
   useEffect(() => {
     fetchAnalytics();
-    const interval = setInterval(fetchAnalytics, 60000); // 1 minute
+    const interval = setInterval(fetchAnalytics, 60000);
     return () => clearInterval(interval);
   }, [period]);
 
@@ -375,7 +378,7 @@ export default function AnalyticsDashboard() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
-              </tr>
+               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {data?.recentViews?.map((view) => (
