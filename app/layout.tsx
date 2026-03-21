@@ -8,7 +8,6 @@ import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next"; // 👈 Add this
 
 import { generateSEO } from "../app/lib/seo";
-import ClientAnalyticsTracker from '@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker';
 
 export const metadata = generateSEO();
 
@@ -26,7 +25,7 @@ export default function RootLayout({
           {children}
           
           {/* Your custom analytics tracker */}
-          <ClientAnalyticsTracker />
+
           
           {/* 👇 Vercel Analytics - Auto tracks page views */}
           <Analytics />

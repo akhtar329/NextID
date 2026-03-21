@@ -3,13 +3,13 @@
 import { ReactNode } from "react";
 import Sidebar from "@/app/component/layout/Sidebar";
 import Topbar from "@/app/component/layout/Topbar";
+import ClientAnalyticsTracker from "@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker";
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  // Temporary: Remove session check
   return (
     <div className="flex h-screen bg-gray-100">
       <Sidebar />
@@ -19,6 +19,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {children}
         </main>
       </div>
+      <ClientAnalyticsTracker />
     </div>
   );
 }

@@ -1,3 +1,6 @@
+// app/api/admin/analytics/track/route.ts
+
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
