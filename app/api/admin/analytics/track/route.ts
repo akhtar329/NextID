@@ -1,15 +1,13 @@
-// app/api/analytics/track/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
-import { getLocationFromIP } from '@/app/lib/location';
-import { eq, sql, and } from 'drizzle-orm';
+import { getHybridLocation } from '@/app/lib/analytics/hybrid-location'; // 👈 Use hybrid location
+import { eq, sql } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     
-    // Get client IP
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
                request.headers.get('x-real-ip') || 
                '0.0.0.0';
@@ -28,7 +26,6 @@ export async function POST(request: NextRequest) {
       timestamp
     } = data;
     
-    // Validate required fields
     if (!visitorId || !sessionId || !pagePath) {
       return NextResponse.json(
         { error: 'Missing required fields' },
@@ -36,8 +33,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Get location
-    const location = await getLocationFromIP(ip);
+    // 🌍 Use HYBRID LOCATION (GPS + Timezone + IP)
+    const location = await getHybridLocation();
     
     const finalDeviceType = deviceType || 'unknown';
     const finalBrowser = browser || 'unknown';
@@ -64,7 +61,7 @@ export async function POST(request: NextRequest) {
       viewedAt: viewTime,
     });
     
-    // 2. Session update - FIXED: Check for existing session and update properly
+    // 2. Session update
     const existingSession = await db
       .select()
       .from(visitorSessions)
@@ -72,7 +69,6 @@ export async function POST(request: NextRequest) {
       .limit(1);
     
     if (existingSession.length === 0) {
-      // Insert new session
       await db.insert(visitorSessions).values({
         visitorId,
         sessionId,
@@ -91,7 +87,6 @@ export async function POST(request: NextRequest) {
         duration: 0,
       });
     } else {
-      // Update existing session
       await db
         .update(visitorSessions)
         .set({
@@ -112,7 +107,6 @@ export async function POST(request: NextRequest) {
       .limit(1);
     
     if (!dailyStat) {
-      // New day entry
       const cityBreakdown: Record<string, number> = {};
       const country = location?.country || 'Unknown';
       const city = location?.city || 'Unknown';
@@ -136,13 +130,11 @@ export async function POST(request: NextRequest) {
         bounceRate: 0,
       });
     } else {
-      // Update existing day
       const topPages = safeJsonParse(dailyStat.topPages, []);
       const deviceBreakdown = safeJsonParse(dailyStat.deviceBreakdown, {});
       const countryBreakdown = safeJsonParse(dailyStat.countryBreakdown, {});
       const cityBreakdown = safeJsonParse(dailyStat.cityBreakdown, {});
       
-      // Update top pages
       const pageIndex = Array.isArray(topPages) 
         ? topPages.findIndex((p: any) => p?.path === pagePath)
         : -1;
@@ -153,14 +145,11 @@ export async function POST(request: NextRequest) {
         topPages.push({ path: pagePath, views: 1 });
       }
       
-      // Update device breakdown
       deviceBreakdown[finalDeviceType] = (deviceBreakdown[finalDeviceType] || 0) + 1;
       
-      // Update country breakdown
       const country = location?.country || 'Unknown';
       countryBreakdown[country] = (countryBreakdown[country] || 0) + 1;
       
-      // Update city breakdown (Pakistan only)
       if (country === 'Pakistan' || country === 'PK') {
         const city = location?.city || 'Unknown';
         cityBreakdown[city] = (cityBreakdown[city] || 0) + 1;
@@ -189,15 +178,6 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('❌ Analytics track error:', error);
-    
-    // Check for duplicate key error (safe to ignore)
-    if (error instanceof Error && error.message.includes('duplicate key')) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Session already tracked' 
-      });
-    }
-    
     return NextResponse.json(
       { error: 'Failed to track analytics', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

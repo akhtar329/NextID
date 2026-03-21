@@ -1,4 +1,4 @@
-// app/api/analytics/session/route.ts
+// app/api/admin/analytics/session/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { visitorSessions } from '@/app/lib/schema';
@@ -9,12 +9,12 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const { visitorId, sessionId, entryPage, pageViews, startedAt, lastActive } = data;
     
-    console.log('🔄 Session update received:', data);
+    console.log('🔄 Session update received:', { visitorId, sessionId, entryPage });
     
     // Validate required fields
     if (!visitorId || !sessionId) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: visitorId and sessionId are required' },
         { status: 400 }
       );
     }

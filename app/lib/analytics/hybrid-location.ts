@@ -9,8 +9,21 @@ export interface ExactLocation {
   longitude: number;
   accuracy: number;
   city?: string;
+  region?: string;        // 👈 Add region
   country?: string;
   countryCode?: string;
+}
+
+export interface HybridLocation {
+  country: string;
+  countryCode: string;
+  city: string;
+  region: string;         // 👈 Add region
+  latitude: string;
+  longitude: string;
+  timezone?: string;
+  accuracy?: number;
+  source: string;
 }
 
 /**
@@ -24,14 +37,12 @@ export async function getExactLocation(): Promise<ExactLocation | null> {
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        // Success - exact location mil gayi
         const location = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
         };
         
-        // Reverse geocoding se city/country bhi le lo
         try {
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}&zoom=10`
@@ -41,16 +52,15 @@ export async function getExactLocation(): Promise<ExactLocation | null> {
           resolve({
             ...location,
             city: data.address?.city || data.address?.town || data.address?.village,
+            region: data.address?.state || data.address?.region,  // 👈 Add region
             country: data.address?.country,
             countryCode: data.address?.country_code?.toUpperCase()
           });
         } catch (error) {
-          // Reverse geocoding fail - sirf coordinates return karo
           resolve(location);
         }
       },
       (error) => {
-        // Error ya user ne permission deny kar di
         console.debug('Geolocation error:', error.message);
         resolve(null);
       },
@@ -69,7 +79,7 @@ export async function getExactLocation(): Promise<ExactLocation | null> {
  * 2️⃣ Timezone + Language (no permission)
  * 3️⃣ IP-based (fallback)
  */
-export async function getHybridLocation() {
+export async function getHybridLocation(): Promise<HybridLocation> {
   // Pehle browser exact location try karo
   if (typeof navigator !== 'undefined' && navigator.permissions) {
     try {
@@ -81,15 +91,16 @@ export async function getHybridLocation() {
             country: exactLocation.country || 'Unknown',
             countryCode: exactLocation.countryCode || 'UN',
             city: exactLocation.city || 'Unknown',
+            region: exactLocation.region || 'Unknown',  // 👈 Add region
             latitude: exactLocation.latitude.toString(),
             longitude: exactLocation.longitude.toString(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             accuracy: exactLocation.accuracy,
             source: 'gps'
           };
         }
       }
     } catch (e) {
-      // Permission API not supported - continue to fallback
       console.debug('Permission API not supported');
     }
   }
@@ -99,8 +110,13 @@ export async function getHybridLocation() {
     const browserInfo = getLocationFromBrowser();
     if (browserInfo.country !== 'Unknown') {
       return {
-        ...browserInfo,
-        city: 'Unknown',
+        country: browserInfo.country,
+        countryCode: browserInfo.countryCode,
+        city: browserInfo.city || 'Unknown',
+        region: browserInfo.region || 'Unknown',  // 👈 Add region
+        latitude: '0',
+        longitude: '0',
+        timezone: browserInfo.timezone,
         source: 'timezone'
       };
     }
@@ -110,14 +126,19 @@ export async function getHybridLocation() {
   
   // Fallback 2: IP-based location
   try {
-    // Client IP fetch karne ka API call
     const ipResponse = await fetch('/api/analytics/my-ip').catch(() => null);
     if (ipResponse && ipResponse.ok) {
       const ip = await ipResponse.text();
       const ipLocation = await getLocationFromIP(ip);
       if (ipLocation) {
         return {
-          ...ipLocation,
+          country: ipLocation.country || 'Unknown',
+          countryCode: ipLocation.countryCode || 'UN',
+          city: ipLocation.city || 'Unknown',
+          region: ipLocation.region || 'Unknown',  // 👈 Add region
+          latitude: ipLocation.latitude || '0',
+          longitude: ipLocation.longitude || '0',
+          timezone: ipLocation.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           source: 'ip'
         };
       }
@@ -126,12 +147,15 @@ export async function getHybridLocation() {
     console.debug('IP location failed');
   }
   
-  // Ultimate fallback
+  // Ultimate fallback - Pakistan default
   return {
-    country: 'Unknown',
-    countryCode: 'UN',
-    city: 'Unknown',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    source: 'unknown'
+    country: 'Pakistan',
+    countryCode: 'PK',
+    city: 'Karachi',
+    region: 'Sindh',  // 👈 Add region
+    latitude: '24.8607',
+    longitude: '67.0011',
+    timezone: 'Asia/Karachi',
+    source: 'fallback'
   };
 }
