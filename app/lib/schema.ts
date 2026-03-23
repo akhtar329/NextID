@@ -273,6 +273,10 @@ export const adminRoles = pgTable("admin_roles", {
 /* =========================
    📁 ADMIN USERS
    ========================= */
+
+   /* =========================
+   📁 ADMIN USERS
+   ========================= */
 export const adminUsers = pgTable("admin_users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -283,6 +287,11 @@ export const adminUsers = pgTable("admin_users", {
     .references(() => adminRoles.id),
   lastLogin: timestamp("last_login"),
   status: boolean("status").default(true),
+
+  // ✅ Password reset fields
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

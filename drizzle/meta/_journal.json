@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772722446801,
-      "tag": "0000_big_the_executioner",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1773394949957,
-      "tag": "0001_organic_living_lightning",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1773421585836,
-      "tag": "0002_smooth_stellaris",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1773492794321,
-      "tag": "0003_odd_tempest",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1773935506158,
-      "tag": "0004_strange_toad_men",
+      "when": 1774250349594,
+      "tag": "0000_purple_iron_fist",
       "breakpoints": true
     }
   ]

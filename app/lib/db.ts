@@ -9,3 +9,13 @@ const pool = new Pool({
 
 // Properly type the db instance with your schema
 export const db = drizzle(pool, { schema });
+
+// Export individual tables from schema
+export const {
+  adminUsers,
+  adminRoles,
+  permissions,
+  userPermissions,
+  sessions,
+  notifications,
+} = schema;
