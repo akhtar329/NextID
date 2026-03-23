@@ -108,10 +108,23 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
   const [activeSection, setActiveSection] = useState('about');
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
-  // Combine all programs
+  // ✅ Combine ALL programs - this will show everything
   const allPrograms = [...undergradPrograms, ...gradPrograms, ...diplomaPrograms];
+  
+  // ✅ ALSO check admission.programs directly (fallback)
+  const programsToShow = allPrograms.length > 0 ? allPrograms : admission.programs || [];
+  
+  // Debug logs
+  console.log('🔍 AdmissionClient - Program Data:');
+  console.log('  - undergradPrograms:', undergradPrograms.length);
+  console.log('  - gradPrograms:', gradPrograms.length);
+  console.log('  - diplomaPrograms:', diplomaPrograms.length);
+  console.log('  - allPrograms combined:', allPrograms.length);
+  console.log('  - admission.programs:', admission.programs?.length || 0);
+  console.log('  - programsToShow:', programsToShow.length);
+  console.log('  - Program Names:', programsToShow.map(p => p.name).join(', '));
 
-  // Prepare city universities data (unique universities in same city)
+  // Prepare city universities data
   const cityUniversities = cityAdmissions.reduce((acc: any[], adm: any) => {
     if (!acc.find(u => u.slug === adm.instituteSlug)) {
       acc.push({
@@ -124,7 +137,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
     return acc;
   }, []);
 
-  // Prepare related admissions (same university)
+  // Prepare related admissions
   const relatedAdmissionsList = relatedAdmissions.map(adm => ({
     id: adm.id,
     name: adm.name,
@@ -170,23 +183,18 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
     };
   }, []);
 
-  // Navigation click handler
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
     if (element) {
       const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - offset;
-      
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      });
+      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50" suppressHydrationWarning>
       
       {/* Breadcrumbs */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -212,12 +220,12 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">🏛️</span>
                 <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-                  {admission.institute?.name}
+                  {admission.name}
                 </h1>
               </div>
               
               <div className="text-xl md:text-2xl font-semibold text-orange-600 mb-3">
-                {admission.name}
+                {admission.institute?.name}
               </div>
               
               <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -324,82 +332,59 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
               </div>
             </section>
             
-            {/* Section 2: Offered Programs */}
+            {/* Section 2: Offered Programs - FIXED: Show ALL programs */}
             <section id="programs" className="scroll-mt-24">
               <div className="bg-white rounded-xl p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>🎓</span> Offered Programs ({admission.programCount})
+                  <span>🎓</span> Offered Programs ({programsToShow.length})
                 </h2>
                 
-                {undergradPrograms.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">📘 Undergraduate Programs</h3>
-                    <div className="space-y-4">
-                      {undergradPrograms.map((program) => (
-                        <div key={program.id} className="border rounded-lg p-4 hover:shadow-md transition">
-                          <Link href={`/programs/${program.slug}`} className="text-lg font-semibold text-orange-600 hover:underline">
-                            {program.name}
-                          </Link>
-                          <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                            {program.duration && <span>⏱️ Duration: {program.duration}</span>}
-                            {program.feeRange && <span>💰 Fee: {program.feeRange}</span>}
-                          </div>
-                          {program.eligibility && (
-                            <p className="text-sm text-gray-600 mt-2">
-                              <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 120)}...
-                            </p>
+                {programsToShow.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {programsToShow.map((program) => (
+                      <div key={program.id} className="border rounded-lg p-4 hover:shadow-md transition hover:border-orange-200">
+                        <Link href={`/programs/${program.slug}`} className="text-lg font-semibold text-orange-600 hover:underline">
+                          {program.name}
+                        </Link>
+                        <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
+                          {program.duration && (
+                            <span className="flex items-center gap-1">
+                              <span>⏱️</span> {program.duration}
+                            </span>
+                          )}
+                          {program.feeRange && (
+                            <span className="flex items-center gap-1">
+                              <span>💰</span> {program.feeRange}
+                            </span>
+                          )}
+                          {program.degreeName && (
+                            <span className="flex items-center gap-1">
+                              <span>🎓</span> {program.degreeName}
+                            </span>
                           )}
                         </div>
-                      ))}
-                    </div>
+                        {program.eligibility && (
+                          <p className="text-sm text-gray-600 mt-2 border-t pt-2">
+                            <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 100)}...
+                          </p>
+                        )}
+                        <div className="flex gap-3 mt-3">
+                          <Link href={`/programs/${program.slug}`} className="text-sm text-orange-600 hover:underline">
+                            View Details →
+                          </Link>
+                          {admission.officialLink && (
+                            <a href={admission.officialLink} target="_blank" className="text-sm text-green-600 hover:underline">
+                              Apply Now →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                )}
-                
-                {gradPrograms.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">🎓 Graduate Programs</h3>
-                    <div className="space-y-4">
-                      {gradPrograms.map((program) => (
-                        <div key={program.id} className="border rounded-lg p-4 hover:shadow-md transition">
-                          <Link href={`/programs/${program.slug}`} className="text-lg font-semibold text-orange-600 hover:underline">
-                            {program.name}
-                          </Link>
-                          <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                            {program.duration && <span>⏱️ Duration: {program.duration}</span>}
-                            {program.feeRange && <span>💰 Fee: {program.feeRange}</span>}
-                          </div>
-                          {program.eligibility && (
-                            <p className="text-sm text-gray-600 mt-2">
-                              <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 120)}...
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {diplomaPrograms.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">📜 Diploma & Certificate Programs</h3>
-                    <div className="space-y-4">
-                      {diplomaPrograms.map((program) => (
-                        <div key={program.id} className="border rounded-lg p-4 hover:shadow-md transition">
-                          <Link href={`/programs/${program.slug}`} className="text-lg font-semibold text-orange-600 hover:underline">
-                            {program.name}
-                          </Link>
-                          <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
-                            {program.duration && <span>⏱️ Duration: {program.duration}</span>}
-                            {program.feeRange && <span>💰 Fee: {program.feeRange}</span>}
-                          </div>
-                          {program.eligibility && (
-                            <p className="text-sm text-gray-600 mt-2">
-                              <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 120)}...
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p className="text-lg">📚 No programs listed for this admission.</p>
+                    <p className="text-sm mt-2">Please check back later for updated information.</p>
                   </div>
                 )}
               </div>
@@ -557,11 +542,11 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
             
           </div>
           
-          {/* RIGHT COLUMN - STICKY SIDEBAR (Multiple Sections Always Visible) */}
+          {/* RIGHT COLUMN - STICKY SIDEBAR */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 space-y-4">
               
-              {/* Section 1: About University - ALWAYS VISIBLE */}
+              {/* Section 1: About University */}
               <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
                   <div className="w-1 h-5 bg-orange-500 rounded-full"></div>
@@ -578,7 +563,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-orange-500">🎓</span>
-                    <span className="text-gray-700">Programs: {admission.programCount}+</span>
+                    <span className="text-gray-700">Programs: {programsToShow.length}+</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-orange-500">📍</span>
@@ -600,15 +585,15 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               </div>
               
-              {/* Section 2: Popular Programs - ALWAYS VISIBLE */}
-              {allPrograms.length > 0 && (
+              {/* Section 2: All Programs List (Sidebar) */}
+              {programsToShow.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
                     <div className="w-1 h-5 bg-orange-500 rounded-full"></div>
-                    <h3 className="font-bold text-gray-900">Popular Programs</h3>
+                    <h3 className="font-bold text-gray-900">All Programs ({programsToShow.length})</h3>
                   </div>
-                  <div className="space-y-3">
-                    {allPrograms.slice(0, 4).map((program, idx) => (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {programsToShow.map((program, idx) => (
                       <Link 
                         key={idx}
                         href={`/programs/${program.slug}`}
@@ -618,25 +603,15 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                           {program.name}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {program.duration || '4 Years'} • {program.degreeName || 'Degree Program'}
+                          {program.duration || 'Program'}
                         </div>
                       </Link>
                     ))}
-                    <Link 
-                      href="#programs"
-                      className="block text-center text-sm text-orange-600 hover:underline mt-2"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        scrollToSection('programs');
-                      }}
-                    >
-                      View All {admission.programCount} Programs →
-                    </Link>
                   </div>
                 </div>
               )}
               
-              {/* Section 3: Other Universities in Same City - ALWAYS VISIBLE */}
+              {/* Section 3: Other Universities in Same City */}
               {cityUniversities.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
@@ -662,7 +637,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               )}
               
-              {/* Section 4: More Admissions from this University - ALWAYS VISIBLE */}
+              {/* Section 4: More Admissions from this University */}
               {relatedAdmissionsList.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
@@ -751,11 +726,6 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="mt-8 pt-6 border-t border-gray-200 text-center text-sm text-gray-500">
-          <p>Last updated: {formattedLastUpdated}</p>
-          <p className="mt-1">© {new Date().getFullYear()} NextID.pk - Pakistan's Premier Educational Portal</p>
-        </div>
       </div>
     </main>
   );

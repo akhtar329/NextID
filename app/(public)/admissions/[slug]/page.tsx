@@ -1,5 +1,6 @@
 // app/(public)/admissions/[slug]/page.tsx
 import { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { admissions, admissionPrograms, programs, institutes, cities, degrees } from '@/app/lib/schema';
@@ -123,7 +124,9 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
     }
     
     const admission = admissionResult[0];
+    console.log('✅ Found admission:', admission.id);
     
+    // Get institute details
     let institute: InstituteType | null = null;
     if (admission.instituteId) {
       const instituteResult = await db
@@ -164,6 +167,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       }
     }
 
+    // ✅ Get ALL programs for this admission
     const programList = await db
       .select({
         id: programs.id,
@@ -180,6 +184,10 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
       .where(eq(admissionPrograms.admissionId, admission.id));
 
+    console.log('📚 Found programs count:', programList.length);
+    console.log('📚 Programs:', programList.map(p => p.name));
+
+    // Get degree names for programs
     const programsWithDegrees: ProgramWithDetails[] = await Promise.all(
       programList.map(async (p) => {
         let degreeName: string | null = null;
@@ -193,8 +201,15 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
         }
         
         return {
-          ...p,
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
           degreeName,
+          overview: p.overview,
+          eligibility: p.eligibility,
+          duration: p.duration,
+          careerScope: p.careerScope,
+          feeRange: p.feeRange,
         };
       })
     );
@@ -348,7 +363,7 @@ function generateMetaDescription(admission: AdmissionWithPrograms): string {
   return description;
 }
 
-// ==================== METADATA GENERATION ====================
+// ==================== METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const admission = await getAdmissionBySlug(slug);
@@ -399,9 +414,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       googleBot: {
         index: true,
         follow: true,
-        'max-video-preview': -1,
         'max-image-preview': 'large',
-        'max-snippet': -1,
+        'max-snippet': 160,
       },
     },
   };
@@ -422,26 +436,36 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
   const statusBadge = getStatusBadge(admission.status);
   const daysRemaining = getDaysRemaining(admission.expectedCloseDate);
   
-  // Group programs by degree level
-  const undergradPrograms = admission.programs.filter((p: ProgramWithDetails) => 
+  // ✅ Get ALL programs - no filtering by degree level
+  const allPrograms = admission.programs;
+  
+  // ✅ Group programs by degree level for display (optional, but keep original)
+  const undergradPrograms = admission.programs.filter(p => 
     p.degreeName?.toLowerCase().includes('bachelor') || 
     p.degreeName?.toLowerCase().includes('bs') ||
     p.degreeName?.toLowerCase().includes('bsc')
   );
   
-  const gradPrograms = admission.programs.filter((p: ProgramWithDetails) => 
+  const gradPrograms = admission.programs.filter(p => 
     p.degreeName?.toLowerCase().includes('master') || 
     p.degreeName?.toLowerCase().includes('ms') ||
     p.degreeName?.toLowerCase().includes('m.phil') ||
     p.degreeName?.toLowerCase().includes('phd')
   );
   
-  const diplomaPrograms = admission.programs.filter((p: ProgramWithDetails) => 
+  const diplomaPrograms = admission.programs.filter(p => 
     p.degreeName?.toLowerCase().includes('diploma') || 
     p.degreeName?.toLowerCase().includes('certificate')
   );
 
-  // ✅ Convert dates to ISO strings for serialization
+  console.log('📊 Program Breakdown:');
+  console.log('  - Total Programs:', allPrograms.length);
+  console.log('  - Undergraduate:', undergradPrograms.length);
+  console.log('  - Graduate:', gradPrograms.length);
+  console.log('  - Diploma/Certificate:', diplomaPrograms.length);
+  console.log('  - Program Names:', allPrograms.map(p => p.name).join(', '));
+
+  // Convert dates to ISO strings for serialization
   const serializedAdmission = {
     ...admission,
     expectedOpenDate: admission.expectedOpenDate?.toISOString() || null,
@@ -450,17 +474,16 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
     updatedAt: admission.updatedAt?.toISOString() || null,
   };
 
-  // Prepare data for client component - NO FUNCTIONS!
+  // Prepare data for client component
   const admissionData = {
     admission: serializedAdmission,
     relatedAdmissions: relatedAdmissions || [],
     cityAdmissions: cityAdmissions || [],
     statusBadge,
     daysRemaining,
-    undergradPrograms,
-    gradPrograms,
-    diplomaPrograms,
-    // ✅ Pass formatted strings instead of functions
+    undergradPrograms: undergradPrograms,  // ✅ Pass all programs
+    gradPrograms: gradPrograms,            // ✅ Pass all programs
+    diplomaPrograms: diplomaPrograms,      // ✅ Pass all programs
     formattedPostedDate: formatShortDate(admission.createdAt) || '—',
     formattedLastDate: formatShortDate(admission.expectedCloseDate) || 'TBA',
     formattedDeadline: formatDate(admission.expectedCloseDate) || 'TBA',
