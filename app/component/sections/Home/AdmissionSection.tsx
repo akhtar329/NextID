@@ -44,10 +44,15 @@ export default function LatestAdmissionsSection() {
     try {
       const deadline = new Date(dateString);
       const now = new Date();
+      // Set to end of day for accurate comparison
       deadline.setHours(23, 59, 59, 999);
+      now.setHours(23, 59, 59, 999);
+      
       const diffTime = deadline.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 ? diffDays : null;
+      
+      // ✅ Only return positive days (future dates)
+      return diffDays > 0 ? diffDays : null;
     } catch (error) {
       return null;
     }
@@ -111,23 +116,36 @@ export default function LatestAdmissionsSection() {
 
   // ==================== MEMOIZED VALUES ====================
   
-  const openAdmissions = useMemo(() => {
-    return admissions.filter(ad => ad.status === 'Open');
+  // ✅ STEP 1: Filter only open admissions with future dates
+  const validOpenAdmissions = useMemo(() => {
+    return admissions.filter(ad => {
+      // Status must be Open
+      if (ad.status !== 'Open') return false;
+      
+      // If no close date, include (but will show as TBA)
+      if (!ad.expectedCloseDate) return true;
+      
+      // Check if date is in future
+      const daysLeft = getDaysLeft(ad.expectedCloseDate);
+      return daysLeft !== null; // Only keep if future date
+    });
   }, [admissions]);
 
   const sortedAdmissionsByUrgency = useMemo(() => {
-    return [...openAdmissions].sort((a, b) => {
+    return [...validOpenAdmissions].sort((a, b) => {
       const daysLeftA = getDaysLeft(a.expectedCloseDate);
       const daysLeftB = getDaysLeft(b.expectedCloseDate);
       
+      // Both have dates - sort by days left (ascending)
       if (daysLeftA !== null && daysLeftB !== null) {
         return daysLeftA - daysLeftB;
       }
+      // One has date, one doesn't - date wala pehle
       if (daysLeftA !== null && daysLeftB === null) return -1;
       if (daysLeftA === null && daysLeftB !== null) return 1;
       return 0;
     });
-  }, [openAdmissions]);
+  }, [validOpenAdmissions]);
 
   const closingSoonAdmissions = useMemo(() => {
     const soon = sortedAdmissionsByUrgency.filter(ad => {
@@ -143,7 +161,7 @@ export default function LatestAdmissionsSection() {
   }, [sortedAdmissionsByUrgency]);
 
   const closingSoonStats = useMemo(() => {
-    const allOpen = openAdmissions;
+    const allOpen = validOpenAdmissions;
     
     const closingThisWeek = allOpen.filter(ad => {
       if (!ad.expectedCloseDate) return false;
@@ -163,13 +181,16 @@ export default function LatestAdmissionsSection() {
       return daysLeft !== null && daysLeft > 7;
     });
 
+    const withoutDate = allOpen.filter(ad => !ad.expectedCloseDate);
+
     return {
       thisWeek: closingThisWeek.length,
       urgent: urgentToday.length,
       normal: normal.length,
+      withoutDate: withoutDate.length,
       total: allOpen.length
     };
-  }, [openAdmissions]);
+  }, [validOpenAdmissions]);
 
   // ==================== FILTERS ====================
   
@@ -239,7 +260,7 @@ export default function LatestAdmissionsSection() {
           <p className="text-gray-600 max-w-3xl mx-auto">
             {closingSoonStats.urgent > 0 && (
               <span className="text-red-600 font-semibold">{closingSoonStats.urgent} urgent admissions</span>
-            )} closing in next 3 days. Apply now for {openAdmissions.length} open admissions across Pakistan.
+            )} closing in next 3 days. Apply now for {validOpenAdmissions.length} open admissions across Pakistan.
           </p>
         </div>
 
@@ -251,7 +272,7 @@ export default function LatestAdmissionsSection() {
               urgencyFilter === 'all' ? 'border-blue-500 ring-2 ring-blue-200 bg-blue-100' : 'border-blue-100'
             }`}
           >
-            <div className="text-3xl font-bold text-blue-600">{openAdmissions.length}</div>
+            <div className="text-3xl font-bold text-blue-600">{validOpenAdmissions.length}</div>
             <div className="text-sm text-gray-600">All Admissions</div>
           </button>
           <button
@@ -334,14 +355,21 @@ export default function LatestAdmissionsSection() {
                     <h3 className="text-lg font-bold text-gray-900 hover:text-blue-600 transition">
                       {admission.instituteName} Admissions {admission.year}
                     </h3>
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                      isUrgent ? 'bg-red-100 text-red-700 animate-pulse' :
-                      isWarning ? 'bg-orange-100 text-orange-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      <span>⏰</span>
-                      <span>{daysLeft ? `${daysLeft} days left` : 'Deadline TBA'}</span>
-                    </div>
+                    {daysLeft ? (
+                      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                        isUrgent ? 'bg-red-100 text-red-700 animate-pulse' :
+                        isWarning ? 'bg-orange-100 text-orange-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        <span>⏰</span>
+                        <span>{daysLeft} {daysLeft === 1 ? 'day' : 'days'} left</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                        <span>📅</span>
+                        <span>Date TBA</span>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Card Body - Programs & Details */}
@@ -358,14 +386,23 @@ export default function LatestAdmissionsSection() {
                       </span>
                       <span className="text-gray-300">•</span>
                       <span className="flex items-center gap-1">
-                        <span>📅</span>
-                        <span>{admission.session || 'Fall'} {admission.year}</span>
+                        <span>📍</span>
+                        <span>{admission.instituteCity || 'Pakistan'}</span>
                       </span>
                       <span className="text-gray-300">•</span>
                       <span className="flex items-center gap-1">
-                        <span>⏰</span>
-                        <span>Last Date: {formatDate(admission.expectedCloseDate)}</span>
+                        <span>📅</span>
+                        <span>{admission.session || 'Fall'} {admission.year}</span>
                       </span>
+                      {admission.expectedCloseDate && (
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span className="flex items-center gap-1">
+                            <span>⏰</span>
+                            <span>Last Date: {formatDate(admission.expectedCloseDate)}</span>
+                          </span>
+                        </>
+                      )}
                     </div>
                     
                     {admission.programs && admission.programs.length > 1 && (
@@ -385,12 +422,17 @@ export default function LatestAdmissionsSection() {
               {urgencyFilter === 'urgent' && 'No Urgent Admissions Right Now'}
               {urgencyFilter === 'warning' && 'No Admissions in Warning Period'}
               {urgencyFilter === 'normal' && 'No Admissions in Normal Period'}
-              {urgencyFilter === 'all' && 'No Admissions Closing Soon'}
+              {urgencyFilter === 'all' && 'No Upcoming Admissions Available'}
             </h3>
+            <p className="text-gray-500 mb-4">
+              {urgencyFilter !== 'all' 
+                ? 'Try viewing all admissions or check back later.'
+                : 'All current admission deadlines have passed. Check back for new announcements.'}
+            </p>
             {urgencyFilter !== 'all' && (
               <button
                 onClick={() => setUrgencyFilter('all')}
-                className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 View All Admissions
               </button>
@@ -405,7 +447,7 @@ export default function LatestAdmissionsSection() {
               href="/admissions"
               className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
             >
-              Browse all {openAdmissions.length} university admissions 2026 in Pakistan →
+              Browse all {validOpenAdmissions.length} university admissions 2026 in Pakistan →
             </Link>
           </div>
         )}
