@@ -91,7 +91,7 @@ export default function AdmissionsPage() {
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch admissions");
       const data = await res.json();
-      console.log('Admissions data:', data);
+
       setAdmissions(data.admissions || []);
       setError(null);
     } catch (err) {

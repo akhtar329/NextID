@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Institutes bulk upload received:", body);
 
     const { institutes: bulkInstitutes } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkInstitutes.length} institutes for bulk upload`);
-
     // Validate each institute
     const errors: string[] = [];
     const validInstitutes = [];
@@ -38,8 +35,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkInstitutes.length; i++) {
       const inst = bulkInstitutes[i];
-      
-      console.log(`🔍 Validating institute ${i + 1}:`, inst);
 
       // Required fields
       if (!inst.name) {
@@ -106,8 +101,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid institutes: ${validInstitutes.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validInstitutes.map(i => i.slug);
     const existingInstitutes = await db
@@ -117,8 +110,6 @@ export async function POST(req: NextRequest) {
       })
       .from(institutes)
       .where(inArray(institutes.slug, allSlugs));
-
-    console.log("📚 Existing institutes:", existingInstitutes);
 
     const existingSlugs = new Set(existingInstitutes.map(e => e.slug));
     const existingNames = new Set(existingInstitutes.map(e => e.name.toLowerCase()));
@@ -143,10 +134,6 @@ export async function POST(req: NextRequest) {
       
       newInstitutes.push(inst);
     }
-
-    console.log(`🆕 New institutes to insert: ${newInstitutes.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs.length}`);
-    console.log(`⚠️ Duplicate names: ${duplicateNames.length}`);
 
     if (newInstitutes.length === 0) {
       let errorMessage = "All institutes already exist";
@@ -216,14 +203,11 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(result[0]);
-        console.log(`✅ Inserted: ${inst.name} (${inst.slug})`);
       } catch (err) {
         console.error(`❌ Failed to insert ${inst.name}:`, err);
         failed.push(inst.name);
       }
     }
-
-    console.log(`✅ Successfully inserted ${inserted.length} institutes`);
 
     const response: any = {
       success: true,

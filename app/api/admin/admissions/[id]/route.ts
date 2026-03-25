@@ -10,7 +10,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 GET /api/admin/admissions/[id] called");
   
   try {
     const { id } = await params;
@@ -94,8 +93,6 @@ export async function GET(
       programs: programListWithDegrees,
     };
 
-    console.log(`✅ Admission found with ${programListWithDegrees.length} programs`);
-
     return NextResponse.json({
       success: true,
       admission: transformedAdmission,
@@ -119,7 +116,6 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PATCH /api/admin/admissions/[id] called - Status Update");
   
   try {
     const { id } = await params;
@@ -133,7 +129,6 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    console.log("📦 PATCH data:", body);
 
     // Validate status
     const { status } = body;
@@ -178,8 +173,6 @@ export async function PATCH(
         updatedAt: admissions.updatedAt,
       });
 
-    console.log(`✅ Admission status updated to: ${status}`);
-
     return NextResponse.json({
       success: true,
       admission: updated[0],
@@ -205,7 +198,6 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PUT /api/admin/admissions/[id] called");
   
   try {
     const { id } = await params;
@@ -219,7 +211,6 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log("📦 Update data:", body);
 
     // Validate required fields
     if (!body.instituteId || !body.year || !body.status || !body.name || !body.slug) {
@@ -325,8 +316,6 @@ export async function PUT(
         })
       );
 
-      console.log(`✅ Updated admission with ${newLinks.length} programs`);
-
       return { updated: updated[0], programCount: newLinks.length };
     });
 
@@ -384,7 +373,6 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 DELETE /api/admin/admissions/[id] called");
   
   try {
     const { id } = await params;
@@ -415,9 +403,6 @@ export async function DELETE(
     await db
       .delete(admissions)
       .where(eq(admissions.id, admissionId));
-
-    console.log("✅ Admission deleted:", admissionId);
-
     return NextResponse.json({
       success: true,
       message: "Admission deleted successfully",

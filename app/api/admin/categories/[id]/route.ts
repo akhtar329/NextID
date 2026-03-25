@@ -61,8 +61,6 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    console.log("Updating category:", categoryId, body);
-
     // Check if category exists
     const existing = await db.select().from(categories).where(eq(categories.id, categoryId));
     if (existing.length === 0) {

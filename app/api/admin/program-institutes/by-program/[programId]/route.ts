@@ -9,11 +9,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ programId: string }> }
 ) {
-  console.log("🚀 GET /api/admin/program-institutes/by-program called");
   
   try {
     const { programId } = await params;
-    console.log("📦 programId:", programId);
     
     const id = parseInt(programId);
 

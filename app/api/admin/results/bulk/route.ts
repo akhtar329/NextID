@@ -8,7 +8,6 @@ import { eq, and } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Results bulk upload received:", body);
 
     const { results: bulkResults } = body;
 
@@ -30,16 +29,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkResults.length} results for bulk upload`);
-
     // Validate each result
     const errors: string[] = [];
     const validResults = [];
 
     for (let i = 0; i < bulkResults.length; i++) {
       const result = bulkResults[i];
-      
-      console.log(`🔍 Validating result ${i + 1}:`, result);
 
       // Required fields
       if (!result.title) {
@@ -129,8 +124,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid results: ${validResults.length}`);
-
     // Insert results one by one
     const inserted = [];
     const failed = [];
@@ -154,14 +147,11 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(insertedResult[0]);
-        console.log(`✅ Inserted: ${result.title} (Year: ${result.year})`);
       } catch (err) {
         console.error(`❌ Failed to insert:`, err);
         failed.push(result);
       }
     }
-
-    console.log(`✅ Successfully inserted ${inserted.length} results`);
 
     const response: any = {
       success: true,

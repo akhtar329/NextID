@@ -4,7 +4,6 @@ import { results, programs, institutes, boards } from "@/app/lib/schema";
 import { desc, eq, and } from "drizzle-orm";
 
 export async function GET(request: Request) {
-  console.log("🚀 GET /api/admin/results called");
 
   try {
     const { searchParams } = new URL(request.url);
@@ -46,8 +45,6 @@ export async function GET(request: Request) {
       .leftJoin(boards, eq(results.boardId, boards.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(results.year), desc(results.createdAt));
-
-    console.log(`✅ Found ${filteredResults.length} results`);
 
     return NextResponse.json({
       success: true,

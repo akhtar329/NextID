@@ -6,14 +6,8 @@ import { eq, sql } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    console.log("Received body:", body);
-    
+    const body = await req.json();    
     const { name, slug, fullForm, levelId, categoryId, displayOrder, status } = body;
-
-    // Detailed validation logging
-    console.log("Extracted fields:", { name, slug, fullForm, levelId, categoryId, displayOrder, status });
-
     // Required fields validation
     if (!name) {
       return NextResponse.json(
@@ -64,7 +58,6 @@ export async function POST(req: NextRequest) {
       
       // Reset sequence to max ID + 1
       await db.execute(sql`SELECT setval('degrees_id_seq', ${maxId + 1}, false)`);
-      console.log(`✅ Sequence reset to ${maxId + 1}`);
     } catch (seqErr) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
       // Continue anyway
@@ -80,8 +73,6 @@ export async function POST(req: NextRequest) {
       displayOrder: displayOrder ?? 0,
       status: status !== undefined ? Boolean(status) : true,
     }).returning();
-
-    console.log("✅ Degree created successfully:", inserted[0]);
     return NextResponse.json({ success: true, degree: inserted[0] });
 
   } catch (err) {

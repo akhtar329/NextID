@@ -113,16 +113,6 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
   
   // ✅ ALSO check admission.programs directly (fallback)
   const programsToShow = allPrograms.length > 0 ? allPrograms : admission.programs || [];
-  
-  // Debug logs
-  console.log('🔍 AdmissionClient - Program Data:');
-  console.log('  - undergradPrograms:', undergradPrograms.length);
-  console.log('  - gradPrograms:', gradPrograms.length);
-  console.log('  - diplomaPrograms:', diplomaPrograms.length);
-  console.log('  - allPrograms combined:', allPrograms.length);
-  console.log('  - admission.programs:', admission.programs?.length || 0);
-  console.log('  - programsToShow:', programsToShow.length);
-  console.log('  - Program Names:', programsToShow.map(p => p.name).join(', '));
 
   // Prepare city universities data
   const cityUniversities = cityAdmissions.reduce((acc: any[], adm: any) => {

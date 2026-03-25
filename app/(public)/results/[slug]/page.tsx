@@ -98,7 +98,6 @@ function getDaysRemaining(date: Date | null): number | null {
 // ==================== GET RESULT BY SLUG ====================
 async function getResultBySlug(slug: string): Promise<ResultType | null> {
   try {
-    console.log('🔍 Fetching result for slug:', slug);
     
     const [result] = await db
       .select({
@@ -122,11 +121,8 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
       .limit(1);
 
     if (!result) {
-      console.log('❌ No result found for slug:', slug);
       return null;
     }
-
-    console.log('✅ Found result:', result.id);
 
     // Get program details
     let program: ProgramType | null = null;
@@ -459,12 +455,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   
-  console.log('📌 Page slug:', slug);
-  
   const result = await getResultBySlug(slug);
   
   if (!result) {
-    console.log('❌ No result found, showing 404');
     notFound();
   }
 

@@ -142,16 +142,14 @@ export default function CreateProgramPage() {
 useEffect(() => {
   const fetchDegrees = async () => {
     try {
-      console.log("📡 Fetching degrees...");
+
       const res = await fetch("/api/admin/degrees");
       const data = await res.json();
-      console.log("📥 Degrees API response:", data);
       
       // Check different possible response structures
       if (data.success) {
         // Try to find degrees array in different locations
         const degreesList = data.degrees || data.data || [];
-        console.log("📋 Degrees list:", degreesList);
         setDegreeOptions(degreesList);
         
         if (degreesList.length === 0) {

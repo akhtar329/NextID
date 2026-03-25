@@ -105,7 +105,6 @@ export default function EditCategoryPage() {
       });
 
       const data = await res.json();
-      console.log("Update response:", data);
 
       if (!res.ok) {
         if (res.status === 409) {

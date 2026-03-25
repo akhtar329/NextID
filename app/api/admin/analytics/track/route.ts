@@ -1,10 +1,9 @@
 // app/api/admin/analytics/track/route.ts
 
-
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
-import { getHybridLocation } from '@/app/lib/analytics/hybrid-location'; // 👈 Use hybrid location
+import { getLocationFromIP } from '@/app/lib/location';
 import { eq, sql } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -36,8 +35,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 🌍 Use HYBRID LOCATION (GPS + Timezone + IP)
-    const location = await getHybridLocation();
+    // Get location
+    const location = await getLocationFromIP(ip);
     
     const finalDeviceType = deviceType || 'unknown';
     const finalBrowser = browser || 'unknown';
@@ -101,19 +100,21 @@ export async function POST(request: NextRequest) {
         .where(eq(visitorSessions.sessionId, sessionId));
     }
     
-    // 3. Daily stats update
+    // 3. Daily stats update - ✅ FIXED with UPSERT
     const today = new Date().toISOString().split('T')[0];
-    const [dailyStat] = await db
+    const country = location?.country || 'Unknown';
+    const city = location?.city || 'Unknown';
+    
+    // Get existing daily stats
+    const existingDailyStat = await db
       .select()
       .from(dailyStats)
       .where(eq(dailyStats.date, today))
       .limit(1);
     
-    if (!dailyStat) {
+    if (existingDailyStat.length === 0) {
+      // Insert new record
       const cityBreakdown: Record<string, number> = {};
-      const country = location?.country || 'Unknown';
-      const city = location?.city || 'Unknown';
-      
       if (country === 'Pakistan' || country === 'PK') {
         cityBreakdown[city] = 1;
       }
@@ -133,11 +134,14 @@ export async function POST(request: NextRequest) {
         bounceRate: 0,
       });
     } else {
-      const topPages = safeJsonParse(dailyStat.topPages, []);
-      const deviceBreakdown = safeJsonParse(dailyStat.deviceBreakdown, {});
-      const countryBreakdown = safeJsonParse(dailyStat.countryBreakdown, {});
-      const cityBreakdown = safeJsonParse(dailyStat.cityBreakdown, {});
+      // Update existing record
+      const existing = existingDailyStat[0];
+      const topPages = safeJsonParse(existing.topPages, []);
+      const deviceBreakdown = safeJsonParse(existing.deviceBreakdown, {});
+      const countryBreakdown = safeJsonParse(existing.countryBreakdown, {});
+      const cityBreakdown = safeJsonParse(existing.cityBreakdown, {});
       
+      // Update top pages
       const pageIndex = Array.isArray(topPages) 
         ? topPages.findIndex((p: any) => p?.path === pagePath)
         : -1;
@@ -148,23 +152,24 @@ export async function POST(request: NextRequest) {
         topPages.push({ path: pagePath, views: 1 });
       }
       
+      // Update device breakdown
       deviceBreakdown[finalDeviceType] = (deviceBreakdown[finalDeviceType] || 0) + 1;
       
-      const country = location?.country || 'Unknown';
+      // Update country breakdown
       countryBreakdown[country] = (countryBreakdown[country] || 0) + 1;
       
+      // Update city breakdown (Pakistan only)
       if (country === 'Pakistan' || country === 'PK') {
-        const city = location?.city || 'Unknown';
         cityBreakdown[city] = (cityBreakdown[city] || 0) + 1;
       }
       
       await db
         .update(dailyStats)
         .set({
-          totalVisitors: sql`${dailyStats.totalVisitors} + ${isNewVisitor ? 1 : 0}`,
-          newVisitors: sql`${dailyStats.newVisitors} + ${isNewVisitor ? 1 : 0}`,
-          returningVisitors: sql`${dailyStats.returningVisitors} + ${isNewVisitor ? 0 : 1}`,
-          totalPageViews: sql`${dailyStats.totalPageViews} + 1`,
+          totalVisitors: (existing.totalVisitors || 0) + (isNewVisitor ? 1 : 0),
+          newVisitors: (existing.newVisitors || 0) + (isNewVisitor ? 1 : 0),
+          returningVisitors: (existing.returningVisitors || 0) + (isNewVisitor ? 0 : 1),
+          totalPageViews: (existing.totalPageViews || 0) + 1,
           topPages: JSON.stringify(topPages.slice(0, 10)),
           deviceBreakdown: JSON.stringify(deviceBreakdown),
           countryBreakdown: JSON.stringify(countryBreakdown),

@@ -39,7 +39,6 @@ interface ResultBulkItem extends BulkItem {
 // -------------------- SIMPLE SLUG GENERATOR  --------------------
 
 const generateSimpleSlug = (title: string, year?: string): string => {
-  console.log("🔨 Generating slug for:", { title, year }); // Debug
   
   let cleanTitle = title
     .toLowerCase()
@@ -318,8 +317,6 @@ export default function CreateResultPage() {
 
       if (resultType === "board") requestBody.boardId = boardId;
       if (resultType === "university") requestBody.universityId = universityId;
-
-      console.log("📤 Sending data:", requestBody);
 
       const res = await fetch("/api/admin/results/create", {
         method: "POST",

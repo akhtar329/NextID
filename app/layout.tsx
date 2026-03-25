@@ -5,7 +5,8 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
-import { Analytics } from "@vercel/analytics/next"; // 👈 Add this
+import { Analytics } from "@vercel/analytics/next";
+import ClientAnalyticsTracker from '@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker';
 
 import { generateSEO } from "../app/lib/seo";
 
@@ -24,8 +25,8 @@ export default function RootLayout({
         <Providers>
           {children}
           
-          {/* Your custom analytics tracker */}
-
+          {/* 👇 Your custom analytics tracker - for detailed location & session data */}
+          <ClientAnalyticsTracker />
           
           {/* 👇 Vercel Analytics - Auto tracks page views */}
           <Analytics />

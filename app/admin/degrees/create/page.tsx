@@ -63,35 +63,28 @@ export default function CreateDegreePage() {
 
   // 🔍 DEBUG VERSION - Custom parser for degrees CSV
   const parseDegreesCSV = (text: string): BulkItem[] => {
-    console.log("=".repeat(50));
-    console.log("📄 RAW CSV TEXT:");
-    console.log(text);
-    console.log("=".repeat(50));
     
     // Split into lines and remove empty lines
     const lines = text.split('\n').filter(line => line.trim() !== '');
-    console.log(`📊 Found ${lines.length} non-empty lines:`, lines);
     
     if (lines.length === 0) {
-      console.log("❌ No lines found in CSV");
       return [];
     }
     
     // Check if first line has headers
     const firstLine = lines[0].toLowerCase();
     const hasHeaders = firstLine.includes('name') || firstLine.includes('levelid') || firstLine.includes('categoryid');
-    console.log(`🔍 Has headers? ${hasHeaders} (first line: "${firstLine}")`);
     
     let startIndex = 0;
     let headers: string[] = [];
     
     if (hasHeaders) {
       headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      console.log("📋 Headers detected:", headers);
+
       startIndex = 1;
     } else {
       headers = ['name', 'levelid', 'categoryid', 'fullform', 'displayorder', 'status'];
-      console.log("📋 Using default headers:", headers);
+
     }
     
     const items: BulkItem[] = [];
@@ -99,29 +92,24 @@ export default function CreateDegreePage() {
     // Process each data line
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim();
-      console.log(`\n🔍 Processing line ${i}: "${line}"`);
       
       if (!line) {
-        console.log(`⚠️ Line ${i} is empty, skipping`);
         continue;
       }
       
       // Skip HTML content
       if (line.startsWith('<')) {
-        console.log(`⚠️ Line ${i} contains HTML, skipping`);
         continue;
       }
       
       // Split by comma
       const values = line.split(',').map(v => v.trim());
-      console.log(`📊 Split values (${values.length}):`, values);
       
       // Create object with headers
       const obj: Record<string, string> = {};
       headers.forEach((header, index) => {
         obj[header] = values[index] || '';
       });
-      console.log("📦 Parsed object:", obj);
       
       // Extract fields
       const name = obj.name || '';
@@ -131,28 +119,16 @@ export default function CreateDegreePage() {
       const status = obj.status === 'false' ? false : true;
       const fullForm = obj.fullform || obj.full_form || obj.fullForm || '';
       
-      console.log(`📊 Extracted:`, {
-        name,
-        levelId,
-        categoryId,
-        displayOrder,
-        status,
-        fullForm
-      });
-      
       // Validate required fields
       if (!name) {
-        console.log(`❌ Line ${i}: Missing name`);
         continue;
       }
       
       if (!levelId || levelId === 0) {
-        console.log(`❌ Line ${i}: Invalid levelId (${levelId})`);
         continue;
       }
       
       if (!categoryId || categoryId === 0) {
-        console.log(`❌ Line ${i}: Invalid categoryId (${categoryId})`);
         continue;
       }
       
@@ -167,11 +143,9 @@ export default function CreateDegreePage() {
         fullForm,
       });
       
-      console.log(`✅ Line ${i}: Valid degree added: ${name}`);
     }
     
-    console.log(`\n🎉 Total valid degrees parsed: ${items.length}`);
-    console.log("=".repeat(50));
+
     
     return items;
   };

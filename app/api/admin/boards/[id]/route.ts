@@ -20,8 +20,6 @@ export async function GET(
       );
     }
 
-    console.log(`📡 Fetching board ID: ${boardId} from boards table`);
-
     // ✅ Boards table se fetch karo
     const board = await db
       .select()
@@ -34,8 +32,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    console.log(`✅ Board found:`, board[0]);
     return NextResponse.json({ success: true, board: board[0] });
 
   } catch (error) {
@@ -64,7 +60,6 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    console.log(`📦 Updating board ${boardId}:`, body);
 
     // ✅ Boards table se check karo
     const existing = await db
@@ -113,8 +108,6 @@ export async function PATCH(
       .where(eq(boards.id, boardId))
       .returning();
 
-    console.log(`✅ Board updated:`, result[0]);
-
     return NextResponse.json({ 
       success: true, 
       board: result[0] 
@@ -145,8 +138,6 @@ export async function DELETE(
       );
     }
 
-    console.log(`🗑️ Deleting board ID: ${boardId} from boards table`);
-
     // ✅ Boards table se delete karo
     const result = await db
       .delete(boards)
@@ -160,7 +151,6 @@ export async function DELETE(
       );
     }
 
-    console.log(`✅ Board deleted`);
     return NextResponse.json({ success: true });
 
   } catch (error) {

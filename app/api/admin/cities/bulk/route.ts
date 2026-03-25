@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Cities bulk upload received:", body);
 
     const { cities: bulkCities } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkCities.length} cities for bulk upload`);
-
     // Validate each city
     const errors: string[] = [];
     const validCities = [];
@@ -38,8 +35,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkCities.length; i++) {
       const city = bulkCities[i];
-      
-      console.log(`🔍 Validating city ${i + 1}:`, city);
 
       // Required fields
       if (!city.name) {
@@ -87,8 +82,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid cities: ${validCities.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validCities.map(c => c.slug);
     const existingCities = await db
@@ -98,8 +91,6 @@ export async function POST(req: NextRequest) {
       })
       .from(cities)
       .where(inArray(cities.slug, allSlugs));
-
-    console.log("📚 Existing cities:", existingCities);
 
     const existingSlugs = new Set(existingCities.map(e => e.slug));
     const existingNames = new Set(existingCities.map(e => e.name.toLowerCase()));
@@ -124,10 +115,6 @@ export async function POST(req: NextRequest) {
       
       newCities.push(city);
     }
-
-    console.log(`🆕 New cities to insert: ${newCities.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs.length}`);
-    console.log(`⚠️ Duplicate names: ${duplicateNames.length}`);
 
     if (newCities.length === 0) {
       let errorMessage = "All cities already exist";
@@ -194,14 +181,11 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(result[0]);
-        console.log(`✅ Inserted: ${city.name} (${city.slug})`);
       } catch (err) {
         console.error(`❌ Failed to insert ${city.name}:`, err);
         failed.push(city.name);
       }
     }
-
-    console.log(`✅ Successfully inserted ${inserted.length} cities`);
 
     const response: any = {
       success: true,

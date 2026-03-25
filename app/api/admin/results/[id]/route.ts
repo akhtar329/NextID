@@ -10,7 +10,6 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 GET /api/admin/results/[id] called");
   
   try {
     const { id } = await params;
@@ -75,7 +74,6 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PUT /api/admin/results/[id] called");
   
   try {
     const { id } = await params;
@@ -89,7 +87,6 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log("📦 Update data:", body);
 
     // Validate required fields
     if (!body.title || !body.year) {
@@ -132,8 +129,6 @@ export async function PUT(
       .where(eq(results.id, resultId))
       .returning();
 
-    console.log("✅ Result updated:", resultId);
-
     return NextResponse.json({
       success: true,
       result: updated[0],
@@ -158,7 +153,6 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PATCH /api/admin/results/[id] called");
   
   try {
     const { id } = await params;
@@ -203,8 +197,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 DELETE /api/admin/results/[id] called");
-  
   try {
     const { id } = await params;
     const resultId = parseInt(id);
@@ -234,8 +226,6 @@ export async function DELETE(
     await db
       .delete(results)
       .where(eq(results.id, resultId));
-
-    console.log("✅ Result deleted:", resultId);
 
     return NextResponse.json({
       success: true,

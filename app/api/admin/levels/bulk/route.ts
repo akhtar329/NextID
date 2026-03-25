@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Levels bulk upload received:", body);
 
     const { levels: bulkLevels } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkLevels.length} levels for bulk upload`);
-
     // Validate each level
     const errors: string[] = [];
     const validLevels = [];
@@ -38,8 +35,7 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkLevels.length; i++) {
       const level = bulkLevels[i];
-      
-      console.log(`🔍 Validating level ${i + 1}:`, level);
+    
 
       // Required fields
       if (!level.name) {
@@ -86,16 +82,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid levels: ${validLevels.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validLevels.map(l => l.slug);
     const existingLevels = await db
       .select({ slug: levels.slug })
       .from(levels)
       .where(inArray(levels.slug, allSlugs));
-
-    console.log("📚 Existing slugs:", existingLevels);
 
     const existingSlugs = new Set(existingLevels.map(e => e.slug));
     
@@ -110,9 +102,6 @@ export async function POST(req: NextRequest) {
         duplicateSlugs.push(level.slug);
       }
     }
-
-    console.log(`🆕 New levels to insert: ${newLevels.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs}`);
 
     if (newLevels.length === 0) {
       return NextResponse.json(
@@ -168,14 +157,11 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(result[0]);
-        console.log(`✅ Inserted: ${level.name} (${level.slug})`);
       } catch (err) {
         console.error(`❌ Failed to insert ${level.name}:`, err);
         failed.push(level.name);
       }
     }
-
-    console.log(`✅ Successfully inserted ${inserted.length} levels`);
 
     const response: any = {
       success: true,

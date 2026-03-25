@@ -66,7 +66,6 @@ function formatShortDate(date: Date | null) {
 // ==================== GET NEWS BY SLUG ====================
 async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   try {
-    console.log('🔍 Fetching news for slug:', slug);
     
     const [newsItem] = await db
       .select({
@@ -237,14 +236,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   
-  console.log('📌 Server: Fetching news for slug:', slug);
-  
   const newsItem = await getNewsBySlug(slug);
   
-  console.log('📌 Server: News item found:', newsItem ? 'YES' : 'NO');
-  
   if (!newsItem) {
-    console.log('📌 Server: No news found, showing 404');
     notFound();
   }
 
@@ -255,9 +249,6 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
     getRelatedNews(newsItem).catch(() => []),
     getStats().catch(() => ({ totalNews: 0 })),
   ]);
-
-  console.log('📌 Server: Related news count:', relatedNews.length);
-  console.log('📌 Server: Stats:', stats);
 
   return (
     <NewsDetailClient 

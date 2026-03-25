@@ -6,7 +6,6 @@ import { eq } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("Creating category with data:", body);
 
     const { name, slug, displayOrder, status } = body;
 
@@ -43,8 +42,6 @@ export async function POST(req: NextRequest) {
       displayOrder: displayOrder || 0,
       status: status !== undefined ? Boolean(status) : true,
     }).returning();
-
-    console.log("Category created:", inserted[0]);
 
     return NextResponse.json({ 
       success: true, 

@@ -43,7 +43,6 @@ const footerData = {
     { name: 'News', href: '/news' },
     { name: 'Blogs', href: '/blogs' },
     { name: 'FAQs', href: '/faqs' },
-    { name: 'Sitemap', href: '/sitemap' },
     { name: 'XML Sitemap', href: '/sitemap.xml' }, // ✅ Added XML Sitemap
     { name: 'Privacy Policy', href: '/privacy' },
     { name: 'Terms of Service', href: '/terms' },
@@ -193,7 +192,7 @@ export default async function GridFooter() {
                       href="tel:+923001234567"
                       className="text-sm text-gray-600 hover:text-blue-600 block"
                     >
-                      +92 300 1234567
+                      +92 342 553 7329
                     </a>
                   </div>
                 </div>

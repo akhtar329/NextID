@@ -6,9 +6,7 @@ import { eq, sql } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
-    console.log("🚀 POST /api/admin/institutes/create called");
     const body = await req.json();
-    console.log("📦 Body:", body);
 
     const { name, slug, type, cityId, description, website, status } = body;
 
@@ -54,7 +52,6 @@ export async function POST(req: NextRequest) {
       
       // Reset sequence to max ID + 1
       await db.execute(sql`SELECT setval('institutes_id_seq', ${maxId + 1}, false)`);
-      console.log(`✅ Sequence reset to ${maxId + 1}`);
     } catch (seqErr) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
     }
@@ -72,8 +69,6 @@ export async function POST(req: NextRequest) {
         status: status !== undefined ? Boolean(status) : true,
       })
       .returning();
-
-    console.log("✅ Institute created:", newInstitute[0]);
 
     return NextResponse.json({ 
       success: true, 

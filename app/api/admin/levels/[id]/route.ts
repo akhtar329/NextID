@@ -30,7 +30,6 @@ export async function GET(
   }
 
   try {
-    console.log(`📡 Fetching level with ID: ${numericId}`);
     
     const level = await db
       .select()
@@ -43,8 +42,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    console.log(`✅ Level found:`, level[0]);
     return NextResponse.json({ success: true, level: level[0] });
   } catch (err) {
     console.error("❌ GET error:", err);
@@ -72,7 +69,6 @@ export async function PUT(
 
   try {
     const body = await req.json();
-    console.log("📦 PUT request for level", numericId, body);
 
     if (!body.name || !body.slug) {
       return NextResponse.json(
@@ -129,8 +125,6 @@ export async function PUT(
         { status: 404 }
       );
     }
-
-    console.log("✅ Level updated:", updated[0]);
     return NextResponse.json({ success: true, level: updated[0] });
   } catch (err: any) {
     console.error("❌ PUT error:", err);
@@ -166,7 +160,6 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    console.log("📦 PATCH request for level", numericId, body);
 
     // Build update object dynamically
     const updateData: Record<string, any> = {};
@@ -176,8 +169,6 @@ export async function PATCH(
     if (body.fullForm !== undefined) updateData.fullForm = body.fullForm || null; // 👈 ADDED
     if (body.displayOrder !== undefined) updateData.displayOrder = Number(body.displayOrder);
     if (body.status !== undefined) updateData.status = Boolean(body.status);
-
-    console.log("📤 Update data:", updateData);
 
     // Check for duplicates if name is being updated
     if (body.name) {
@@ -229,8 +220,6 @@ export async function PATCH(
         { status: 404 }
       );
     }
-
-    console.log("✅ Level updated:", updated[0]);
     return NextResponse.json({ success: true, level: updated[0] });
   } catch (err: any) {
     console.error("❌ PATCH error:", err);
@@ -265,7 +254,6 @@ export async function DELETE(
   }
 
   try {
-    console.log(`🗑️ Deleting level with ID: ${numericId}`);
 
     // Check if level exists
     const [existing] = await db
@@ -301,8 +289,6 @@ export async function DELETE(
       .delete(levels)
       .where(eq(levels.id, numericId))
       .returning({ id: levels.id });
-
-    console.log(`✅ Level ${numericId} deleted successfully`);
     return NextResponse.json({ 
       success: true, 
       message: "Level deleted successfully" 

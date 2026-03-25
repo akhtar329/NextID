@@ -34,7 +34,6 @@ type CityData = {
 
 export async function getMenuData(menuId: string, categorySlug?: string) {
   try {
-    console.log("Fetching menu data for:", menuId, "category:", categorySlug);
 
     // 1. Get all categories
     const allCategories = await db
@@ -48,8 +47,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
       .where(eq(categories.status, true))
       .orderBy(asc(categories.displayOrder));
 
-    console.log(`Found ${allCategories.length} categories`);
-
     // 2. Determine active category
     let activeCategorySlug = categorySlug || allCategories[0]?.slug || 'engineering';
     let activeCategory = allCategories.find(c => c.slug === activeCategorySlug);
@@ -60,7 +57,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
     }
 
     const activeCategoryId = activeCategory?.id;
-    console.log(`Active category: ${activeCategorySlug} (ID: ${activeCategoryId})`);
 
     // 3. Initialize empty arrays
     let programsData: ProgramData[] = [];
@@ -79,7 +75,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
         ));
 
       const degreeIds = categoryDegrees.map(d => d.id);
-      console.log(`Found ${degreeIds.length} degrees for category`);
 
       // Get programs for this category
       if (degreeIds.length > 0) {
@@ -99,8 +94,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
           ))
           .limit(8);
       }
-
-      console.log(`Found ${programsData.length} programs for category ${activeCategorySlug}`);
 
       // Get institutes for this category
       if (programsData.length > 0) {
@@ -125,8 +118,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
           .limit(8);
       }
 
-      console.log(`Found ${institutesData.length} institutes for category ${activeCategorySlug}`);
-
       // Get cities for this category
       if (programsData.length > 0) {
         const programIds = programsData.map(p => p.id);
@@ -148,8 +139,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
           .groupBy(cities.id)
           .limit(8);
       }
-
-      console.log(`Found ${citiesData.length} cities for category ${activeCategorySlug}`);
     }
 
     // 5. Menu-specific data
@@ -183,8 +172,6 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
       activeCategory: activeCategorySlug,
       ...menuSpecificData
     };
-
-    console.log("Menu data fetched successfully for category:", activeCategorySlug);
     
     return {
       success: true,

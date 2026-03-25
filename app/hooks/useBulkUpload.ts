@@ -182,10 +182,8 @@ export function useBulkUpload({
       
       if (file) {
         const text = await file.text();
-        console.log(`📄 File content:`, text.substring(0, 200) + '...');
         items = customParse ? customParse(text) : defaultParseCSV(text);
       } else if (bulkData) {
-        console.log(`📝 Manual data:`, bulkData.substring(0, 200) + '...');
         items = defaultParseManual(bulkData);
       }
 
@@ -194,19 +192,14 @@ export function useBulkUpload({
         setLoading(false);
         return;
       }
-
-      console.log(`📦 Sending ${items.length} ${itemName} to API:`, items);
       
       const res = await fetch(apiEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [itemName]: items }),
       });
-
-      console.log(`📥 Response status:`, res.status);
       
       const text = await res.text();
-      console.log(`📥 Raw response:`, text);
 
       if (!text) {
         throw new Error("Empty response from server");
@@ -219,8 +212,6 @@ export function useBulkUpload({
         console.error("❌ JSON Parse Error:", parseError);
         throw new Error(`Invalid JSON response from server`);
       }
-
-      console.log(`📥 Parsed response:`, data);
 
       if (!res.ok) {
         throw new Error(data.error || data.message || `HTTP ${res.status}: ${data.details?.join(', ') || 'Failed to upload'}`);

@@ -5,11 +5,9 @@ import { cities } from "@/app/lib/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
-  console.log("🚀 POST /api/admin/cities/create called");
   
   try {
     const body = await request.json();
-    console.log("📦 Body:", body);
 
     // Validate
     if (!body.name || !body.slug) {
@@ -55,7 +53,6 @@ export async function POST(request: Request) {
       
       // Reset sequence to max ID + 1
       await db.execute(sql`SELECT setval('cities_id_seq', ${maxId + 1}, false)`);
-      console.log(`✅ Sequence reset to ${maxId + 1}`);
     } catch (seqErr) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
     }
@@ -72,8 +69,6 @@ export async function POST(request: Request) {
         createdAt: new Date(),
       })
       .returning();
-
-    console.log("✅ City created:", newCity[0]);
 
     return NextResponse.json({
       success: true,

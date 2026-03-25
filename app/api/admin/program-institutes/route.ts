@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 
 // GET - Get all relations (for testing)
 export async function GET() {
-  console.log("🚀 GET /api/admin/program-institutes called");
   
   try {
     const all = await db.select().from(programInstitutes);
@@ -31,18 +30,15 @@ export async function GET() {
 
 // POST - Bulk assign
 export async function POST(request: Request) {
-  console.log("🚀 POST /api/admin/program-institutes called");
   
   try {
     const body = await request.json();
-    console.log("📦 Request body:", body);
 
     // Check both possible field names
     const instituteId = body.instituteId;
     const programIds = body.programIds || [];
     
     if (!instituteId) {
-      console.log("❌ Missing institute ID");
       return NextResponse.json(
         { success: false, error: "Institute ID is required" },
         { status: 400 }
@@ -50,22 +46,18 @@ export async function POST(request: Request) {
     }
 
     if (!Array.isArray(programIds)) {
-      console.log("❌ Program IDs must be an array");
+      ("❌ Program IDs must be an array");
       return NextResponse.json(
         { success: false, error: "Program IDs must be an array" },
         { status: 400 }
       );
     }
 
-    console.log(`🔍 Processing institute ID: ${instituteId}, programs: ${programIds.length}`);
-
     try {
       // Delete all existing assignments for this institute
       await db
         .delete(programInstitutes)
         .where(eq(programInstitutes.instituteId, instituteId));
-
-      console.log("✅ Deleted existing assignments");
 
       // Insert new assignments
       if (programIds.length > 0) {
@@ -76,7 +68,6 @@ export async function POST(request: Request) {
         }));
 
         await db.insert(programInstitutes).values(values);
-        console.log(`✅ Inserted ${programIds.length} new assignments`);
       }
 
       return NextResponse.json({

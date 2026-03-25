@@ -61,8 +61,8 @@ export default function InstituteProgramsPage() {
         
         if (assignedData.success) {
           const assignedIds = new Set<number>();
-          assignedData.programs.forEach((p: Program) => {
-            assignedIds.add(p.id);
+          assignedData.programs.forEach((program: Program) => {
+            assignedIds.add(program.id);
           });
           setSelectedProgramIds(assignedIds);
         }
@@ -94,16 +94,23 @@ export default function InstituteProgramsPage() {
   // Select all filtered programs
   const selectAll = () => {
     const newSelected = new Set(selectedProgramIds);
-    filteredPrograms.forEach(program => newSelected.add(program.id));
+    filteredPrograms.forEach((program: Program) => newSelected.add(program.id));
     setSelectedProgramIds(newSelected);
   };
 
   // Deselect all filtered programs
   const deselectAll = () => {
     const newSelected = new Set(selectedProgramIds);
-    filteredPrograms.forEach(program => newSelected.delete(program.id));
+    filteredPrograms.forEach((program: Program) => newSelected.delete(program.id));
     setSelectedProgramIds(newSelected);
   };
+
+  // Filter programs by search
+  const filteredPrograms = allPrograms.filter((program: Program) => 
+    program.name.toLowerCase().includes(search.toLowerCase()) ||
+    program.degreeName.toLowerCase().includes(search.toLowerCase()) ||
+    (program.levelName?.toLowerCase() || "").includes(search.toLowerCase())
+  );
 
   // Save assignments
   const handleSave = async () => {
@@ -112,11 +119,6 @@ export default function InstituteProgramsPage() {
     toast.loading("Saving assignments...", { id: toastId });
 
     try {
-      console.log("📤 Sending data:", {
-        instituteId: parseInt(instituteId),
-        programIds: Array.from(selectedProgramIds),
-      });
-
       const res = await fetch("/api/admin/program-institutes", {
         method: "POST",
         headers: { 
@@ -128,22 +130,15 @@ export default function InstituteProgramsPage() {
         }),
       });
 
-      console.log("📥 Response status:", res.status);
-
-      // Get response as text first
       const responseText = await res.text();
-      console.log("📥 Raw response:", responseText);
 
-      // Check if response is empty
       if (!responseText) {
         throw new Error("Empty response from server");
       }
 
-      // Parse JSON
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log("📥 Parsed response:", data);
       } catch (parseError) {
         console.error("❌ JSON parse error:", parseError);
         throw new Error("Invalid JSON response from server");
@@ -172,13 +167,6 @@ export default function InstituteProgramsPage() {
       setSaving(false);
     }
   };
-
-  // Filter programs by search
-  const filteredPrograms = allPrograms.filter(program => 
-    program.name.toLowerCase().includes(search.toLowerCase()) ||
-    program.degreeName.toLowerCase().includes(search.toLowerCase()) ||
-    (program.levelName?.toLowerCase() || "").includes(search.toLowerCase())
-  );
 
   if (loading) {
     return (
@@ -252,7 +240,7 @@ export default function InstituteProgramsPage() {
 
       {/* Programs Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {filteredPrograms.map((program) => (
+        {filteredPrograms.map((program: Program) => (
           <div
             key={program.id}
             onClick={() => toggleProgram(program.id)}
@@ -269,6 +257,7 @@ export default function InstituteProgramsPage() {
                 type="checkbox"
                 checked={selectedProgramIds.has(program.id)}
                 onChange={() => toggleProgram(program.id)}
+                onClick={(e) => e.stopPropagation()}
                 className="mt-1 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
               />
               <div>
@@ -291,6 +280,13 @@ export default function InstituteProgramsPage() {
           </div>
         ))}
       </div>
+
+      {/* No Results */}
+      {filteredPrograms.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <p className="text-gray-500">No programs found matching "{search}"</p>
+        </div>
+      )}
     </div>
   );
 }

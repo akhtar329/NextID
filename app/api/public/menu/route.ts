@@ -11,8 +11,6 @@ export async function GET(request: Request) {
     
     // Convert null to undefined
     const categorySlug = category === null ? undefined : category;
-
-    console.log("Menu API called with:", { menuId, category: categorySlug });
     
     const data = await getMenuData(menuId, categorySlug);
     

@@ -1,4 +1,4 @@
-// app/admin/admissions/create/page.tsx (Complete Fixed Version)
+// app/admin/admissions/create/page.tsx (Updated - Only RichTextEditor for images, no separate image fields)
 
 "use client";
 
@@ -659,15 +659,21 @@ export default function CreateAdmissionPage() {
               />
             </div>
 
-            {/* Additional Notes with Rich Text Editor */}
+            {/* Additional Notes with Rich Text Editor (Images supported here) */}
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Additional Notes
+                <span className="text-xs text-gray-500 ml-2">(Supports HTML formatting, including images)</span>
+              </label>
               <RichTextEditor
                 value={note}
                 onChange={setNote}
-                placeholder="Add formatted notes, instructions, deadlines, or additional information..."
-                minHeight={200}
+                placeholder="Add formatted notes, instructions, deadlines, or additional information with images..."
+                minHeight={250}
               />
-
+              <p className="text-xs text-gray-500 mt-1">
+                💡 You can add images using the image button in the toolbar. Upload from computer or insert image URL.
+              </p>
             </div>
 
             {/* Form Actions */}
@@ -738,6 +744,9 @@ export default function CreateAdmissionPage() {
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-xs text-yellow-700">
               <strong>CSV Format:</strong> name, instituteId, programId, fullForm, year, status
+            </p>
+            <p className="text-xs text-yellow-600 mt-1">
+              💡 <strong>For notes with images:</strong> Use the Rich Text Editor in single admission mode to add formatted notes with images.
             </p>
           </div>
         </div>

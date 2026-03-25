@@ -6,7 +6,6 @@ import { institutes, cities } from "@/app/lib/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 export async function GET() {
-  console.log("🚀 GET /api/admin/institutes called");
   
   try {
     // Fetch institutes with city names
@@ -26,8 +25,6 @@ export async function GET() {
       .from(institutes)
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .orderBy(desc(institutes.createdAt));
-
-    console.log(`✅ Found ${allInstitutes.length} institutes`);
 
     return NextResponse.json({
       success: true,

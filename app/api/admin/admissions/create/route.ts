@@ -9,8 +9,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    console.log('📦 Request body:', body);
-    
     // Validation
     if (!body.name || !body.slug || !body.programIds || !body.instituteId || !body.year || !body.status) {
       return NextResponse.json(
@@ -68,8 +66,6 @@ export async function POST(request: NextRequest) {
         })
         .returning();
 
-      console.log('✅ Admission created:', newAdmission);
-
       // 2. Insert into junction table for each program
       const junctionRecords = await Promise.all(
         programIds.map(async (programId: number) => {
@@ -84,8 +80,6 @@ export async function POST(request: NextRequest) {
           return record;
         })
       );
-
-      console.log(`✅ Linked ${junctionRecords.length} programs to admission`);
 
       return { newAdmission, junctionRecords };
     });

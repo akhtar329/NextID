@@ -20,8 +20,6 @@ export async function GET(
       );
     }
 
-    console.log(`📡 Fetching degree with ID: ${numericId}`);
-
     const [degree] = await db.select().from(degrees).where(eq(degrees.id, numericId));
     
     if (!degree) {
@@ -30,8 +28,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    console.log(`✅ Degree found:`, degree);
     return NextResponse.json({ success: true, degree });
     
   } catch (err) {
@@ -60,7 +56,6 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    console.log(`📦 Update request for degree ${numericId}:`, body);
     
     const { name, slug, fullForm, levelId, categoryId, displayOrder, status } = body;
 
@@ -134,8 +129,6 @@ export async function PATCH(
     if (displayOrder !== undefined) updateData.displayOrder = Number(displayOrder);
     if (statusValue !== undefined) updateData.status = statusValue;
 
-    console.log("📤 Update data:", updateData);
-
     // Perform update
     await db.update(degrees)
       .set(updateData)
@@ -143,8 +136,6 @@ export async function PATCH(
 
     // Fetch updated degree
     const [updated] = await db.select().from(degrees).where(eq(degrees.id, numericId));
-
-    console.log(`✅ Degree ${numericId} updated successfully:`, updated);
     
     return NextResponse.json({ 
       success: true, 
@@ -196,8 +187,6 @@ export async function DELETE(
       );
     }
 
-    console.log(`🗑️ Deleting degree with ID: ${numericId}`);
-
     // Check if degree exists
     const [existing] = await db.select().from(degrees).where(eq(degrees.id, numericId));
     
@@ -227,8 +216,6 @@ export async function DELETE(
 
     // Delete degree
     await db.delete(degrees).where(eq(degrees.id, numericId));
-
-    console.log(`✅ Degree ${numericId} deleted successfully`);
     
     return NextResponse.json({ 
       success: true, 

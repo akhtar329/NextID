@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Programs bulk upload received:", body);
 
     const { programs: bulkPrograms } = body;
 
@@ -30,8 +29,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkPrograms.length} programs for bulk upload`);
-
     // Validate each program
     const errors: string[] = [];
     const validPrograms = [];
@@ -39,8 +36,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkPrograms.length; i++) {
       const prog = bulkPrograms[i];
-      
-      console.log(`🔍 Validating program ${i + 1}:`, prog);
 
       // Required fields
       if (!prog.name) {
@@ -99,8 +94,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid programs: ${validPrograms.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validPrograms.map(p => p.slug);
     const existingPrograms = await db
@@ -110,8 +103,6 @@ export async function POST(req: NextRequest) {
       })
       .from(programs)
       .where(inArray(programs.slug, allSlugs));
-
-    console.log("📚 Existing programs:", existingPrograms);
 
     const existingSlugs = new Set(existingPrograms.map(e => e.slug));
     const existingNames = new Set(existingPrograms.map(e => e.name.toLowerCase()));
@@ -136,10 +127,6 @@ export async function POST(req: NextRequest) {
       
       newPrograms.push(prog);
     }
-
-    console.log(`🆕 New programs to insert: ${newPrograms.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs.length}`);
-    console.log(`⚠️ Duplicate names: ${duplicateNames.length}`);
 
     if (newPrograms.length === 0) {
       let errorMessage = "All programs already exist";
@@ -166,8 +153,6 @@ export async function POST(req: NextRequest) {
     const inserted = await db.insert(programs)
       .values(newPrograms)
       .returning();
-
-    console.log(`✅ Successfully inserted ${inserted.length} programs`);
 
     // Create response object with all properties
     const response: {

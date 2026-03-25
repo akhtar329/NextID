@@ -33,7 +33,6 @@ export default function UniversitiesSection() {
     const fetchUniversities = async () => {
       try {
         setLoading(true);
-        console.log('📡 Fetching universities...');
         
         // API call - using public/institutes endpoint
         const response = await fetch('/api/public/institutes?limit=20');
@@ -43,19 +42,15 @@ export default function UniversitiesSection() {
         }
         
         const data = await response.json();
-        console.log('📦 API Response:', data);
         
         // Handle API response format
         let universitiesData: University[] = [];
         
         if (Array.isArray(data) && data.length > 0) {
-          console.log('✅ Universities found (array):', data.length);
           universitiesData = data;
         } else if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          console.log('✅ Universities found (data.data):', data.data.length);
           universitiesData = data.data;
         } else {
-          console.log('⚠️ No universities found');
           universitiesData = [];
         }
         

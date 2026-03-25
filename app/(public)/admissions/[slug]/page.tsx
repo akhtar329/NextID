@@ -35,6 +35,8 @@ interface InstituteType {
   description: string | null;
   website: string | null;
   city: CityType | null;
+  featuredImage?: string | null;
+  logo?: string | null;
 }
 
 interface AdmissionWithPrograms {
@@ -54,6 +56,8 @@ interface AdmissionWithPrograms {
   programCount: number;
   createdAt: Date | null;
   updatedAt: Date | null;
+  featuredImage?: string | null;
+  galleryImages?: string | null; // JSON string of image URLs
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -95,7 +99,7 @@ function getDaysRemaining(date: Date | null): number | null {
 // ==================== GET ADMISSION BY SLUG ====================
 async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms | null> {
   try {
-    console.log('🔍 Looking for admission with slug:', slug);
+
     
     const admissionResult = await db
       .select({
@@ -113,18 +117,19 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
         instituteId: admissions.instituteId,
         createdAt: admissions.createdAt,
         updatedAt: admissions.updatedAt,
+        featuredImage: admissions.featuredImage,
+        galleryImages: admissions.galleryImages,
       })
       .from(admissions)
       .where(eq(admissions.slug, slug))
       .limit(1);
     
     if (admissionResult.length === 0) {
-      console.log('❌ Admission not found with slug:', slug);
+
       return null;
     }
     
     const admission = admissionResult[0];
-    console.log('✅ Found admission:', admission.id);
     
     // Get institute details
     let institute: InstituteType | null = null;
@@ -138,6 +143,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
           description: institutes.description,
           website: institutes.website,
           cityId: institutes.cityId,
+          featuredImage: institutes.featuredImage,
         })
         .from(institutes)
         .where(eq(institutes.id, admission.instituteId))
@@ -167,7 +173,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       }
     }
 
-    // ✅ Get ALL programs for this admission
+    // Get ALL programs for this admission
     const programList = await db
       .select({
         id: programs.id,
@@ -183,9 +189,6 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       .from(admissionPrograms)
       .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
       .where(eq(admissionPrograms.admissionId, admission.id));
-
-    console.log('📚 Found programs count:', programList.length);
-    console.log('📚 Programs:', programList.map(p => p.name));
 
     // Get degree names for programs
     const programsWithDegrees: ProgramWithDetails[] = await Promise.all(
@@ -377,6 +380,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 
   const canonicalUrl = `https://www.nextid.pk/admissions/${admission.slug}`;
+  
+  // Use featured image if available
+  const ogImage = admission.featuredImage || '/images/og-admissions.jpg';
 
   return {
     title: generateMetaTitle(admission),
@@ -395,7 +401,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       locale: 'en_PK',
       images: [
         {
-          url: '/images/og-admissions.jpg',
+          url: ogImage,
           width: 1200,
           height: 630,
           alt: `${admission.institute?.name} Admissions ${admission.year}`,
@@ -406,7 +412,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       card: 'summary_large_image',
       title: generateMetaTitle(admission),
       description: generateMetaDescription(admission),
-      images: ['/images/og-admissions.jpg'],
+      images: [ogImage],
     },
     robots: {
       index: true,
@@ -436,10 +442,10 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
   const statusBadge = getStatusBadge(admission.status);
   const daysRemaining = getDaysRemaining(admission.expectedCloseDate);
   
-  // ✅ Get ALL programs - no filtering by degree level
+  // Get ALL programs
   const allPrograms = admission.programs;
   
-  // ✅ Group programs by degree level for display (optional, but keep original)
+  // Group programs by degree level
   const undergradPrograms = admission.programs.filter(p => 
     p.degreeName?.toLowerCase().includes('bachelor') || 
     p.degreeName?.toLowerCase().includes('bs') ||
@@ -458,12 +464,15 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
     p.degreeName?.toLowerCase().includes('certificate')
   );
 
-  console.log('📊 Program Breakdown:');
-  console.log('  - Total Programs:', allPrograms.length);
-  console.log('  - Undergraduate:', undergradPrograms.length);
-  console.log('  - Graduate:', gradPrograms.length);
-  console.log('  - Diploma/Certificate:', diplomaPrograms.length);
-  console.log('  - Program Names:', allPrograms.map(p => p.name).join(', '));
+  // Parse gallery images
+  let galleryImagesArray: string[] = [];
+  if (admission.galleryImages) {
+    try {
+      galleryImagesArray = JSON.parse(admission.galleryImages);
+    } catch (e) {
+      console.error('Error parsing gallery images:', e);
+    }
+  }
 
   // Convert dates to ISO strings for serialization
   const serializedAdmission = {
@@ -472,6 +481,8 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
     expectedCloseDate: admission.expectedCloseDate?.toISOString() || null,
     createdAt: admission.createdAt?.toISOString() || null,
     updatedAt: admission.updatedAt?.toISOString() || null,
+    featuredImage: admission.featuredImage || null,
+    galleryImages: galleryImagesArray,
   };
 
   // Prepare data for client component
@@ -481,9 +492,9 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
     cityAdmissions: cityAdmissions || [],
     statusBadge,
     daysRemaining,
-    undergradPrograms: undergradPrograms,  // ✅ Pass all programs
-    gradPrograms: gradPrograms,            // ✅ Pass all programs
-    diplomaPrograms: diplomaPrograms,      // ✅ Pass all programs
+    undergradPrograms: undergradPrograms,
+    gradPrograms: gradPrograms,
+    diplomaPrograms: diplomaPrograms,
     formattedPostedDate: formatShortDate(admission.createdAt) || '—',
     formattedLastDate: formatShortDate(admission.expectedCloseDate) || 'TBA',
     formattedDeadline: formatDate(admission.expectedCloseDate) || 'TBA',

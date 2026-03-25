@@ -33,19 +33,14 @@ export default function LatestResultsSection() {
     const fetchResults = async () => {
       try {
         setLoading(true);
-        console.log('📡 Fetching results...');
         
         const response = await fetch('/api/public/results?limit=50&sort=latest');
         const data = await response.json();
         
-        console.log('📦 API Response:', data);
-        
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          console.log('✅ Results found:', data.data.length);
           setResults(data.data);
           setHasData(true);
         } else {
-          console.log('⚠️ No results found');
           setResults([]);
           setHasData(false);
         }

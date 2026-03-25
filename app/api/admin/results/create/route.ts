@@ -6,11 +6,9 @@ import { results } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
-  console.log("🚀 POST /api/admin/results/create called");
   
   try {
     const body = await request.json();
-    console.log("📦 Request body:", body);
 
     // Validate required fields
     if (!body.title || !body.year || !body.slug) {
@@ -59,12 +57,6 @@ export async function POST(request: Request) {
         updatedAt: new Date(),
       })
       .returning();
-
-    console.log("✅ Result created:", {
-      id: newResult[0].id,
-      title: newResult[0].title,
-      slug: newResult[0].slug
-    });
 
     return NextResponse.json({
       success: true,

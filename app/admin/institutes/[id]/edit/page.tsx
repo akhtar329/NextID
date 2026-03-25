@@ -36,9 +36,9 @@ export default function EditInstitutePage() {
   const [website, setWebsite] = useState("");
   const [status, setStatus] = useState(true);
   const [slugEdited, setSlugEdited] = useState(false);
-  
+
   // Data states
-  const [cities, setCities] = useState<{ id: number; name: string; }[]>([]);
+  const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,16 +64,13 @@ export default function EditInstitutePage() {
   useEffect(() => {
     async function fetchInstitute() {
       if (!instituteId) return;
-      
+
       setFetchLoading(true);
       setError(null);
-      
+
       try {
-        console.log("📤 Fetching institute ID:", instituteId);
-        
         const res = await fetch(`/api/admin/institutes/${instituteId}`);
-        console.log("📥 Response status:", res.status);
-        
+
         // Check if response is OK
         if (!res.ok) {
           if (res.status === 404) {
@@ -81,33 +78,30 @@ export default function EditInstitutePage() {
           }
           throw new Error(`HTTP error ${res.status}`);
         }
-        
+
         // Get response text
         const text = await res.text();
-        console.log("📥 Raw response length:", text.length);
-        
+
         if (!text) {
           throw new Error("Empty response from server");
         }
-        
+
         // Parse JSON
         let data;
         try {
           data = JSON.parse(text);
-          console.log("📥 Parsed data:", data);
         } catch (parseError) {
           console.error("❌ Parse error:", parseError);
           throw new Error("Invalid response from server");
         }
-        
+
         if (!data.success) {
           throw new Error(data.error || "Failed to load institute");
         }
-        
+
         if (data.institute) {
           const institute = data.institute;
-          console.log("✅ Institute loaded:", institute);
-          
+
           // Set form values
           setName(institute.name || "");
           setSlug(institute.slug || "");
@@ -120,16 +114,19 @@ export default function EditInstitutePage() {
         } else {
           throw new Error("Institute data not found in response");
         }
-        
       } catch (err) {
         console.error("❌ Error fetching institute:", err);
-        setError(err instanceof Error ? err.message : "Failed to load institute");
-        toast.error(err instanceof Error ? err.message : "Failed to load institute");
+        setError(
+          err instanceof Error ? err.message : "Failed to load institute",
+        );
+        toast.error(
+          err instanceof Error ? err.message : "Failed to load institute",
+        );
       } finally {
         setFetchLoading(false);
       }
     }
-    
+
     if (instituteId) {
       fetchInstitute();
     }
@@ -168,11 +165,9 @@ export default function EditInstitutePage() {
     toast.loading(`Updating "${name}"...`, { id: toastId });
 
     try {
-      console.log("📤 Submitting update for ID:", instituteId);
-      
       const res = await fetch(`/api/admin/institutes/${instituteId}`, {
         method: "PUT",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -186,11 +181,8 @@ export default function EditInstitutePage() {
         }),
       });
 
-      console.log("📥 Update response status:", res.status);
-
       // Get response text
       const text = await res.text();
-      console.log("📥 Raw update response:", text);
 
       if (!text) {
         throw new Error("Empty response from server");
@@ -200,32 +192,37 @@ export default function EditInstitutePage() {
       let data;
       try {
         data = JSON.parse(text);
-        console.log("📥 Parsed update response:", data);
       } catch (parseError) {
         console.error("❌ Parse error:", parseError);
         throw new Error("Invalid response from server");
       }
 
       if (!res.ok) {
-        throw new Error(data.error || data.details || `HTTP error ${res.status}`);
+        throw new Error(
+          data.error || data.details || `HTTP error ${res.status}`,
+        );
       }
 
       if (data.success) {
-        toast.success(`"${name}" updated successfully!`, { 
+        toast.success(`"${name}" updated successfully!`, {
           id: toastId,
-          duration: 3000 
+          duration: 3000,
         });
         router.push("/admin/institutes");
       } else {
         throw new Error(data.error || "Failed to update institute");
       }
-
     } catch (err) {
       console.error("❌ Error updating institute:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to update institute", { 
-        id: toastId 
-      });
-      setError(err instanceof Error ? err.message : "Failed to update institute");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update institute",
+        {
+          id: toastId,
+        },
+      );
+      setError(
+        err instanceof Error ? err.message : "Failed to update institute",
+      );
     } finally {
       setLoading(false);
     }
@@ -250,8 +247,8 @@ export default function EditInstitutePage() {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-8 rounded text-center">
           <div className="text-4xl mb-4">🏛️</div>
           <p className="mb-4">{error}</p>
-          <Link 
-            href="/admin/institutes" 
+          <Link
+            href="/admin/institutes"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             ← Back to Institutes
@@ -270,11 +267,16 @@ export default function EditInstitutePage() {
             Dashboard
           </Link>
           <span className="mx-2">›</span>
-          <Link href="/admin/institutes" className="hover:text-blue-600 transition-colors">
+          <Link
+            href="/admin/institutes"
+            className="hover:text-blue-600 transition-colors"
+          >
             Institutes
           </Link>
           <span className="mx-2">›</span>
-          <span className="text-gray-700 font-medium">Edit: {instituteName}</span>
+          <span className="text-gray-700 font-medium">
+            Edit: {instituteName}
+          </span>
         </div>
 
         <div className="flex items-center justify-between">
@@ -283,8 +285,18 @@ export default function EditInstitutePage() {
             href="/admin/institutes"
             className="inline-flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
             View All Institutes
           </Link>
@@ -299,7 +311,10 @@ export default function EditInstitutePage() {
       )}
 
       {/* Edit Form */}
-      <form className="bg-white p-6 rounded-lg shadow-sm border space-y-4" onSubmit={handleSubmit}>
+      <form
+        className="bg-white p-6 rounded-lg shadow-sm border space-y-4"
+        onSubmit={handleSubmit}
+      >
         <Input
           label="Institute Name *"
           value={name}
@@ -333,10 +348,10 @@ export default function EditInstitutePage() {
           onChange={(val: number) => setCityId(val)}
           options={[
             { value: 0, label: "Select City" },
-            ...cities.map(c => ({
+            ...cities.map((c) => ({
               value: c.id,
               label: c.name,
-            }))
+            })),
           ]}
           required
         />
@@ -385,8 +400,20 @@ export default function EditInstitutePage() {
             {loading ? (
               <span className="flex items-center gap-2">
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Updating...
               </span>
@@ -394,7 +421,7 @@ export default function EditInstitutePage() {
               "Update Institute"
             )}
           </PrimaryButton>
-          
+
           <Link
             href="/admin/institutes"
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"

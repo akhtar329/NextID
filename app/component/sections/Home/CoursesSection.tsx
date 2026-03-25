@@ -33,7 +33,7 @@ export default function CoursesSection() {
     const fetchPrograms = async () => {
       try {
         setLoading(true);
-        console.log('📡 Fetching programs...');
+  
         
         const response = await fetch('/api/public/programs?limit=50');
         
@@ -42,19 +42,15 @@ export default function CoursesSection() {
         }
         
         const data = await response.json();
-        console.log('📦 API Response:', data);
         
         // Handle both response formats
         let programsData: Program[] = [];
         
         if (Array.isArray(data) && data.length > 0) {
-          console.log('✅ Programs found (array):', data.length);
           programsData = data;
         } else if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          console.log('✅ Programs found (data.data):', data.data.length);
           programsData = data.data;
         } else {
-          console.log('⚠️ No programs found');
           programsData = [];
         }
         

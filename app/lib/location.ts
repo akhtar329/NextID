@@ -20,7 +20,6 @@ export async function getLocationFromIP(ip: string): Promise<LocationInfo | null
   try {
     // 📌 Localhost/development IPs ke liye fake data return karo
     if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
-      console.log('📍 Development environment detected, returning default location');
       return {
         country: 'Pakistan',
         countryCode: 'PK',

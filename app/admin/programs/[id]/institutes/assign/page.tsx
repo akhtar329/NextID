@@ -106,10 +106,6 @@ export default function ProgramInstitutesAssignPage() {
     toast.loading("Saving assignments...", { id: toastId });
 
     try {
-      console.log("📤 Sending data:", {
-        programId: parseInt(programId),
-        instituteIds: Array.from(selectedInstituteIds),
-      });
 
       const res = await fetch("/api/admin/program-institutes", {
         method: "POST",
@@ -123,7 +119,6 @@ export default function ProgramInstitutesAssignPage() {
       });
 
       const responseText = await res.text();
-      console.log("📥 Raw response:", responseText);
 
       if (!responseText) {
         throw new Error("Empty response from server");

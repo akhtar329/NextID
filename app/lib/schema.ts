@@ -102,6 +102,9 @@ export const institutes = pgTable("institutes", {
   description: text("description"),
   website: varchar("website", { length: 255 }),
   isFeatured: boolean("is_featured").default(false),
+  // 👇 ADD THIS
+  featuredImage: varchar("featured_image", { length: 500 }),
+  logo: varchar("logo", { length: 500 }),
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -179,6 +182,9 @@ export const admissions = pgTable("admissions", {
   meritInfo: text("merit_info"),
   note: text("note"),
   officialLink: varchar("official_link", { length: 255 }),
+  // 👇 ADD THESE
+  featuredImage: varchar("featured_image", { length: 500 }),
+  galleryImages: text("gallery_images"), // JSON array
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

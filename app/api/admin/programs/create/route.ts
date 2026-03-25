@@ -6,7 +6,6 @@ import { programs } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
-  console.log("🚀 POST /api/admin/programs/create - START");
 
   try {
     // Parse request body
@@ -38,7 +37,6 @@ export async function POST(request: Request) {
 
     // Validate required fields
     if (!name || !slug || !degreeId) {
-      console.log("❌ Missing required fields:", { name, slug, degreeId });
       return NextResponse.json(
         { 
           success: false, 
@@ -56,7 +54,6 @@ export async function POST(request: Request) {
       .limit(1);
 
     if (existing.length > 0) {
-      console.log("❌ Slug already exists:", slug);
       return NextResponse.json(
         { 
           success: false, 
@@ -82,8 +79,6 @@ export async function POST(request: Request) {
       status: status !== undefined ? status : true,
       // created_at and updated_at automatically set by database default
     }).returning();
-
-    console.log("✅ Program created successfully:", newProgram[0]);
     return NextResponse.json({ 
       success: true, 
       program: newProgram[0],
@@ -110,6 +105,5 @@ export async function POST(request: Request) {
     }, { status: 500 });
     
   } finally {
-    console.log("🏁 POST /api/admin/programs/create - END");
   }
 }

@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Degrees bulk upload received:", body);
 
     const { degrees: bulkDegrees } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkDegrees.length} degrees for bulk upload`);
-
     // Validate each degree
     const errors: string[] = [];
     const validDegrees = [];
@@ -38,8 +35,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkDegrees.length; i++) {
       const deg = bulkDegrees[i];
-      
-      console.log(`🔍 Validating degree ${i + 1}:`, deg);
 
       // Required fields
       if (!deg.name) {
@@ -99,8 +94,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid degrees: ${validDegrees.length}`);
-
     // Check for existing degrees with same name
     const newDegrees = [];
     const duplicateNames = [];
@@ -118,9 +111,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(`🆕 New degrees to insert: ${newDegrees.length}`);
-    console.log(`⚠️ Duplicate names: ${duplicateNames.length}`);
-
     if (newDegrees.length === 0) {
       return NextResponse.json(
         { 
@@ -136,8 +126,6 @@ export async function POST(req: NextRequest) {
     const inserted = await db.insert(degrees)
       .values(newDegrees)
       .returning();
-
-    console.log(`✅ Successfully inserted ${inserted.length} degrees`);
 
     const response: any = {
       success: true,

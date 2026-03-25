@@ -5,7 +5,6 @@ import { boards, cities } from "@/app/lib/schema"; // ✅ Boards table import
 import { eq, desc } from "drizzle-orm";
 
 export async function GET() {
-  console.log("🚀 GET /api/admin/boards called");
 
   try {
     // Boards table se saare boards fetch karo
@@ -24,8 +23,6 @@ export async function GET() {
       .from(boards)
       .leftJoin(cities, eq(boards.cityId, cities.id))
       .orderBy(desc(boards.createdAt));
-
-    console.log(`✅ Found ${allBoards.length} boards from boards table`);
 
     return NextResponse.json({
       success: true,

@@ -14,14 +14,11 @@ async function updatePassword() {
     const newPassword = process.argv[3];
     
     if (!newPassword) {
-        console.log('Usage: node update-password.cjs [user_id] [new_password]');
-        console.log('Example: node update-password.cjs 6 Akhtar123');
         process.exit(1);
     }
     
     try {
         await client.connect();
-        console.log('✓ Connected to database');
         
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         
@@ -34,14 +31,7 @@ async function updatePassword() {
         );
         
         if (result.rows.length > 0) {
-            console.log('\n✓ Password updated successfully!');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log(`User ID: ${result.rows[0].id}`);
-            console.log(`Name: ${result.rows[0].name}`);
-            console.log(`Email: ${result.rows[0].email}`);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         } else {
-            console.log(`✗ User with ID ${userId} not found`);
         }
         
         await client.end();

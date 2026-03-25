@@ -10,7 +10,6 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 GET /api/admin/cities/[id] called");
   
   try {
     const { id } = await params;
@@ -36,8 +35,6 @@ export async function GET(
       );
     }
 
-    console.log("✅ City fetched:", city[0].name);
-
     return NextResponse.json({
       success: true,
       city: city[0],
@@ -61,7 +58,6 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PATCH /api/admin/cities/[id] called");
   
   try {
     const { id } = await params;
@@ -75,7 +71,6 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    console.log("📦 Update data:", body);
 
     // Check if exists
     const existing = await db
@@ -122,8 +117,6 @@ export async function PATCH(
       .where(eq(cities.id, cityId))
       .returning();
 
-    console.log("✅ City updated:", cityId);
-
     return NextResponse.json({
       success: true,
       city: updated[0],
@@ -148,7 +141,6 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PUT /api/admin/cities/[id] called");
   
   try {
     const { id } = await params;
@@ -162,7 +154,6 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log("📦 Full update data:", body);
 
     // Validate
     if (!body.name || !body.slug) {
@@ -213,8 +204,6 @@ export async function PUT(
       .where(eq(cities.id, cityId))
       .returning();
 
-    console.log("✅ City updated fully:", cityId);
-
     return NextResponse.json({
       success: true,
       city: updated[0],
@@ -239,7 +228,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 DELETE /api/admin/cities/[id] called");
   
   try {
     const { id } = await params;
@@ -270,8 +258,6 @@ export async function DELETE(
     await db
       .delete(cities)
       .where(eq(cities.id, cityId));
-
-    console.log("✅ City deleted:", cityId);
 
     return NextResponse.json({
       success: true,

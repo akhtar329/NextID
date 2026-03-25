@@ -9,8 +9,6 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const { visitorId, sessionId, entryPage, pageViews, startedAt, lastActive } = data;
     
-    console.log('🔄 Session update received:', { visitorId, sessionId, entryPage });
-    
     // Validate required fields
     if (!visitorId || !sessionId) {
       return NextResponse.json(
@@ -36,7 +34,6 @@ export async function POST(request: NextRequest) {
         startedAt: startedAt ? new Date(startedAt) : new Date(),
         lastActive: lastActive ? new Date(lastActive) : new Date(),
       });
-      console.log('✅ New session created:', sessionId);
       return NextResponse.json({ 
         success: true, 
         message: 'Session created successfully' 
@@ -51,8 +48,6 @@ export async function POST(request: NextRequest) {
           exitPage: entryPage || existingSession[0].exitPage,
         })
         .where(eq(visitorSessions.sessionId, sessionId));
-      
-      console.log('✅ Session updated:', sessionId);
       return NextResponse.json({ 
         success: true, 
         message: 'Session updated successfully' 

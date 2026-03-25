@@ -6,7 +6,6 @@ import { admissions, admissionPrograms, programs, institutes, cities } from "@/a
 import { eq, and, desc, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
-  console.log("🚀 GET /api/admin/admissions called");
   
   try {
     const { searchParams } = new URL(request.url);
@@ -59,8 +58,6 @@ export async function GET(request: NextRequest) {
       .innerJoin(cities, eq(institutes.cityId, cities.id))
       .where(whereClause)
       .orderBy(desc(admissions.year), desc(admissions.createdAt));
-
-    console.log(`✅ Found ${admissionsList.length} admissions`);
 
     // Now fetch programs for each admission
     const admissionsWithPrograms = await Promise.all(

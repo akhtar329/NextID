@@ -10,11 +10,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 GET /api/admin/institutes/[id] called");
   
   try {
     const { id } = await params;
-    console.log("📦 ID:", id);
     
     const instituteId = parseInt(id);
 
@@ -51,8 +49,6 @@ export async function GET(
       );
     }
 
-    console.log("✅ Institute fetched:", institute[0].name);
-
     return NextResponse.json({
       success: true,
       institute: institute[0],
@@ -76,7 +72,6 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PATCH /api/admin/institutes/[id] called");
   
   try {
     const { id } = await params;
@@ -90,7 +85,6 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    console.log("📦 PATCH data:", body);
 
     // Check if exists
     const existing = await db
@@ -148,8 +142,6 @@ export async function PATCH(
       .where(eq(institutes.id, instituteId))
       .returning();
 
-    console.log("✅ Institute patched:", instituteId);
-
     return NextResponse.json({
       success: true,
       institute: updated[0],
@@ -174,7 +166,6 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 PUT /api/admin/institutes/[id] called");
   
   try {
     const { id } = await params;
@@ -188,7 +179,6 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log("📦 PUT data:", body);
 
     // Validate required fields
     if (!body.name || !body.slug || !body.type || !body.cityId) {
@@ -252,8 +242,6 @@ export async function PUT(
       .where(eq(institutes.id, instituteId))
       .returning();
 
-    console.log("✅ Institute updated fully:", instituteId);
-
     return NextResponse.json({
       success: true,
       institute: updated[0],
@@ -278,7 +266,6 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log("🚀 DELETE /api/admin/institutes/[id] called");
   
   try {
     const { id } = await params;
@@ -309,8 +296,6 @@ export async function DELETE(
     await db
       .delete(institutes)
       .where(eq(institutes.id, instituteId));
-
-    console.log("✅ Institute deleted:", instituteId);
 
     return NextResponse.json({
       success: true,

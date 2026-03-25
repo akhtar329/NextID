@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Bulk upload received:", body);
 
     const { categories: bulkCategories } = body;
 
@@ -25,8 +24,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    console.log(`📊 Processing ${bulkCategories.length} categories`);
 
     // Validate each category
     const errors: string[] = [];
@@ -106,12 +103,8 @@ export async function POST(req: NextRequest) {
           ...cat,
           slug: uniqueSlug
         });
-        
-        console.log(`🔄 Slug "${cat.slug}" already exists, using "${uniqueSlug}" instead`);
       }
     }
-
-    console.log(`🆕 New categories to insert: ${newCategories.length}`);
 
     if (newCategories.length === 0) {
       return NextResponse.json(
@@ -160,7 +153,6 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(result[0]);
-        console.log(`✅ Inserted: ${cat.name} -> ${cat.slug}`);
       } catch (err) {
         console.error(`❌ Failed to insert ${cat.name}:`, err);
         failed.push(cat.name);

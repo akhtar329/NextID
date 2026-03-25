@@ -6,15 +6,13 @@ import { cities } from "@/app/lib/schema";
 import { desc } from "drizzle-orm";
 
 export async function GET() {
-  console.log("🚀 GET /api/admin/cities called");
+
   
   try {
     const allCities = await db
       .select()
       .from(cities)
       .orderBy(desc(cities.createdAt));
-
-    console.log(`✅ Found ${allCities.length} cities`);
 
     return NextResponse.json({
       success: true,

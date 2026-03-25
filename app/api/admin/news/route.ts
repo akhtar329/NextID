@@ -6,7 +6,6 @@ import { news, programs, institutes, cities } from "@/app/lib/schema";
 import { desc, eq } from "drizzle-orm";
 
 export async function GET(request: Request) {
-  console.log("🚀 GET /api/admin/news called");
   
   try {
     const { searchParams } = new URL(request.url);

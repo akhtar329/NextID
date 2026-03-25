@@ -1,7 +1,10 @@
 // app/(public)/news/[slug]/NewsDetailClient.tsx
+
 "use client";
 
 import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { NewsDetail, RelatedNews } from './page';
 
 // ==================== FORMAT DATE FUNCTION ====================
@@ -32,12 +35,25 @@ interface NewsDetailClientProps {
 }
 
 export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsDetailClientProps) {
-  // Format content with paragraphs
-  const contentParagraphs = newsItem.content.split('\n\n').filter(p => p.trim());
+  const [copied, setCopied] = useState(false);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(`https://www.nextid.pk/news/${newsItem.slug}`);
-    alert('Link copied to clipboard!');
+    setCopied(true);
+    toast.success('Link copied to clipboard!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // ✅ Process HTML content - preserves formatting
+  const renderContent = () => {
+    if (!newsItem.content) return null;
+    
+    return (
+      <div 
+        className="prose prose-lg max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4 prose-strong:text-gray-900 prose-em:text-gray-600 prose-ul:list-disc prose-ul:pl-5 prose-ol:list-decimal prose-ol:pl-5 prose-li:mb-1 prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-800"
+        dangerouslySetInnerHTML={{ __html: newsItem.content }}
+      />
+    );
   };
 
   return (
@@ -174,13 +190,9 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
                 </div>
               )}
 
-              {/* Article Content */}
+              {/* ✅ Article Content with HTML Formatting */}
               <div className="prose prose-lg max-w-none">
-                {contentParagraphs.map((paragraph, index) => (
-                  <p key={index} className="mb-4 text-gray-700 leading-relaxed">
-                    {paragraph}
-                  </p>
-                ))}
+                {renderContent()}
               </div>
 
               {/* Article Footer */}
@@ -295,13 +307,77 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
                   onClick={copyToClipboard}
                   className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
                 >
-                  📋 Copy Link
+                  {copied ? '✓ Copied!' : '📋 Copy Link'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Add Tailwind Typography for better HTML rendering */}
+      <style jsx global>{`
+        .prose {
+          font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+        .prose h1 {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-top: 1.5rem;
+          margin-bottom: 1rem;
+        }
+        .prose h2 {
+          font-size: 1.5rem;
+          font-weight: 600;
+          margin-top: 1.25rem;
+          margin-bottom: 0.75rem;
+        }
+        .prose h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin-top: 1rem;
+          margin-bottom: 0.5rem;
+        }
+        .prose p {
+          margin-bottom: 1rem;
+          line-height: 1.6;
+        }
+        .prose ul, .prose ol {
+          margin-bottom: 1rem;
+          padding-left: 1.5rem;
+        }
+        .prose li {
+          margin-bottom: 0.25rem;
+        }
+        .prose strong {
+          font-weight: 600;
+          color: #111827;
+        }
+        .prose em {
+          font-style: italic;
+          color: #4b5563;
+        }
+        .prose a {
+          color: #2563eb;
+          text-decoration: underline;
+        }
+        .prose a:hover {
+          color: #1d4ed8;
+        }
+        .prose blockquote {
+          border-left: 4px solid #e5e7eb;
+          padding-left: 1rem;
+          margin: 1rem 0;
+          font-style: italic;
+          color: #4b5563;
+        }
+        .prose img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 0.5rem;
+          margin: 1rem 0;
+        }
+      `}</style>
 
       {/* JSON-LD Structured Data */}
       <script
@@ -330,18 +406,7 @@ export default function NewsDetailClient({ newsItem, relatedNews, stats }: NewsD
             "mainEntityOfPage": {
               "@type": "WebPage",
               "@id": `https://www.nextid.pk/news/${newsItem.slug}`
-            },
-            "keywords": [
-              newsItem.programName,
-              newsItem.instituteName,
-              newsItem.boardName,
-              newsItem.cityName,
-              "Education News",
-              "Pakistan"
-            ].filter(Boolean).join(','),
-            "articleSection": "Education",
-            "inLanguage": "en-PK",
-            "isAccessibleForFree": true,
+            }
           })
         }}
       />

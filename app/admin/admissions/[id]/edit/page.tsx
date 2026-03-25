@@ -180,8 +180,6 @@ export default function EditAdmissionPage() {
         const admissionRes = await fetch(`/api/admin/admissions/${admissionId}`);
         const admissionData = await admissionRes.json();
         
-        console.log('Admission data from API:', admissionData);
-        
         if (admissionData.success && admissionData.admission) {
           const ad: Admission = admissionData.admission;
           

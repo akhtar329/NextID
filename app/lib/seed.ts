@@ -10,13 +10,11 @@ import { eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
 
 async function seed() {
-  console.log("🌱 Starting seed...");
 
   try {
     /* =========================
        FIRST: Delete existing data in correct order
        ========================= */
-    console.log("🗑️ Cleaning up existing data...");
     
     // Pehle child tables delete karo
     await db.delete(admissionPrograms);  // ✅ New junction table
@@ -36,25 +34,19 @@ async function seed() {
     // Last mein admin tables
     await db.delete(adminUsers);
     await db.delete(adminRoles);
-    
-    console.log("✅ Cleanup complete");
 
     /* =========================
        1. ADMIN ROLES
        ========================= */
-    console.log("Creating admin roles...");
     
     await db.insert(adminRoles).values([
       { id: 1, name: "SuperAdmin", description: "Full access", status: true },
       { id: 2, name: "Editor", description: "Content edit access", status: true },
     ]);
-    
-    console.log("✅ Admin roles created");
 
     /* =========================
        2. ADMIN USERS
        ========================= */
-    console.log("Creating admin user...");
     const hashedPassword = await hash("Admin@123456", 10);
     
     await db.insert(adminUsers).values([
@@ -66,12 +58,10 @@ async function seed() {
         status: true,
       },
     ]);
-    console.log("✅ Admin user created");
 
     /* =========================
        3. CATEGORIES
        ========================= */
-    console.log("Creating categories...");
     await db.insert(categories).values([
       { id: 1, name: "Engineering", slug: "engineering", displayOrder: 1, status: true },
       { id: 2, name: "Medical", slug: "medical", displayOrder: 2, status: true },
@@ -81,12 +71,10 @@ async function seed() {
       { id: 6, name: "Education", slug: "education", displayOrder: 6, status: true },
       { id: 7, name: "Arts", slug: "arts", displayOrder: 7, status: true },
     ]);
-    console.log("✅ Categories created");
 
     /* =========================
        4. LEVELS
        ========================= */
-    console.log("Creating levels...");
     await db.insert(levels).values([
       { id: 1, name: "Matric", slug: "matric", displayOrder: 1, status: true },
       { id: 2, name: "Intermediate", slug: "intermediate", displayOrder: 2, status: true },
@@ -94,12 +82,10 @@ async function seed() {
       { id: 4, name: "Master", slug: "master", displayOrder: 4, status: true },
       { id: 5, name: "PhD", slug: "phd", displayOrder: 5, status: true },
     ]);
-    console.log("✅ Levels created");
 
     /* =========================
        5. DEGREES - FIXED: Added slug field
        ========================= */
-    console.log("Creating degrees...");
     await db.insert(degrees).values([
       { id: 1, name: "BS", slug: "bs", fullForm: "Bachelor of Science", levelId: 3, categoryId: 4, displayOrder: 1, status: true },
       { id: 2, name: "BE", slug: "be", fullForm: "Bachelor of Engineering", levelId: 3, categoryId: 1, displayOrder: 1, status: true },
@@ -114,12 +100,10 @@ async function seed() {
       { id: 11, name: "ME", slug: "me", fullForm: "Master of Engineering", levelId: 4, categoryId: 1, displayOrder: 2, status: true },
       { id: 12, name: "PhD", slug: "phd", fullForm: "Doctor of Philosophy", levelId: 5, categoryId: 4, displayOrder: 3, status: true },
     ]);
-    console.log("✅ Degrees created");
 
     /* =========================
        6. CITIES
        ========================= */
-    console.log("Creating cities...");
     await db.insert(cities).values([
       { id: 1, name: "Karachi", slug: "karachi", province: "Sindh", isPopular: true, status: true },
       { id: 2, name: "Lahore", slug: "lahore", province: "Punjab", isPopular: true, status: true },
@@ -132,12 +116,10 @@ async function seed() {
       { id: 9, name: "Hyderabad", slug: "hyderabad", province: "Sindh", isPopular: false, status: true },
       { id: 10, name: "Sukkur", slug: "sukkur", province: "Sindh", isPopular: false, status: true },
     ]);
-    console.log("✅ Cities created");
 
     /* =========================
        7. INSTITUTES
        ========================= */
-    console.log("Creating institutes...");
     await db.insert(institutes).values([
       // Karachi
       { id: 1, name: "University of Karachi", slug: "university-of-karachi", type: "Public", cityId: 1, isFeatured: true, status: true },
@@ -167,12 +149,10 @@ async function seed() {
       // Quetta
       { id: 18, name: "University of Balochistan", slug: "university-of-balochistan", type: "Public", cityId: 8, isFeatured: false, status: true },
     ]);
-    console.log("✅ Institutes created");
 
     /* =========================
        8. BOARDS
        ========================= */
-    console.log("Creating boards...");
     await db.insert(boards).values([
       { id: 1, name: "FBISE Islamabad", slug: "fbise", cityId: 3, status: true },
       { id: 2, name: "BISE Karachi", slug: "bise-karachi", cityId: 1, status: true },
@@ -185,12 +165,10 @@ async function seed() {
       { id: 9, name: "BISE Hyderabad", slug: "bise-hyderabad", cityId: 9, status: true },
       { id: 10, name: "BISE Sukkur", slug: "bise-sukkur", cityId: 10, status: true },
     ]);
-    console.log("✅ Boards created");
 
     /* =========================
        9. PROGRAMS
        ========================= */
-    console.log("Creating programs...");
     
     let programId = 1;
     const programValues = [
@@ -256,12 +234,10 @@ async function seed() {
         status: true
       });
     }
-    console.log(`✅ ${programValues.length} Programs created`);
 
     /* =========================
        10. PROGRAM-INSTITUTE RELATIONS
        ========================= */
-    console.log("Creating program-institute relations...");
     const allPrograms = await db.select().from(programs);
     const allInstitutes = await db.select().from(institutes);
 
@@ -279,12 +255,11 @@ async function seed() {
         relationCount++;
       }
     }
-    console.log(`✅ ${relationCount} Program-Institute relations created`);
+  
 
     /* =========================
        11. PROGRAM-CITY RELATIONS
        ========================= */
-    console.log("Creating program-city relations...");
     const allCities = await db.select().from(cities);
     const popularCities = allCities.filter(c => c.isPopular);
     const otherCities = allCities.filter(c => !c.isPopular);
@@ -312,12 +287,10 @@ async function seed() {
         cityRelationCount++;
       }
     }
-    console.log(`✅ ${cityRelationCount} Program-City relations created`);
 
     /* =========================
        12. ADMISSIONS - ✅ FIXED: No programId, only name/slug/instituteId
        ========================= */
-    console.log("Creating admissions...");
     const currentYear = new Date().getFullYear();
     let admissionCount = 0;
     const admissionIds: number[] = [];
@@ -359,12 +332,10 @@ async function seed() {
         admissionCount++;
       }
     }
-    console.log(`✅ ${admissionCount} Admissions created`);
 
     /* =========================
        13. ADMISSION-PROGRAM RELATIONS - ✅ NEW: Link admissions to multiple programs
        ========================= */
-    console.log("Creating admission-program relations...");
     let admissionProgramCount = 0;
     
     // For each admission, link it to 1-4 random programs
@@ -389,7 +360,7 @@ async function seed() {
         admissionProgramCount++;
       }
     }
-    console.log(`✅ ${admissionProgramCount} Admission-Program relations created`);
+  
 
     /* =========================
        📊 SUMMARY
@@ -402,20 +373,6 @@ async function seed() {
     const finalCityRelations = await db.select().from(programCities);
     const finalAdmissions = await db.select().from(admissions);
     const finalAdmissionPrograms = await db.select().from(admissionPrograms);
-
-    console.log("\n✅✅✅ Seed Completed Successfully! ✅✅✅");
-    console.log("📊 Final Summary:");
-    console.log(`- Categories: ${finalCategories.length}`);
-    console.log(`- Levels: 5`);
-    console.log(`- Degrees: 12`);
-    console.log(`- Programs: ${finalPrograms.length}`);
-    console.log(`- Institutes: ${finalInstitutes.length}`);
-    console.log(`- Cities: ${finalCities.length}`);
-    console.log(`- Boards: 10`);
-    console.log(`- Program-Institute Relations: ${finalRelations.length}`);
-    console.log(`- Program-City Relations: ${finalCityRelations.length}`);
-    console.log(`- Admissions: ${finalAdmissions.length}`);
-    console.log(`- Admission-Program Relations: ${finalAdmissionPrograms.length}`);
 
   } catch (error) {
     console.error("❌ Error during seed:", error);

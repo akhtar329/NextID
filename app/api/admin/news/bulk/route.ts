@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 News bulk upload received:", body);
 
     const { news: bulkNews } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkNews.length} news items for bulk upload`);
-
     // Validate each news item
     const errors: string[] = [];
     const validNews = [];
@@ -38,8 +35,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkNews.length; i++) {
       const item = bulkNews[i];
-      
-      console.log(`🔍 Validating news ${i + 1}:`, item);
 
       // Required fields
       if (!item.title) {
@@ -114,8 +109,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid news items: ${validNews.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validNews.map(n => n.slug);
     const existingNews = await db
@@ -125,8 +118,6 @@ export async function POST(req: NextRequest) {
       })
       .from(news)
       .where(inArray(news.slug, allSlugs));
-
-    console.log("📚 Existing news:", existingNews);
 
     const existingSlugs = new Set(existingNews.map(e => e.slug));
     
@@ -141,9 +132,6 @@ export async function POST(req: NextRequest) {
       }
       newNews.push(item);
     }
-
-    console.log(`🆕 New news to insert: ${newNews.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs.length}`);
 
     if (newNews.length === 0) {
       return NextResponse.json(
@@ -211,14 +199,11 @@ export async function POST(req: NextRequest) {
           .returning();
         
         inserted.push(result[0]);
-        console.log(`✅ Inserted: ${item.title} (${item.slug})`);
       } catch (err) {
         console.error(`❌ Failed to insert ${item.title}:`, err);
         failed.push(item.title);
       }
     }
-
-    console.log(`✅ Successfully inserted ${inserted.length} news items`);
 
     const response: any = {
       success: true,

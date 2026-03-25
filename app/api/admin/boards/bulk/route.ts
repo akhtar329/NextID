@@ -7,7 +7,6 @@ import { eq, inArray } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("📦 Boards bulk upload received:", body);
 
     const { boards: bulkBoards } = body;
 
@@ -29,8 +28,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`📊 Processing ${bulkBoards.length} boards for bulk upload`);
-
     // Validate each board
     const errors: string[] = [];
     const validBoards = [];
@@ -38,8 +35,6 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < bulkBoards.length; i++) {
       const board = bulkBoards[i];
-      
-      console.log(`🔍 Validating board ${i + 1}:`, board);
 
       // Required fields
       if (!board.name) {
@@ -93,8 +88,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`✅ Valid boards: ${validBoards.length}`);
-
     // Check for existing slugs in database
     const allSlugs = validBoards.map(b => b.slug);
     const existingBoards = await db
@@ -104,8 +97,6 @@ export async function POST(req: NextRequest) {
       })
       .from(boards)
       .where(inArray(boards.slug, allSlugs));
-
-    console.log("📚 Existing boards:", existingBoards);
 
     const existingSlugs = new Set(existingBoards.map(e => e.slug));
     const existingNames = new Set(existingBoards.map(e => e.name.toLowerCase()));
@@ -130,10 +121,6 @@ export async function POST(req: NextRequest) {
       
       newBoards.push(board);
     }
-
-    console.log(`🆕 New boards to insert: ${newBoards.length}`);
-    console.log(`⚠️ Duplicate slugs: ${duplicateSlugs.length}`);
-    console.log(`⚠️ Duplicate names: ${duplicateNames.length}`);
 
     if (newBoards.length === 0) {
       let errorMessage = "All boards already exist";
@@ -160,8 +147,6 @@ export async function POST(req: NextRequest) {
     const inserted = await db.insert(boards)
       .values(newBoards)
       .returning();
-
-    console.log(`✅ Successfully inserted ${inserted.length} boards`);
 
     const response: any = {
       success: true,
