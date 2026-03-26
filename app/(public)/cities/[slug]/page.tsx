@@ -20,6 +20,7 @@ function formatShortDate(date: Date | null) {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
   });
 }
@@ -389,91 +390,87 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
   const hasAnyData = institutesList.length > 0 || admissionsList.length > 0 || resultsList.length > 0 || newsList.length > 0;
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Breadcrumbs */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Link href="/" className="text-gray-600 hover:text-blue-600">Home</Link>
-            <span className="text-gray-400">›</span>
-            <Link href="/cities" className="text-gray-600 hover:text-blue-600">Cities</Link>
-            <span className="text-gray-400">›</span>
-            <span className="text-gray-900 font-medium">{city.name}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-purple-700 to-indigo-800 text-white">
+      {/* Hero Section - Premium Design */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-purple-700 via-purple-600 to-indigo-800">
+        <div className="absolute inset-0 bg-black/20"></div>
         {city.imageUrl && (
           <div className="absolute inset-0">
-            <img 
-              src={city.imageUrl} 
-              alt={city.name}
-              className="w-full h-full object-cover opacity-20"
-            />
+            <img src={city.imageUrl} alt={city.name} className="w-full h-full object-cover opacity-30" />
           </div>
         )}
-        <div className="relative container mx-auto px-4 py-16 lg:py-20">
-          <div className="max-w-4xl">
-            <div className="flex items-center gap-3 mb-3">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
-                {city.name}
-              </h1>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+        
+        <div className="relative container mx-auto px-4 py-20 z-10">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span className="text-xs font-medium text-white">Educational Hub</span>
+              </div>
               {city.isPopular && (
                 <span className="px-3 py-1 bg-yellow-500 text-black text-xs font-semibold rounded-full">
-                  Popular
+                  ⭐ Popular City
                 </span>
               )}
             </div>
             
-            <div className="flex flex-wrap items-center gap-4 text-purple-200 mb-8">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+              {city.name}
+            </h1>
+            
+            <div className="flex flex-wrap items-center gap-6 text-white/90">
               {city.province && (
-                <span className="flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  {city.province}
-                </span>
+                  <span>{city.province}</span>
+                </div>
               )}
               {city.population && (
-                <span className="flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-                  {city.population.toLocaleString()}+
-                </span>
+                  <span>{city.population.toLocaleString()}+</span>
+                </div>
               )}
               {city.area && (
-                <span className="flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                   </svg>
-                  {city.area}
-                </span>
+                  <span>{city.area}</span>
+                </div>
               )}
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-2xl md:text-3xl font-bold">{stats.institutes}</div>
-                <div className="text-xs text-purple-200 mt-1">Educational Institutes</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-2xl md:text-3xl font-bold">{stats.admissions}</div>
-                <div className="text-xs text-purple-200 mt-1">Open Admissions</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-2xl md:text-3xl font-bold">{stats.results}</div>
-                <div className="text-xs text-purple-200 mt-1">Results Available</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-2xl md:text-3xl font-bold">{stats.news}</div>
-                <div className="text-xs text-purple-200 mt-1">Latest News</div>
-              </div>
+      {/* Stats Bar */}
+      <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x">
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.institutes}</div>
+              <div className="text-xs text-gray-500">Educational Institutes</div>
+            </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.admissions}</div>
+              <div className="text-xs text-gray-500">Open Admissions</div>
+            </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.results}</div>
+              <div className="text-xs text-gray-500">Results Available</div>
+            </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{stats.news}</div>
+              <div className="text-xs text-gray-500">Latest News</div>
             </div>
           </div>
         </div>
@@ -485,73 +482,90 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
           
           {/* Sidebar */}
           <div className="lg:col-span-1 order-2 lg:order-1">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 sticky top-24">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b">
-                Quick Information
-              </h2>
+            <div className="sticky top-24 space-y-6">
               
-              <div className="space-y-4">
-                {city.province && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Province</span>
-                    <span className="text-sm font-medium text-gray-900">{city.province}</span>
-                  </div>
-                )}
-                {city.population && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Population</span>
-                    <span className="text-sm font-medium text-gray-900">{city.population.toLocaleString()}+</span>
-                  </div>
-                )}
-                {city.area && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Area</span>
-                    <span className="text-sm font-medium text-gray-900">{city.area}</span>
-                  </div>
-                )}
-                {years.length > 0 && (
-                  <div>
-                    <div className="text-sm text-gray-500 mb-2">Available Years</div>
-                    <div className="flex flex-wrap gap-2">
-                      {years.slice(0, 8).map(year => (
-                        <Link
-                          key={year}
-                          href={`/cities/${city.slug}/year/${year}`}
-                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs hover:bg-purple-100 hover:text-purple-700 transition"
-                        >
-                          {year}
-                        </Link>
-                      ))}
+              {/* Quick Info Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Quick Information
+                  </h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  {city.province && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Province</span>
+                      <span className="text-sm font-medium text-gray-900">{city.province}</span>
                     </div>
-                  </div>
-                )}
+                  )}
+                  {city.population && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Population</span>
+                      <span className="text-sm font-medium text-gray-900">{city.population.toLocaleString()}+</span>
+                    </div>
+                  )}
+                  {city.area && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Area</span>
+                      <span className="text-sm font-medium text-gray-900">{city.area}</span>
+                    </div>
+                  )}
+                  {city.latitude && city.longitude && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Coordinates</span>
+                      <span className="text-sm text-gray-600">{city.latitude}, {city.longitude}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="font-semibold text-gray-900 mb-3">Browse by Category</h3>
+              {/* Years Card */}
+              {years.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h3 className="font-semibold text-gray-900 mb-3">Browse by Year</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {years.map(year => (
+                      <Link
+                        key={year}
+                        href={`/cities/${city.slug}/year/${year}`}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-purple-100 hover:text-purple-600 transition"
+                      >
+                        {year}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Links */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
                 <div className="space-y-2">
                   {stats.institutes > 0 && (
-                    <Link href="#institutes" className="flex items-center justify-between text-sm text-gray-600 hover:text-purple-600 py-1">
-                      <span>🏛️ Institutes & Universities</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">{stats.institutes}</span>
+                    <Link href="#institutes" className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-50 transition group">
+                      <span className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 group-hover:bg-purple-200">🏛️</span>
+                      <span className="text-sm text-gray-700 group-hover:text-purple-600">Institutes & Universities ({stats.institutes})</span>
                     </Link>
                   )}
                   {stats.admissions > 0 && (
-                    <Link href="#admissions" className="flex items-center justify-between text-sm text-gray-600 hover:text-purple-600 py-1">
-                      <span>📝 Open Admissions</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">{stats.admissions}</span>
+                    <Link href="#admissions" className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-50 transition group">
+                      <span className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-green-600 group-hover:bg-green-200">📝</span>
+                      <span className="text-sm text-gray-700 group-hover:text-purple-600">Open Admissions ({stats.admissions})</span>
                     </Link>
                   )}
                   {stats.results > 0 && (
-                    <Link href="#results" className="flex items-center justify-between text-sm text-gray-600 hover:text-purple-600 py-1">
-                      <span>📊 Exam Results</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">{stats.results}</span>
+                    <Link href="#results" className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-50 transition group">
+                      <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📊</span>
+                      <span className="text-sm text-gray-700 group-hover:text-purple-600">Exam Results ({stats.results})</span>
                     </Link>
                   )}
                   {stats.news > 0 && (
-                    <Link href="#news" className="flex items-center justify-between text-sm text-gray-600 hover:text-purple-600 py-1">
-                      <span>📰 Latest News</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">{stats.news}</span>
+                    <Link href="#news" className="flex items-center gap-3 p-2 rounded-lg hover:bg-purple-50 transition group">
+                      <span className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-200">📰</span>
+                      <span className="text-sm text-gray-700 group-hover:text-purple-600">Latest News ({stats.news})</span>
                     </Link>
                   )}
                 </div>
@@ -560,65 +574,59 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
           </div>
 
           {/* Main Content */}
-          <div className="lg:col-span-2 order-1 lg:order-2 space-y-10">
+          <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            {/* City Description */}
-            {city.description && (
-              <div className="bg-white rounded-xl p-6 border border-gray-200">
-                <p className="text-gray-700 leading-relaxed">{city.description}</p>
-              </div>
-            )}
-            
-            {/* Institutes Section */}
+            {/* Institutes Section - TOP */}
             {institutesList.length > 0 && (
               <section id="institutes">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-purple-500 rounded-full"></span>
                     Institutes in {city.name}
                   </h2>
                   {stats.institutes > 6 && (
-                    <Link href={`/cities/${city.slug}/institutes`} className="text-sm text-purple-600 hover:underline">
-                      View all {stats.institutes}
+                    <Link href={`/cities/${city.slug}/institutes`} className="text-sm text-purple-600 hover:underline font-medium">
+                      View All →
                     </Link>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {institutesList.map((inst) => (
                     <Link
                       key={inst.id}
                       href={`/universities/${inst.slug}`}
-                      className="group bg-white rounded-xl p-5 border border-gray-200 hover:shadow-md hover:border-purple-200 transition-all"
+                      className="group bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-purple-200 transition-all"
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-4">
                         {inst.logo ? (
-                          <img src={inst.logo} alt={inst.name} className="w-12 h-12 object-contain rounded-lg" />
+                          <img src={inst.logo} alt={inst.name} className="w-14 h-14 object-contain rounded-xl" />
                         ) : (
-                          <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center text-xl">
+                          <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl">
                             🏛️
                           </div>
                         )}
                         <div className="flex-1">
-                          <h3 className="font-bold text-gray-900 group-hover:text-purple-600 transition">
+                          <h3 className="font-bold text-gray-900 group-hover:text-purple-600 transition text-lg">
                             {inst.name}
                           </h3>
                           {inst.type && (
-                            <p className="text-xs text-gray-500 mt-0.5">{inst.type}</p>
+                            <p className="text-sm text-gray-500 mt-1">{inst.type}</p>
                           )}
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-3">
                             {inst.programsCount > 0 && (
-                              <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                                📚 {inst.programsCount}
+                              <span className="text-xs px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full">
+                                📚 {inst.programsCount} Programs
                               </span>
                             )}
                             {inst.admissionsCount > 0 && (
-                              <span className="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded-full">
-                                📝 {inst.admissionsCount}
+                              <span className="text-xs px-2.5 py-1 bg-green-50 text-green-600 rounded-full">
+                                📝 {inst.admissionsCount} Open
                               </span>
                             )}
                             {inst.resultsCount > 0 && (
-                              <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-600 rounded-full">
-                                📊 {inst.resultsCount}
+                              <span className="text-xs px-2.5 py-1 bg-orange-50 text-orange-600 rounded-full">
+                                📊 {inst.resultsCount} Results
                               </span>
                             )}
                           </div>
@@ -633,48 +641,52 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
             {/* Admissions Section */}
             {admissionsList.length > 0 && (
               <section id="admissions">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-green-500 rounded-full"></span>
                     Open Admissions
                   </h2>
                   {stats.admissions > 5 && (
-                    <Link href={`/cities/${city.slug}/admissions`} className="text-sm text-purple-600 hover:underline">
-                      View all {stats.admissions}
+                    <Link href={`/cities/${city.slug}/admissions`} className="text-sm text-purple-600 hover:underline font-medium">
+                      View All →
                     </Link>
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {admissionsList.map((adm) => (
                     <Link
                       key={adm.id}
                       href={`/admissions/${adm.slug}`}
-                      className="block bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md hover:border-purple-200 transition-all"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-green-200 transition-all group"
                     >
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4">
                           {adm.instituteLogo ? (
-                            <img src={adm.instituteLogo} alt={adm.instituteName || ''} className="w-10 h-10 object-contain" />
+                            <img src={adm.instituteLogo} alt={adm.instituteName || ''} className="w-12 h-12 object-contain rounded-xl" />
                           ) : (
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-lg">
+                            <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-emerald-100 rounded-xl flex items-center justify-center text-xl">
                               📝
                             </div>
                           )}
                           <div>
-                            <h3 className="font-semibold text-gray-900 group-hover:text-purple-600">
+                            <h3 className="font-semibold text-gray-900 group-hover:text-purple-600 transition">
                               {adm.instituteName}
                             </h3>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-sm text-gray-500 mt-0.5">
                               {adm.session || 'Annual'} {adm.year}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                        <div className="flex items-center gap-4">
+                          <span className="px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-full">
                             {adm.status}
                           </span>
                           {adm.expectedCloseDate && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-sm text-gray-500 flex items-center gap-1">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
                               Until {formatShortDate(adm.expectedCloseDate)}
                             </span>
                           )}
@@ -689,36 +701,39 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
             {/* Results Section */}
             {resultsList.length > 0 && (
               <section id="results">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
                     Recent Results
                   </h2>
                   {stats.results > 5 && (
-                    <Link href={`/cities/${city.slug}/results`} className="text-sm text-purple-600 hover:underline">
-                      View all {stats.results}
+                    <Link href={`/cities/${city.slug}/results`} className="text-sm text-purple-600 hover:underline font-medium">
+                      View All →
                     </Link>
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {resultsList.map((res) => (
                     <Link
                       key={res.id}
                       href={`/results/${res.slug}`}
-                      className="block bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md hover:border-purple-200 transition-all"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
                     >
-                      <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-900 group-hover:text-purple-600">
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 group-hover:text-purple-600 transition text-lg">
                             {res.instituteName}
                           </h3>
-                          <p className="text-sm text-gray-600">{res.title}</p>
+                          <p className="text-gray-600 mt-1">{res.title}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{res.year}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-full">
+                            {res.year}
+                          </span>
                           {res.isPopular && (
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
-                              Popular
+                            <span className="px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-full">
+                              ⭐ Popular
                             </span>
                           )}
                         </div>
@@ -732,48 +747,52 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
             {/* News Section */}
             {newsList.length > 0 && (
               <section id="news">
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span>
                     Latest News
                   </h2>
                   {stats.news > 5 && (
-                    <Link href={`/cities/${city.slug}/news`} className="text-sm text-purple-600 hover:underline">
-                      View all {stats.news}
+                    <Link href={`/cities/${city.slug}/news`} className="text-sm text-purple-600 hover:underline font-medium">
+                      View All →
                     </Link>
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {newsList.map((item) => (
                     <Link
                       key={item.id}
                       href={`/news/${item.slug}`}
-                      className="block bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md hover:border-purple-200 transition-all"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group"
                     >
-                      <div className="flex gap-3">
+                      <div className="flex gap-4">
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.title} className="w-14 h-14 object-cover rounded-lg" />
+                          <img src={item.imageUrl} alt={item.title} className="w-20 h-20 object-cover rounded-xl" />
                         ) : (
-                          <div className="w-14 h-14 bg-gray-100 rounded-lg flex items-center justify-center text-xl">
+                          <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center text-3xl">
                             📰
                           </div>
                         )}
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-2">
                             {item.isBreaking && (
-                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded-full">
+                              <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
                                 BREAKING
                               </span>
                             )}
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-gray-400 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
                               {formatShortDate(item.publishedAt)}
                             </span>
                           </div>
-                          <h3 className="font-semibold text-gray-900 group-hover:text-purple-600 line-clamp-2">
+                          <h3 className="font-bold text-gray-900 group-hover:text-purple-600 transition text-lg mb-2">
                             {item.title}
                           </h3>
                           {item.excerpt && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-1">{item.excerpt}</p>
+                            <p className="text-gray-600 line-clamp-2">{item.excerpt}</p>
                           )}
                         </div>
                       </div>
@@ -783,14 +802,32 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
+            {/* About Section - BOTTOM (with proper paragraph formatting) */}
+            {city.description && (
+              <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <span>📖</span> About {city.name}
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="prose prose-purple max-w-none">
+                    {city.description.split('\n\n').map((paragraph, idx) => (
+                      <p key={idx} className="text-gray-700 leading-relaxed mb-4 last:mb-0">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* No Data State */}
             {!hasAnyData && (
-              <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
-                <div className="text-5xl mb-4">📚</div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
-                <p className="text-gray-500 text-sm">
-                  We're currently gathering information for {city.name}. Please check back later.
-                </p>
+              <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
+                <div className="text-6xl mb-4">📚</div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
+                <p className="text-gray-500">We're currently gathering information for {city.name}. Please check back later.</p>
               </div>
             )}
           </div>
