@@ -489,7 +489,7 @@ export default function CreateNewsPage() {
                     
                     <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
                       <span className="text-gray-500 text-sm whitespace-nowrap">Permalink:</span>
-                      <span className="text-blue-600 text-sm whitespace-nowrap">https://nextid.pk/news/</span>
+                      <span className="text-blue-600 text-sm whitespace-nowrap">https://www.nextid.pk/news/</span>
                       <input
                         type="text"
                         value={slug}

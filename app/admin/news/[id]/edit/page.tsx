@@ -289,7 +289,7 @@ export default function EditNewsPage() {
                 
                 <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
                   <span className="text-gray-500 text-sm">Permalink:</span>
-                  <span className="text-blue-600 text-sm">https://nextid.pk/news/</span>
+                  <span className="text-blue-600 text-sm">https://www.nextid.pk/news/</span>
                   <input
                     type="text"
                     value={slug}

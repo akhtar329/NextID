@@ -7,8 +7,9 @@ import {
   varchar,
   timestamp,
   integer,
-  jsonb, 
+  jsonb,
   boolean,
+  decimal,
 } from "drizzle-orm/pg-core";
 
 /* =========================
@@ -79,12 +80,36 @@ export const programs = pgTable("programs", {
    📁 CITIES
    ========================= */
 export const cities = pgTable("cities", {
+  // Basic Information
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   slug: varchar("slug", { length: 150 }).notNull().unique(),
   province: varchar("province", { length: 100 }),
+  description: text("description"),
+  
+  // Media
+  imageUrl: varchar("image_url", { length: 500 }),
+  thumbnailUrl: varchar("thumbnail_url", { length: 500 }),
+  
+  // Location Data
+  latitude: decimal("latitude", { precision: 10, scale: 8 }),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }),
+  
+  // Additional Info
+  population: integer("population"),
+  area: varchar("area", { length: 50 }),
+  
+  // SEO
+  metaTitle: varchar("meta_title", { length: 200 }),
+  metaDescription: text("meta_description"),
+  metaKeywords: text("meta_keywords"),
+  
+  // Settings
   isPopular: boolean("is_popular").default(false),
+  displayOrder: integer("display_order").default(0),
   status: boolean("status").default(true),
+  
+  // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -139,6 +164,7 @@ export const programCities = pgTable("program_cities", {
 /* =========================
    📁 BOARDS
    ========================= */
+
 export const boards = pgTable("boards", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -146,6 +172,18 @@ export const boards = pgTable("boards", {
   cityId: integer("city_id").references(() => cities.id),
   website: varchar("website", { length: 255 }),
   description: text("description"),
+  
+  // Existing fields
+  establishedYear: integer("established_year"),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  contactPhone: varchar("contact_phone", { length: 50 }),
+  address: text("address"),
+  
+  // ✅ SEO Fields
+  metaTitle: varchar("meta_title", { length: 200 }),
+  metaDescription: text("meta_description"),
+  metaKeywords: text("meta_keywords"),
+  
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

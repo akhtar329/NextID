@@ -53,7 +53,7 @@ export async function GET(
   }
 }
 
-// PATCH - Partial update (status, isPopular)
+// PATCH - Partial update
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -89,9 +89,22 @@ export async function PATCH(
     // Update only provided fields
     const updateData: any = {};
     
-    if (body.status !== undefined) updateData.status = Boolean(body.status);
-    if (body.isPopular !== undefined) updateData.isPopular = Boolean(body.isPopular);
     if (body.name !== undefined) updateData.name = body.name;
+    if (body.province !== undefined) updateData.province = body.province;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
+    if (body.thumbnailUrl !== undefined) updateData.thumbnailUrl = body.thumbnailUrl;
+    if (body.latitude !== undefined) updateData.latitude = body.latitude;
+    if (body.longitude !== undefined) updateData.longitude = body.longitude;
+    if (body.population !== undefined) updateData.population = body.population;
+    if (body.area !== undefined) updateData.area = body.area;
+    if (body.metaTitle !== undefined) updateData.metaTitle = body.metaTitle;
+    if (body.metaDescription !== undefined) updateData.metaDescription = body.metaDescription;
+    if (body.metaKeywords !== undefined) updateData.metaKeywords = body.metaKeywords;
+    if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
+    if (body.isPopular !== undefined) updateData.isPopular = Boolean(body.isPopular);
+    if (body.status !== undefined) updateData.status = Boolean(body.status);
+    
     if (body.slug !== undefined) {
       // Check if slug exists on another city
       const slugExists = await db
@@ -108,7 +121,6 @@ export async function PATCH(
       }
       updateData.slug = body.slug;
     }
-    if (body.province !== undefined) updateData.province = body.province;
 
     // Update
     const updated = await db
@@ -191,13 +203,24 @@ export async function PUT(
       );
     }
 
-    // Update
+    // Full update with all fields
     const updated = await db
       .update(cities)
       .set({
         name: body.name,
         slug: body.slug,
         province: body.province || null,
+        description: body.description || null,
+        imageUrl: body.imageUrl || null,
+        thumbnailUrl: body.thumbnailUrl || null,
+        latitude: body.latitude || null,
+        longitude: body.longitude || null,
+        population: body.population || null,
+        area: body.area || null,
+        metaTitle: body.metaTitle || null,
+        metaDescription: body.metaDescription || null,
+        metaKeywords: body.metaKeywords || null,
+        displayOrder: body.displayOrder ?? 0,
         isPopular: body.isPopular || false,
         status: body.status ?? true,
       })

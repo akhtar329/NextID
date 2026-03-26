@@ -21,6 +21,13 @@ interface Board {
   cityId: number;
   website: string | null;
   description: string | null;
+  establishedYear: number | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  metaKeywords: string | null;
   status: boolean;
   createdAt: string;
 }
@@ -35,6 +42,13 @@ export default function EditBoardPage() {
   const [cityId, setCityId] = useState<number>(0);
   const [website, setWebsite] = useState("");
   const [description, setDescription] = useState("");
+  const [establishedYear, setEstablishedYear] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [metaKeywords, setMetaKeywords] = useState("");
   const [status, setStatus] = useState(true);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +74,13 @@ export default function EditBoardPage() {
           setCityId(board.cityId || 0);
           setWebsite(board.website || "");
           setDescription(board.description || "");
+          setEstablishedYear(board.establishedYear ? String(board.establishedYear) : "");
+          setContactEmail(board.contactEmail || "");
+          setContactPhone(board.contactPhone || "");
+          setAddress(board.address || "");
+          setMetaTitle(board.metaTitle || "");
+          setMetaDescription(board.metaDescription || "");
+          setMetaKeywords(board.metaKeywords || "");
           setStatus(board.status === true);
         } else {
           toast.error("Board not found");
@@ -91,7 +112,7 @@ export default function EditBoardPage() {
 
     try {
       const res = await fetch(`/api/admin/boards/${boardId}`, {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
@@ -99,6 +120,13 @@ export default function EditBoardPage() {
           cityId: Number(cityId),
           website: website || null,
           description: description || null,
+          establishedYear: establishedYear ? parseInt(establishedYear) : null,
+          contactEmail: contactEmail || null,
+          contactPhone: contactPhone || null,
+          address: address || null,
+          metaTitle: metaTitle || null,
+          metaDescription: metaDescription || null,
+          metaKeywords: metaKeywords || null,
           status,
         }),
       });
@@ -120,81 +148,184 @@ export default function EditBoardPage() {
   };
 
   if (loading) {
-    return <div className="p-6">Loading...</div>;
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex justify-center items-center h-64">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-6">Edit Board</h1>
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold">Edit Board</h1>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          ← Back
+        </button>
+      </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 text-red-700 p-3 rounded">
+        <div className="mb-4 bg-red-50 text-red-700 p-3 rounded-lg border border-red-200">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <Input
-          label="Board Name *"
-          value={name}
-          onChange={setName}
-          required
-        />
-
-        <Input
-          label="Slug"
-          value={slug}
-          onChange={setSlug}
-        />
-
-        <Select
-          label="City"
-          value={cityId}
-          onChange={(val: number) => setCityId(val)}
-          options={[
-            { value: 0, label: "Select City" },
-            ...cities.map(c => ({ value: c.id, label: c.name }))
-          ]}
-        />
-
-        <Input
-          label="Website"
-          value={website}
-          onChange={setWebsite}
-          placeholder="e.g., www.example.com"
-        />
-
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Description
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            className="w-full px-3 py-2 border rounded-lg"
-          />
+      <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-lg shadow-sm border">
+        {/* Basic Information */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Basic Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Board Name *"
+              value={name}
+              onChange={setName}
+              required
+              placeholder="e.g., BISE Lahore"
+            />
+            <Input
+              label="Slug"
+              value={slug}
+              onChange={setSlug}
+              placeholder="url-friendly-name"
+            />
+            <Select
+              label="City"
+              value={cityId}
+              onChange={(val: number) => setCityId(val)}
+              options={[
+                { value: 0, label: "Select City" },
+                ...cities.map(c => ({ value: c.id, label: c.name }))
+              ]}
+            />
+            <Input
+              label="Website"
+              value={website}
+              onChange={setWebsite}
+              placeholder="e.g., www.example.com"
+            />
+          </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              placeholder="Board description..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setStatus(true)}
-            className={`px-4 py-2 rounded-lg ${
-              status ? "bg-green-100 text-green-700 ring-1 ring-green-300" : "bg-gray-100"
-            }`}
-          >
-            Active
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatus(false)}
-            className={`px-4 py-2 rounded-lg ${
-              !status ? "bg-red-100 text-red-700 ring-1 ring-red-300" : "bg-gray-100"
-            }`}
-          >
-            Inactive
-          </button>
+        {/* Contact Information */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Contact Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Input
+                label="Established Year"
+                type="number"
+                value={establishedYear}
+                onChange={setEstablishedYear}
+                placeholder="e.g., 1954"
+              />
+              <p className="text-xs text-gray-500 mt-1">Year the board was established</p>
+            </div>
+            <Input
+              label="Contact Email"
+              type="email"
+              value={contactEmail}
+              onChange={setContactEmail}
+              placeholder="e.g., info@board.edu.pk"
+            />
+            <Input
+              label="Contact Phone"
+              value={contactPhone}
+              onChange={setContactPhone}
+              placeholder="e.g., +92-42-12345678"
+            />
+          </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Address
+            </label>
+            <textarea
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              rows={2}
+              placeholder="Complete address of the board office..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* SEO Settings */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">SEO Settings</h2>
+          <div className="space-y-3">
+            <Input
+              label="Meta Title"
+              value={metaTitle}
+              onChange={setMetaTitle}
+              placeholder="SEO optimized title (50-60 characters)"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Meta Description
+              </label>
+              <textarea
+                value={metaDescription}
+                onChange={(e) => setMetaDescription(e.target.value)}
+                placeholder="SEO optimized description (150-160 characters)"
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <Input
+              label="Meta Keywords"
+              value={metaKeywords}
+              onChange={setMetaKeywords}
+              placeholder="board, education, results, date sheets"
+            />
+          </div>
+        </div>
+
+        {/* Status */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Status
+          </label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setStatus(true)}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                status 
+                  ? "bg-green-600 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus(false)}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                !status 
+                  ? "bg-red-600 text-white" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Inactive
+            </button>
+          </div>
         </div>
 
         <div className="pt-4 flex gap-3">
@@ -204,7 +335,7 @@ export default function EditBoardPage() {
           <button
             type="button"
             onClick={() => router.push("/admin/boards")}
-            className="px-4 py-2 border rounded-lg"
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Cancel
           </button>

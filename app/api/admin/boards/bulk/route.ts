@@ -72,6 +72,14 @@ export async function POST(req: NextRequest) {
         cityId: Number(board.cityId),
         website: board.website || null,
         description: board.description || null,
+        establishedYear: board.establishedYear ? parseInt(board.establishedYear) : null,
+        contactEmail: board.contactEmail || null,
+        contactPhone: board.contactPhone || null,
+        address: board.address || null,
+        // ✅ SEO Fields
+        metaTitle: board.metaTitle || null,
+        metaDescription: board.metaDescription || null,
+        metaKeywords: board.metaKeywords || null,
         status: board.status === false || board.status === 'false' ? false : true,
       });
     }
@@ -143,7 +151,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert boards
+    // Insert boards with all fields including SEO
     const inserted = await db.insert(boards)
       .values(newBoards)
       .returning();

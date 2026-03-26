@@ -1,73 +1,108 @@
+// app/api/admin/boards/create/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { institutes } from "@/app/lib/schema";
-import { InferInsertModel, eq } from "drizzle-orm";
+import { boards } from "@/app/lib/schema";
+import { eq, sql } from "drizzle-orm";
 
-type InsertInstitute = InferInsertModel<typeof institutes>;
-
-interface RequestBody {
-  name: string;
-  type: string;
-  cityId: number;
-}
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  
   try {
-    const body: RequestBody = await req.json();
+    const body = await request.json();
 
-    if (!body.name || !body.type || !body.cityId) {
+    // Validate
+    if (!body.name || !body.slug) {
       return NextResponse.json(
-        { success: false, error: "Name, type and city are required" },
+        { success: false, error: "Name and slug are required" },
         { status: 400 }
       );
     }
 
-    const slug = body.name.toLowerCase().trim().replace(/\s+/g, "-");
-
-    // ✅ Check duplicate slug
-    const existing = await db
+    // Check if slug exists
+    const existingSlug = await db
       .select()
-      .from(institutes)
-      .where(eq(institutes.slug, slug));
+      .from(boards)
+      .where(eq(boards.slug, body.slug))
+      .limit(1);
 
-    if (existing.length > 0) {
+    if (existingSlug.length > 0) {
+      return NextResponse.json(
+        { success: false, error: "Board with this slug already exists" },
+        { status: 409 }
+      );
+    }
+
+    // Check if name exists
+    const existingName = await db
+      .select()
+      .from(boards)
+      .where(eq(boards.name, body.name))
+      .limit(1);
+
+    if (existingName.length > 0) {
       return NextResponse.json(
         { success: false, error: "Board with this name already exists" },
-        { status: 400 }
+        { status: 409 }
       );
     }
 
-    const insertData: InsertInstitute = {
-      name: body.name,
-      slug,
-      type: body.type,
-      cityId: body.cityId,
-      status: true,
-      createdAt: new Date(),
-    };
+    // Fix sequence if needed
+    try {
+      const result = await db.execute<{ max: number | null }>(sql`SELECT MAX(id) as max FROM boards`);
+      const maxId = result.rows[0]?.max ?? 0;
+      await db.execute(sql`SELECT setval('boards_id_seq', ${maxId + 1}, false)`);
+    } catch (seqErr) {
+      console.warn("⚠️ Could not reset sequence:", seqErr);
+    }
 
-    const result = await db
-      .insert(institutes)
-      .values(insertData)
-      .returning({
-        id: institutes.id,
-        name: institutes.name,
-        slug: institutes.slug,
-        status: institutes.status,
-        createdAt: institutes.createdAt,
-      });
+    // Create board with all fields including SEO
+    const newBoard = await db
+      .insert(boards)
+      .values({
+        name: body.name,
+        slug: body.slug,
+        cityId: body.cityId,
+        website: body.website || null,
+        description: body.description || null,
+        establishedYear: body.establishedYear || null,
+        contactEmail: body.contactEmail || null,
+        contactPhone: body.contactPhone || null,
+        address: body.address || null,
+        metaTitle: body.metaTitle || null,
+        metaDescription: body.metaDescription || null,
+        metaKeywords: body.metaKeywords || null,
+        status: body.status ?? true,
+        createdAt: new Date(),
+      })
+      .returning();
 
     return NextResponse.json({
       success: true,
-      board: result[0],
+      board: newBoard[0],
+      message: "Board created successfully",
     });
+
   } catch (error: any) {
-    console.error("Error creating board:", error);
+    console.error("❌ Error creating board:", error);
+
+    if (error.code === '23505') {
+      if (error.detail?.includes('slug')) {
+        return NextResponse.json(
+          { success: false, error: "Board with this slug already exists" },
+          { status: 409 }
+        );
+      } else if (error.detail?.includes('name')) {
+        return NextResponse.json(
+          { success: false, error: "Board with this name already exists" },
+          { status: 409 }
+        );
+      }
+    }
 
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Database error",
+        error: "Failed to create board",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );

@@ -12,9 +12,21 @@ export default function EditCityPage() {
   const params = useParams();
   const cityId = params.id as string;
 
+  // Form states
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [province, setProvince] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [population, setPopulation] = useState("");
+  const [area, setArea] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [metaKeywords, setMetaKeywords] = useState("");
+  const [displayOrder, setDisplayOrder] = useState("");
   const [isPopular, setIsPopular] = useState(false);
   const [status, setStatus] = useState(true);
   const [slugEdited, setSlugEdited] = useState(false);
@@ -55,6 +67,17 @@ export default function EditCityPage() {
           setName(city.name || "");
           setSlug(city.slug || "");
           setProvince(city.province || "");
+          setDescription(city.description || "");
+          setImageUrl(city.imageUrl || "");
+          setThumbnailUrl(city.thumbnailUrl || "");
+          setLatitude(city.latitude || "");
+          setLongitude(city.longitude || "");
+          setPopulation(city.population ? String(city.population) : "");
+          setArea(city.area || "");
+          setMetaTitle(city.metaTitle || "");
+          setMetaDescription(city.metaDescription || "");
+          setMetaKeywords(city.metaKeywords || "");
+          setDisplayOrder(city.displayOrder ? String(city.displayOrder) : "");
           setIsPopular(city.isPopular || false);
           setStatus(city.status === undefined ? true : city.status);
           setCityName(city.name || "");
@@ -112,6 +135,17 @@ export default function EditCityPage() {
           name: name.trim(),
           slug: slug.trim(),
           province: province.trim() || null,
+          description: description.trim() || null,
+          imageUrl: imageUrl.trim() || null,
+          thumbnailUrl: thumbnailUrl.trim() || null,
+          latitude: latitude.trim() || null,
+          longitude: longitude.trim() || null,
+          population: population ? parseInt(population) : null,
+          area: area.trim() || null,
+          metaTitle: metaTitle.trim() || null,
+          metaDescription: metaDescription.trim() || null,
+          metaKeywords: metaKeywords.trim() || null,
+          displayOrder: displayOrder ? parseInt(displayOrder) : 0,
           isPopular,
           status,
         }),
@@ -157,7 +191,7 @@ export default function EditCityPage() {
 
   if (fetchLoading) {
     return (
-      <div className="p-6 max-w-2xl mx-auto">
+      <div className="p-6 max-w-4xl mx-auto">
         <div className="flex justify-center items-center h-64">
           <div className="text-gray-500">Loading city data...</div>
         </div>
@@ -179,7 +213,7 @@ export default function EditCityPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       {/* Breadcrumb */}
       <div className="mb-6">
         <div className="flex items-center text-sm text-gray-500 mb-2">
@@ -208,30 +242,136 @@ export default function EditCityPage() {
       )}
 
       <form className="bg-white p-6 rounded-lg shadow-sm border space-y-4" onSubmit={handleSubmit}>
-        <Input
-          label="City Name *"
-          value={name}
-          onChange={setName}
-          placeholder="e.g. Karachi"
-          required
-        />
+        {/* Basic Information */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Basic Information</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="City Name *"
+              value={name}
+              onChange={setName}
+              placeholder="e.g. Karachi"
+              required
+            />
+            <Input
+              label="Slug *"
+              value={slug}
+              onChange={handleSlugChange}
+              placeholder="e.g. karachi"
+              required
+            />
+            <Input
+              label="Province"
+              value={province}
+              onChange={setProvince}
+              placeholder="e.g. Sindh"
+            />
+            <Input
+              label="Display Order"
+              type="number"
+              value={displayOrder}
+              onChange={setDisplayOrder}
+              placeholder="e.g. 1"
+            />
+          </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="City description..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
 
-        <Input
-          label="Slug *"
-          value={slug}
-          onChange={handleSlugChange}
-          placeholder="e.g. karachi"
-          required
-        />
+        {/* Images */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Images</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Featured Image URL"
+              value={imageUrl}
+              onChange={setImageUrl}
+              placeholder="https://example.com/city-image.jpg"
+            />
+            <Input
+              label="Thumbnail URL"
+              value={thumbnailUrl}
+              onChange={setThumbnailUrl}
+              placeholder="https://example.com/city-thumbnail.jpg"
+            />
+          </div>
+        </div>
 
-        <Input
-          label="Province"
-          value={province}
-          onChange={setProvince}
-          placeholder="e.g. Sindh"
-        />
+        {/* Location & Demographics */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Location & Demographics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Latitude"
+              value={latitude}
+              onChange={setLatitude}
+              placeholder="e.g. 24.8607"
+            />
+            <Input
+              label="Longitude"
+              value={longitude}
+              onChange={setLongitude}
+              placeholder="e.g. 67.0011"
+            />
+            <Input
+              label="Population"
+              type="number"
+              value={population}
+              onChange={setPopulation}
+              placeholder="e.g. 20000000"
+            />
+            <Input
+              label="Area"
+              value={area}
+              onChange={setArea}
+              placeholder="e.g. 3,527 km²"
+            />
+          </div>
+        </div>
 
-        <div className="flex items-center gap-6">
+        {/* SEO Settings */}
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">SEO Settings</h2>
+          <div className="space-y-3">
+            <Input
+              label="Meta Title"
+              value={metaTitle}
+              onChange={setMetaTitle}
+              placeholder="SEO optimized title (50-60 characters)"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Meta Description
+              </label>
+              <textarea
+                value={metaDescription}
+                onChange={(e) => setMetaDescription(e.target.value)}
+                placeholder="SEO optimized description (150-160 characters)"
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <Input
+              label="Meta Keywords"
+              value={metaKeywords}
+              onChange={setMetaKeywords}
+              placeholder="city, education, universities, colleges"
+            />
+          </div>
+        </div>
+
+        {/* Status */}
+        <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2">
             <input
               id="isPopular"

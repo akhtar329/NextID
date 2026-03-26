@@ -57,13 +57,24 @@ export async function POST(request: Request) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
     }
 
-    // Create city
+    // Create city with all fields
     const newCity = await db
       .insert(cities)
       .values({
         name: body.name,
         slug: body.slug,
         province: body.province || null,
+        description: body.description || null,
+        imageUrl: body.imageUrl || null,
+        thumbnailUrl: body.thumbnailUrl || null,
+        latitude: body.latitude || null,
+        longitude: body.longitude || null,
+        population: body.population || null,
+        area: body.area || null,
+        metaTitle: body.metaTitle || null,
+        metaDescription: body.metaDescription || null,
+        metaKeywords: body.metaKeywords || null,
+        displayOrder: body.displayOrder ?? 0,
         isPopular: body.isPopular || false,
         status: body.status ?? true,
         createdAt: new Date(),

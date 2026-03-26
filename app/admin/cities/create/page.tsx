@@ -12,6 +12,16 @@ import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
 
 interface CityBulkItem extends BulkItem {
   province?: string;
+  description?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  latitude?: string;
+  longitude?: string;
+  population?: number;
+  area?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
   isPopular: boolean;
 }
 
@@ -23,6 +33,17 @@ export default function CreateCityPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [province, setProvince] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [population, setPopulation] = useState("");
+  const [area, setArea] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [metaKeywords, setMetaKeywords] = useState("");
+  const [displayOrder, setDisplayOrder] = useState("");
   const [isPopular, setIsPopular] = useState(false);
   const [status, setStatus] = useState(true);
   const [slugEdited, setSlugEdited] = useState(false);
@@ -51,7 +72,7 @@ export default function CreateCityPage() {
     if (lines.length === 0) return [];
     
     const firstLine = lines[0].toLowerCase();
-    const hasHeaders = firstLine.includes('name') || firstLine.includes('province') || firstLine.includes('slug');
+    const hasHeaders = firstLine.includes('name') || firstLine.includes('province');
     
     let startIndex = 0;
     let headers: string[] = [];
@@ -60,7 +81,7 @@ export default function CreateCityPage() {
       headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       startIndex = 1;
     } else {
-      headers = ['name', 'province', 'slug', 'ispopular', 'status'];
+      headers = ['name', 'province', 'slug', 'description', 'imageurl', 'thumbnailurl', 'latitude', 'longitude', 'population', 'area', 'metatitle', 'metadescription', 'metakeywords', 'ispopular', 'displayorder', 'status'];
     }
     
     const items: BulkItem[] = [];
@@ -80,7 +101,17 @@ export default function CreateCityPage() {
       const name = obj.name || '';
       const province = obj.province || obj.state || '';
       const slug = obj.slug || generateSlug(name);
-      const displayOrder = parseInt(obj.displayorder || '0') || 0;
+      const description = obj.description || obj.desc || '';
+      const imageUrl = obj.imageurl || obj.image_url || '';
+      const thumbnailUrl = obj.thumbnailurl || obj.thumbnail_url || '';
+      const latitude = obj.latitude || '';
+      const longitude = obj.longitude || '';
+      const population = obj.population ? parseInt(obj.population) : null;
+      const area = obj.area || '';
+      const metaTitle = obj.metatitle || obj.meta_title || '';
+      const metaDescription = obj.metadescription || obj.meta_description || '';
+      const metaKeywords = obj.metakeywords || obj.meta_keywords || '';
+      const displayOrder = parseInt(obj.displayorder || obj.display_order || '0') || 0;
       const isPopular = obj.ispopular === 'true' || obj.popular === 'true' || false;
       const status = obj.status === 'false' ? false : true;
       
@@ -91,6 +122,16 @@ export default function CreateCityPage() {
           displayOrder,
           status,
           province,
+          description,
+          imageUrl,
+          thumbnailUrl,
+          latitude,
+          longitude,
+          population,
+          area,
+          metaTitle,
+          metaDescription,
+          metaKeywords,
           isPopular,
         });
       }
@@ -134,6 +175,17 @@ export default function CreateCityPage() {
           name: name.trim(),
           slug: slug.trim(),
           province: province.trim() || null,
+          description: description.trim() || null,
+          imageUrl: imageUrl.trim() || null,
+          thumbnailUrl: thumbnailUrl.trim() || null,
+          latitude: latitude.trim() || null,
+          longitude: longitude.trim() || null,
+          population: population ? parseInt(population) : null,
+          area: area.trim() || null,
+          metaTitle: metaTitle.trim() || null,
+          metaDescription: metaDescription.trim() || null,
+          metaKeywords: metaKeywords.trim() || null,
+          displayOrder: displayOrder ? parseInt(displayOrder) : 0,
           isPopular,
           status,
         }),
@@ -168,13 +220,11 @@ export default function CreateCityPage() {
 
   // Download sample CSV
   const downloadSample = () => {
-    const headers = ['name', 'province', 'slug', 'isPopular', 'status'];
+    const headers = ['name', 'province', 'slug', 'description', 'imageUrl', 'thumbnailUrl', 'latitude', 'longitude', 'population', 'area', 'metaTitle', 'metaDescription', 'metaKeywords', 'isPopular', 'displayOrder', 'status'];
     const sampleData = [
-      ['Karachi', 'Sindh', 'karachi', 'true', 'true'],
-      ['Lahore', 'Punjab', 'lahore', 'true', 'true'],
-      ['Islamabad', 'ICT', 'islamabad', 'true', 'true'],
-      ['Peshawar', 'KPK', 'peshawar', 'false', 'true'],
-      ['Quetta', 'Balochistan', 'quetta', 'false', 'true'],
+      ['Karachi', 'Sindh', 'karachi', 'Pakistan\'s largest city and economic hub', 'https://example.com/karachi.jpg', 'https://example.com/karachi-thumb.jpg', '24.8607', '67.0011', '20000000', '3,527 km²', 'Karachi Education Guide', 'Complete guide to education in Karachi', 'Karachi, universities, colleges', 'true', '1', 'true'],
+      ['Lahore', 'Punjab', 'lahore', 'Cultural heart of Pakistan', 'https://example.com/lahore.jpg', 'https://example.com/lahore-thumb.jpg', '31.5497', '74.3436', '13000000', '1,772 km²', 'Lahore Education Guide', 'Complete guide to education in Lahore', 'Lahore, universities, colleges', 'true', '2', 'true'],
+      ['Islamabad', 'ICT', 'islamabad', 'Capital city of Pakistan', 'https://example.com/islamabad.jpg', 'https://example.com/islamabad-thumb.jpg', '33.6844', '73.0479', '2000000', '906 km²', 'Islamabad Education Guide', 'Complete guide to education in Islamabad', 'Islamabad, universities, colleges', 'true', '3', 'true'],
     ];
     
     const csvContent = [
@@ -197,13 +247,12 @@ export default function CreateCityPage() {
 
   // Sample data for preview
   const sampleData = [
-    ['Karachi', 'Sindh', 'karachi', 'true', 'true'],
-    ['Lahore', 'Punjab', 'lahore', 'true', 'true'],
-    ['Islamabad', 'ICT', 'islamabad', 'true', 'true'],
+    ['Karachi', 'Sindh', 'karachi', 'Pakistan\'s largest city', 'https://example.com/karachi.jpg', 'https://example.com/karachi-thumb.jpg', '24.8607', '67.0011', '20000000', '3,527 km²', 'Karachi Education Guide', 'Complete guide', 'Karachi, universities', 'true', '1', 'true'],
+    ['Lahore', 'Punjab', 'lahore', 'Cultural heart', 'https://example.com/lahore.jpg', 'https://example.com/lahore-thumb.jpg', '31.5497', '74.3436', '13000000', '1,772 km²', 'Lahore Education Guide', 'Complete guide', 'Lahore, universities', 'true', '2', 'true'],
   ];
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       {/* Breadcrumb */}
       <div className="mb-6">
         <div className="flex items-center text-sm text-gray-500 mb-2">
@@ -261,30 +310,136 @@ export default function CreateCityPage() {
           )}
 
           <form className="bg-white p-6 rounded-lg shadow-sm border space-y-4" onSubmit={handleSingleSubmit}>
-            <Input
-              label="City Name *"
-              value={name}
-              onChange={setName}
-              placeholder="e.g. Karachi"
-              required
-            />
+            {/* Basic Information */}
+            <div className="border-b pb-4 mb-4">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">Basic Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="City Name *"
+                  value={name}
+                  onChange={setName}
+                  placeholder="e.g. Karachi"
+                  required
+                />
+                <Input
+                  label="Slug *"
+                  value={slug}
+                  onChange={handleSlugChange}
+                  placeholder="e.g. karachi"
+                  required
+                />
+                <Input
+                  label="Province"
+                  value={province}
+                  onChange={setProvince}
+                  placeholder="e.g. Sindh"
+                />
+                <Input
+                  label="Display Order"
+                  type="number"
+                  value={displayOrder}
+                  onChange={setDisplayOrder}
+                  placeholder="e.g. 1"
+                />
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="City description..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
 
-            <Input
-              label="Slug *"
-              value={slug}
-              onChange={handleSlugChange}
-              placeholder="e.g. karachi"
-              required
-            />
+            {/* Images */}
+            <div className="border-b pb-4 mb-4">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">Images</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Featured Image URL"
+                  value={imageUrl}
+                  onChange={setImageUrl}
+                  placeholder="https://example.com/city-image.jpg"
+                />
+                <Input
+                  label="Thumbnail URL"
+                  value={thumbnailUrl}
+                  onChange={setThumbnailUrl}
+                  placeholder="https://example.com/city-thumbnail.jpg"
+                />
+              </div>
+            </div>
 
-            <Input
-              label="Province"
-              value={province}
-              onChange={setProvince}
-              placeholder="e.g. Sindh"
-            />
+            {/* Location & Demographics */}
+            <div className="border-b pb-4 mb-4">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">Location & Demographics</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Latitude"
+                  value={latitude}
+                  onChange={setLatitude}
+                  placeholder="e.g. 24.8607"
+                />
+                <Input
+                  label="Longitude"
+                  value={longitude}
+                  onChange={setLongitude}
+                  placeholder="e.g. 67.0011"
+                />
+                <Input
+                  label="Population"
+                  type="number"
+                  value={population}
+                  onChange={setPopulation}
+                  placeholder="e.g. 20000000"
+                />
+                <Input
+                  label="Area"
+                  value={area}
+                  onChange={setArea}
+                  placeholder="e.g. 3,527 km²"
+                />
+              </div>
+            </div>
 
-            <div className="flex items-center gap-6">
+            {/* SEO */}
+            <div className="border-b pb-4 mb-4">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">SEO Settings</h2>
+              <div className="space-y-3">
+                <Input
+                  label="Meta Title"
+                  value={metaTitle}
+                  onChange={setMetaTitle}
+                  placeholder="SEO optimized title (50-60 characters)"
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meta Description
+                  </label>
+                  <textarea
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    placeholder="SEO optimized description (150-160 characters)"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <Input
+                  label="Meta Keywords"
+                  value={metaKeywords}
+                  onChange={setMetaKeywords}
+                  placeholder="city, education, universities, colleges"
+                />
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="flex flex-wrap items-center gap-6">
               <div className="flex items-center gap-2">
                 <input
                   id="isPopular"
@@ -335,13 +490,13 @@ export default function CreateCityPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="font-medium text-blue-800 mb-2">CSV Format</h3>
             <p className="text-sm text-blue-600 mb-2">
-              Headers: name, province, slug, isPopular, status
+              Headers: name, province, slug, description, imageUrl, thumbnailUrl, latitude, longitude, population, area, metaTitle, metaDescription, metaKeywords, isPopular, displayOrder, status
             </p>
             <p className="text-sm text-blue-600">
-              Example: Karachi,Sindh,karachi,true,true
+              Example: Karachi,Sindh,karachi,Pakistan's largest city,https://example.com/karachi.jpg,https://example.com/thumb.jpg,24.8607,67.0011,20000000,3527 km²,Karachi Education Guide,Complete guide,Karachi universities,true,1,true
             </p>
             <p className="text-xs text-blue-500 mt-2">
-              Note: isPopular and status should be true/false
+              Note: All fields except name are optional. isPopular and status should be true/false.
             </p>
           </div>
 

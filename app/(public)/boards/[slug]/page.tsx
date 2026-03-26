@@ -16,11 +16,11 @@ function formatDate(date: Date | null) {
   });
 }
 
-// ==================== FORMAT SHORT DATE ====================
 function formatShortDate(date: Date | null) {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
   });
 }
@@ -35,10 +35,15 @@ interface BoardDetail {
   cityId: number | null;
   cityName: string | null;
   citySlug: string | null;
+  cityDescription: string | null;
   province: string | null;
-  establishedYear?: number | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
+  establishedYear: number | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  metaKeywords: string | null;
 }
 
 interface Result {
@@ -83,7 +88,15 @@ async function getBoardBySlug(slug: string): Promise<BoardDetail | null> {
         cityId: boards.cityId,
         cityName: cities.name,
         citySlug: cities.slug,
+        cityDescription: cities.description,
         province: cities.province,
+        establishedYear: boards.establishedYear,
+        contactEmail: boards.contactEmail,
+        contactPhone: boards.contactPhone,
+        address: boards.address,
+        metaTitle: boards.metaTitle,
+        metaDescription: boards.metaDescription,
+        metaKeywords: boards.metaKeywords,
       })
       .from(boards)
       .leftJoin(cities, eq(boards.cityId, cities.id))
@@ -234,12 +247,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const title = `${board.name} - Results, Date Sheets & News | NextID.pk`;
-  const description = `Find all ${board.name} results, date sheets, and announcements. ${board.cityName ? `Based in ${board.cityName}` : ''} Board of Intermediate and Secondary Education. Check exam results online.`;
+  const title = board.metaTitle || `${board.name} - Results, Date Sheets & News | NextID.pk`;
+  const description = board.metaDescription || `Find all ${board.name} results, date sheets, and announcements. ${board.cityName ? `Based in ${board.cityName}.` : ''} Check exam results online.`;
 
   return {
     title,
     description,
+    keywords: board.metaKeywords || `${board.name}, ${board.name} results, ${board.name} date sheets, education board Pakistan`,
     openGraph: {
       title,
       description,
@@ -258,7 +272,7 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
   const board = await getBoardBySlug(slug);
   if (!board) notFound();
 
-  const [results, dateSheets, news, stats, years] = await Promise.all([
+  const [results, dateSheets, newsList, stats, years] = await Promise.all([
     getResults(board.id, 5),
     getDateSheets(board.id, 5),
     getNews(board.id, 5),
@@ -267,61 +281,77 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
   ]);
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Breadcrumbs */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Link href="/" className="text-gray-600 hover:text-blue-600">Home</Link>
-            <span className="text-gray-400">›</span>
-            <Link href="/boards" className="text-gray-600 hover:text-blue-600">Boards</Link>
-            <span className="text-gray-400">›</span>
-            <span className="text-gray-900 font-medium">{board.name}</span>
+      {/* Hero Section - Premium Design */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-red-600">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-orange-400/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+        
+        <div className="container mx-auto px-4 py-20 relative z-10">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                <span className="text-xs font-medium text-white">Educational Board</span>
+              </div>
+            </div>
+            
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+              {board.name}
+            </h1>
+            
+            <div className="flex flex-wrap items-center gap-6 text-white/90">
+              {board.cityName && (
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{board.cityName}{board.province ? `, ${board.province}` : ''}</span>
+                </div>
+              )}
+              {board.establishedYear && (
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Est. {board.establishedYear}</span>
+                </div>
+              )}
+              {board.website && (
+                <a href={board.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
+                  </svg>
+                  <span>Official Website</span>
+                </a>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-orange-600 to-red-600 text-white">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-4xl">
-            {/* Board Name */}
-            <h1 className="text-5xl md:text-6xl font-bold mb-4">{board.name}</h1>
-            
-            {/* Location and Website */}
-            <div className="flex flex-wrap items-center gap-4 text-lg mb-8">
-              {board.cityName && (
-                <span className="flex items-center gap-2">
-                  <span>📍</span>
-                  {board.cityName}{board.province ? `, ${board.province}` : ''}
-                </span>
-              )}
-              {board.website && (
-                <a href={board.website} target="_blank" rel="noopener" className="text-orange-200 hover:text-white flex items-center gap-2">
-                  <span>🌐</span> Official Website
-                </a>
-              )}
+      {/* Stats Bar */}
+      <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x">
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{stats.totalResults}</div>
+              <div className="text-xs text-gray-500">Total Results</div>
             </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-3xl font-bold">{stats.totalResults}</div>
-                <div className="text-sm text-orange-200">Total Results</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-3xl font-bold">{stats.totalDateSheets}</div>
-                <div className="text-sm text-orange-200">Date Sheets</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-3xl font-bold">{stats.totalNews}</div>
-                <div className="text-sm text-orange-200">Announcements</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                <div className="text-3xl font-bold">{stats.recentResults}</div>
-                <div className="text-sm text-orange-200">This Month</div>
-              </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{stats.totalDateSheets}</div>
+              <div className="text-xs text-gray-500">Date Sheets</div>
+            </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{stats.totalNews}</div>
+              <div className="text-xs text-gray-500">Announcements</div>
+            </div>
+            <div className="py-4 text-center">
+              <div className="text-2xl font-bold text-orange-600">{stats.recentResults}</div>
+              <div className="text-xs text-gray-500">This Month</div>
             </div>
           </div>
         </div>
@@ -331,111 +361,141 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Sidebar - Board Info */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 sticky top-24">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Board Information</h2>
+          {/* Sidebar */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="sticky top-24 space-y-6">
               
-              <div className="space-y-4">
-                {board.cityName && (
-                  <div>
-                    <div className="text-sm text-gray-500">Location</div>
-                    <div className="font-semibold">
-                      {board.cityName}
-                      {board.province && <span className="text-gray-400">, {board.province}</span>}
-                    </div>
-                  </div>
-                )}
-                
-                {board.website && (
-                  <div>
-                    <div className="text-sm text-gray-500">Website</div>
-                    <a href={board.website} target="_blank" rel="noopener" className="text-orange-600 hover:underline text-sm">
-                      {board.website.replace(/^https?:\/\//, '')}
-                    </a>
-                  </div>
-                )}
-
-                {years.length > 0 && (
-                  <div>
-                    <div className="text-sm text-gray-500">Available Years</div>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {years.slice(0, 5).map(year => (
-                        <Link
-                          key={year}
-                          href={`/boards/${board.slug}/results/${year}`}
-                          className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs hover:bg-orange-100"
-                        >
-                          {year}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {board.description && (
-                <div className="mt-6 pt-6 border-t">
-                  <h3 className="font-semibold text-gray-900 mb-2">About</h3>
-                  <p className="text-sm text-gray-600">{board.description}</p>
+              {/* Contact Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Contact Information
+                  </h3>
                 </div>
-              )}
+                <div className="p-6 space-y-4">
+                  {board.address && (
+                    <div className="flex gap-3">
+                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Address</div>
+                        <div className="text-sm text-gray-700 mt-1">{board.address}</div>
+                      </div>
+                    </div>
+                  )}
+                  {board.contactPhone && (
+                    <div className="flex gap-3">
+                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Phone</div>
+                        <a href={`tel:${board.contactPhone}`} className="text-sm text-orange-600 hover:underline mt-1 block">
+                          {board.contactPhone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {board.contactEmail && (
+                    <div className="flex gap-3">
+                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">Email</div>
+                        <a href={`mailto:${board.contactEmail}`} className="text-sm text-orange-600 hover:underline mt-1 block break-all">
+                          {board.contactEmail}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Quick Links */}
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="font-semibold text-gray-900 mb-3">Quick Links</h3>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
                 <div className="space-y-2">
-                  <Link href="#results" className="block text-sm text-orange-600 hover:underline">
-                    📊 Latest Results ({stats.totalResults})
+                  <Link href="#results" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
+                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📊</span>
+                    <span className="text-sm text-gray-700 group-hover:text-orange-600">Latest Results ({stats.totalResults})</span>
                   </Link>
-                  <Link href="#date-sheets" className="block text-sm text-orange-600 hover:underline">
-                    📅 Date Sheets ({stats.totalDateSheets})
+                  <Link href="#date-sheets" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
+                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📅</span>
+                    <span className="text-sm text-gray-700 group-hover:text-orange-600">Date Sheets ({stats.totalDateSheets})</span>
                   </Link>
-                  <Link href="#news" className="block text-sm text-orange-600 hover:underline">
-                    📢 News & Announcements ({stats.totalNews})
+                  <Link href="#news" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
+                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📢</span>
+                    <span className="text-sm text-gray-700 group-hover:text-orange-600">News & Announcements ({stats.totalNews})</span>
                   </Link>
                 </div>
               </div>
+
+              {/* Years */}
+              {years.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <h3 className="font-semibold text-gray-900 mb-3">Browse by Year</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {years.map(year => (
+                      <Link
+                        key={year}
+                        href={`/boards/${board.slug}/results/${year}`}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-orange-100 hover:text-orange-600 transition"
+                      >
+                        {year}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Main Content - Results, Date Sheets, News */}
-          <div className="lg:col-span-2 space-y-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
+            
             
             {/* Results Section */}
             <section id="results">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">Latest Results</h2>
-                <Link href={`/boards/${board.slug}/results`} className="text-sm text-orange-600 hover:underline">
-                  View All ({stats.totalResults})
-                </Link>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
+                  Latest Results
+                </h2>
+                {stats.totalResults > 0 && (
+                  <Link href={`/boards/${board.slug}/results`} className="text-sm text-orange-600 hover:underline font-medium">
+                    View All →
+                  </Link>
+                )}
               </div>
 
               {results.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-4">
                   {results.map((res) => (
                     <Link
                       key={res.id}
                       href={`/results/${res.slug}`}
-                      className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-md transition group"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
                     >
                       <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-bold text-gray-900 group-hover:text-orange-600 mb-1">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition mb-2">
                             {res.title}
                           </h3>
-                          <div className="flex items-center gap-3 text-sm text-gray-600">
-                            <span>Year: {res.year}</span>
+                          <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">Year: {res.year}</span>
                             {res.resultDate && (
-                              <>
-                                <span>•</span>
-                                <span>Announced: {formatShortDate(res.resultDate)}</span>
-                              </>
+                              <span className="text-gray-500">Announced: {formatShortDate(res.resultDate)}</span>
                             )}
                           </div>
                         </div>
                         {res.isPopular && (
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                          <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
                             Popular
                           </span>
                         )}
@@ -444,47 +504,74 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                   ))}
                 </div>
               ) : (
-                <div className="bg-white rounded-xl p-8 text-center border border-gray-200">
-                  <p className="text-gray-500">No results found for this board.</p>
+                <div className="bg-white rounded-xl p-12 text-center border border-gray-100">
+                  <div className="text-5xl mb-4">📋</div>
+                  <p className="text-gray-500">No results found for {board.name}.</p>
                 </div>
               )}
             </section>
 
+
+            {/* About Section with City Description */}
+            {(board.description || board.cityDescription || board.cityName) && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                  <h2 className="text-xl font-bold text-gray-900">About {board.name}</h2>
+                </div>
+                <div className="p-6">
+                  {board.description && (
+                    <p className="text-gray-600 leading-relaxed">{board.description}</p>
+                  )}
+                  {board.cityName && board.cityDescription && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                        <span>📍</span> About {board.cityName}
+                      </h3>
+                      <p className="text-gray-600 leading-relaxed">{board.cityDescription}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+
             {/* Date Sheets Section */}
             {dateSheets.length > 0 && (
               <section id="date-sheets">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Date Sheets</h2>
-                  <Link href={`/boards/${board.slug}/date-sheets`} className="text-sm text-orange-600 hover:underline">
-                    View All ({stats.totalDateSheets})
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
+                    Date Sheets
+                  </h2>
+                  <Link href={`/boards/${board.slug}/date-sheets`} className="text-sm text-orange-600 hover:underline font-medium">
+                    View All →
                   </Link>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-4">
                   {dateSheets.map((ds) => (
                     <div
                       key={ds.id}
-                      className="bg-white rounded-xl p-5 border border-gray-200"
+                      className="bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg transition-all"
                     >
                       <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-bold text-gray-900 mb-1">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 mb-2">
                             {ds.title}
                           </h3>
-                          <div className="flex items-center gap-3 text-sm text-gray-600">
+                          <div className="flex flex-wrap items-center gap-3 text-sm">
                             {ds.examDate && (
-                              <span>📅 Exam Date: {formatDate(ds.examDate)}</span>
+                              <span className="flex items-center gap-1 text-gray-600">
+                                📅 Exam Date: {formatDate(ds.examDate)}
+                              </span>
                             )}
                             {ds.year && (
-                              <>
-                                <span>•</span>
-                                <span>Year: {ds.year}</span>
-                              </>
+                              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">Year: {ds.year}</span>
                             )}
                           </div>
                         </div>
                         {ds.isPopular && (
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                          <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
                             Popular
                           </span>
                         )}
@@ -496,39 +583,47 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
             )}
 
             {/* News Section */}
-            {news.length > 0 && (
+            {newsList.length > 0 && (
               <section id="news">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900">News & Announcements</h2>
-                  <Link href={`/boards/${board.slug}/news`} className="text-sm text-orange-600 hover:underline">
-                    View All ({stats.totalNews})
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
+                    News & Announcements
+                  </h2>
+                  <Link href={`/boards/${board.slug}/news`} className="text-sm text-orange-600 hover:underline font-medium">
+                    View All →
                   </Link>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4">
-                  {news.map((item) => (
+                <div className="space-y-4">
+                  {newsList.map((item) => (
                     <Link
                       key={item.id}
                       href={`/news/${item.slug}`}
-                      className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-md transition group"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex gap-4">
                         {item.isBreaking && (
-                          <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full flex-shrink-0">
-                            BREAKING
-                          </span>
+                          <div className="flex-shrink-0">
+                            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
+                              BREAKING
+                            </span>
+                          </div>
                         )}
-                        <div>
-                          <h3 className="font-bold text-gray-900 group-hover:text-orange-600 mb-1">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition mb-2">
                             {item.title}
                           </h3>
                           {item.excerpt && (
                             <p className="text-sm text-gray-600 mb-2 line-clamp-2">{item.excerpt}</p>
                           )}
                           {item.publishedAt && (
-                            <p className="text-xs text-gray-500">
-                              Published: {formatShortDate(item.publishedAt)}
-                            </p>
+                            <div className="text-xs text-gray-400 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              {formatShortDate(item.publishedAt)}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -539,66 +634,16 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
             )}
 
             {/* No Data State */}
-            {results.length === 0 && dateSheets.length === 0 && news.length === 0 && (
-              <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
-                <div className="text-6xl mb-4">📋</div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Information Available</h3>
-                <p className="text-gray-500">
-                  We're currently updating information for {board.name}. Please check back later.
-                </p>
+            {results.length === 0 && dateSheets.length === 0 && newsList.length === 0 && (
+              <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
+                <div className="text-6xl mb-4">📚</div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
+                <p className="text-gray-500">We're currently updating information for {board.name}. Please check back later.</p>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* SEO Content Section */}
-      <section className="bg-white py-12 border-t border-gray-200">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto prose prose-orange">
-            <h2>About {board.name}</h2>
-            
-            <p>
-              <strong>{board.name}</strong> is one of the leading education boards in {board.cityName || 'Pakistan'}. 
-              It is responsible for conducting examinations and announcing results for secondary and higher secondary education.
-            </p>
-
-            {board.description && (
-              <>
-                <h3>Overview</h3>
-                <p>{board.description}</p>
-              </>
-            )}
-
-            <h3>Examinations</h3>
-            <p>
-              The board conducts annual examinations for Matric (SSC) and Intermediate (HSSC) levels. 
-              With {stats.totalResults} results available, students can check their results online through the official portal.
-            </p>
-
-            <h3>Results and Date Sheets</h3>
-            <p>
-              {board.name} announces results for annual and supplementary examinations. We have <strong>{stats.totalResults} results</strong> 
-              and <strong>{stats.totalDateSheets} date sheets</strong> available. Students can check their results by providing their roll numbers.
-            </p>
-
-            <h3>Latest Announcements</h3>
-            <p>
-              Stay updated with the latest news and announcements from {board.name}. We provide <strong>{stats.totalNews} news updates</strong> 
-              regarding examination schedules, result dates, and important notifications.
-            </p>
-
-            <h3>Contact Information</h3>
-            <p>
-              For any queries regarding examinations, results, or date sheets, students can visit the official website or contact the board office.
-            </p>
-
-            <p className="text-sm text-gray-500 mt-8">
-              Last updated: {new Date().toLocaleDateString('en-PK')}
-            </p>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }

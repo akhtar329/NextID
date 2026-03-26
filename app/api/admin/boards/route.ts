@@ -1,13 +1,13 @@
 // app/api/admin/boards/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { boards, cities } from "@/app/lib/schema"; // ✅ Boards table import
+import { boards, cities } from "@/app/lib/schema";
 import { eq, desc } from "drizzle-orm";
 
 export async function GET() {
 
   try {
-    // Boards table se saare boards fetch karo
+    // Boards table se saare boards fetch karo with all fields
     const allBoards = await db
       .select({
         id: boards.id,
@@ -16,6 +16,13 @@ export async function GET() {
         cityId: boards.cityId,
         website: boards.website,
         description: boards.description,
+        establishedYear: boards.establishedYear,
+        contactEmail: boards.contactEmail,
+        contactPhone: boards.contactPhone,
+        address: boards.address,
+        metaTitle: boards.metaTitle,
+        metaDescription: boards.metaDescription,
+        metaKeywords: boards.metaKeywords,
         status: boards.status,
         createdAt: boards.createdAt,
         cityName: cities.name,

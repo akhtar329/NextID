@@ -1,4 +1,5 @@
-// app/admin/boards/create/page.tsx
+// app/admin/boards/create/page.tsx - Add SEO fields
+
 "use client";
 
 import { useState, useEffect, type FormEvent } from "react";
@@ -16,6 +17,13 @@ interface BoardBulkItem extends BulkItem {
   cityId: number;
   website?: string;
   description?: string;
+  establishedYear?: number | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  address?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
 }
 
 export default function CreateBoardPage() {
@@ -28,6 +36,16 @@ export default function CreateBoardPage() {
   const [cityId, setCityId] = useState<number | null>(null);
   const [website, setWebsite] = useState("");
   const [description, setDescription] = useState("");
+  const [establishedYear, setEstablishedYear] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [address, setAddress] = useState("");
+  
+  // ✅ SEO fields
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [metaKeywords, setMetaKeywords] = useState("");
+  
   const [type] = useState("Board");
   const [slugEdited, setSlugEdited] = useState(false);
   const [singleLoading, setSingleLoading] = useState(false);
@@ -51,6 +69,13 @@ export default function CreateBoardPage() {
       setSlug(generateSlug(name));
     }
   }, [name, slugEdited]);
+
+  // Auto-generate meta title from name
+  useEffect(() => {
+    if (!metaTitle && name) {
+      setMetaTitle(`${name} - Results, Date Sheets & Announcements | NextID.pk`);
+    }
+  }, [name, metaTitle]);
 
   // Fetch Cities
   useEffect(() => {
@@ -94,7 +119,7 @@ export default function CreateBoardPage() {
       headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       startIndex = 1;
     } else {
-      headers = ['name', 'cityid', 'slug', 'website', 'description', 'status'];
+      headers = ['name', 'cityid', 'slug', 'website', 'description', 'establishedyear', 'contactemail', 'contactphone', 'address', 'metatitle', 'metadescription', 'metakeywords', 'status'];
     }
     
     const items: BulkItem[] = [];
@@ -116,6 +141,13 @@ export default function CreateBoardPage() {
       const slug = obj.slug || generateSlug(name);
       const website = obj.website || obj.web || '';
       const description = obj.description || obj.desc || '';
+      const establishedYear = obj.establishedyear || obj.established_year ? parseInt(obj.establishedyear || obj.established_year) : null;
+      const contactEmail = obj.contactemail || obj.contact_email || '';
+      const contactPhone = obj.contactphone || obj.contact_phone || '';
+      const address = obj.address || '';
+      const metaTitle = obj.metatitle || obj.meta_title || '';
+      const metaDescription = obj.metadescription || obj.meta_description || '';
+      const metaKeywords = obj.metakeywords || obj.meta_keywords || '';
       const displayOrder = parseInt(obj.displayorder || '0') || 0;
       const status = obj.status === 'false' ? false : true;
       
@@ -128,6 +160,13 @@ export default function CreateBoardPage() {
           cityId,
           website,
           description,
+          establishedYear,
+          contactEmail,
+          contactPhone,
+          address,
+          metaTitle,
+          metaDescription,
+          metaKeywords,
         });
       }
     }
@@ -173,6 +212,13 @@ export default function CreateBoardPage() {
           slug: slug || generateSlug(name),
           website: website || null,
           description: description || null,
+          establishedYear: establishedYear ? parseInt(establishedYear) : null,
+          contactEmail: contactEmail || null,
+          contactPhone: contactPhone || null,
+          address: address || null,
+          metaTitle: metaTitle || null,
+          metaDescription: metaDescription || null,
+          metaKeywords: metaKeywords || null,
           status: true,
         }),
       });
@@ -197,11 +243,10 @@ export default function CreateBoardPage() {
 
   // Download sample CSV
   const downloadSample = () => {
-    const headers = ['name', 'cityId', 'slug', 'website', 'description', 'status'];
+    const headers = ['name', 'cityId', 'slug', 'website', 'description', 'establishedYear', 'contactEmail', 'contactPhone', 'address', 'metaTitle', 'metaDescription', 'metaKeywords', 'status'];
     const sampleData = [
-      ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', 'true'],
-      ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board of Intermediate and Secondary Education', 'true'],
-      ['Aga Khan Board', '3', 'aga-khan', 'www.agakhan.edu', 'Aga Khan University Examination Board', 'true'],
+      ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results, Date Sheets & News', 'Complete guide to BISE Lahore results, date sheets and announcements', 'BISE Lahore, Lahore board, matric result, intermediate result', 'true'],
+      ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board of Intermediate and Secondary Education', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Sector H-8, Islamabad', 'FBISE - Federal Board Results & Announcements', 'Check FBISE results, date sheets and latest announcements', 'FBISE, federal board, matric result, HSSC result', 'true'],
     ];
     
     const csvContent = [
@@ -224,9 +269,8 @@ export default function CreateBoardPage() {
 
   // Sample data for preview
   const sampleData = [
-    ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', 'true'],
-    ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board of Intermediate and Secondary Education', 'true'],
-    ['Aga Khan Board', '3', 'aga-khan', 'www.agakhan.edu', 'Aga Khan University Examination Board', 'true'],
+    ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results', 'Complete guide', 'BISE Lahore, results', 'true'],
+    ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Islamabad', 'FBISE - Results', 'Check FBISE results', 'FBISE, results', 'true'],
   ];
 
   if (loading) {
@@ -288,47 +332,119 @@ export default function CreateBoardPage() {
           className="space-y-4 bg-white p-6 rounded-lg shadow-sm border"
           onSubmit={handleSingleSubmit}
         >
-          <Input
-            label="Board Name *"
-            value={name}
-            onChange={setName}
-            placeholder="e.g., BISE Lahore"
-            required
-          />
+          {/* Basic Information */}
+          <div className="border-b pb-4 mb-4">
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Basic Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Board Name *"
+                value={name}
+                onChange={setName}
+                placeholder="e.g., BISE Lahore"
+                required
+              />
+              <Input
+                label="Slug"
+                value={slug}
+                onChange={handleSlugChange}
+                placeholder="url-friendly-name (auto-generated)"
+              />
+              <Select
+                label="City *"
+                value={cityId ?? 0}
+                onChange={(val: number) => setCityId(val === 0 ? null : val)}
+                options={[{ value: 0, label: "Select City" }, ...cities]}
+                required
+              />
+              <Input
+                label="Website"
+                value={website}
+                onChange={setWebsite}
+                placeholder="e.g., www.biselahore.edu.pk"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Board description..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
 
-          <Input
-            label="Slug"
-            value={slug}
-            onChange={handleSlugChange}
-            placeholder="url-friendly-name (auto-generated)"
-          />
+          {/* Contact Information */}
+          <div className="border-b pb-4 mb-4">
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Contact Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Established Year"
+                type="number"
+                value={establishedYear}
+                onChange={setEstablishedYear}
+                placeholder="e.g., 1954"
+              />
+              <Input
+                label="Contact Email"
+                type="email"
+                value={contactEmail}
+                onChange={setContactEmail}
+                placeholder="e.g., info@board.edu.pk"
+              />
+              <Input
+                label="Contact Phone"
+                value={contactPhone}
+                onChange={setContactPhone}
+                placeholder="e.g., +92-42-12345678"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address
+              </label>
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Complete address of the board office..."
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
 
-          <Select
-            label="City *"
-            value={cityId ?? 0}
-            onChange={(val: number) => setCityId(val === 0 ? null : val)}
-            options={[{ value: 0, label: "Select City" }, ...cities]}
-            required
-          />
-
-          <Input
-            label="Website"
-            value={website}
-            onChange={setWebsite}
-            placeholder="e.g., www.biselahore.edu.pk"
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Board description..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          {/* SEO Settings */}
+          <div className="border-b pb-4 mb-4">
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">SEO Settings</h2>
+            <div className="space-y-3">
+              <Input
+                label="Meta Title"
+                value={metaTitle}
+                onChange={setMetaTitle}
+                placeholder="SEO optimized title (50-60 characters)"
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Meta Description
+                </label>
+                <textarea
+                  value={metaDescription}
+                  onChange={(e) => setMetaDescription(e.target.value)}
+                  placeholder="SEO optimized description (150-160 characters)"
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <Input
+                label="Meta Keywords"
+                value={metaKeywords}
+                onChange={setMetaKeywords}
+                placeholder="board, education, results, date sheets"
+              />
+            </div>
           </div>
 
           <div className="pt-4 flex gap-3">
@@ -354,13 +470,13 @@ export default function CreateBoardPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="font-medium text-blue-800 mb-2">CSV Format</h3>
             <p className="text-sm text-blue-600 mb-2">
-              Headers: name, cityId, slug, website, description, status
+              Headers: name, cityId, slug, website, description, establishedYear, contactEmail, contactPhone, address, metaTitle, metaDescription, metaKeywords, status
             </p>
             <p className="text-sm text-blue-600">
-              Example: BISE Lahore,1,bise-lahore,www.biselahore.edu.pk,Board of Intermediate and Secondary Education Lahore,true
+              Example: BISE Lahore,1,bise-lahore,www.biselahore.edu.pk,Board description,1954,info@biselahore.edu.pk,042-99231234,Mall Road Lahore,BISE Lahore - Results,Complete guide,BISE Lahore results,true
             </p>
             <p className="text-xs text-blue-500 mt-2">
-              Note: cityId must be a valid ID from cities table
+              Note: cityId must be a valid ID from cities table. All fields except name and cityId are optional.
             </p>
           </div>
 
