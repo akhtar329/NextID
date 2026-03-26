@@ -280,6 +280,16 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
     getYears(board.id),
   ]);
 
+  // Helper function to format description with paragraphs
+  const formatDescription = (text: string | null) => {
+    if (!text) return null;
+    return text.split('\n\n').map((paragraph, idx) => (
+      <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
+        {paragraph}
+      </p>
+    ));
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
@@ -459,7 +469,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
           {/* Main Content */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            
             {/* Results Section */}
             <section id="results">
               <div className="flex items-center justify-between mb-6">
@@ -511,29 +520,33 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               )}
             </section>
 
-
-            {/* About Section with City Description */}
+            {/* About Section with formatted paragraphs */}
             {(board.description || board.cityDescription || board.cityName) && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100">
-                  <h2 className="text-xl font-bold text-gray-900">About {board.name}</h2>
+                <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-red-50">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <span>📖</span> About {board.name}
+                  </h2>
                 </div>
                 <div className="p-6">
                   {board.description && (
-                    <p className="text-gray-600 leading-relaxed">{board.description}</p>
+                    <div className="prose prose-orange max-w-none">
+                      {formatDescription(board.description)}
+                    </div>
                   )}
                   {board.cityName && board.cityDescription && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                    <div className="mt-6 pt-6 border-t border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
                         <span>📍</span> About {board.cityName}
                       </h3>
-                      <p className="text-gray-600 leading-relaxed">{board.cityDescription}</p>
+                      <div className="prose prose-gray max-w-none">
+                        {formatDescription(board.cityDescription)}
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
             )}
-
 
             {/* Date Sheets Section */}
             {dateSheets.length > 0 && (
