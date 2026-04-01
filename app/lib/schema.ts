@@ -10,6 +10,8 @@ import {
   jsonb,
   boolean,
   decimal,
+  unique,
+  index,
 } from "drizzle-orm/pg-core";
 
 /* =========================
@@ -54,7 +56,7 @@ export const degrees = pgTable("degrees", {
 });
 
 /* =========================
-   📁 PROGRAMS (Core Entity)
+   📁 PROGRAMS (Core Entity) - REMOVED SEO COLUMNS
    ========================= */
 export const programs = pgTable("programs", {
   id: serial("id").primaryKey(),
@@ -68,8 +70,7 @@ export const programs = pgTable("programs", {
   duration: varchar("duration", { length: 50 }),
   careerScope: text("career_scope"),
   feeRange: varchar("fee_range", { length: 50 }),
-  seoTitle: varchar("seo_title", { length: 255 }),
-  seoDescription: text("seo_description"),
+  // ❌ REMOVED: seoTitle, seoDescription - moved to seo_metadata
   isFeatured: boolean("is_featured").default(false),
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -77,10 +78,9 @@ export const programs = pgTable("programs", {
 });
 
 /* =========================
-   📁 CITIES
+   📁 CITIES - REMOVED META COLUMNS
    ========================= */
 export const cities = pgTable("cities", {
-  // Basic Information
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   slug: varchar("slug", { length: 150 }).notNull().unique(),
@@ -99,10 +99,7 @@ export const cities = pgTable("cities", {
   population: integer("population"),
   area: varchar("area", { length: 50 }),
   
-  // SEO
-  metaTitle: varchar("meta_title", { length: 200 }),
-  metaDescription: text("meta_description"),
-  metaKeywords: text("meta_keywords"),
+  // ❌ REMOVED: metaTitle, metaDescription, metaKeywords - moved to seo_metadata
   
   // Settings
   isPopular: boolean("is_popular").default(false),
@@ -127,7 +124,6 @@ export const institutes = pgTable("institutes", {
   description: text("description"),
   website: varchar("website", { length: 255 }),
   isFeatured: boolean("is_featured").default(false),
-  // 👇 ADD THIS
   featuredImage: varchar("featured_image", { length: 500 }),
   logo: varchar("logo", { length: 500 }),
   status: boolean("status").default(true),
@@ -162,9 +158,8 @@ export const programCities = pgTable("program_cities", {
 });
 
 /* =========================
-   📁 BOARDS
+   📁 BOARDS - REMOVED META COLUMNS
    ========================= */
-
 export const boards = pgTable("boards", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -172,17 +167,12 @@ export const boards = pgTable("boards", {
   cityId: integer("city_id").references(() => cities.id),
   website: varchar("website", { length: 255 }),
   description: text("description"),
-  
-  // Existing fields
   establishedYear: integer("established_year"),
   contactEmail: varchar("contact_email", { length: 255 }),
   contactPhone: varchar("contact_phone", { length: 50 }),
   address: text("address"),
   
-  // ✅ SEO Fields
-  metaTitle: varchar("meta_title", { length: 200 }),
-  metaDescription: text("meta_description"),
-  metaKeywords: text("meta_keywords"),
+  // ❌ REMOVED: metaTitle, metaDescription, metaKeywords - moved to seo_metadata
   
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -220,9 +210,8 @@ export const admissions = pgTable("admissions", {
   meritInfo: text("merit_info"),
   note: text("note"),
   officialLink: varchar("official_link", { length: 255 }),
-  // 👇 ADD THESE
   featuredImage: varchar("featured_image", { length: 500 }),
-  galleryImages: text("gallery_images"), // JSON array
+  galleryImages: text("gallery_images"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -317,10 +306,6 @@ export const adminRoles = pgTable("admin_roles", {
 /* =========================
    📁 ADMIN USERS
    ========================= */
-
-   /* =========================
-   📁 ADMIN USERS
-   ========================= */
 export const adminUsers = pgTable("admin_users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -331,11 +316,8 @@ export const adminUsers = pgTable("admin_users", {
     .references(() => adminRoles.id),
   lastLogin: timestamp("last_login"),
   status: boolean("status").default(true),
-
-  // ✅ Password reset fields
   passwordResetToken: text("password_reset_token"),
   passwordResetExpires: timestamp("password_reset_expires"),
-
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -384,7 +366,7 @@ export const notifications = pgTable("notifications", {
   userId: integer("user_id")
     .notNull()
     .references(() => adminUsers.id, { onDelete: 'cascade' }),
-  type: varchar("type", { length: 20 }).notNull(), // info, success, warning, error
+  type: varchar("type", { length: 20 }).notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),
   read: boolean("read").default(false),
@@ -394,7 +376,38 @@ export const notifications = pgTable("notifications", {
 });
 
 /* =========================
-   📁 PAGE VIEWS (Analytics)
+   📁 SEO METADATA (Centralized - Single Source of Truth) ✅ NEW
+   ========================= */
+export const seoMetadata = pgTable("seo_metadata", {
+  id: serial("id").primaryKey(),
+  
+  // Entity identification
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: integer("entity_id").notNull(),
+  
+  // Core SEO (Critical for search engines)
+  metaTitle: varchar("meta_title", { length: 255 }),
+  metaDescription: text("meta_description"),
+  
+  // Technical SEO
+  canonicalUrl: text("canonical_url"),
+  robots: varchar("robots", { length: 100 }).default("index, follow"),
+  
+  // Social Media (Open Graph)
+  ogTitle: varchar("og_title", { length: 255 }),
+  ogDescription: text("og_description"),
+  ogImage: varchar("og_image", { length: 500 }),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniqueEntity: unique("seo_metadata_entity_type_entity_id_unique").on(table.entityType, table.entityId),
+  idxEntity: index("idx_seo_metadata_entity").on(table.entityType, table.entityId),
+}));
+
+/* =========================
+   📁 PAGE VIEWS (Analytics) - CLEAN, NO META COLUMNS
    ========================= */
 export const pageViews = pgTable("page_views", {
   id: serial("id").primaryKey(),
@@ -412,7 +425,7 @@ export const pageViews = pgTable("page_views", {
   browser: varchar("browser", { length: 50 }),
   os: varchar("os", { length: 50 }),
   
-  // 🌍 LOCATION INFO - Complete
+  // Location info
   country: varchar("country", { length: 100 }),
   countryCode: varchar("country_code", { length: 10 }),
   city: varchar("city", { length: 100 }),
@@ -422,8 +435,8 @@ export const pageViews = pgTable("page_views", {
   timezone: varchar("timezone", { length: 100 }),
   
   // Performance
-  loadTime: integer("load_time"), // milliseconds
-  apiLatency: integer("api_latency"), // milliseconds
+  loadTime: integer("load_time"),
+  apiLatency: integer("api_latency"),
   
   // Referrer
   referrer: varchar("referrer", { length: 500 }),
@@ -476,7 +489,7 @@ export const visitorSessions = pgTable("visitor_sessions", {
 export const dailyStats = pgTable("daily_stats", {
   id: serial("id").primaryKey(),
   
-  date: varchar("date", { length: 10 }).notNull().unique(), // YYYY-MM-DD
+  date: varchar("date", { length: 10 }).notNull().unique(),
   
   // Visitor stats
   totalVisitors: integer("total_visitors").default(0),
@@ -485,22 +498,22 @@ export const dailyStats = pgTable("daily_stats", {
   
   // Page stats
   totalPageViews: integer("total_page_views").default(0),
-  avgTimeOnSite: integer("avg_time_on_site").default(0), // seconds
-  bounceRate: integer("bounce_rate").default(0), // percentage
+  avgTimeOnSite: integer("avg_time_on_site").default(0),
+  bounceRate: integer("bounce_rate").default(0),
   
   // Breakdowns
-  topPages: jsonb("top_pages"), // [{path: "/", views: 100}]
-  deviceBreakdown: jsonb("device_breakdown"), // {"mobile": 60, "desktop": 35, "tablet": 5}
-  browserBreakdown: jsonb("browser_breakdown"), // {"chrome": 50, "firefox": 20}
-  osBreakdown: jsonb("os_breakdown"), // {"windows": 30, "mac": 20}
+  topPages: jsonb("top_pages"),
+  deviceBreakdown: jsonb("device_breakdown"),
+  browserBreakdown: jsonb("browser_breakdown"),
+  osBreakdown: jsonb("os_breakdown"),
   
   // Location breakdowns
-  countryBreakdown: jsonb("country_breakdown"), // {"Pakistan": 80, "USA": 10}
-  cityBreakdown: jsonb("city_breakdown"), // {"Karachi": 40, "Lahore": 30, "Islamabad": 10}
+  countryBreakdown: jsonb("country_breakdown"),
+  cityBreakdown: jsonb("city_breakdown"),
   
   // Performance
-  avgLoadTime: integer("avg_load_time").default(0), // milliseconds
-  avgApiLatency: integer("avg_api_latency").default(0), // milliseconds
+  avgLoadTime: integer("avg_load_time").default(0),
+  avgApiLatency: integer("avg_api_latency").default(0),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -513,20 +526,20 @@ export const systemStats = pgTable("system_stats", {
   id: serial("id").primaryKey(),
   
   // Active users
-  activeUsers: integer("active_users").default(0), // last 5 minutes
-  totalSessions: integer("total_sessions").default(0), // today
+  activeUsers: integer("active_users").default(0),
+  totalSessions: integer("total_sessions").default(0),
   
   // Performance
-  avgResponseTime: integer("avg_response_time").default(0), // milliseconds
-  errorRate: integer("error_rate").default(0), // percentage
+  avgResponseTime: integer("avg_response_time").default(0),
+  errorRate: integer("error_rate").default(0),
   
   // Resources
-  cpuUsage: integer("cpu_usage").default(0), // percentage
-  memoryUsage: integer("memory_usage").default(0), // percentage
-  diskUsage: integer("disk_usage").default(0), // percentage
+  cpuUsage: integer("cpu_usage").default(0),
+  memoryUsage: integer("memory_usage").default(0),
+  diskUsage: integer("disk_usage").default(0),
   
   // Uptime
-  uptime: integer("uptime").default(0), // seconds
+  uptime: integer("uptime").default(0),
   
   // Timestamp
   recordedAt: timestamp("recorded_at").defaultNow().notNull(),

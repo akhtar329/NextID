@@ -3,22 +3,26 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { admissions, admissionPrograms, programs, institutes } from "@/app/lib/schema";
-import { eq, desc, and, inArray, isNotNull } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status'); // 'open', 'closed', 'expected'
+    const status = searchParams.get('status');
     const year = searchParams.get('year');
     const programId = searchParams.get('programId');
     const instituteId = searchParams.get('instituteId');
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20;
+    const slug = searchParams.get('slug'); // Add slug filter for single admission
 
     // Build conditions array
     const conditions = [];
 
+    if (slug) {
+      conditions.push(eq(admissions.slug, slug));
+    }
+
     if (status) {
-      // Ensure status is properly capitalized if needed
       const statusValue = status.toLowerCase() === 'open' ? 'Open' : 
                           status.toLowerCase() === 'closed' ? 'Closed' : 
                           status.toLowerCase() === 'expected' ? 'Expected' : status;
@@ -29,64 +33,74 @@ export async function GET(request: Request) {
       conditions.push(eq(admissions.year, parseInt(year)));
     }
 
-    // ✅ FIXED: Don't filter by programId directly - need to use junction table
-    // We'll handle program filtering after fetching
-
     if (instituteId) {
       conditions.push(eq(admissions.instituteId, parseInt(instituteId)));
     }
 
-    // Base query without program filter
+    // Base query
     let baseQuery = db
       .select({
         id: admissions.id,
-        name: admissions.name,  // ✅ Include name
-        slug: admissions.slug,  // ✅ Include slug
+        name: admissions.name,
+        slug: admissions.slug,
         year: admissions.year,
         session: admissions.session,
         status: admissions.status,
         expectedOpenDate: admissions.expectedOpenDate,
         expectedCloseDate: admissions.expectedCloseDate,
         meritInfo: admissions.meritInfo,
+        note: admissions.note,
         officialLink: admissions.officialLink,
         instituteId: admissions.instituteId,
         instituteName: institutes.name,
         instituteSlug: institutes.slug,
+        instituteType: institutes.type,
+        instituteLogo: institutes.logo,
+        instituteCityId: institutes.cityId,
       })
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(admissions.year))
-      .limit(limit * 2); // Get more to account for filtering
+      .limit(slug ? 1 : limit * 2);
 
-    // Execute query
     const admissionsList = await baseQuery;
 
-    // If programId is provided, we need to filter admissions that have this program
+    // If slug is provided, return single admission
+    if (slug && admissionsList.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Admission not found",
+      }, { status: 404 });
+    }
+
+    // Filter by programId if provided
     let filteredAdmissions = admissionsList;
-    if (programId) {
-      // Get all admission IDs that have this program
+    if (programId && !slug) {
       const admissionIdsWithProgram = await db
         .select({ admissionId: admissionPrograms.admissionId })
         .from(admissionPrograms)
         .where(eq(admissionPrograms.programId, parseInt(programId)));
 
-      const validAdmissionIds = admissionIdsWithProgram.map(item => item.admissionId);
+      const validAdmissionIds = new Set(admissionIdsWithProgram.map(item => item.admissionId));
       
-      // Filter admissions
       filteredAdmissions = admissionsList.filter(ad => 
-        validAdmissionIds.includes(ad.id)
+        validAdmissionIds.has(ad.id)
       );
     }
 
-    // For each admission, fetch its programs
+    // Fetch programs for each admission
     const admissionsWithPrograms = await Promise.all(
-      filteredAdmissions.slice(0, limit).map(async (ad) => {
+      filteredAdmissions.slice(0, slug ? 1 : limit).map(async (ad) => {
         const programList = await db
           .select({
             id: programs.id,
             name: programs.name,
             slug: programs.slug,
+            overview: programs.overview,
+            eligibility: programs.eligibility,
+            duration: programs.duration,
+            feeRange: programs.feeRange,
           })
           .from(admissionPrograms)
           .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
@@ -95,13 +109,14 @@ export async function GET(request: Request) {
         return {
           ...ad,
           programs: programList,
+          programCount: programList.length,
         };
       })
     );
 
     return NextResponse.json({
       success: true,
-      data: admissionsWithPrograms,
+      data: slug ? admissionsWithPrograms[0] : admissionsWithPrograms,
       count: admissionsWithPrograms.length,
     });
   } catch (error) {

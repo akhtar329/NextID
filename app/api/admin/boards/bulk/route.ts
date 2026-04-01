@@ -1,8 +1,54 @@
 // app/api/admin/boards/bulk/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { boards } from "@/app/lib/schema";
+import { boards, seoMetadata } from "@/app/lib/schema";
 import { eq, inArray } from "drizzle-orm";
+
+// Types
+interface BoardInput {
+  name: string;
+  cityId: number;
+  slug?: string;
+  website?: string;
+  description?: string;
+  establishedYear?: string | number;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  robots?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  status?: boolean | string;
+}
+
+interface ValidBoard {
+  name: string;
+  slug: string;
+  cityId: number;
+  website: string | null;
+  description: string | null;
+  establishedYear: number | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  status: boolean;
+}
+
+interface SeoData {
+  tempIndex: number;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  robots: string;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImage: string | null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,11 +76,12 @@ export async function POST(req: NextRequest) {
 
     // Validate each board
     const errors: string[] = [];
-    const validBoards = [];
+    const validBoards: ValidBoard[] = [];
+    const validSeoData: SeoData[] = [];
     const slugMap = new Map<string, number>();
 
     for (let i = 0; i < bulkBoards.length; i++) {
-      const board = bulkBoards[i];
+      const board = bulkBoards[i] as BoardInput;
 
       // Required fields
       if (!board.name) {
@@ -72,16 +119,26 @@ export async function POST(req: NextRequest) {
         cityId: Number(board.cityId),
         website: board.website || null,
         description: board.description || null,
-        establishedYear: board.establishedYear ? parseInt(board.establishedYear) : null,
+        establishedYear: board.establishedYear ? parseInt(String(board.establishedYear)) : null,
         contactEmail: board.contactEmail || null,
         contactPhone: board.contactPhone || null,
         address: board.address || null,
-        // ✅ SEO Fields
-        metaTitle: board.metaTitle || null,
-        metaDescription: board.metaDescription || null,
-        metaKeywords: board.metaKeywords || null,
         status: board.status === false || board.status === 'false' ? false : true,
       });
+
+      // Store SEO data separately (will be inserted after boards are created)
+      if (board.metaTitle || board.metaDescription || board.canonicalUrl) {
+        validSeoData.push({
+          tempIndex: i,
+          metaTitle: board.metaTitle || null,
+          metaDescription: board.metaDescription || null,
+          canonicalUrl: board.canonicalUrl || null,
+          robots: board.robots || 'index, follow',
+          ogTitle: board.ogTitle || board.metaTitle || null,
+          ogDescription: board.ogDescription || board.metaDescription || null,
+          ogImage: board.ogImage || null,
+        });
+      }
     }
 
     if (errors.length > 0) {
@@ -110,9 +167,9 @@ export async function POST(req: NextRequest) {
     const existingNames = new Set(existingBoards.map(e => e.name.toLowerCase()));
     
     // Filter out existing boards
-    const newBoards = [];
-    const duplicateSlugs = [];
-    const duplicateNames = [];
+    const newBoards: ValidBoard[] = [];
+    const duplicateSlugs: string[] = [];
+    const duplicateNames: string[] = [];
 
     for (const board of validBoards) {
       const nameLower = board.name.toLowerCase();
@@ -151,16 +208,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert boards with all fields including SEO
-    const inserted = await db.insert(boards)
-      .values(newBoards)
-      .returning();
+    // Start transaction for bulk insert with SEO
+    const result = await db.transaction(async (tx) => {
+      // Insert boards
+      const insertedBoards = await tx
+        .insert(boards)
+        .values(newBoards)
+        .returning();
+
+      // Insert SEO metadata for boards that have it
+      const insertedSeo = [];
+      for (let i = 0; i < insertedBoards.length; i++) {
+        const board = insertedBoards[i];
+        const matchingSeo = validSeoData.find(seo => 
+          seo.tempIndex === i || 
+          (board.name && seo.metaTitle?.includes(board.name))
+        );
+        
+        if (matchingSeo) {
+          const [seoRecord] = await tx
+            .insert(seoMetadata)
+            .values({
+              entityType: 'board',
+              entityId: board.id,
+              metaTitle: matchingSeo.metaTitle,
+              metaDescription: matchingSeo.metaDescription,
+              canonicalUrl: matchingSeo.canonicalUrl,
+              robots: matchingSeo.robots,
+              ogTitle: matchingSeo.ogTitle,
+              ogDescription: matchingSeo.ogDescription,
+              ogImage: matchingSeo.ogImage,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .returning();
+          insertedSeo.push(seoRecord);
+        }
+      }
+
+      return { insertedBoards, insertedSeo };
+    });
 
     const response: any = {
       success: true,
-      count: inserted.length,
-      boards: inserted,
-      message: `Successfully created ${inserted.length} boards`
+      count: result.insertedBoards.length,
+      boards: result.insertedBoards,
+      seoCount: result.insertedSeo.length,
+      message: `Successfully created ${result.insertedBoards.length} boards with ${result.insertedSeo.length} SEO records`
     };
 
     if (duplicateSlugs.length > 0 || duplicateNames.length > 0) {

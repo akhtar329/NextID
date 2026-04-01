@@ -1,5 +1,3 @@
-// app/admin/admissions/create/page.tsx (Updated - Only RichTextEditor for images, no separate image fields)
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -26,7 +24,7 @@ type Institute = {
   slug: string;
 };
 
-// Form data type for single creation
+// Form data type for single creation (with SEO fields)
 type AdmissionFormData = {
   name: string;
   slug: string;
@@ -40,6 +38,14 @@ type AdmissionFormData = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
+  // SEO fields
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  robots: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImage: string | null;
 };
 
 export default function CreateAdmissionPage() {
@@ -57,6 +63,16 @@ export default function CreateAdmissionPage() {
   const [meritInfo, setMeritInfo] = useState("");
   const [note, setNote] = useState("");
   const [officialLink, setOfficialLink] = useState("");
+  
+  // SEO states
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [canonicalUrl, setCanonicalUrl] = useState("");
+  const [robots, setRobots] = useState("index, follow");
+  const [ogTitle, setOgTitle] = useState("");
+  const [ogDescription, setOgDescription] = useState("");
+  const [ogImage, setOgImage] = useState("");
+  const [autoGenerateSeo, setAutoGenerateSeo] = useState(true);
   
   // Name and slug states
   const [name, setName] = useState("");
@@ -93,6 +109,41 @@ export default function CreateAdmissionPage() {
       .replace(/^-|-$/g, "");
   };
 
+  // Auto-generate SEO meta
+  const generateSeoMeta = () => {
+    if (!autoGenerateSeo) return;
+    
+    if (selectedInstitute && year && name) {
+      const sessionText = session ? ` ${session}` : '';
+      const instituteName = selectedInstitute.name;
+      
+      // Meta Title (under 60 chars)
+      let generatedTitle = `${instituteName} Admission ${year}`;
+      if (generatedTitle.length > 55) {
+        generatedTitle = instituteName.substring(0, 40) + ` Admission ${year}`;
+      }
+      setMetaTitle(generatedTitle + " | NextID");
+      
+      // Meta Description (under 160 chars)
+      const programsList = selectedProgramsList.map(p => p.name).slice(0, 3).join(", ");
+      const programText = programsList ? ` Programs: ${programsList}.` : "";
+      let generatedDesc = `${instituteName}${sessionText} admission ${year} is open. Check last date, eligibility criteria${programText} fee structure and apply online.`;
+      if (generatedDesc.length > 155) {
+        generatedDesc = generatedDesc.substring(0, 152) + "...";
+      }
+      setMetaDescription(generatedDesc);
+      
+      // Canonical URL
+      setCanonicalUrl(`https://www.nextid.pk/admissions/${slug}`);
+      
+      // OG Title
+      setOgTitle(`${instituteName} Admission ${year} - Apply Now`);
+      
+      // OG Description
+      setOgDescription(`${instituteName}${sessionText} admission ${year}. Limited seats available. Apply before deadline.`);
+    }
+  };
+
   // Auto-generate name and slug
   useEffect(() => {
     if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
@@ -111,6 +162,13 @@ export default function CreateAdmissionPage() {
       setSlug(generatedSlug);
     }
   }, [selectedInstitute, selectedProgramsList, year, session, manualName]);
+
+  // Auto-generate SEO when name/slug/institute changes
+  useEffect(() => {
+    if (name && slug && selectedInstitute) {
+      generateSeoMeta();
+    }
+  }, [name, slug, selectedInstitute, year, session, selectedProgramsList, autoGenerateSeo]);
 
   // Handle manual name change
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,20 +379,29 @@ export default function CreateAdmissionPage() {
       return;
     }
 
-    const formData: AdmissionFormData = {
-      name,
-      slug,
-      programIds: selectedPrograms,
-      instituteId: Number(instituteId),
-      year: Number(year),
-      session: session || null,
-      status,
-      expectedOpenDate: expectedOpenDate || null,
-      expectedCloseDate: expectedCloseDate || null,
-      meritInfo: meritInfo || null,
-      note: note || null,
-      officialLink: officialLink || null,
-    };
+const formData: AdmissionFormData = {
+  name,
+  slug,
+  programIds: selectedPrograms,
+  instituteId: Number(instituteId),
+  year: Number(year),
+  session: session || null,
+  status,
+  expectedOpenDate: expectedOpenDate || null,
+  expectedCloseDate: expectedCloseDate || null,
+  meritInfo: meritInfo || null,
+  note: note || null,
+  officialLink: officialLink || null,
+  
+  // SEO data - NO metaKeywords
+  metaTitle: metaTitle || null,
+  metaDescription: metaDescription || null,
+  canonicalUrl: canonicalUrl || null,
+  robots: robots || "index, follow",
+  ogTitle: ogTitle || null,
+  ogDescription: ogDescription || null,
+  ogImage: ogImage || null,
+};
 
     toast.loading("Creating admission...", { id: "create-admission" });
 
@@ -579,6 +646,141 @@ export default function CreateAdmissionPage() {
               </div>
             )}
 
+            {/* SEO Section - Collapsible */}
+            <details className="border rounded-lg p-4">
+              <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-blue-600">
+                🔍 SEO Settings (Optional - Auto-generated)
+              </summary>
+              
+              <div className="mt-4 space-y-4">
+                {/* Auto-generate toggle */}
+                <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                  <span className="text-sm text-gray-700">Auto-generate SEO from admission data</span>
+                  <button
+                    type="button"
+                    onClick={() => setAutoGenerateSeo(!autoGenerateSeo)}
+                    className={`px-3 py-1 text-sm rounded ${
+                      autoGenerateSeo 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    {autoGenerateSeo ? '✅ Auto ON' : 'Manual Mode'}
+                  </button>
+                </div>
+                
+                {/* Meta Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meta Title
+                    <span className="text-xs text-gray-500 ml-2">(50-60 chars recommended)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    placeholder="SEO title for search engines"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    maxLength={70}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {metaTitle.length}/70 characters
+                  </p>
+                </div>
+                
+                {/* Meta Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meta Description
+                    <span className="text-xs text-gray-500 ml-2">(155-160 chars recommended)</span>
+                  </label>
+                  <textarea
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    placeholder="SEO description for search results"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    maxLength={170}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {metaDescription.length}/170 characters
+                  </p>
+                </div>
+                
+                {/* Canonical URL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Canonical URL
+                  </label>
+                  <input
+                    type="url"
+                    value={canonicalUrl}
+                    onChange={(e) => setCanonicalUrl(e.target.value)}
+                    placeholder="https://www.nextid.pk/admissions/slug"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                {/* Robots */}
+                <Select
+                  label="Robots"
+                  value={robots}
+                  onChange={(val: string) => setRobots(val)}
+                  options={[
+                    { value: "index, follow", label: "Index, Follow (Default)" },
+                    { value: "noindex, follow", label: "No Index, Follow" },
+                    { value: "index, nofollow", label: "Index, No Follow" },
+                    { value: "noindex, nofollow", label: "No Index, No Follow" },
+                  ]}
+                />
+                
+                {/* OG Title (Social Media) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Social Media Title (OG Title)
+                  </label>
+                  <input
+                    type="text"
+                    value={ogTitle}
+                    onChange={(e) => setOgTitle(e.target.value)}
+                    placeholder="Title for Facebook/WhatsApp sharing"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                {/* OG Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Social Media Description (OG Description)
+                  </label>
+                  <textarea
+                    value={ogDescription}
+                    onChange={(e) => setOgDescription(e.target.value)}
+                    placeholder="Description for Facebook/WhatsApp sharing"
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                {/* OG Image */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Social Media Image URL (OG Image)
+                  </label>
+                  <input
+                    type="url"
+                    value={ogImage}
+                    onChange={(e) => setOgImage(e.target.value)}
+                    placeholder="https://nextid.pk/images/og/admission-default.jpg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recommended size: 1200x630 pixels
+                  </p>
+                </div>
+              </div>
+            </details>
+
             {/* Selected Programs Summary */}
             {selectedProgramsList.length > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -659,7 +861,7 @@ export default function CreateAdmissionPage() {
               />
             </div>
 
-            {/* Additional Notes with Rich Text Editor (Images supported here) */}
+            {/* Additional Notes with Rich Text Editor */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Additional Notes
@@ -747,6 +949,9 @@ export default function CreateAdmissionPage() {
             </p>
             <p className="text-xs text-yellow-600 mt-1">
               💡 <strong>For notes with images:</strong> Use the Rich Text Editor in single admission mode to add formatted notes with images.
+            </p>
+            <p className="text-xs text-yellow-600 mt-1">
+              🔍 <strong>SEO:</strong> After bulk upload, you can edit each admission to add SEO meta data (title, description, etc.)
             </p>
           </div>
         </div>

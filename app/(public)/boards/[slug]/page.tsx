@@ -1,9 +1,10 @@
 // app/(public)/boards/[slug]/page.tsx
+
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
-import { boards, cities, results, dateSheets, news } from '@/app/lib/schema';
+import { boards, cities, results, dateSheets, news, seoMetadata } from '@/app/lib/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 
 // ==================== FORMAT DATE FUNCTION ====================
@@ -35,15 +36,20 @@ interface BoardDetail {
   cityId: number | null;
   cityName: string | null;
   citySlug: string | null;
-  cityDescription: string | null;
   province: string | null;
   establishedYear: number | null;
   contactEmail: string | null;
   contactPhone: string | null;
   address: string | null;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  metaKeywords: string | null;
+  seo?: {
+    metaTitle: string | null;
+    metaDescription: string | null;
+    canonicalUrl: string | null;
+    robots: string | null;
+    ogTitle: string | null;
+    ogDescription: string | null;
+    ogImage: string | null;
+  } | null;
 }
 
 interface Result {
@@ -88,22 +94,34 @@ async function getBoardBySlug(slug: string): Promise<BoardDetail | null> {
         cityId: boards.cityId,
         cityName: cities.name,
         citySlug: cities.slug,
-        cityDescription: cities.description,
         province: cities.province,
         establishedYear: boards.establishedYear,
         contactEmail: boards.contactEmail,
         contactPhone: boards.contactPhone,
         address: boards.address,
-        metaTitle: boards.metaTitle,
-        metaDescription: boards.metaDescription,
-        metaKeywords: boards.metaKeywords,
       })
       .from(boards)
       .leftJoin(cities, eq(boards.cityId, cities.id))
       .where(eq(boards.slug, slug))
       .limit(1);
 
-    return board || null;
+    if (!board) return null;
+
+    const [seo] = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, 'board'),
+          eq(seoMetadata.entityId, board.id)
+        )
+      )
+      .limit(1);
+
+    return {
+      ...board,
+      seo: seo || null,
+    };
   } catch (error) {
     console.error('Error fetching board:', error);
     return null;
@@ -247,22 +265,36 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const title = board.metaTitle || `${board.name} - Results, Date Sheets & News | NextID.pk`;
-  const description = board.metaDescription || `Find all ${board.name} results, date sheets, and announcements. ${board.cityName ? `Based in ${board.cityName}.` : ''} Check exam results online.`;
+  const title = board.seo?.metaTitle || `${board.name} - Results, Date Sheets & News | NextID.pk`;
+  const description = board.seo?.metaDescription || `Find all ${board.name} results, date sheets, and announcements. ${board.cityName ? `Based in ${board.cityName}.` : ''} Check exam results online.`;
 
   return {
     title,
     description,
-    keywords: board.metaKeywords || `${board.name}, ${board.name} results, ${board.name} date sheets, education board Pakistan`,
     openGraph: {
-      title,
-      description,
+      title: board.seo?.ogTitle || title,
+      description: board.seo?.ogDescription || description,
+      images: board.seo?.ogImage ? [{ url: board.seo.ogImage }] : undefined,
       type: 'website',
     },
     alternates: {
-      canonical: `https://www.nextid.pk/boards/${board.slug}`,
+      canonical: board.seo?.canonicalUrl || `https://www.nextid.pk/boards/${board.slug}`,
     },
+    robots: board.seo?.robots ? {
+      index: board.seo.robots.includes('index'),
+      follow: board.seo.robots.includes('follow'),
+    } : { index: true, follow: true },
   };
+}
+
+// ==================== HELPER: Format Description ====================
+function formatDescription(text: string | null) {
+  if (!text) return null;
+  return text.split('\n\n').map((paragraph, idx) => (
+    <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
+      {paragraph}
+    </p>
+  ));
 }
 
 // ==================== MAIN PAGE ====================
@@ -280,88 +312,82 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
     getYears(board.id),
   ]);
 
-  // Helper function to format description with paragraphs
-  const formatDescription = (text: string | null) => {
-    if (!text) return null;
-    return text.split('\n\n').map((paragraph, idx) => (
-      <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
-        {paragraph}
-      </p>
-    ));
-  };
+  // ✅ Only show sections if they have data
+  const hasResults = stats.totalResults > 0;
+  const hasDateSheets = stats.totalDateSheets > 0;
+  const hasNews = stats.totalNews > 0;
+  const hasAbout = board.description && board.description.trim() !== "";
+  const hasAnyContent = hasResults || hasDateSheets || hasNews || hasAbout;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Hero Section - Premium Design */}
+      {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-red-600">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-orange-400/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
         
-        <div className="container mx-auto px-4 py-20 relative z-10">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full">
-                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                <span className="text-xs font-medium text-white">Educational Board</span>
-              </div>
-            </div>
-            
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight">
+        <div className="container mx-auto px-4 py-16 md:py-20 relative z-10">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
               {board.name}
             </h1>
             
-            <div className="flex flex-wrap items-center gap-6 text-white/90">
+            <div className="flex flex-wrap items-center justify-center gap-4 text-white/90">
               {board.cityName && (
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="flex items-center gap-2 text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>{board.cityName}{board.province ? `, ${board.province}` : ''}</span>
-                </div>
+                  {board.cityName}{board.province ? `, ${board.province}` : ''}
+                </span>
               )}
               {board.establishedYear && (
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="flex items-center gap-2 text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span>Est. {board.establishedYear}</span>
-                </div>
+                  Est. {board.establishedYear}
+                </span>
               )}
               {board.website && (
-                <a href={board.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <a href={board.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm hover:text-white transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
                   </svg>
-                  <span>Official Website</span>
+                  Official Website
                 </a>
               )}
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Stats Bar */}
-      <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x">
-            <div className="py-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.totalResults}</div>
-              <div className="text-xs text-gray-500">Total Results</div>
-            </div>
-            <div className="py-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.totalDateSheets}</div>
-              <div className="text-xs text-gray-500">Date Sheets</div>
-            </div>
-            <div className="py-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.totalNews}</div>
-              <div className="text-xs text-gray-500">Announcements</div>
-            </div>
-            <div className="py-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.recentResults}</div>
-              <div className="text-xs text-gray-500">This Month</div>
+            {/* Stats Cards - Only show if data exists */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
+              {hasResults && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <div className="text-2xl font-bold">{stats.totalResults}</div>
+                  <div className="text-xs text-orange-200">Results</div>
+                </div>
+              )}
+              {hasDateSheets && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <div className="text-2xl font-bold">{stats.totalDateSheets}</div>
+                  <div className="text-xs text-orange-200">Date Sheets</div>
+                </div>
+              )}
+              {hasNews && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <div className="text-2xl font-bold">{stats.totalNews}</div>
+                  <div className="text-xs text-orange-200">Announcements</div>
+                </div>
+              )}
+              {stats.recentResults > 0 && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                  <div className="text-2xl font-bold">{stats.recentResults}</div>
+                  <div className="text-xs text-orange-200">This Month</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -372,90 +398,75 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Sidebar */}
-          <div className="lg:col-span-1 order-2 lg:order-1">
+          <aside className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-24 space-y-6">
-              
               {/* Contact Card */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4">
-                  <h3 className="text-white font-semibold flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    Contact Information
-                  </h3>
-                </div>
-                <div className="p-6 space-y-4">
-                  {board.address && (
-                    <div className="flex gap-3">
-                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wide">Address</div>
-                        <div className="text-sm text-gray-700 mt-1">{board.address}</div>
+              {(board.address || board.contactPhone || board.contactEmail) && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-5 py-4 bg-gray-50 border-b border-gray-200">
+                    <h3 className="font-semibold text-gray-900">Contact Information</h3>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {board.address && (
+                      <div className="flex gap-2 text-sm">
+                        <span className="text-gray-400">📍</span>
+                        <span className="text-gray-600">{board.address}</span>
                       </div>
-                    </div>
-                  )}
-                  {board.contactPhone && (
-                    <div className="flex gap-3">
-                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                      <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wide">Phone</div>
-                        <a href={`tel:${board.contactPhone}`} className="text-sm text-orange-600 hover:underline mt-1 block">
+                    )}
+                    {board.contactPhone && (
+                      <div className="flex gap-2 text-sm">
+                        <span className="text-gray-400">📞</span>
+                        <a href={`tel:${board.contactPhone}`} className="text-orange-600 hover:underline">
                           {board.contactPhone}
                         </a>
                       </div>
-                    </div>
-                  )}
-                  {board.contactEmail && (
-                    <div className="flex gap-3">
-                      <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      <div>
-                        <div className="text-xs text-gray-500 uppercase tracking-wide">Email</div>
-                        <a href={`mailto:${board.contactEmail}`} className="text-sm text-orange-600 hover:underline mt-1 block break-all">
+                    )}
+                    {board.contactEmail && (
+                      <div className="flex gap-2 text-sm">
+                        <span className="text-gray-400">✉️</span>
+                        <a href={`mailto:${board.contactEmail}`} className="text-orange-600 hover:underline break-all">
                           {board.contactEmail}
                         </a>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Quick Links */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
-                <div className="space-y-2">
-                  <Link href="#results" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
-                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📊</span>
-                    <span className="text-sm text-gray-700 group-hover:text-orange-600">Latest Results ({stats.totalResults})</span>
-                  </Link>
-                  <Link href="#date-sheets" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
-                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📅</span>
-                    <span className="text-sm text-gray-700 group-hover:text-orange-600">Date Sheets ({stats.totalDateSheets})</span>
-                  </Link>
-                  <Link href="#news" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
-                    <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📢</span>
-                    <span className="text-sm text-gray-700 group-hover:text-orange-600">News & Announcements ({stats.totalNews})</span>
-                  </Link>
+              {/* Quick Links - Only show sections that have data */}
+              {(hasResults || hasDateSheets || hasNews) && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                  <h3 className="font-semibold text-gray-900 mb-3">Quick Links</h3>
+                  <div className="space-y-1">
+                    {hasResults && (
+                      <Link href="#results" className="block text-sm text-gray-600 hover:text-orange-600 py-1">
+                        📊 Results ({stats.totalResults})
+                      </Link>
+                    )}
+                    {hasDateSheets && (
+                      <Link href="#date-sheets" className="block text-sm text-gray-600 hover:text-orange-600 py-1">
+                        📅 Date Sheets ({stats.totalDateSheets})
+                      </Link>
+                    )}
+                    {hasNews && (
+                      <Link href="#news" className="block text-sm text-gray-600 hover:text-orange-600 py-1">
+                        📢 News ({stats.totalNews})
+                      </Link>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Years */}
+              {/* Years Filter - Only show if there are results */}
               {years.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                   <h3 className="font-semibold text-gray-900 mb-3">Browse by Year</h3>
                   <div className="flex flex-wrap gap-2">
                     {years.map(year => (
                       <Link
                         key={year}
                         href={`/boards/${board.slug}/results/${year}`}
-                        className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-orange-100 hover:text-orange-600 transition"
+                        className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-sm hover:bg-orange-100 hover:text-orange-600 transition"
                       >
                         {year}
                       </Link>
@@ -464,47 +475,40 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                 </div>
               )}
             </div>
-          </div>
+          </aside>
 
           {/* Main Content */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
             {/* Results Section */}
-            <section id="results">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
-                  Latest Results
-                </h2>
-                {stats.totalResults > 0 && (
-                  <Link href={`/boards/${board.slug}/results`} className="text-sm text-orange-600 hover:underline font-medium">
+            {hasResults && (
+              <section id="results">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-2xl font-bold text-gray-900">Latest Results</h2>
+                  <Link href={`/boards/${board.slug}/results`} className="text-sm text-orange-600 hover:underline">
                     View All →
                   </Link>
-                )}
-              </div>
+                </div>
 
-              {results.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {results.map((res) => (
                     <Link
                       key={res.id}
                       href={`/results/${res.slug}`}
-                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
+                      className="block bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md hover:border-orange-200 transition group"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition mb-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600">
                             {res.title}
                           </h3>
-                          <div className="flex flex-wrap items-center gap-3 text-sm">
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">Year: {res.year}</span>
-                            {res.resultDate && (
-                              <span className="text-gray-500">Announced: {formatShortDate(res.resultDate)}</span>
-                            )}
+                          <div className="text-sm text-gray-500 mt-1">
+                            Year: {res.year}
+                            {res.resultDate && ` • Announced: ${formatShortDate(res.resultDate)}`}
                           </div>
                         </div>
                         {res.isPopular && (
-                          <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
                             Popular
                           </span>
                         )}
@@ -512,79 +516,32 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                     </Link>
                   ))}
                 </div>
-              ) : (
-                <div className="bg-white rounded-xl p-12 text-center border border-gray-100">
-                  <div className="text-5xl mb-4">📋</div>
-                  <p className="text-gray-500">No results found for {board.name}.</p>
-                </div>
-              )}
-            </section>
-
-            {/* About Section with formatted paragraphs */}
-            {(board.description || board.cityDescription || board.cityName) && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-red-50">
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <span>📖</span> About {board.name}
-                  </h2>
-                </div>
-                <div className="p-6">
-                  {board.description && (
-                    <div className="prose prose-orange max-w-none">
-                      {formatDescription(board.description)}
-                    </div>
-                  )}
-                  {board.cityName && board.cityDescription && (
-                    <div className="mt-6 pt-6 border-t border-gray-100">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                        <span>📍</span> About {board.cityName}
-                      </h3>
-                      <div className="prose prose-gray max-w-none">
-                        {formatDescription(board.cityDescription)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              </section>
             )}
 
             {/* Date Sheets Section */}
-            {dateSheets.length > 0 && (
+            {hasDateSheets && (
               <section id="date-sheets">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
-                    Date Sheets
-                  </h2>
-                  <Link href={`/boards/${board.slug}/date-sheets`} className="text-sm text-orange-600 hover:underline font-medium">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-2xl font-bold text-gray-900">Date Sheets</h2>
+                  <Link href={`/boards/${board.slug}/date-sheets`} className="text-sm text-orange-600 hover:underline">
                     View All →
                   </Link>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {dateSheets.map((ds) => (
-                    <div
-                      key={ds.id}
-                      className="bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 mb-2">
-                            {ds.title}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-3 text-sm">
-                            {ds.examDate && (
-                              <span className="flex items-center gap-1 text-gray-600">
-                                📅 Exam Date: {formatDate(ds.examDate)}
-                              </span>
-                            )}
-                            {ds.year && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md">Year: {ds.year}</span>
-                            )}
+                    <div key={ds.id} className="bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md transition">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{ds.title}</h3>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {ds.examDate && `📅 Exam Date: ${formatDate(ds.examDate)}`}
+                            {ds.year && ` • Year: ${ds.year}`}
                           </div>
                         </div>
                         {ds.isPopular && (
-                          <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
                             Popular
                           </span>
                         )}
@@ -596,46 +553,38 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
             )}
 
             {/* News Section */}
-            {newsList.length > 0 && (
+            {hasNews && (
               <section id="news">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
-                    News & Announcements
-                  </h2>
-                  <Link href={`/boards/${board.slug}/news`} className="text-sm text-orange-600 hover:underline font-medium">
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-2xl font-bold text-gray-900">News & Announcements</h2>
+                  <Link href={`/boards/${board.slug}/news`} className="text-sm text-orange-600 hover:underline">
                     View All →
                   </Link>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {newsList.map((item) => (
                     <Link
                       key={item.id}
                       href={`/news/${item.slug}`}
-                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
+                      className="block bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md hover:border-orange-200 transition group"
                     >
-                      <div className="flex gap-4">
+                      <div className="flex gap-3">
                         {item.isBreaking && (
-                          <div className="flex-shrink-0">
-                            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
-                              BREAKING
-                            </span>
-                          </div>
+                          <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-full">
+                            BREAKING
+                          </span>
                         )}
                         <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition mb-2">
+                          <h3 className="font-semibold text-gray-900 group-hover:text-orange-600">
                             {item.title}
                           </h3>
                           {item.excerpt && (
-                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">{item.excerpt}</p>
+                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{item.excerpt}</p>
                           )}
                           {item.publishedAt && (
-                            <div className="text-xs text-gray-400 flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {formatShortDate(item.publishedAt)}
+                            <div className="text-xs text-gray-400 mt-2">
+                              📅 {formatShortDate(item.publishedAt)}
                             </div>
                           )}
                         </div>
@@ -646,10 +595,24 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               </section>
             )}
 
-            {/* No Data State */}
-            {results.length === 0 && dateSheets.length === 0 && newsList.length === 0 && (
-              <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
-                <div className="text-6xl mb-4">📚</div>
+            {/* ✅ About Section - ONLY BOARD DESCRIPTION (No city) */}
+            {hasAbout && (
+              <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                  <h2 className="text-xl font-bold text-gray-900">About {board.name}</h2>
+                </div>
+                <div className="p-6">
+                  <div className="text-gray-700 leading-relaxed space-y-3">
+                    {formatDescription(board.description)}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Empty State */}
+            {!hasAnyContent && (
+              <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
+                <div className="text-5xl mb-4">📚</div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
                 <p className="text-gray-500">We're currently updating information for {board.name}. Please check back later.</p>
               </div>

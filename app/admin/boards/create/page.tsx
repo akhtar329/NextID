@@ -1,4 +1,4 @@
-// app/admin/boards/create/page.tsx - Add SEO fields
+// app/admin/boards/create/page.tsx
 
 "use client";
 
@@ -23,7 +23,11 @@ interface BoardBulkItem extends BulkItem {
   address?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
-  metaKeywords?: string | null;
+  canonicalUrl?: string | null;
+  robots?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImage?: string | null;
 }
 
 export default function CreateBoardPage() {
@@ -41,12 +45,15 @@ export default function CreateBoardPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [address, setAddress] = useState("");
   
-  // ✅ SEO fields
+  // ✅ SEO fields (will be saved to seo_metadata table)
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
-  const [metaKeywords, setMetaKeywords] = useState("");
+  const [canonicalUrl, setCanonicalUrl] = useState("");
+  const [robots, setRobots] = useState("index, follow");
+  const [ogTitle, setOgTitle] = useState("");
+  const [ogDescription, setOgDescription] = useState("");
+  const [ogImage, setOgImage] = useState("");
   
-  const [type] = useState("Board");
   const [slugEdited, setSlugEdited] = useState(false);
   const [singleLoading, setSingleLoading] = useState(false);
 
@@ -76,6 +83,27 @@ export default function CreateBoardPage() {
       setMetaTitle(`${name} - Results, Date Sheets & Announcements | NextID.pk`);
     }
   }, [name, metaTitle]);
+
+  // Auto-generate canonical URL
+  useEffect(() => {
+    if (!canonicalUrl && slug) {
+      setCanonicalUrl(`https://www.nextid.pk/boards/${slug}`);
+    }
+  }, [slug, canonicalUrl]);
+
+  // Auto-generate OG title from meta title
+  useEffect(() => {
+    if (!ogTitle && metaTitle) {
+      setOgTitle(metaTitle);
+    }
+  }, [metaTitle, ogTitle]);
+
+  // Auto-generate OG description from meta description
+  useEffect(() => {
+    if (!ogDescription && metaDescription) {
+      setOgDescription(metaDescription);
+    }
+  }, [metaDescription, ogDescription]);
 
   // Fetch Cities
   useEffect(() => {
@@ -119,7 +147,7 @@ export default function CreateBoardPage() {
       headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       startIndex = 1;
     } else {
-      headers = ['name', 'cityid', 'slug', 'website', 'description', 'establishedyear', 'contactemail', 'contactphone', 'address', 'metatitle', 'metadescription', 'metakeywords', 'status'];
+      headers = ['name', 'cityid', 'slug', 'website', 'description', 'establishedyear', 'contactemail', 'contactphone', 'address', 'metatitle', 'metadescription', 'canonicalurl', 'robots', 'ogtitle', 'ogdescription', 'ogimage', 'status'];
     }
     
     const items: BulkItem[] = [];
@@ -147,7 +175,11 @@ export default function CreateBoardPage() {
       const address = obj.address || '';
       const metaTitle = obj.metatitle || obj.meta_title || '';
       const metaDescription = obj.metadescription || obj.meta_description || '';
-      const metaKeywords = obj.metakeywords || obj.meta_keywords || '';
+      const canonicalUrl = obj.canonicalurl || obj.canonical_url || '';
+      const robots = obj.robots || 'index, follow';
+      const ogTitle = obj.ogtitle || obj.og_title || '';
+      const ogDescription = obj.ogdescription || obj.og_description || '';
+      const ogImage = obj.ogimage || obj.og_image || '';
       const displayOrder = parseInt(obj.displayorder || '0') || 0;
       const status = obj.status === 'false' ? false : true;
       
@@ -166,7 +198,11 @@ export default function CreateBoardPage() {
           address,
           metaTitle,
           metaDescription,
-          metaKeywords,
+          canonicalUrl,
+          robots,
+          ogTitle,
+          ogDescription,
+          ogImage,
         });
       }
     }
@@ -208,7 +244,6 @@ export default function CreateBoardPage() {
         body: JSON.stringify({
           name,
           cityId,
-          type: "Board",
           slug: slug || generateSlug(name),
           website: website || null,
           description: description || null,
@@ -216,9 +251,14 @@ export default function CreateBoardPage() {
           contactEmail: contactEmail || null,
           contactPhone: contactPhone || null,
           address: address || null,
+          // SEO fields (will be saved to seo_metadata table)
           metaTitle: metaTitle || null,
           metaDescription: metaDescription || null,
-          metaKeywords: metaKeywords || null,
+          canonicalUrl: canonicalUrl || null,
+          robots: robots || 'index, follow',
+          ogTitle: ogTitle || metaTitle || null,
+          ogDescription: ogDescription || metaDescription || null,
+          ogImage: ogImage || null,
           status: true,
         }),
       });
@@ -243,10 +283,10 @@ export default function CreateBoardPage() {
 
   // Download sample CSV
   const downloadSample = () => {
-    const headers = ['name', 'cityId', 'slug', 'website', 'description', 'establishedYear', 'contactEmail', 'contactPhone', 'address', 'metaTitle', 'metaDescription', 'metaKeywords', 'status'];
+    const headers = ['name', 'cityId', 'slug', 'website', 'description', 'establishedYear', 'contactEmail', 'contactPhone', 'address', 'metaTitle', 'metaDescription', 'canonicalUrl', 'robots', 'ogTitle', 'ogDescription', 'ogImage', 'status'];
     const sampleData = [
-      ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results, Date Sheets & News', 'Complete guide to BISE Lahore results, date sheets and announcements', 'BISE Lahore, Lahore board, matric result, intermediate result', 'true'],
-      ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board of Intermediate and Secondary Education', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Sector H-8, Islamabad', 'FBISE - Federal Board Results & Announcements', 'Check FBISE results, date sheets and latest announcements', 'FBISE, federal board, matric result, HSSC result', 'true'],
+      ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results, Date Sheets & News', 'Complete guide to BISE Lahore results, date sheets and announcements', 'https://www.nextid.pk/boards/bise-lahore', 'index, follow', 'BISE Lahore Results 2026', 'Check BISE Lahore results online', 'https://www.nextid.pk/images/bise-lahore-og.jpg', 'true'],
+      ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board of Intermediate and Secondary Education', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Sector H-8, Islamabad', 'FBISE - Federal Board Results & Announcements', 'Check FBISE results, date sheets and latest announcements', 'https://www.nextid.pk/boards/fbise', 'index, follow', 'FBISE Results 2026', 'Check FBISE results online', 'https://www.nextid.pk/images/fbise-og.jpg', 'true'],
     ];
     
     const csvContent = [
@@ -269,8 +309,8 @@ export default function CreateBoardPage() {
 
   // Sample data for preview
   const sampleData = [
-    ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results', 'Complete guide', 'BISE Lahore, results', 'true'],
-    ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Islamabad', 'FBISE - Results', 'Check FBISE results', 'FBISE, results', 'true'],
+    ['BISE Lahore', '1', 'bise-lahore', 'www.biselahore.edu.pk', 'Board of Intermediate and Secondary Education Lahore', '1954', 'info@biselahore.edu.pk', '042-99231234', 'Mall Road, Lahore', 'BISE Lahore - Results', 'Complete guide', 'https://www.nextid.pk/boards/bise-lahore', 'index, follow', 'BISE Lahore Results', 'Check results', '', 'true'],
+    ['FBISE', '2', 'fbise', 'www.fbise.edu.pk', 'Federal Board', '1975', 'info@fbise.edu.pk', '051-111-123456', 'Islamabad', 'FBISE - Results', 'Check FBISE results', 'https://www.nextid.pk/boards/fbise', 'index, follow', 'FBISE Results', 'Check results', '', 'true'],
   ];
 
   if (loading) {
@@ -439,10 +479,42 @@ export default function CreateBoardPage() {
                 />
               </div>
               <Input
-                label="Meta Keywords"
-                value={metaKeywords}
-                onChange={setMetaKeywords}
-                placeholder="board, education, results, date sheets"
+                label="Canonical URL"
+                value={canonicalUrl}
+                onChange={setCanonicalUrl}
+                placeholder="https://www.nextid.pk/boards/board-slug"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Robots"
+                  value={robots}
+                  onChange={setRobots}
+                  placeholder="index, follow"
+                />
+              </div>
+              <Input
+                label="OG Title (Facebook/Twitter)"
+                value={ogTitle}
+                onChange={setOgTitle}
+                placeholder="Title for social media sharing"
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OG Description
+                </label>
+                <textarea
+                  value={ogDescription}
+                  onChange={(e) => setOgDescription(e.target.value)}
+                  placeholder="Description for social media sharing"
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <Input
+                label="OG Image URL"
+                value={ogImage}
+                onChange={setOgImage}
+                placeholder="https://www.nextid.pk/images/board-og.jpg"
               />
             </div>
           </div>
@@ -470,10 +542,10 @@ export default function CreateBoardPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="font-medium text-blue-800 mb-2">CSV Format</h3>
             <p className="text-sm text-blue-600 mb-2">
-              Headers: name, cityId, slug, website, description, establishedYear, contactEmail, contactPhone, address, metaTitle, metaDescription, metaKeywords, status
+              Headers: name, cityId, slug, website, description, establishedYear, contactEmail, contactPhone, address, metaTitle, metaDescription, canonicalUrl, robots, ogTitle, ogDescription, ogImage, status
             </p>
             <p className="text-sm text-blue-600">
-              Example: BISE Lahore,1,bise-lahore,www.biselahore.edu.pk,Board description,1954,info@biselahore.edu.pk,042-99231234,Mall Road Lahore,BISE Lahore - Results,Complete guide,BISE Lahore results,true
+              Example: BISE Lahore,1,bise-lahore,www.biselahore.edu.pk,Board description,1954,info@biselahore.edu.pk,042-99231234,Mall Road Lahore,BISE Lahore - Results,Complete guide,https://www.nextid.pk/boards/bise-lahore,index follow,BISE Lahore Results,Check results,https://example.com/og.jpg,true
             </p>
             <p className="text-xs text-blue-500 mt-2">
               Note: cityId must be a valid ID from cities table. All fields except name and cityId are optional.

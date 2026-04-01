@@ -9,15 +9,17 @@ import {
   categories, 
   institutes, 
   admissions,
-  admissionPrograms,  // ✅ Add this
+  admissionPrograms,
   results, 
   cities,
-  programInstitutes  // ✅ Add this if not already
+  programInstitutes,
+  seoMetadata
 } from '@/app/lib/schema';
-import { eq, and, desc, count, sql, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, count, sql, isNotNull } from 'drizzle-orm';
 import { db } from '@/app/lib/db';
+import { generateSEO } from '@/app/lib/seo';
 
-// ==================== FORMAT DATE FUNCTION ====================
+// ==================== FORMAT DATE FUNCTIONS ====================
 function formatDate(date: Date | null) {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -27,11 +29,11 @@ function formatDate(date: Date | null) {
   });
 }
 
-// ==================== FORMAT SHORT DATE ====================
 function formatShortDate(date: Date | null) {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric',
   });
 }
@@ -49,6 +51,7 @@ interface ProgramDetail {
   degreeName: string | null;
   levelName: string | null;
   categoryName: string | null;
+  featuredImage?: string | null;
 }
 
 interface InstituteWithStats {
@@ -56,6 +59,7 @@ interface InstituteWithStats {
   name: string;
   slug: string;
   type: string;
+  logo: string | null;
   cityName: string | null;
   citySlug: string | null;
   admissionsCount: number;
@@ -73,6 +77,7 @@ interface Admission {
   expectedCloseDate: Date | null;
   instituteName: string;
   instituteSlug: string;
+  instituteLogo: string | null;
   cityName: string | null;
 }
 
@@ -84,6 +89,7 @@ interface Result {
   resultDate: Date | null;
   instituteName: string;
   instituteSlug: string;
+  instituteLogo: string | null;
   cityName: string | null;
   isPopular: boolean | null;
 }
@@ -122,13 +128,13 @@ async function getProgramBySlug(slug: string): Promise<ProgramDetail | null> {
 // ==================== GET INSTITUTES WITH STATS ====================
 async function getInstitutesWithStats(programId: number) {
   try {
-    // Get all institutes that offer this program
     const institutesList = await db
       .select({
         id: institutes.id,
         name: institutes.name,
         slug: institutes.slug,
         type: institutes.type,
+        logo: institutes.logo,
         isFeatured: institutes.isFeatured,
         cityName: cities.name,
         citySlug: cities.slug,
@@ -144,10 +150,8 @@ async function getInstitutesWithStats(programId: number) {
       )
       .orderBy(desc(institutes.isFeatured), institutes.name);
 
-    // Get admission counts for each institute for this program
     const institutesWithStats = await Promise.all(
       institutesList.map(async (inst) => {
-        // ✅ FIXED: Count admissions through junction table
         const [admissionsResult] = await db
           .select({ count: count() })
           .from(admissions)
@@ -160,7 +164,6 @@ async function getInstitutesWithStats(programId: number) {
             )
           );
 
-        // Count results (results still use direct programId)
         const [resultsResult] = await db
           .select({ count: count() })
           .from(results)
@@ -179,7 +182,6 @@ async function getInstitutesWithStats(programId: number) {
       })
     );
 
-    // Filter institutes that have either admissions or results
     return institutesWithStats.filter(
       inst => inst.admissionsCount > 0 || inst.resultsCount > 0
     );
@@ -190,7 +192,7 @@ async function getInstitutesWithStats(programId: number) {
 }
 
 // ==================== GET ADMISSIONS ====================
-async function getAdmissions(programId: number, limit = 5) {
+async function getAdmissions(programId: number, limit = 6) {
   try {
     return await db
       .select({
@@ -203,6 +205,7 @@ async function getAdmissions(programId: number, limit = 5) {
         expectedCloseDate: admissions.expectedCloseDate,
         instituteName: institutes.name,
         instituteSlug: institutes.slug,
+        instituteLogo: institutes.logo,
         cityName: cities.name,
       })
       .from(admissions)
@@ -212,8 +215,7 @@ async function getAdmissions(programId: number, limit = 5) {
       .where(
         and(
           eq(admissionPrograms.programId, programId),
-          eq(admissions.status, 'Open'),
-          isNotNull(admissionPrograms.programId)
+          eq(admissions.status, 'Open')
         )
       )
       .orderBy(admissions.expectedCloseDate)
@@ -225,7 +227,7 @@ async function getAdmissions(programId: number, limit = 5) {
 }
 
 // ==================== GET RESULTS ====================
-async function getResults(programId: number, limit = 5) {
+async function getResults(programId: number, limit = 6) {
   try {
     return await db
       .select({
@@ -237,6 +239,7 @@ async function getResults(programId: number, limit = 5) {
         isPopular: results.isPopular,
         instituteName: institutes.name,
         instituteSlug: institutes.slug,
+        instituteLogo: institutes.logo,
         cityName: cities.name,
       })
       .from(results)
@@ -254,13 +257,11 @@ async function getResults(programId: number, limit = 5) {
 // ==================== GET STATS ====================
 async function getStats(programId: number) {
   try {
-    // ✅ FIXED: Count institutes through programInstitutes
     const [institutesCount] = await db
       .select({ count: count() })
       .from(programInstitutes)
       .where(eq(programInstitutes.programId, programId));
 
-    // ✅ FIXED: Count admissions through junction table
     const [admissionsCount] = await db
       .select({ count: count() })
       .from(admissionPrograms)
@@ -288,27 +289,31 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const program = await getProgramBySlug(slug);
 
   if (!program) {
-    return {
-      title: 'Program Not Found | NextID.pk',
-      description: 'The requested program could not be found.',
-    };
+    return generateSEO({
+      title: "Program Not Found",
+      description: "The requested program could not be found.",
+      noIndex: true,
+    });
   }
 
-  const title = `${program.name} Program - Admissions, Universities & Results | NextID.pk`;
-  const description = `Find all ${program.name} admissions, universities, and results in Pakistan. Check eligibility, duration, fee structure, and career scope. ${program.overview?.substring(0, 100)}...`;
+  return generateSEO({
+    entityType: "program",
+    entityId: program.id,
+    path: `/programs/${slug}`,
+    title: `${program.name} Program - Admissions, Universities & Results | NextID.pk`,
+    description: `Complete guide to ${program.name} program in Pakistan. Check eligibility, duration, fee structure, career scope, open admissions, and results from top universities.`,
+    image: "/program-default.jpg",
+  });
+}
 
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      type: 'website',
-    },
-    alternates: {
-      canonical: `https://www.nextid.pk/programs/${program.slug}`,
-    },
-  };
+// ==================== HELPER: Format Description ====================
+function formatDescription(text: string | null) {
+  if (!text) return null;
+  return text.split('\n\n').map((paragraph, idx) => (
+    <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
+      {paragraph}
+    </p>
+  ));
 }
 
 // ==================== MAIN PAGE ====================
@@ -318,15 +323,17 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
   const program = await getProgramBySlug(slug);
   if (!program) notFound();
 
-  const [institutes, admissions, results, stats] = await Promise.all([
+  const [institutes, admissionsList, resultsList, stats] = await Promise.all([
     getInstitutesWithStats(program.id),
     getAdmissions(program.id, 6),
     getResults(program.id, 6),
     getStats(program.id),
   ]);
 
+  const hasAnyData = institutes.length > 0 || admissionsList.length > 0 || resultsList.length > 0;
+
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
       {/* Breadcrumbs */}
       <div className="bg-white border-b">
@@ -336,250 +343,342 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
             <span className="text-gray-400">›</span>
             <Link href="/programs" className="text-gray-600 hover:text-blue-600">Programs</Link>
             <span className="text-gray-400">›</span>
-            <span className="text-gray-900 font-medium">{program.name}</span>
+            <span className="text-gray-900 font-medium line-clamp-1">{program.name}</span>
           </div>
         </div>
       </div>
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-700 to-indigo-800 text-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl">
-            <div className="flex items-center gap-2 text-sm text-blue-200 mb-4">
-              <span>{program.levelName || 'Program'}</span>
+      {/* Hero Section - Premium Design */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-800">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+        
+        <div className="container mx-auto px-4 py-16 relative z-10">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-blue-200 mb-4">
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full">
+                <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
+                {program.levelName || 'Program'}
+              </span>
               <span>•</span>
               <span>{program.categoryName || 'Category'}</span>
               <span>•</span>
               <span>{program.degreeName || 'Degree'}</span>
             </div>
             
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">{program.name}</h1>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+              {program.name}
+            </h1>
             
-            <p className="text-xl text-blue-100 mb-6 max-w-3xl">
-              {program.overview || `Complete guide to ${program.name} programs in Pakistan.`}
+            <p className="text-xl text-blue-100 mb-8 max-w-3xl leading-relaxed">
+              {program.overview?.substring(0, 200) || `Complete guide to ${program.name} programs in Pakistan.`}
             </p>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-3 gap-4 max-w-2xl">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold">{stats.institutes}</div>
-                <div className="text-sm text-blue-200">Universities</div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{stats.institutes}</div>
+                <div className="text-xs text-blue-200 mt-1">Universities</div>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold">{stats.admissions}</div>
-                <div className="text-sm text-blue-200">Open Admissions</div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{stats.admissions}</div>
+                <div className="text-xs text-blue-200 mt-1">Open Admissions</div>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold">{stats.results}</div>
-                <div className="text-sm text-blue-200">Results</div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{stats.results}</div>
+                <div className="text-xs text-blue-200 mt-1">Results</div>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Left Sidebar - Program Info */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 sticky top-24">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Program Details</h2>
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="sticky top-24 space-y-6">
               
-              <div className="space-y-4">
-                {program.duration && (
-                  <div>
-                    <div className="text-sm text-gray-500">Duration</div>
-                    <div className="font-semibold">{program.duration}</div>
-                  </div>
-                )}
-                
-                {program.feeRange && (
-                  <div>
-                    <div className="text-sm text-gray-500">Fee Range</div>
-                    <div className="font-semibold">{program.feeRange}</div>
-                  </div>
-                )}
-                
-                {program.levelName && (
-                  <div>
-                    <div className="text-sm text-gray-500">Level</div>
-                    <div className="font-semibold">{program.levelName}</div>
-                  </div>
-                )}
-                
-                {program.categoryName && (
-                  <div>
-                    <div className="text-sm text-gray-500">Category</div>
-                    <div className="font-semibold">{program.categoryName}</div>
-                  </div>
-                )}
-                
-                {program.degreeName && (
-                  <div>
-                    <div className="text-sm text-gray-500">Degree</div>
-                    <div className="font-semibold">{program.degreeName}</div>
-                  </div>
-                )}
+              {/* Program Details Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-4">
+                  <h2 className="text-white font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Program Details
+                  </h2>
+                </div>
+                <div className="p-6 space-y-4">
+                  {program.duration && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Duration</span>
+                      <span className="text-sm font-medium text-gray-900">{program.duration}</span>
+                    </div>
+                  )}
+                  {program.feeRange && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Fee Range</span>
+                      <span className="text-sm font-medium text-gray-900">{program.feeRange}</span>
+                    </div>
+                  )}
+                  {program.levelName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Level</span>
+                      <span className="text-sm font-medium text-gray-900">{program.levelName}</span>
+                    </div>
+                  )}
+                  {program.categoryName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Category</span>
+                      <span className="text-sm font-medium text-gray-900">{program.categoryName}</span>
+                    </div>
+                  )}
+                  {program.degreeName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Degree</span>
+                      <span className="text-sm font-medium text-gray-900">{program.degreeName}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {program.eligibility && (
-                <div className="mt-6 pt-6 border-t">
-                  <h3 className="font-semibold text-gray-900 mb-2">Eligibility</h3>
-                  <p className="text-sm text-gray-600">{program.eligibility}</p>
+              {/* Quick Links */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
+                <div className="space-y-2">
+                  {stats.institutes > 0 && (
+                    <Link href="#universities" className="flex items-center gap-3 p-2 rounded-lg hover:bg-blue-50 transition group">
+                      <span className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-200">🏛️</span>
+                      <span className="text-sm text-gray-700 group-hover:text-blue-600">Universities ({stats.institutes})</span>
+                    </Link>
+                  )}
+                  {stats.admissions > 0 && (
+                    <Link href="#admissions" className="flex items-center gap-3 p-2 rounded-lg hover:bg-green-50 transition group">
+                      <span className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-green-600 group-hover:bg-green-200">📝</span>
+                      <span className="text-sm text-gray-700 group-hover:text-green-600">Open Admissions ({stats.admissions})</span>
+                    </Link>
+                  )}
+                  {stats.results > 0 && (
+                    <Link href="#results" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
+                      <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📊</span>
+                      <span className="text-sm text-gray-700 group-hover:text-orange-600">Results ({stats.results})</span>
+                    </Link>
+                  )}
                 </div>
-              )}
-
-              {program.careerScope && (
-                <div className="mt-6 pt-6 border-t">
-                  <h3 className="font-semibold text-gray-900 mb-2">Career Scope</h3>
-                  <p className="text-sm text-gray-600">{program.careerScope}</p>
-                </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* Main Content - Universities, Admissions, Results */}
-          <div className="lg:col-span-2 space-y-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            {/* Universities Offering This Program */}
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">Universities Offering {program.name}</h2>
-                <Link href={`/programs/${program.slug}/universities`} className="text-sm text-blue-600 hover:underline">
-                  View All ({stats.institutes})
-                </Link>
+            {/* Eligibility Section */}
+            {program.eligibility && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <span>📋</span> Eligibility Criteria
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="prose prose-blue max-w-none">
+                    {formatDescription(program.eligibility)}
+                  </div>
+                </div>
               </div>
+            )}
 
-              {institutes.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Career Scope Section */}
+            {program.careerScope && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50">
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <span>🚀</span> Career Scope
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="prose prose-green max-w-none">
+                    {formatDescription(program.careerScope)}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Universities Section */}
+            {institutes.length > 0 && (
+              <section id="universities">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-blue-500 rounded-full"></span>
+                    Universities Offering {program.name}
+                  </h2>
+                  {stats.institutes > 4 && (
+                    <Link href={`/programs/${program.slug}/universities`} className="text-sm text-blue-600 hover:underline font-medium">
+                      View All →
+                    </Link>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {institutes.slice(0, 4).map((inst) => (
                     <Link
                       key={inst.id}
                       href={`/universities/${inst.slug}`}
-                      className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 hover:shadow-md transition group"
+                      className="group bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all"
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-bold text-gray-900 group-hover:text-blue-600">
+                      <div className="flex items-start gap-4">
+                        {inst.logo ? (
+                          <img src={inst.logo} alt={inst.name} className="w-12 h-12 object-contain rounded-lg" />
+                        ) : (
+                          <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center text-xl">
+                            🏛️
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition">
                             {inst.name}
                           </h3>
                           {inst.cityName && (
-                            <p className="text-sm text-gray-500">{inst.cityName}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{inst.cityName}</p>
                           )}
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {inst.admissionsCount > 0 && (
+                              <span className="text-xs px-2.5 py-1 bg-green-50 text-green-600 rounded-full">
+                                📝 {inst.admissionsCount} Open
+                              </span>
+                            )}
+                            {inst.resultsCount > 0 && (
+                              <span className="text-xs px-2.5 py-1 bg-orange-50 text-orange-600 rounded-full">
+                                📊 {inst.resultsCount} Results
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {inst.isFeatured && (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                            Featured
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex gap-3 text-sm">
-                        {inst.admissionsCount > 0 && (
-                          <span className="text-green-600">
-                            📝 {inst.admissionsCount} Admission{inst.admissionsCount !== 1 ? 's' : ''}
-                          </span>
-                        )}
-                        {inst.resultsCount > 0 && (
-                          <span className="text-orange-600">
-                            📊 {inst.resultsCount} Result{inst.resultsCount !== 1 ? 's' : ''}
-                          </span>
-                        )}
                       </div>
                     </Link>
                   ))}
                 </div>
-              ) : (
-                <div className="bg-white rounded-xl p-8 text-center border border-gray-200">
-                  <p className="text-gray-500">No universities found offering this program.</p>
-                </div>
-              )}
-            </section>
+              </section>
+            )}
 
-            {/* Open Admissions */}
-            {admissions.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Open Admissions</h2>
-                  <Link href={`/admissions?program=${program.slug}`} className="text-sm text-blue-600 hover:underline">
-                    View All ({stats.admissions})
-                  </Link>
+            {/* Admissions Section */}
+            {admissionsList.length > 0 && (
+              <section id="admissions">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-green-500 rounded-full"></span>
+                    Open Admissions
+                  </h2>
+                  {stats.admissions > 6 && (
+                    <Link href={`/admissions?program=${program.slug}`} className="text-sm text-blue-600 hover:underline font-medium">
+                      View All →
+                    </Link>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {admissions.map((adm) => (
+                <div className="space-y-4">
+                  {admissionsList.map((adm) => (
                     <Link
                       key={adm.id}
                       href={`/admissions/${adm.slug}`}
-                      className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 hover:shadow-md transition group"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-green-200 transition-all group"
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-bold text-gray-900 group-hover:text-blue-600">
-                          {adm.instituteName}
-                        </h3>
-                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                          Open
-                        </span>
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4">
+                          {adm.instituteLogo ? (
+                            <img src={adm.instituteLogo} alt={adm.instituteName} className="w-12 h-12 object-contain rounded-lg" />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg flex items-center justify-center text-xl">
+                              📝
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-semibold text-gray-900 group-hover:text-green-600 transition">
+                              {adm.instituteName}
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              {adm.session || 'Annual'} {adm.year}
+                            </p>
+                            {adm.cityName && (
+                              <p className="text-xs text-gray-400 mt-1">{adm.cityName}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-full">
+                            {adm.status}
+                          </span>
+                          {adm.expectedCloseDate && (
+                            <span className="text-sm text-gray-500 flex items-center gap-1">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Until {formatShortDate(adm.expectedCloseDate)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      
-                      <p className="text-sm text-gray-600 mb-2">
-                        Session: {adm.session || 'Fall'} {adm.year}
-                      </p>
-                      
-                      {adm.cityName && (
-                        <p className="text-xs text-gray-400">{adm.cityName}</p>
-                      )}
-                      
-                      {adm.expectedCloseDate && (
-                        <p className="text-xs text-orange-600 mt-2">
-                          Closes: {formatShortDate(adm.expectedCloseDate)}
-                        </p>
-                      )}
                     </Link>
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Recent Results */}
-            {results.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900">Recent Results</h2>
-                  <Link href={`/results?program=${program.slug}`} className="text-sm text-blue-600 hover:underline">
-                    View All ({stats.results})
-                  </Link>
+            {/* Results Section */}
+            {resultsList.length > 0 && (
+              <section id="results">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
+                    Recent Results
+                  </h2>
+                  {stats.results > 6 && (
+                    <Link href={`/results?program=${program.slug}`} className="text-sm text-blue-600 hover:underline font-medium">
+                      View All →
+                    </Link>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {results.map((res) => (
+                <div className="space-y-4">
+                  {resultsList.map((res) => (
                     <Link
                       key={res.id}
                       href={`/results/${res.slug}`}
-                      className="bg-white rounded-xl shadow-sm p-5 border border-gray-200 hover:shadow-md transition group"
+                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-bold text-gray-900 group-hover:text-blue-600">
-                          {res.instituteName}
-                        </h3>
-                        {res.isPopular && (
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
-                            Popular
+                      <div className="flex items-center justify-between flex-wrap gap-4">
+                        <div className="flex items-center gap-4">
+                          {res.instituteLogo ? (
+                            <img src={res.instituteLogo} alt={res.instituteName} className="w-12 h-12 object-contain rounded-lg" />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg flex items-center justify-center text-xl">
+                              📊
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition">
+                              {res.instituteName}
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-0.5">{res.title}</p>
+                            {res.cityName && (
+                              <p className="text-xs text-gray-400 mt-1">{res.cityName}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-full">
+                            {res.year}
                           </span>
-                        )}
-                      </div>
-                      
-                      <p className="text-sm text-gray-600 mb-2">
-                        {res.title || `Result ${res.year}`}
-                      </p>
-                      
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-400">{res.cityName}</span>
-                        {res.resultDate && (
-                          <span className="text-gray-500">{formatShortDate(res.resultDate)}</span>
-                        )}
+                          {res.isPopular && (
+                            <span className="px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-full">
+                              ⭐ Popular
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </Link>
                   ))}
@@ -587,84 +686,33 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </section>
             )}
 
+            {/* Overview Section - Bottom */}
+            {program.overview && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <span>📖</span> About {program.name}
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="prose prose-gray max-w-none">
+                    {formatDescription(program.overview)}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* No Data State */}
-            {institutes.length === 0 && admissions.length === 0 && results.length === 0 && (
-              <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
+            {!hasAnyData && (
+              <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <div className="text-6xl mb-4">📚</div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Information Available</h3>
-                <p className="text-gray-500">
-                  We're currently updating information for {program.name}. Please check back later.
-                </p>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
+                <p className="text-gray-500">We're currently gathering information for {program.name}. Please check back later.</p>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* SEO Content Section */}
-      <section className="bg-white py-12 border-t border-gray-200">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto prose prose-blue">
-            <h2>About {program.name} Program in Pakistan</h2>
-            
-            <p>
-              <strong>{program.name}</strong> is a popular academic program offered by numerous universities across Pakistan. 
-              This comprehensive guide provides detailed information about {program.name} admissions, eligibility criteria, 
-              fee structure, career prospects, and results from various institutions.
-            </p>
-
-            {program.overview && (
-              <>
-                <h3>Program Overview</h3>
-                <p>{program.overview}</p>
-              </>
-            )}
-
-            <h3>Universities Offering {program.name}</h3>
-            <p>
-              {program.name} is offered by {stats.institutes} universities across Pakistan including 
-              {institutes.slice(0, 5).map((inst, i, arr) => (
-                <span key={inst.id}>
-                  {' '}<Link href={`/universities/${inst.slug}`} className="text-blue-600 hover:underline">{inst.name}</Link>
-                  {i < arr.length - 2 ? ',' : i === arr.length - 2 ? ' and' : ''}
-                </span>
-              ))}. These institutions provide quality education and recognized degrees.
-            </p>
-
-            <h3>Admission Process</h3>
-            <p>
-              Admissions for {program.name} are typically announced twice a year for Fall and Spring semesters. 
-              Currently, there {stats.admissions === 1 ? 'is' : 'are'} <strong>{stats.admissions} open admission{stats.admissions !== 1 ? 's' : ''}</strong> available. 
-              The admission process usually involves submitting an online application, providing educational documents, 
-              and in some cases, passing an entry test.
-            </p>
-
-            <h3>Eligibility Criteria</h3>
-            <p>{program.eligibility || 'Eligibility criteria vary by university. Generally, candidates must have completed their previous education with minimum required marks.'}</p>
-
-            <h3>Career Opportunities</h3>
-            <p>{program.careerScope || `Graduates of ${program.name} have excellent career opportunities in both public and private sectors.`}</p>
-
-            <h3>Results and Merit Lists</h3>
-            <p>
-              Universities announce results and merit lists for {program.name} admissions periodically. 
-              We have <strong>{stats.results} result{stats.results !== 1 ? 's' : ''}</strong> available for various institutions. 
-              Students can check their results online by providing their roll numbers.
-            </p>
-
-            <h3>Fee Structure</h3>
-            <p>
-              The fee structure for {program.name} varies by institution. {program.feeRange ? 
-              `Typically, it ranges from ${program.feeRange}.` : 
-              'Students are advised to check individual university websites for detailed fee information.'}
-            </p>
-
-            <p className="text-sm text-gray-500 mt-8">
-              Last updated: {new Date().toLocaleDateString('en-PK')}
-            </p>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }

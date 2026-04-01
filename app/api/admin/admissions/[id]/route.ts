@@ -2,15 +2,54 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { admissions, admissionPrograms, programs, institutes, cities, degrees } from "@/app/lib/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { admissions, admissionPrograms, programs, institutes, cities, degrees, seoMetadata } from "@/app/lib/schema";
+import { eq, and } from "drizzle-orm";
 
-// GET - Fetch single admission with all programs
+// ==================== TYPES ====================
+interface AdmissionUpdateData {
+  name: string;
+  slug: string;
+  instituteId: number;
+  year: number;
+  session: string | null;
+  status: 'Expected' | 'Open' | 'Closed';
+  expectedOpenDate: string | null;
+  expectedCloseDate: string | null;
+  meritInfo: string | null;
+  note: string | null;
+  officialLink: string | null;
+  programIds: number[];
+  featuredImage?: string | null;
+  galleryImages?: string[] | null;
+  // SEO Fields
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  canonicalUrl?: string | null;
+  robots?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImage?: string | null;
+}
+
+// ==================== HELPER FUNCTIONS ====================
+const validateStatus = (status: string): status is 'Expected' | 'Open' | 'Closed' => {
+  return ['Expected', 'Open', 'Closed'].includes(status);
+};
+
+const validateProgramIds = (programIds: any): programIds is number[] => {
+  return Array.isArray(programIds) && programIds.length > 0 && programIds.every(id => typeof id === 'number');
+};
+
+const parseDate = (date: string | null): Date | null => {
+  return date ? new Date(date) : null;
+};
+
+// ==================== GET - Fetch single admission ====================
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  
   try {
     const { id } = await params;
     const admissionId = parseInt(id);
@@ -22,8 +61,8 @@ export async function GET(
       );
     }
 
-    // Fetch admission with institute details
-    const admissionResult = await db
+    // Fetch admission with institute and city details
+    const admission = await db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -36,15 +75,19 @@ export async function GET(
         meritInfo: admissions.meritInfo,
         note: admissions.note,
         officialLink: admissions.officialLink,
+        featuredImage: admissions.featuredImage,
+        galleryImages: admissions.galleryImages,
         createdAt: admissions.createdAt,
         updatedAt: admissions.updatedAt,
         instituteId: admissions.instituteId,
-        institute: {
-          id: institutes.id,
-          name: institutes.name,
-          slug: institutes.slug,
-          cityName: cities.name,
-        },
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
+        instituteType: institutes.type,
+        instituteLogo: institutes.logo,
+        cityId: cities.id,
+        cityName: cities.name,
+        citySlug: cities.slug,
+        cityProvince: cities.province,
       })
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
@@ -52,153 +95,107 @@ export async function GET(
       .where(eq(admissions.id, admissionId))
       .limit(1);
 
-    if (admissionResult.length === 0) {
+    if (admission.length === 0) {
       return NextResponse.json(
         { success: false, error: "Admission not found" },
         { status: 404 }
       );
     }
 
-    // Fetch all programs for this admission
+    // Fetch programs for this admission
     const programList = await db
       .select({
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
+        degreeName: degrees.name,
+        duration: programs.duration,
+        feeRange: programs.feeRange,
       })
       .from(admissionPrograms)
       .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
+      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
       .where(eq(admissionPrograms.admissionId, admissionId));
 
-    // Get degree names
-    const programListWithDegrees = await Promise.all(
-      programList.map(async (p) => {
-        const degreeInfo = await db
-          .select({ name: degrees.name })
-          .from(degrees)
-          .innerJoin(programs, eq(programs.degreeId, degrees.id))
-          .where(eq(programs.id, p.id))
-          .limit(1);
-        
-        return {
-          ...p,
-          degreeName: degreeInfo[0]?.name || null,
-        };
-      })
-    );
+    // Fetch SEO metadata
+    const seo = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, 'admission'),
+          eq(seoMetadata.entityId, admissionId)
+        )
+      )
+      .limit(1);
 
-    // Combine data
-    const transformedAdmission = {
-      ...admissionResult[0],
-      programs: programListWithDegrees,
+    // Parse gallery images
+    let galleryImagesArray: string[] = [];
+    if (admission[0].galleryImages) {
+      try {
+        galleryImagesArray = JSON.parse(admission[0].galleryImages);
+      } catch (e) {
+        console.error('Error parsing gallery images:', e);
+      }
+    }
+
+    // Format institute object
+    const instituteObj = {
+      id: admission[0].instituteId,
+      name: admission[0].instituteName,
+      slug: admission[0].instituteSlug,
+      type: admission[0].instituteType,
+      logo: admission[0].instituteLogo,
+      city: {
+        id: admission[0].cityId,
+        name: admission[0].cityName,
+        slug: admission[0].citySlug,
+        province: admission[0].cityProvince,
+      },
     };
 
-    return NextResponse.json({
+    const response = {
       success: true,
-      admission: transformedAdmission,
-    });
+      admission: {
+        id: admission[0].id,
+        name: admission[0].name,
+        slug: admission[0].slug,
+        year: admission[0].year,
+        session: admission[0].session,
+        status: admission[0].status,
+        expectedOpenDate: admission[0].expectedOpenDate,
+        expectedCloseDate: admission[0].expectedCloseDate,
+        meritInfo: admission[0].meritInfo,
+        note: admission[0].note,
+        officialLink: admission[0].officialLink,
+        featuredImage: admission[0].featuredImage,
+        galleryImages: galleryImagesArray,
+        createdAt: admission[0].createdAt,
+        updatedAt: admission[0].updatedAt,
+        instituteId: admission[0].instituteId,
+        institute: instituteObj,
+        programs: programList,
+        programCount: programList.length,
+        seo: seo[0] || null,
+      },
+    };
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error("❌ Error fetching admission:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: "Failed to fetch admission",
-        details: error instanceof Error ? error.message : "Unknown error"
-      },
+      { success: false, error: "Failed to fetch admission" },
       { status: 500 }
     );
   }
 }
 
-// PATCH - Update only admission status (for inline editing)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  
-  try {
-    const { id } = await params;
-    const admissionId = parseInt(id);
-
-    if (isNaN(admissionId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid admission ID" },
-        { status: 400 }
-      );
-    }
-
-    const body = await request.json();
-
-    // Validate status
-    const { status } = body;
-    const validStatuses = ["Expected", "Open", "Closed"];
-    
-    if (!status || !validStatuses.includes(status)) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Valid status is required (Expected, Open, or Closed)" 
-        },
-        { status: 400 }
-      );
-    }
-
-    // Check if admission exists
-    const existing = await db
-      .select()
-      .from(admissions)
-      .where(eq(admissions.id, admissionId))
-      .limit(1);
-
-    if (existing.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Admission not found" },
-        { status: 404 }
-      );
-    }
-
-    // Update only the status
-    const updated = await db
-      .update(admissions)
-      .set({
-        status: status,
-        updatedAt: new Date(),
-      })
-      .where(eq(admissions.id, admissionId))
-      .returning({
-        id: admissions.id,
-        name: admissions.name,
-        status: admissions.status,
-        updatedAt: admissions.updatedAt,
-      });
-
-    return NextResponse.json({
-      success: true,
-      admission: updated[0],
-      message: `Status updated to ${status}`,
-    });
-
-  } catch (error: any) {
-    console.error("❌ Error updating admission status:", error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to update admission status",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT - Update admission with multiple programs
+// ==================== PUT - Full update ====================
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  
   try {
     const { id } = await params;
     const admissionId = parseInt(id);
@@ -213,37 +210,32 @@ export async function PUT(
     const body = await request.json();
 
     // Validate required fields
-    if (!body.instituteId || !body.year || !body.status || !body.name || !body.slug) {
+    if (!body.name || !body.slug || !body.instituteId || !body.year || !body.status) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Institute ID, Year, Status, Name, and Slug are required" 
-        },
-        { status: 400 }
-      );
-    }
-
-    // Validate programIds (array)
-    const programIds = Array.isArray(body.programIds) ? body.programIds : [];
-    if (programIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "At least one program is required" },
+        { success: false, error: "Missing required fields: name, slug, instituteId, year, status" },
         { status: 400 }
       );
     }
 
     // Validate status
-    const validStatuses = ["Expected", "Open", "Closed"];
-    if (!validStatuses.includes(body.status)) {
+    if (!validateStatus(body.status)) {
       return NextResponse.json(
-        { success: false, error: "Status must be Expected, Open, or Closed" },
+        { success: false, error: "Status must be: Expected, Open, or Closed" },
         { status: 400 }
       );
     }
 
-    // Check if exists
+    // Validate program IDs
+    if (!validateProgramIds(body.programIds)) {
+      return NextResponse.json(
+        { success: false, error: "At least one valid program ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Check if admission exists
     const existing = await db
-      .select()
+      .select({ id: admissions.id, slug: admissions.slug })
       .from(admissions)
       .where(eq(admissions.id, admissionId))
       .limit(1);
@@ -255,7 +247,7 @@ export async function PUT(
       );
     }
 
-    // Check if slug is being changed and already exists (exclude current)
+    // Check slug uniqueness if changed
     if (body.slug !== existing[0].slug) {
       const slugExists = await db
         .select()
@@ -265,50 +257,48 @@ export async function PUT(
 
       if (slugExists.length > 0) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: "Slug already exists. Please choose a different slug." 
-          },
+          { success: false, error: "Slug already exists. Please choose a different slug." },
           { status: 400 }
         );
       }
     }
 
-    // Start transaction for update
+    // Start transaction
     const result = await db.transaction(async (tx) => {
       // 1. Update admission
-      const updated = await tx
+      const [updatedAdmission] = await tx
         .update(admissions)
         .set({
-          name: body.name,
-          slug: body.slug,
+          name: body.name.trim(),
+          slug: body.slug.trim(),
           instituteId: Number(body.instituteId),
           year: Number(body.year),
           session: body.session || null,
           status: body.status,
-          expectedOpenDate: body.expectedOpenDate ? new Date(body.expectedOpenDate) : null,
-          expectedCloseDate: body.expectedCloseDate ? new Date(body.expectedCloseDate) : null,
+          expectedOpenDate: parseDate(body.expectedOpenDate),
+          expectedCloseDate: parseDate(body.expectedCloseDate),
           meritInfo: body.meritInfo || null,
           note: body.note || null,
           officialLink: body.officialLink || null,
+          featuredImage: body.featuredImage || null,
+          galleryImages: body.galleryImages ? JSON.stringify(body.galleryImages) : null,
           updatedAt: new Date(),
         })
         .where(eq(admissions.id, admissionId))
         .returning();
 
-      // 2. Delete old program links
+      // 2. Update program links (delete old, insert new)
       await tx
         .delete(admissionPrograms)
         .where(eq(admissionPrograms.admissionId, admissionId));
 
-      // 3. Insert new program links
-      const newLinks = await Promise.all(
-        programIds.map(async (programId: number) => {
+      const programLinks = await Promise.all(
+        body.programIds.map(async (programId: number) => {
           const [link] = await tx
             .insert(admissionPrograms)
             .values({
-              admissionId: admissionId,
-              programId: Number(programId),
+              admissionId,
+              programId,
               createdAt: new Date(),
             })
             .returning();
@@ -316,64 +306,109 @@ export async function PUT(
         })
       );
 
-      return { updated: updated[0], programCount: newLinks.length };
+      // 3. Update SEO metadata
+      let seoRecord = null;
+      const hasSeoData = body.metaTitle || body.metaDescription || body.metaKeywords || body.canonicalUrl;
+
+      if (hasSeoData) {
+        const existingSeo = await tx
+          .select()
+          .from(seoMetadata)
+          .where(
+            and(
+              eq(seoMetadata.entityType, 'admission'),
+              eq(seoMetadata.entityId, admissionId)
+            )
+          )
+          .limit(1);
+
+        const seoData = {
+          metaTitle: body.metaTitle || null,
+          metaDescription: body.metaDescription || null,
+          metaKeywords: body.metaKeywords || null,
+          canonicalUrl: body.canonicalUrl || null,
+          robots: body.robots || 'index, follow',
+          ogTitle: body.ogTitle || body.metaTitle || null,
+          ogDescription: body.ogDescription || body.metaDescription || null,
+          ogImage: body.ogImage || body.featuredImage || null,
+          updatedAt: new Date(),
+        };
+
+        if (existingSeo.length > 0) {
+          const [updated] = await tx
+            .update(seoMetadata)
+            .set(seoData)
+            .where(eq(seoMetadata.id, existingSeo[0].id))
+            .returning();
+          seoRecord = updated;
+        } else {
+          const [created] = await tx
+            .insert(seoMetadata)
+            .values({
+              entityType: 'admission',
+              entityId: admissionId,
+              ...seoData,
+              createdAt: new Date(),
+            })
+            .returning();
+          seoRecord = created;
+        }
+      }
+
+      return {
+        admission: updatedAdmission,
+        programCount: programLinks.length,
+        seo: seoRecord,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      admission: result.updated,
+      admission: result.admission,
       programCount: result.programCount,
+      seo: result.seo ? 'updated' : 'skipped',
       message: `Admission updated successfully with ${result.programCount} program(s)`,
     });
 
   } catch (error: any) {
     console.error("❌ Error updating admission:", error);
     
-    // Handle unique constraint violation
+    // Handle unique constraint violations
     if (error.code === '23505') {
       if (error.message?.includes('admissions_slug_unique')) {
         return NextResponse.json(
-          { success: false, error: "Duplicate slug. Please choose a different slug." },
+          { success: false, error: "Slug already exists. Please choose a different slug." },
           { status: 400 }
         );
       }
-      if (error.message?.includes('admission_programs_admission_id_program_id_unique')) {
+      if (error.message?.includes('seo_metadata_entity_type_entity_id_unique')) {
         return NextResponse.json(
-          { success: false, error: "Duplicate program. Cannot link same program twice." },
+          { success: false, error: "SEO metadata already exists for this admission." },
           { status: 400 }
         );
       }
     }
 
-    // Handle foreign key violation
+    // Handle foreign key violations
     if (error.code === '23503') {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Invalid reference", 
-          details: "One or more program IDs or institute ID do not exist." 
-        },
+        { success: false, error: "Invalid institute ID or program ID. Please check your data." },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to update admission",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { success: false, error: "Failed to update admission", details: error.message },
       { status: 500 }
     );
   }
 }
 
-// DELETE - Delete admission
-export async function DELETE(
+// ==================== PATCH - Partial update (status only) ====================
+export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  
   try {
     const { id } = await params;
     const admissionId = parseInt(id);
@@ -385,9 +420,18 @@ export async function DELETE(
       );
     }
 
-    // Check if exists
+    const body = await request.json();
+    const { status } = body;
+
+    if (!status || !validateStatus(status)) {
+      return NextResponse.json(
+        { success: false, error: "Valid status is required: Expected, Open, or Closed" },
+        { status: 400 }
+      );
+    }
+
     const existing = await db
-      .select()
+      .select({ id: admissions.id })
       .from(admissions)
       .where(eq(admissions.id, admissionId))
       .limit(1);
@@ -399,10 +443,87 @@ export async function DELETE(
       );
     }
 
-    // Delete (junction table records will be deleted automatically due to CASCADE)
-    await db
-      .delete(admissions)
-      .where(eq(admissions.id, admissionId));
+    const [updated] = await db
+      .update(admissions)
+      .set({
+        status,
+        updatedAt: new Date(),
+      })
+      .where(eq(admissions.id, admissionId))
+      .returning({
+        id: admissions.id,
+        name: admissions.name,
+        status: admissions.status,
+        updatedAt: admissions.updatedAt,
+      });
+
+    return NextResponse.json({
+      success: true,
+      admission: updated,
+      message: `Status updated to ${status}`,
+    });
+
+  } catch (error) {
+    console.error("❌ Error updating admission status:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to update admission status" },
+      { status: 500 }
+    );
+  }
+}
+
+// ==================== DELETE - Delete admission ====================
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const admissionId = parseInt(id);
+
+    if (isNaN(admissionId)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid admission ID" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await db
+      .select({ id: admissions.id })
+      .from(admissions)
+      .where(eq(admissions.id, admissionId))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Admission not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete in transaction
+    await db.transaction(async (tx) => {
+      // Delete SEO metadata
+      await tx
+        .delete(seoMetadata)
+        .where(
+          and(
+            eq(seoMetadata.entityType, 'admission'),
+            eq(seoMetadata.entityId, admissionId)
+          )
+        );
+
+      // Delete program links
+      await tx
+        .delete(admissionPrograms)
+        .where(eq(admissionPrograms.admissionId, admissionId));
+
+      // Delete admission
+      await tx
+        .delete(admissions)
+        .where(eq(admissions.id, admissionId));
+    });
+
     return NextResponse.json({
       success: true,
       message: "Admission deleted successfully",
@@ -411,11 +532,7 @@ export async function DELETE(
   } catch (error) {
     console.error("❌ Error deleting admission:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to delete admission",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { success: false, error: "Failed to delete admission" },
       { status: 500 }
     );
   }

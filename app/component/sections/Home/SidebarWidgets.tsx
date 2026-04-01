@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 // Types
 interface City {
@@ -55,6 +56,20 @@ export default function SidebarWidgets() {
   const [hasPrograms, setHasPrograms] = useState(false);
   const [hasUniversities, setHasUniversities] = useState(false);
 
+  // Helper function to safely extract data from API response
+  const extractData = (response: any) => {
+    if (response.success) {
+      return response.data || response.programs || response.cities || response.boards || response.institutes || [];
+    }
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   // Fetch all data
   useEffect(() => {
     // Cities with university counts
@@ -63,8 +78,7 @@ export default function SidebarWidgets() {
         setLoadingCities(true);
         const res = await fetch('/api/public/cities?limit=5&withUniversityCount=true');
         const data = await res.json();
-        const citiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        // Sirf pehle 5 cities lo
+        const citiesData = extractData(data);
         setCities(citiesData.slice(0, 5));
         setHasCities(citiesData.length > 0);
       } catch (error) {
@@ -82,8 +96,7 @@ export default function SidebarWidgets() {
         setLoadingBoards(true);
         const res = await fetch('/api/public/boards?limit=5&withStats=true');
         const data = await res.json();
-        const boardsData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        // Sirf pehle 5 boards lo
+        const boardsData = extractData(data);
         setBoards(boardsData.slice(0, 5));
         setHasBoards(boardsData.length > 0);
       } catch (error) {
@@ -101,8 +114,9 @@ export default function SidebarWidgets() {
         setLoadingPrograms(true);
         const res = await fetch('/api/public/programs?limit=5&withUniversityCount=true');
         const data = await res.json();
-        const programsData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        // Sirf pehle 5 programs lo
+        console.log('Programs API response:', data); // Debug log
+        const programsData = extractData(data);
+        console.log('Extracted programs data:', programsData); // Debug log
         setPrograms(programsData.slice(0, 5));
         setHasPrograms(programsData.length > 0);
       } catch (error) {
@@ -120,8 +134,7 @@ export default function SidebarWidgets() {
         setLoadingUniversities(true);
         const res = await fetch('/api/public/institutes?limit=5&featured=true&withCounts=true');
         const data = await res.json();
-        const universitiesData = data.success ? data.data : (Array.isArray(data) ? data : []);
-        // Sirf pehle 5 universities lo
+        const universitiesData = extractData(data);
         setUniversities(universitiesData.slice(0, 5));
         setHasUniversities(universitiesData.length > 0);
       } catch (error) {
@@ -150,7 +163,7 @@ export default function SidebarWidgets() {
 
   return (
     <div className="space-y-8">
-      {/* 1. Cities Widget - Only show if has data or loading */}
+      {/* 1. Cities Widget */}
       {(hasCities || loadingCities) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex justify-between items-center mb-4 pb-3 border-b">
@@ -167,12 +180,12 @@ export default function SidebarWidgets() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : cities.length > 0 ? (
             <div className="space-y-2">
-              {cities.slice(0, 5).map((city) => (
+              {cities.map((city) => (
                 <Link
                   key={city.id}
-                  href={`/city/${city.slug}`}
+                  href={`/cities/${city.slug}`}
                   className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 group transition-colors"
                 >
                   <span className="font-medium text-gray-800 group-hover:text-blue-600">
@@ -184,9 +197,9 @@ export default function SidebarWidgets() {
                 </Link>
               ))}
             </div>
-          )}
+          ) : null}
           
-          {hasCities && (
+          {hasCities && cities.length > 0 && (
             <div className="mt-4 pt-3 border-t text-center">
               <Link href="/cities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                 View All Cities →
@@ -196,7 +209,7 @@ export default function SidebarWidgets() {
         </div>
       )}
       
-      {/* 2. Boards Widget - Only show if has data or loading */}
+      {/* 2. Boards Widget */}
       {(hasBoards || loadingBoards) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex justify-between items-center mb-4 pb-3 border-b">
@@ -213,9 +226,9 @@ export default function SidebarWidgets() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : boards.length > 0 ? (
             <div className="space-y-2">
-              {boards.slice(0, 5).map((board) => (
+              {boards.map((board) => (
                 <Link
                   key={board.id}
                   href={`/boards/${board.slug}`}
@@ -235,9 +248,9 @@ export default function SidebarWidgets() {
                 </Link>
               ))}
             </div>
-          )}
+          ) : null}
           
-          {hasBoards && (
+          {hasBoards && boards.length > 0 && (
             <div className="mt-4 pt-3 border-t text-center">
               <Link href="/boards" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                 View All Boards →
@@ -247,7 +260,7 @@ export default function SidebarWidgets() {
         </div>
       )}
       
-      {/* 3. Programs Widget - Only show if has data or loading */}
+      {/* 3. Programs Widget */}
       {(hasPrograms || loadingPrograms) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex justify-between items-center mb-4 pb-3 border-b">
@@ -264,9 +277,9 @@ export default function SidebarWidgets() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : programs.length > 0 ? (
             <div className="space-y-2">
-              {programs.slice(0, 5).map((program) => (
+              {programs.map((program) => (
                 <Link
                   key={program.id}
                   href={`/programs/${program.slug}`}
@@ -288,9 +301,9 @@ export default function SidebarWidgets() {
                 </Link>
               ))}
             </div>
-          )}
+          ) : null}
           
-          {hasPrograms && (
+          {hasPrograms && programs.length > 0 && (
             <div className="mt-4 pt-3 border-t text-center">
               <Link href="/programs" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                 View All Programs →
@@ -300,7 +313,7 @@ export default function SidebarWidgets() {
         </div>
       )}
       
-      {/* 4. Universities Widget - Only show if has data or loading */}
+      {/* 4. Universities Widget */}
       {(hasUniversities || loadingUniversities) && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
           <div className="flex justify-between items-center mb-4 pb-3 border-b">
@@ -317,9 +330,9 @@ export default function SidebarWidgets() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : universities.length > 0 ? (
             <div className="space-y-2">
-              {universities.slice(0, 5).map((uni) => (
+              {universities.map((uni) => (
                 <Link
                   key={uni.id}
                   href={`/universities/${uni.slug}`}
@@ -339,9 +352,9 @@ export default function SidebarWidgets() {
                 </Link>
               ))}
             </div>
-          )}
+          ) : null}
           
-          {hasUniversities && (
+          {hasUniversities && universities.length > 0 && (
             <div className="mt-4 pt-3 border-t text-center">
               <Link href="/universities" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                 View All Universities →
@@ -351,13 +364,13 @@ export default function SidebarWidgets() {
         </div>
       )}
       
-      {/* 5. Newsletter - Always show (static) */}
+      {/* 5. Newsletter - Always show */}
       <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-6 text-white">
         <h3 className="text-xl font-bold mb-3">Stay Updated</h3>
         <p className="text-blue-100 text-sm mb-4">
           Get admission alerts, results, and educational news
         </p>
-        <form onSubmit={(e) => { e.preventDefault(); setEmail(''); }} className="space-y-3">
+        <form onSubmit={(e) => { e.preventDefault(); toast.success('Subscribed!'); setEmail(''); }} className="space-y-3">
           <input
             type="email"
             value={email}

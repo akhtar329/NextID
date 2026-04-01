@@ -44,14 +44,12 @@ export default function LatestAdmissionsSection() {
     try {
       const deadline = new Date(dateString);
       const now = new Date();
-      // Set to end of day for accurate comparison
       deadline.setHours(23, 59, 59, 999);
       now.setHours(23, 59, 59, 999);
       
       const diffTime = deadline.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
-      // ✅ Only return positive days (future dates)
       return diffDays > 0 ? diffDays : null;
     } catch (error) {
       return null;
@@ -116,18 +114,12 @@ export default function LatestAdmissionsSection() {
 
   // ==================== MEMOIZED VALUES ====================
   
-  // ✅ STEP 1: Filter only open admissions with future dates
   const validOpenAdmissions = useMemo(() => {
     return admissions.filter(ad => {
-      // Status must be Open
       if (ad.status !== 'Open') return false;
-      
-      // If no close date, include (but will show as TBA)
       if (!ad.expectedCloseDate) return true;
-      
-      // Check if date is in future
       const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      return daysLeft !== null; // Only keep if future date
+      return daysLeft !== null;
     });
   }, [admissions]);
 
@@ -136,11 +128,9 @@ export default function LatestAdmissionsSection() {
       const daysLeftA = getDaysLeft(a.expectedCloseDate);
       const daysLeftB = getDaysLeft(b.expectedCloseDate);
       
-      // Both have dates - sort by days left (ascending)
       if (daysLeftA !== null && daysLeftB !== null) {
         return daysLeftA - daysLeftB;
       }
-      // One has date, one doesn't - date wala pehle
       if (daysLeftA !== null && daysLeftB === null) return -1;
       if (daysLeftA === null && daysLeftB !== null) return 1;
       return 0;
@@ -249,14 +239,14 @@ export default function LatestAdmissionsSection() {
     <section className="py-12 bg-white">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Headings */}
+        {/* ✅ Changed H1 to H2 - No duplicate H1 */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
             Admissions 2026 in Pakistan
-          </h1>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            ⏰ {closingSoonStats.thisWeek} Admissions Closing This Week
           </h2>
+          <h3 className="text-2xl font-bold text-gray-800 mb-2">
+            ⏰ {closingSoonStats.thisWeek} Admissions Closing This Week
+          </h3>
           <p className="text-gray-600 max-w-3xl mx-auto">
             {closingSoonStats.urgent > 0 && (
               <span className="text-red-600 font-semibold">{closingSoonStats.urgent} urgent admissions</span>
@@ -332,7 +322,7 @@ export default function LatestAdmissionsSection() {
           </div>
         )}
 
-        {/* Cards Grid - New Layout */}
+        {/* Cards Grid */}
         {filteredAdmissions.length > 0 ? (
           <div className="space-y-4">
             {filteredAdmissions.map((admission) => {
@@ -350,7 +340,7 @@ export default function LatestAdmissionsSection() {
                     'border-gray-200 bg-white hover:bg-gray-50'
                   }`}
                 >
-                  {/* Card Header - Title + Days Left */}
+                  {/* Card Header */}
                   <div className="flex items-center justify-between p-5 border-b border-gray-100">
                     <h3 className="text-lg font-bold text-gray-900 hover:text-blue-600 transition">
                       {admission.instituteName} Admissions {admission.year}
@@ -372,7 +362,7 @@ export default function LatestAdmissionsSection() {
                     )}
                   </div>
                   
-                  {/* Card Body - Programs & Details */}
+                  {/* Card Body */}
                   <div className="p-5">
                     <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
                       <span className="flex items-center gap-1">

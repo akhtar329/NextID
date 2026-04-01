@@ -1,4 +1,5 @@
 // app/admin/boards/[id]/edit/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -25,11 +26,18 @@ interface Board {
   contactEmail: string | null;
   contactPhone: string | null;
   address: string | null;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  metaKeywords: string | null;
   status: boolean;
   createdAt: string;
+  seo?: {
+    id: number;
+    metaTitle: string | null;
+    metaDescription: string | null;
+    canonicalUrl: string | null;
+    robots: string | null;
+    ogTitle: string | null;
+    ogDescription: string | null;
+    ogImage: string | null;
+  } | null;
 }
 
 export default function EditBoardPage() {
@@ -46,14 +54,20 @@ export default function EditBoardPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [metaTitle, setMetaTitle] = useState("");
-  const [metaDescription, setMetaDescription] = useState("");
-  const [metaKeywords, setMetaKeywords] = useState("");
   const [status, setStatus] = useState(true);
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // SEO Fields (from seo_metadata table)
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [canonicalUrl, setCanonicalUrl] = useState("");
+  const [robots, setRobots] = useState("index, follow");
+  const [ogTitle, setOgTitle] = useState("");
+  const [ogDescription, setOgDescription] = useState("");
+  const [ogImage, setOgImage] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,10 +92,24 @@ export default function EditBoardPage() {
           setContactEmail(board.contactEmail || "");
           setContactPhone(board.contactPhone || "");
           setAddress(board.address || "");
-          setMetaTitle(board.metaTitle || "");
-          setMetaDescription(board.metaDescription || "");
-          setMetaKeywords(board.metaKeywords || "");
           setStatus(board.status === true);
+          
+          // Load SEO data if exists
+          if (board.seo) {
+            setMetaTitle(board.seo.metaTitle || "");
+            setMetaDescription(board.seo.metaDescription || "");
+            setCanonicalUrl(board.seo.canonicalUrl || "");
+            setRobots(board.seo.robots || "index, follow");
+            setOgTitle(board.seo.ogTitle || "");
+            setOgDescription(board.seo.ogDescription || "");
+            setOgImage(board.seo.ogImage || "");
+          } else {
+            // Auto-generate default SEO if not exists
+            setMetaTitle(`${board.name} - Results, Date Sheets & Announcements | NextID.pk`);
+            setCanonicalUrl(`https://www.nextid.pk/boards/${board.slug}`);
+            setOgTitle(`${board.name} - Results & Date Sheets`);
+            setOgDescription(`Check ${board.name} results, date sheets, and announcements.`);
+          }
         } else {
           toast.error("Board not found");
           router.push("/admin/boards");
@@ -124,10 +152,15 @@ export default function EditBoardPage() {
           contactEmail: contactEmail || null,
           contactPhone: contactPhone || null,
           address: address || null,
+          status,
+          // SEO fields (will be saved to seo_metadata)
           metaTitle: metaTitle || null,
           metaDescription: metaDescription || null,
-          metaKeywords: metaKeywords || null,
-          status,
+          canonicalUrl: canonicalUrl || null,
+          robots: robots || "index, follow",
+          ogTitle: ogTitle || metaTitle || null,
+          ogDescription: ogDescription || metaDescription || null,
+          ogImage: ogImage || null,
         }),
       });
 
@@ -289,10 +322,42 @@ export default function EditBoardPage() {
               />
             </div>
             <Input
-              label="Meta Keywords"
-              value={metaKeywords}
-              onChange={setMetaKeywords}
-              placeholder="board, education, results, date sheets"
+              label="Canonical URL"
+              value={canonicalUrl}
+              onChange={setCanonicalUrl}
+              placeholder="https://www.nextid.pk/boards/board-slug"
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Robots"
+                value={robots}
+                onChange={setRobots}
+                placeholder="index, follow"
+              />
+            </div>
+            <Input
+              label="OG Title (Facebook/Twitter)"
+              value={ogTitle}
+              onChange={setOgTitle}
+              placeholder="Title for social media sharing"
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                OG Description
+              </label>
+              <textarea
+                value={ogDescription}
+                onChange={(e) => setOgDescription(e.target.value)}
+                placeholder="Description for social media sharing"
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <Input
+              label="OG Image URL"
+              value={ogImage}
+              onChange={setOgImage}
+              placeholder="https://www.nextid.pk/images/board-og.jpg"
             />
           </div>
         </div>

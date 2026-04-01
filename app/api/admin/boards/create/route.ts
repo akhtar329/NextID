@@ -1,7 +1,8 @@
 // app/api/admin/boards/create/route.ts
+
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { boards } from "@/app/lib/schema";
+import { boards, seoMetadata } from "@/app/lib/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -54,30 +55,57 @@ export async function POST(request: Request) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
     }
 
-    // Create board with all fields including SEO
-    const newBoard = await db
-      .insert(boards)
-      .values({
-        name: body.name,
-        slug: body.slug,
-        cityId: body.cityId,
-        website: body.website || null,
-        description: body.description || null,
-        establishedYear: body.establishedYear || null,
-        contactEmail: body.contactEmail || null,
-        contactPhone: body.contactPhone || null,
-        address: body.address || null,
-        metaTitle: body.metaTitle || null,
-        metaDescription: body.metaDescription || null,
-        metaKeywords: body.metaKeywords || null,
-        status: body.status ?? true,
-        createdAt: new Date(),
-      })
-      .returning();
+    // Start transaction
+    const result = await db.transaction(async (tx) => {
+      // 1. Create board (without SEO fields)
+      const [newBoard] = await tx
+        .insert(boards)
+        .values({
+          name: body.name,
+          slug: body.slug,
+          cityId: body.cityId || null,
+          website: body.website || null,
+          description: body.description || null,
+          establishedYear: body.establishedYear || null,
+          contactEmail: body.contactEmail || null,
+          contactPhone: body.contactPhone || null,
+          address: body.address || null,
+          status: body.status ?? true,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      // 2. Insert SEO metadata (if provided)
+      let seoRecord = null;
+      const hasSeoData = body.metaTitle || body.metaDescription || body.canonicalUrl;
+      
+      if (hasSeoData) {
+        const [newSeo] = await tx
+          .insert(seoMetadata)
+          .values({
+            entityType: 'board',
+            entityId: newBoard.id,
+            metaTitle: body.metaTitle || null,
+            metaDescription: body.metaDescription || null,
+            canonicalUrl: body.canonicalUrl || null,
+            robots: body.robots || 'index, follow',
+            ogTitle: body.ogTitle || body.metaTitle || null,
+            ogDescription: body.ogDescription || body.metaDescription || null,
+            ogImage: body.ogImage || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        seoRecord = newSeo;
+      }
+
+      return { newBoard, seoRecord };
+    });
 
     return NextResponse.json({
       success: true,
-      board: newBoard[0],
+      board: result.newBoard,
+      seo: result.seoRecord ? 'created' : 'skipped',
       message: "Board created successfully",
     });
 

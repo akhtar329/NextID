@@ -1,9 +1,42 @@
 // app/(public)/layout.tsx
 import Header from '@/app/component/layout/Header';
 import Footer from '@/app/component/layout/Footer';
-import { generateSEO } from "../../app/lib/seo";
+import type { Metadata } from 'next';
 
-export const metadata = generateSEO();
+// ✅ Use static metadata (since this is a layout, we can't use async here)
+export const metadata: Metadata = {
+  title: "Latest Education News, Results & Admissions in Pakistan | NextID",
+  description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+  metadataBase: new URL("https://www.nextid.pk"),
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    type: "website",
+    title: "NextID - Pakistan's Leading Education Portal",
+    description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+    siteName: "NextID",
+    locale: "en_PK",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "NextID - Education Portal Pakistan",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "NextID - Pakistan's Leading Education Portal",
+    description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+    images: ["/og-image.png"],
+  },
+};
 
 export default function PublicLayout({
   children,

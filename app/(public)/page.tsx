@@ -8,96 +8,16 @@ import ResultsSection from "@/app/component/sections/Home/ResultsSection";
 import CoursesSection from "@/app/component/sections/Home/CoursesSection";
 import UniversitiesSection from "@/app/component/sections/Home/UniversitiesSection";
 import SidebarWidgets from "@/app/component/sections/Home/SidebarWidgets";
+import { generateSEOClient } from "@/app/lib/seo";
 
 // ==================== METADATA FOR SEO ====================
-export const metadata: Metadata = {
-  metadataBase: new URL("https://www.nextid.pk"),
-  title: {
-    default:
-      "Pakistan Latest Admissions 2026, Results, Date Sheets & University Updates | NextID.pk",
-    template: "%s | NextID.pk",
-  },
-  description:
-    "Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan. NUST, FAST, LUMS, Punjab University admissions open. Check merit lists, fee structure, and apply online.",
-  keywords: [
-    "admissions 2026 pakistan",
-    "university admissions pakistan 2026",
-    "board results 2026",
-    "date sheets 2026",
-    "nust admissions 2026",
-    "fast admissions 2026",
-    "lums admissions 2026",
-    "punjab university admissions",
-    "karachi university admissions",
-    "bs programs pakistan",
-    "mba admissions pakistan",
-    "ms programs pakistan",
-    "medical admissions pakistan 2026",
-    "engineering admissions pakistan",
-    "education portal pakistan",
-    "admission alerts",
-    "merit lists 2026",
-    "entry test preparation",
-    "scholarship 2026 pakistan",
-  ].join(", "),
-
-  authors: [{ name: "NextID.pk", url: "https://www.nextid.pk" }],
-  creator: "NextID.pk",
-  publisher: "NextID.pk",
-
-  openGraph: {
-    title:
-      "Pakistan Latest Admissions 2026, Results & University Updates | NextID.pk",
-    description:
-      "Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan. Apply online for NUST, FAST, LUMS admissions.",
-    url: "https://www.nextid.pk",
-    siteName: "NextID.pk",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "NextID.pk - Pakistan Education Portal",
-      },
-    ],
-    locale: "en_PK",
-    type: "website",
-  },
-
-  twitter: {
-    card: "summary_large_image",
-    title:
-      "Pakistan Latest Admissions 2026, Results & University Updates | NextID.pk",
-    description:
-      "Find latest university admissions 2026, board results, date sheets, and educational news in Pakistan.",
-    images: ["/twitter-image.jpg"],
-    creator: "@nextidpk",
-    site: "@nextidpk",
-  },
-
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": 160,
-      "max-video-preview": -1,
-    },
-  },
-
-  alternates: {
-    canonical: "https://www.nextid.pk",
-  },
-
-  category: "education",
-
-  verification: {
-    google: "your-google-verification-code",
-    yandex: "your-yandex-verification",
-  },
-};
+// Use generateSEOClient (synchronous version) for static metadata
+export const metadata: Metadata = generateSEOClient({
+  path: "/",
+  title: "Find Admissions, Check Results & Download Date Sheets 2026 | Pakistan | NextID",
+  description: "Complete education information portal. Find 2026 admissions, board results, date sheets, merit lists & scholarships. All in one place.",
+  image: "/og-image.jpg",
+});
 
 // ==================== SCHEMA MARKUP ====================
 const websiteSchema = {
@@ -106,7 +26,7 @@ const websiteSchema = {
   name: "NextID.pk",
   url: "https://www.nextid.pk",
   description:
-    "Pakistan's #1 education portal for admissions, results, date sheets, and degree programs.",
+    "Find Admissions, Check Results & Download Date Sheets 2026 | Pakistan | NextID",
   potentialAction: {
     "@type": "SearchAction",
     target: {
@@ -164,18 +84,11 @@ export default function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
-
-      {/* Hidden H1 for SEO - Using Tailwind's sr-only */}
-      <h1 className="sr-only">
-        NextID.pk - Pakistan's Largest Education Portal for Admissions 2026,
-        Results, Date Sheets and Degree Programs
-      </h1>
-
       {/* Main Content */}
       <div className="min-h-screen bg-gray-50">
         <HeroSection />
 
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Main Content */}
             <main className="lg:w-8/12">
@@ -233,68 +146,89 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* SEO Content Section - For Better Ranking */}
-        <section className="bg-white py-8 border-t border-gray-200 mt-8">
+        {/* SEO Content Section - Dynamic */}
+        <section className="bg-white py-12 border-t border-gray-200 mt-8">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="prose prose-blue max-w-none text-gray-600 text-sm">
-              <h2 className="text-lg font-bold text-gray-900 mb-3">
-                Pakistan Education Portal - Admissions 2026, Results, Date
-                Sheets
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+                Pakistan Education Portal - Admissions 2026, Results & More
               </h2>
-              <p className="mb-2">
-                <strong>NextID.pk</strong> is Pakistan's premier education
-                portal providing latest updates on
-                <strong> admissions 2026</strong> in top universities including
-                <Link
-                  href="/universities/nust"
-                  className="text-blue-600 hover:underline mx-1"
-                >
-                  NUST
-                </Link>
-                ,
-                <Link
-                  href="/universities/fast-nuces"
-                  className="text-blue-600 hover:underline mx-1"
-                >
-                  FAST
-                </Link>
-                ,
-                <Link
-                  href="/universities/lums"
-                  className="text-blue-600 hover:underline mx-1"
-                >
-                  LUMS
-                </Link>
-                ,
-                <Link
-                  href="/universities/punjab-university"
-                  className="text-blue-600 hover:underline mx-1"
-                >
-                  Punjab University
-                </Link>
-                , and
-                <Link
-                  href="/universities/karachi-university"
-                  className="text-blue-600 hover:underline mx-1"
-                >
-                  Karachi University
-                </Link>
-                . Find complete information about <strong>BS programs</strong>,{" "}
-                <strong>MBA admissions</strong>,<strong>MS programs</strong>,{" "}
-                <strong>medical admissions</strong>, and{" "}
-                <strong>engineering admissions</strong>.
-              </p>
-              <p>
-                Check <strong>board results 2026</strong> for FBISE, BISE
-                Lahore, BISE Karachi, BISE Rawalpindi, and all other boards.
-                Download <strong>date sheets 2026</strong> for annual and
-                supplementary examinations. Get <strong>merit lists</strong>,{" "}
-                <strong>fee structures</strong>, and{" "}
-                <strong>entry test schedules</strong>
-                for all major universities. Stay updated with latest{" "}
-                <strong>education news</strong> and
-                <strong>scholarship opportunities</strong> in Pakistan.
-              </p>
+              
+              <div className="prose prose-blue max-w-none text-gray-600">
+                <p className="text-lg leading-relaxed mb-4">
+                  <strong className="text-gray-900">NextID.pk</strong> is Pakistan's premier education 
+                  portal providing the latest updates on <strong className="text-gray-900">admissions 2026</strong> 
+                  in top universities across the country.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-6">
+                  <div className="bg-blue-50 rounded-xl p-5">
+                    <h3 className="font-semibold text-gray-900 mb-3">📚 University Admissions 2026</h3>
+                    <p className="text-sm">
+                      Apply online for top universities including 
+                      <Link href="/universities/nust" className="text-blue-600 hover:underline mx-1">NUST</Link>,
+                      <Link href="/universities/fast-nuces" className="text-blue-600 hover:underline mx-1">FAST</Link>,
+                      <Link href="/universities/lums" className="text-blue-600 hover:underline mx-1">LUMS</Link>,
+                      <Link href="/universities/punjab-university" className="text-blue-600 hover:underline mx-1">Punjab University</Link>,
+                      and <Link href="/universities/karachi-university" className="text-blue-600 hover:underline mx-1">Karachi University</Link>.
+                      Find complete information for <strong>BS programs</strong>, <strong>MBA admissions</strong>, 
+                      <strong>MS programs</strong>, <strong>medical admissions</strong>, and 
+                      <strong>engineering admissions</strong>.
+                    </p>
+                  </div>
+                  
+                  <div className="bg-green-50 rounded-xl p-5">
+                    <h3 className="font-semibold text-gray-900 mb-3">📊 Results & Date Sheets 2026</h3>
+                    <p className="text-sm">
+                      Check <strong>board results 2026</strong> for FBISE, BISE Lahore, BISE Karachi, 
+                      BISE Rawalpindi, and all other educational boards. Download <strong>date sheets 2026</strong> 
+                      for annual and supplementary examinations. Get <strong>merit lists</strong>, 
+                      <strong>fee structures</strong>, and <strong>entry test schedules</strong> 
+                      for all major universities.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-xl p-5 my-6">
+                  <h3 className="font-semibold text-gray-900 mb-3">🎓 Latest Education News & Updates</h3>
+                  <p className="text-sm">
+                    Stay updated with the latest <strong>education news</strong>, 
+                    <strong>scholarship opportunities</strong>, <strong>career guidance</strong>, 
+                    and <strong>study abroad programs</strong> in Pakistan. Follow us for instant 
+                    alerts on admission deadlines, result announcements, and exam schedules.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 text-center">
+                  <div className="p-4">
+                    <div className="text-2xl mb-2">🏛️</div>
+                    <div className="text-sm font-medium text-gray-900">50+ Universities</div>
+                    <div className="text-xs text-gray-500">Complete Information</div>
+                  </div>
+                  <div className="p-4">
+                    <div className="text-2xl mb-2">📝</div>
+                    <div className="text-sm font-medium text-gray-900">1000+ Programs</div>
+                    <div className="text-xs text-gray-500">BS, MS, PhD & More</div>
+                  </div>
+                  <div className="p-4">
+                    <div className="text-2xl mb-2">📊</div>
+                    <div className="text-sm font-medium text-gray-900">500+ Results</div>
+                    <div className="text-xs text-gray-500">Board & University</div>
+                  </div>
+                  <div className="p-4">
+                    <div className="text-2xl mb-2">📰</div>
+                    <div className="text-sm font-medium text-gray-900">Daily Updates</div>
+                    <div className="text-xs text-gray-500">Latest News & Alerts</div>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-gray-400 text-center mt-8 pt-6 border-t">
+                  Last updated: {new Date().toLocaleDateString('en-PK')} | 
+                  <Link href="/about" className="text-blue-600 hover:underline mx-1">About Us</Link> | 
+                  <Link href="/contact" className="text-blue-600 hover:underline mx-1">Contact</Link> | 
+                  <Link href="/privacy" className="text-blue-600 hover:underline mx-1">Privacy Policy</Link>
+                </p>
+              </div>
             </div>
           </div>
         </section>

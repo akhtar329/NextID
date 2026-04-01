@@ -39,7 +39,6 @@ type Admission = {
   institute: Institute;
 };
 
-// Flattened type for Table component
 type FlatAdmission = {
   id: number;
   name: string;
@@ -49,12 +48,7 @@ type FlatAdmission = {
   status: "Expected" | "Open" | "Closed";
   expectedOpenDate: string | null;
   expectedCloseDate: string | null;
-  meritInfo: string | null;
-  note: string | null;
-  officialLink: string | null;
   programNames: string;
-  programIds: number[];
-  firstProgramId: number;
   instituteName: string;
   instituteCity: string;
   instituteId: number;
@@ -70,11 +64,9 @@ export default function AdmissionsPage() {
   const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
 
-  // Filters
   const [yearFilter, setYearFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
-  // Fetch admissions
   const fetchAdmissions = async () => {
     setLoading(true);
     try {
@@ -107,7 +99,6 @@ export default function AdmissionsPage() {
     fetchAdmissions();
   }, [yearFilter, statusFilter]);
 
-  // Update admission status
   const updateStatus = async (id: number, newStatus: "Expected" | "Open" | "Closed") => {
     setUpdatingStatus(id);
     toast.loading("Updating status...", { id: `status-${id}` });
@@ -143,7 +134,6 @@ export default function AdmissionsPage() {
     }
   };
 
-  // Delete admission
   const deleteAdmission = async (id: number, name: string) => {
     if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
 
@@ -181,11 +171,8 @@ export default function AdmissionsPage() {
     }
   };
 
-  // Transform data for table
   const flattenedData: FlatAdmission[] = admissions.map(ad => {
     const programNames = ad.programs?.map(p => p.name).join(', ') || 'No programs';
-    const programIds = ad.programs?.map(p => p.id) || [];
-    const firstProgramId = programIds[0] || 0;
     const programCount = ad.programs?.length || 0;
     
     return {
@@ -197,12 +184,7 @@ export default function AdmissionsPage() {
       status: ad.status,
       expectedOpenDate: ad.expectedOpenDate,
       expectedCloseDate: ad.expectedCloseDate,
-      meritInfo: ad.meritInfo,
-      note: ad.note,
-      officialLink: ad.officialLink,
       programNames,
-      programIds,
-      firstProgramId,
       programCount,
       instituteName: ad.institute.name,
       instituteCity: ad.institute.cityName,
@@ -210,7 +192,6 @@ export default function AdmissionsPage() {
     };
   });
 
-  // Filter by search
   const filteredData = flattenedData.filter(ad => 
     ad.name.toLowerCase().includes(search.toLowerCase()) ||
     ad.programNames.toLowerCase().includes(search.toLowerCase()) ||
@@ -218,7 +199,6 @@ export default function AdmissionsPage() {
     ad.year.toString().includes(search)
   );
 
-  // Get unique years for filter dropdown
   const years = [...new Set(admissions.map(ad => ad.year))].sort((a, b) => b - a);
 
   const columns: {
@@ -230,17 +210,12 @@ export default function AdmissionsPage() {
       header: "Name",
       accessor: "name",
       render: (value: string, row: FlatAdmission) => (
-        <div>
-          <button
-            onClick={() => router.push(`/admin/admissions/${row.id}`)}
-            className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
-          >
-            {value}
-          </button>
-          <div className="text-xs text-gray-500 mt-1 font-mono">
-            /admissions/{row.slug}
-          </div>
-        </div>
+        <button
+          onClick={() => router.push(`/admin/admissions/${row.id}`)}
+          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+        >
+          {value}
+        </button>
       )
     },
     {
@@ -256,14 +231,6 @@ export default function AdmissionsPage() {
               {row.programCount} programs
             </div>
           )}
-          {row.firstProgramId > 0 && (
-            <button
-              onClick={() => router.push(`/admin/programs/${row.firstProgramId}`)}
-              className="text-xs text-gray-500 hover:text-blue-600 hover:underline mt-1 block"
-            >
-              View first program →
-            </button>
-          )}
         </div>
       )
     },
@@ -271,15 +238,12 @@ export default function AdmissionsPage() {
       header: "Institute",
       accessor: "instituteName",
       render: (value: string, row: FlatAdmission) => (
-        <div>
-          <button
-            onClick={() => router.push(`/admin/institutes/${row.instituteId}`)}
-            className="text-gray-700 hover:text-blue-600 hover:underline text-sm"
-          >
-            {value}
-          </button>
-          <div className="text-xs text-gray-500">{row.instituteCity}</div>
-        </div>
+        <button
+          onClick={() => router.push(`/admin/institutes/${row.instituteId}`)}
+          className="text-gray-700 hover:text-blue-600 hover:underline text-sm"
+        >
+          {value}
+        </button>
       )
     },
     {
@@ -327,34 +291,15 @@ export default function AdmissionsPage() {
                   ${colors[value as keyof typeof colors]}
                   hover:ring-2 hover:ring-offset-1 transition-all
                 `}
-                title="Change status"
               >
-                <option value="Expected" className="bg-white text-gray-700">Expected</option>
-                <option value="Open" className="bg-white text-gray-700">Open</option>
-                <option value="Closed" className="bg-white text-gray-700">Closed</option>
+                <option value="Expected">Expected</option>
+                <option value="Open">Open</option>
+                <option value="Closed">Closed</option>
               </select>
             )}
           </div>
         );
       }
-    },
-    {
-      header: "Open Date",
-      accessor: "expectedOpenDate",
-      render: (value: string | null) => (
-        <span className="text-sm text-gray-600">
-          {value ? new Date(value).toLocaleDateString() : '—'}
-        </span>
-      )
-    },
-    {
-      header: "Close Date",
-      accessor: "expectedCloseDate",
-      render: (value: string | null) => (
-        <span className="text-sm text-gray-600">
-          {value ? new Date(value).toLocaleDateString() : '—'}
-        </span>
-      )
     },
     {
       header: "Actions",
@@ -385,12 +330,7 @@ export default function AdmissionsPage() {
     },
   ];
 
-  // Stats
   const totalAdmissions = admissions.length;
-  const expectedAdmissions = admissions.filter(a => a.status === 'Expected').length;
-  const openAdmissions = admissions.filter(a => a.status === 'Open').length;
-  const closedAdmissions = admissions.filter(a => a.status === 'Closed').length;
-  const totalProgramsLinked = admissions.reduce((sum, ad) => sum + (ad.programs?.length || 0), 0);
 
   if (loading && admissions.length === 0) {
     return (
@@ -409,43 +349,45 @@ export default function AdmissionsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Admissions</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage program admissions with SEO-friendly URLs
+            Manage program admissions
           </p>
         </div>
         <PrimaryButton onClick={() => router.push("/admin/admissions/create")}>
-          + Add New Admission
+          + Add New
         </PrimaryButton>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Card */}
       {!loading && admissions.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Total Admissions</div>
             <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Expected</div>
-            <div className="text-2xl font-semibold mt-1 text-yellow-600">{expectedAdmissions}</div>
+            <div className="text-2xl font-semibold mt-1 text-yellow-600">
+              {admissions.filter(a => a.status === 'Expected').length}
+            </div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Open</div>
-            <div className="text-2xl font-semibold mt-1 text-green-600">{openAdmissions}</div>
+            <div className="text-2xl font-semibold mt-1 text-green-600">
+              {admissions.filter(a => a.status === 'Open').length}
+            </div>
           </div>
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Closed</div>
-            <div className="text-2xl font-semibold mt-1 text-red-600">{closedAdmissions}</div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="text-sm text-gray-500">Programs Linked</div>
-            <div className="text-2xl font-semibold mt-1 text-blue-600">{totalProgramsLinked}</div>
+            <div className="text-2xl font-semibold mt-1 text-red-600">
+              {admissions.filter(a => a.status === 'Closed').length}
+            </div>
           </div>
         </div>
       )}
 
       {/* Filters */}
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-2">
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
           <SearchInput
             value={search}
             onChange={setSearch}
@@ -503,13 +445,8 @@ export default function AdmissionsPage() {
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <Table columns={columns} data={filteredData} />
-          
-          {/* Summary */}
-          <div className="p-4 border-t text-sm text-gray-500 flex justify-between">
-            <span>Showing {filteredData.length} of {flattenedData.length} admissions</span>
-            <span className="font-medium">
-              Total Programs: {totalProgramsLinked}
-            </span>
+          <div className="p-4 border-t text-sm text-gray-500">
+            Showing {filteredData.length} of {flattenedData.length} admissions
           </div>
         </div>
       )}

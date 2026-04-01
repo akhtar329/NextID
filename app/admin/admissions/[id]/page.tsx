@@ -22,6 +22,19 @@ type Institute = {
   slug: string;
 };
 
+type SeoData = {
+  id: number;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+  robots: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type Admission = {
   id: number;
   name: string;
@@ -34,9 +47,11 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  // 👇 Programs array (not single program)
   programs: Program[];
   institute: Institute;
+  seo?: SeoData;
+  createdAt?: string;  // ✅ Add this
+  updatedAt?: string;  // ✅ Add this
 };
 
 export default function AdmissionDetailPage() {
@@ -47,6 +62,7 @@ export default function AdmissionDetailPage() {
   const [admission, setAdmission] = useState<Admission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showSeo, setShowSeo] = useState(false);
 
   useEffect(() => {
     fetchAdmission();
@@ -131,7 +147,6 @@ export default function AdmissionDetailPage() {
           <Link href="/admin/admissions" className="hover:text-blue-600">Admissions</Link>
           <span className="mx-2">›</span>
           <span className="text-gray-700">
-            {/* 👇 FIX: Show first program name or fallback */}
             {admission.programs && admission.programs.length > 0 
               ? `${admission.programs[0].name} - ${admission.year}` 
               : `Admission ${admission.year}`}
@@ -274,6 +289,146 @@ export default function AdmissionDetailPage() {
             </div>
           )}
 
+          {/* SEO Section */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <button
+              onClick={() => setShowSeo(!showSeo)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <h2 className="font-medium text-gray-900">🔍 SEO Metadata</h2>
+              <span className="text-gray-500 text-sm">
+                {showSeo ? '▼' : '▶'} {admission.seo ? 'Has SEO' : 'No SEO'}
+              </span>
+            </button>
+            
+            {showSeo && (
+              <div className="mt-4 space-y-3 pt-3 border-t">
+                {admission.seo ? (
+                  <>
+                    {/* Meta Title */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Meta Title
+                      </label>
+                      <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded font-mono break-all">
+                        {admission.seo.metaTitle || '— Not set —'}
+                      </p>
+                      {admission.seo.metaTitle && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Length: {admission.seo.metaTitle.length} characters
+                          {admission.seo.metaTitle.length > 60 && ' ⚠️ Too long (max 60)'}
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Meta Description */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Meta Description
+                      </label>
+                      <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded break-all">
+                        {admission.seo.metaDescription || '— Not set —'}
+                      </p>
+                      {admission.seo.metaDescription && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Length: {admission.seo.metaDescription.length} characters
+                          {admission.seo.metaDescription.length > 160 && ' ⚠️ Too long (max 160)'}
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Canonical URL */}
+                    {admission.seo.canonicalUrl && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Canonical URL
+                        </label>
+                        <p className="text-sm text-blue-600 break-all">
+                          <Link href={admission.seo.canonicalUrl} target="_blank" className="hover:underline">
+                            {admission.seo.canonicalUrl}
+                          </Link>
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Robots */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Robots
+                      </label>
+                      <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded font-mono">
+                        {admission.seo.robots || 'index, follow'}
+                      </p>
+                    </div>
+                    
+                    {/* OG Title */}
+                    {admission.seo.ogTitle && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Social Media Title
+                        </label>
+                        <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded">
+                          {admission.seo.ogTitle}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* OG Description */}
+                    {admission.seo.ogDescription && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Social Media Description
+                        </label>
+                        <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded">
+                          {admission.seo.ogDescription}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* OG Image */}
+                    {admission.seo.ogImage && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Social Media Image
+                        </label>
+                        <img 
+                          src={admission.seo.ogImage} 
+                          alt="OG Preview"
+                          className="mt-1 max-w-full h-32 object-cover rounded border"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        <p className="text-xs text-gray-400 mt-1 truncate">
+                          {admission.seo.ogImage}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* SEO Updated */}
+                    {admission.seo.updatedAt && (
+                      <div className="text-xs text-gray-400 pt-2 border-t">
+                        SEO Updated: {new Date(admission.seo.updatedAt).toLocaleString()}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-gray-500 mb-3">
+                      No SEO metadata set for this admission
+                    </p>
+                    <Link
+                      href={`/admin/admissions/${admissionId}/edit`}
+                      className="inline-block px-3 py-1.5 bg-blue-50 text-blue-600 rounded text-sm hover:bg-blue-100"
+                    >
+                      Add SEO in Edit Mode →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Merit Information */}
           {admission.meritInfo && (
             <div className="bg-white p-4 rounded-lg shadow-sm border">
@@ -296,6 +451,16 @@ export default function AdmissionDetailPage() {
           {/* Metadata */}
           <div className="bg-gray-50 p-4 rounded-lg border text-sm text-gray-500">
             <p>ID: {admission.id}</p>
+            {admission.createdAt && (
+              <p className="text-xs mt-1">
+                Created: {new Date(admission.createdAt).toLocaleString()}
+              </p>
+            )}
+            {admission.updatedAt && (
+              <p className="text-xs">
+                Updated: {new Date(admission.updatedAt).toLocaleString()}
+              </p>
+            )}
           </div>
         </div>
       </div>

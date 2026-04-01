@@ -1,8 +1,8 @@
-// app/api/admin/admissions/route.ts (POST method)
+// app/api/admin/admissions/create/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
-import { admissions, admissionPrograms } from '@/app/lib/schema';
+import { admissions, admissionPrograms, seoMetadata } from '@/app/lib/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Ensure programIds is an array
+    // Ensure programIds is an array
     const programIds = Array.isArray(body.programIds) ? body.programIds : [body.programIds];
     
     if (programIds.length === 0) {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Check if slug already exists
+    // Check if slug already exists
     const existingAdmission = await db
       .select()
       .from(admissions)
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Start a transaction to ensure data consistency
+    // Start a transaction
     const result = await db.transaction(async (tx) => {
-      // 1. Create admission (without programId)
+      // 1. Create admission
       const [newAdmission] = await tx
         .insert(admissions)
         .values({
@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
           meritInfo: body.meritInfo || null,
           note: body.note || null,
           officialLink: body.officialLink || null,
+          featuredImage: body.featuredImage || null,
+          galleryImages: body.galleryImages ? JSON.stringify(body.galleryImages) : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -81,13 +83,39 @@ export async function POST(request: NextRequest) {
         })
       );
 
-      return { newAdmission, junctionRecords };
+      // 3. Insert SEO metadata (WITHOUT metaKeywords)
+      let seoRecord = null;
+      const hasSeoData = body.metaTitle || body.metaDescription || body.canonicalUrl;
+      
+      if (hasSeoData) {
+        const [newSeo] = await tx
+          .insert(seoMetadata)
+          .values({
+            entityType: 'admission',
+            entityId: newAdmission.id,
+            metaTitle: body.metaTitle || null,
+            metaDescription: body.metaDescription || null,
+            // metaKeywords: body.metaKeywords || null, // ❌ REMOVED
+            canonicalUrl: body.canonicalUrl || null,
+            robots: body.robots || 'index, follow',
+            ogTitle: body.ogTitle || body.metaTitle || null,
+            ogDescription: body.ogDescription || body.metaDescription || null,
+            ogImage: body.ogImage || body.featuredImage || null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        seoRecord = newSeo;
+      }
+
+      return { newAdmission, junctionRecords, seoRecord };
     });
 
     return NextResponse.json({
       success: true,
       admission: result.newAdmission,
       programCount: result.junctionRecords.length,
+      seo: result.seoRecord ? 'created' : 'skipped',
       message: `Admission created successfully with ${result.junctionRecords.length} program(s)`
     });
 
@@ -96,7 +124,6 @@ export async function POST(request: NextRequest) {
     
     // Handle unique constraint violation
     if (error.code === '23505') {
-      // Check which unique constraint failed
       if (error.message?.includes('admissions_slug_unique')) {
         return NextResponse.json(
           { 
@@ -111,6 +138,15 @@ export async function POST(request: NextRequest) {
           { 
             error: 'Duplicate program', 
             details: 'This program is already linked to this admission.' 
+          },
+          { status: 400 }
+        );
+      }
+      if (error.message?.includes('seo_metadata_entity_type_entity_id_unique')) {
+        return NextResponse.json(
+          { 
+            error: 'Duplicate SEO record', 
+            details: 'SEO metadata already exists for this admission.' 
           },
           { status: 400 }
         );

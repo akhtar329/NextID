@@ -108,39 +108,52 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
   const [activeSection, setActiveSection] = useState('about');
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
-  // ✅ Combine ALL programs - this will show everything
+  // Combine ALL programs
   const allPrograms = [...undergradPrograms, ...gradPrograms, ...diplomaPrograms];
-  
-  // ✅ ALSO check admission.programs directly (fallback)
   const programsToShow = allPrograms.length > 0 ? allPrograms : admission.programs || [];
 
   // Prepare city universities data
   const cityUniversities = cityAdmissions.reduce((acc: any[], adm: any) => {
-    if (!acc.find(u => u.slug === adm.instituteSlug)) {
+    const existingIndex = acc.findIndex(u => u.slug === adm.instituteSlug);
+    if (existingIndex === -1) {
       acc.push({
         name: adm.instituteName,
         slug: adm.instituteSlug,
         type: admission.institute?.type || 'University',
-        admissionCount: cityAdmissions.filter(a => a.instituteSlug === adm.instituteSlug).length
+        admissionCount: 1,
+        key: `uni-${adm.instituteSlug}`
       });
+    } else {
+      acc[existingIndex].admissionCount += 1;
     }
     return acc;
   }, []);
 
   // Prepare related admissions
-  const relatedAdmissionsList = relatedAdmissions.map(adm => ({
+  const relatedAdmissionsList = relatedAdmissions.map((adm, index) => ({
     id: adm.id,
     name: adm.name,
     slug: adm.slug,
     year: adm.year,
     session: adm.session,
-    status: adm.status
+    status: adm.status,
+    key: `related-${adm.id}-${index}`
   }));
+
+  // Define sections for navigation
+  const sections = [
+    { id: 'about', label: 'Overview', show: true },
+    { id: 'programs', label: 'Programs', show: programsToShow.length > 0 },
+    { id: 'eligibility', label: 'Eligibility', show: true },
+    { id: 'merit', label: 'Merit', show: !!admission.meritInfo },
+    { id: 'how-to-apply', label: 'How to Apply', show: true },
+    { id: 'documents', label: 'Documents', show: true },
+    { id: 'faq', label: 'FAQ', show: true },
+    { id: 'deadline', label: 'Deadline', show: true },
+  ].filter(section => section.show);
 
   // Track active section on scroll
   useEffect(() => {
-    const sections = ['about', 'programs', 'eligibility', 'merit', 'how-to-apply', 'documents', 'faq'];
-    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -156,22 +169,22 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
       }
     );
 
-    sections.forEach((sectionId) => {
-      const element = document.getElementById(sectionId);
+    sections.forEach((section) => {
+      const element = document.getElementById(section.id);
       if (element) {
-        sectionRefs.current[sectionId] = element;
+        sectionRefs.current[section.id] = element;
         observer.observe(element);
       }
     });
 
     return () => {
-      sections.forEach((sectionId) => {
-        if (sectionRefs.current[sectionId]) {
-          observer.unobserve(sectionRefs.current[sectionId]!);
+      sections.forEach((section) => {
+        if (sectionRefs.current[section.id]) {
+          observer.unobserve(sectionRefs.current[section.id]!);
         }
       });
     };
-  }, []);
+  }, [sections]);
 
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -182,6 +195,9 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
       window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }
   };
+
+  const currentIndex = sections.findIndex(s => s.id === activeSection);
+  const progressPercentage = ((currentIndex + 1) / sections.length) * 100;
 
   return (
     <main className="min-h-screen bg-gray-50" suppressHydrationWarning>
@@ -227,11 +243,6 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                     📅 Session: {admission.session} {admission.year}
                   </span>
                 )}
-                {daysRemaining && daysRemaining > 0 && admission.status === 'Open' && (
-                  <span className="bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm font-medium">
-                    ⏰ {daysRemaining} days remaining
-                  </span>
-                )}
               </div>
               
               <div className="flex flex-wrap items-center gap-3 text-gray-600 text-sm">
@@ -261,16 +272,11 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
         </div>
 
         {/* Quick Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition">
             <div className="text-2xl mb-2">📅</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide">Posted Date</div>
             <div className="font-bold text-gray-800">{formattedPostedDate}</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition">
-            <div className="text-2xl mb-2">⏰</div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">Last Date</div>
-            <div className="font-bold text-gray-800">{formattedLastDate}</div>
           </div>
           <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-md transition">
             <div className="text-2xl mb-2">🎓</div>
@@ -311,10 +317,10 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                     </p>
                     <p>
                       {admission.status === 'Open' 
-                        ? `Applications are currently being accepted. The last date to submit your application is ${formattedDeadline}.`
+                        ? `Applications are currently being accepted.`
                         : admission.status === 'Expected'
                           ? `Applications will open on ${formattedOpenDate}. Stay tuned for updates.`
-                          : `Applications for this session are now closed. The deadline was ${formattedDeadline}.`
+                          : `Applications for this session are now closed.`
                       }
                     </p>
                   </div>
@@ -322,17 +328,17 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
               </div>
             </section>
             
-            {/* Section 2: Offered Programs - FIXED: Show ALL programs */}
-            <section id="programs" className="scroll-mt-24">
-              <div className="bg-white rounded-xl p-6 border border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>🎓</span> Offered Programs ({programsToShow.length})
-                </h2>
-                
-                {programsToShow.length > 0 ? (
+            {/* Section 2: Offered Programs */}
+            {programsToShow.length > 0 && (
+              <section id="programs" className="scroll-mt-24">
+                <div className="bg-white rounded-xl p-6 border border-gray-200">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <span>🎓</span> Offered Programs ({programsToShow.length})
+                  </h2>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {programsToShow.map((program) => (
-                      <div key={program.id} className="border rounded-lg p-4 hover:shadow-md transition hover:border-orange-200">
+                    {programsToShow.map((program, index) => (
+                      <div key={`program-${program.id}-${index}`} className="border rounded-lg p-4 hover:shadow-md transition hover:border-orange-200">
                         <Link href={`/programs/${program.slug}`} className="text-lg font-semibold text-orange-600 hover:underline">
                           {program.name}
                         </Link>
@@ -355,14 +361,15 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                         </div>
                         {program.eligibility && (
                           <p className="text-sm text-gray-600 mt-2 border-t pt-2">
-                            <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 100)}...
+                            <span className="font-medium">✅ Eligibility:</span> {program.eligibility.substring(0, 100)}
+                            {program.eligibility.length > 100 && '...'}
                           </p>
                         )}
                         <div className="flex gap-3 mt-3">
                           <Link href={`/programs/${program.slug}`} className="text-sm text-orange-600 hover:underline">
                             View Details →
                           </Link>
-                          {admission.officialLink && (
+                          {admission.officialLink && admission.status === 'Open' && (
                             <a href={admission.officialLink} target="_blank" className="text-sm text-green-600 hover:underline">
                               Apply Now →
                             </a>
@@ -371,40 +378,41 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <p className="text-lg">📚 No programs listed for this admission.</p>
-                    <p className="text-sm mt-2">Please check back later for updated information.</p>
-                  </div>
-                )}
-              </div>
-            </section>
+                </div>
+              </section>
+            )}
             
             {/* Section 3: Eligibility Criteria */}
             <section id="eligibility" className="scroll-mt-24">
               <div className="bg-white rounded-xl p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>✅</span> General Eligibility Criteria
+                  <span>✅</span> Eligibility Criteria
                 </h2>
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <ul className="space-y-2 text-gray-700">
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">✓</span>
-                      <span>Intermediate (FA / FSc / ICS or equivalent) from a recognized board for undergraduate programs</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">✓</span>
-                      <span>Bachelor's degree (16 years) for graduate programs with minimum 2.5 CGPA or 50% marks</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">✓</span>
-                      <span>Entry test as per university policy (where applicable)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">✓</span>
-                      <span>Admission based on merit and university admission policy</span>
-                    </li>
-                  </ul>
+                  {admission.meritInfo ? (
+                    <div className="text-gray-700 leading-relaxed">
+                      {admission.meritInfo}
+                    </div>
+                  ) : (
+                    <ul className="space-y-2 text-gray-700">
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-500">✓</span>
+                        <span>Intermediate (FA / FSc / ICS or equivalent) from a recognized board for undergraduate programs</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-500">✓</span>
+                        <span>Bachelor's degree (16 years) for graduate programs with minimum 2.5 CGPA or 50% marks</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-500">✓</span>
+                        <span>Entry test as per university policy (where applicable)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-green-500">✓</span>
+                        <span>Admission based on merit and university admission policy</span>
+                      </li>
+                    </ul>
+                  )}
                 </div>
               </div>
             </section>
@@ -432,7 +440,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 <div className="space-y-4">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold">1</div>
-                    <div><span className="font-medium">Visit Official Website:</span> Go to <a href={admission.institute?.website || '#'} className="text-orange-600 hover:underline" target="_blank">{admission.institute?.website || 'university website'}</a></div>
+                    <div><span className="font-medium">Visit Official Website:</span> Go to <a href={admission.institute?.website || '#'} className="text-orange-600 hover:underline" target="_blank" rel="noopener noreferrer">{admission.institute?.website || 'university website'}</a></div>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold">2</div>
@@ -449,10 +457,6 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold">5</div>
                     <div><span className="font-medium">Pay Application Fee:</span> Submit fee via bank challan or online payment</div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold">6</div>
-                    <div><span className="font-medium">Submit Before Deadline:</span> Last date to apply is {formattedDeadline}</div>
                   </div>
                 </div>
               </div>
@@ -475,7 +479,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                     'Last degree certificate (for graduate programs)',
                     'Experience certificate (if required)'
                   ].map((doc, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                    <div key={`doc-${i}`} className="flex items-center gap-2">
                       <span className="text-green-500">☑️</span>
                       <span className="text-gray-700 text-sm">{doc}</span>
                     </div>
@@ -491,35 +495,35 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   <span>❓</span> Frequently Asked Questions
                 </h2>
                 <div className="space-y-4">
-                  <details className="group border-b pb-3">
+                  <details key="faq-1" className="group border-b pb-3">
                     <summary className="font-semibold text-gray-800 cursor-pointer list-none flex items-center justify-between">
                       <span>What is the last date to apply?</span>
                       <span className="text-orange-500 group-open:rotate-180 transition">▼</span>
                     </summary>
                     <p className="text-gray-600 mt-2 pl-4">The last date to submit your application is {formattedDeadline}.</p>
                   </details>
-                  <details className="group border-b pb-3">
+                  <details key="faq-2" className="group border-b pb-3">
                     <summary className="font-semibold text-gray-800 cursor-pointer list-none flex items-center justify-between">
                       <span>Is there any entry test?</span>
                       <span className="text-orange-500 group-open:rotate-180 transition">▼</span>
                     </summary>
                     <p className="text-gray-600 mt-2 pl-4">Entry test requirements vary by program. Please check the official advertisement or contact the admission office for details.</p>
                   </details>
-                  <details className="group border-b pb-3">
+                  <details key="faq-3" className="group border-b pb-3">
                     <summary className="font-semibold text-gray-800 cursor-pointer list-none flex items-center justify-between">
                       <span>Can I apply for multiple programs?</span>
                       <span className="text-orange-500 group-open:rotate-180 transition">▼</span>
                     </summary>
                     <p className="text-gray-600 mt-2 pl-4">Yes, you can apply for multiple programs. However, a separate application may be required for each program.</p>
                   </details>
-                  <details className="group border-b pb-3">
+                  <details key="faq-4" className="group border-b pb-3">
                     <summary className="font-semibold text-gray-800 cursor-pointer list-none flex items-center justify-between">
                       <span>Is hostel facility available?</span>
                       <span className="text-orange-500 group-open:rotate-180 transition">▼</span>
                     </summary>
                     <p className="text-gray-600 mt-2 pl-4">Please contact the university directly for hostel availability and accommodation details.</p>
                   </details>
-                  <details className="group">
+                  <details key="faq-5" className="group">
                     <summary className="font-semibold text-gray-800 cursor-pointer list-none flex items-center justify-between">
                       <span>What is the application fee?</span>
                       <span className="text-orange-500 group-open:rotate-180 transition">▼</span>
@@ -530,13 +534,68 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
               </div>
             </section>
             
+            {/* Section 8: Deadline - AT THE BOTTOM (Prominent) */}
+            <section id="deadline" className="scroll-mt-24">
+              <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg border border-orange-400">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-white/20 rounded-full p-2">
+                    <span className="text-3xl">⏰</span>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Application Deadline</h2>
+                    <p className="text-orange-100 text-sm">Don't miss the opportunity to apply</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 my-4 text-center">
+                  <div className="text-4xl md:text-5xl font-bold mb-2">
+                    {formattedLastDate !== 'TBA' ? formattedLastDate : 'TBA'}
+                  </div>
+                  {daysRemaining && daysRemaining > 0 && admission.status === 'Open' && (
+                    <div className="inline-block bg-white/20 rounded-full px-4 py-2">
+                      <span className="text-lg font-semibold">
+                        ⚡ {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining to apply
+                      </span>
+                    </div>
+                  )}
+                  {admission.status === 'Closed' && (
+                    <div className="inline-block bg-white/20 rounded-full px-4 py-2">
+                      <span className="text-lg font-semibold">❌ Applications are now closed</span>
+                    </div>
+                  )}
+                  {admission.status === 'Expected' && (
+                    <div className="inline-block bg-white/20 rounded-full px-4 py-2">
+                      <span className="text-lg font-semibold">📅 Opening on {formattedOpenDate}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {admission.officialLink && admission.status === 'Open' && (
+                  <div className="text-center">
+                    <a
+                      href={admission.officialLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block bg-white text-orange-600 hover:bg-orange-50 px-8 py-3 rounded-xl font-bold text-lg transition shadow-lg hover:shadow-xl"
+                    >
+                      📝 Apply Now → Apply Before Deadline
+                    </a>
+                  </div>
+                )}
+                
+                <p className="text-xs text-orange-100 text-center mt-4">
+                  * Late applications may not be accepted
+                </p>
+              </div>
+            </section>
+            
           </div>
           
-          {/* RIGHT COLUMN - STICKY SIDEBAR */}
+          {/* RIGHT COLUMN - STICKY SIDEBAR (No Deadline Here) */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 space-y-4">
               
-              {/* Section 1: About University */}
+              {/* About University Card */}
               <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
                   <div className="w-1 h-5 bg-orange-500 rounded-full"></div>
@@ -545,10 +604,6 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-start gap-2">
                     <span className="text-orange-500">🏛️</span>
-                    <span className="text-gray-700">Established: {admission.institute?.city?.name || 'Pakistan'}</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-orange-500">📚</span>
                     <span className="text-gray-700">Type: {admission.institute?.type || 'University'}</span>
                   </div>
                   <div className="flex items-start gap-2">
@@ -562,7 +617,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   {admission.institute?.website && (
                     <div className="flex items-start gap-2">
                       <span className="text-orange-500">🌐</span>
-                      <a href={admission.institute.website} target="_blank" className="text-blue-600 hover:underline truncate">
+                      <a href={admission.institute.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate">
                         {admission.institute.website.replace('https://', '').replace('http://', '')}
                       </a>
                     </div>
@@ -575,7 +630,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               </div>
               
-              {/* Section 2: All Programs List (Sidebar) */}
+              {/* All Programs List (Sidebar) */}
               {programsToShow.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
@@ -585,7 +640,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   <div className="space-y-2 max-h-80 overflow-y-auto">
                     {programsToShow.map((program, idx) => (
                       <Link 
-                        key={idx}
+                        key={`sidebar-program-${program.id}-${idx}`}
                         href={`/programs/${program.slug}`}
                         className="block p-2 bg-gray-50 rounded-lg hover:bg-orange-50 transition group"
                       >
@@ -601,7 +656,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               )}
               
-              {/* Section 3: Other Universities in Same City */}
+              {/* Other Universities in Same City */}
               {cityUniversities.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
@@ -613,7 +668,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   <div className="space-y-2">
                     {cityUniversities.slice(0, 4).map((uni, idx) => (
                       <Link
-                        key={idx}
+                        key={`uni-${uni.slug}-${idx}`}
                         href={`/universities/${uni.slug}`}
                         className="block p-2 bg-gray-50 rounded-lg hover:bg-orange-50 transition"
                       >
@@ -627,7 +682,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               )}
               
-              {/* Section 4: More Admissions from this University */}
+              {/* More Admissions from this University */}
               {relatedAdmissionsList.length > 0 && (
                 <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
@@ -639,7 +694,7 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                   <div className="space-y-2">
                     {relatedAdmissionsList.slice(0, 3).map((adm, idx) => (
                       <Link
-                        key={idx}
+                        key={adm.key || `related-${adm.id}-${idx}`}
                         href={`/admissions/${adm.slug}`}
                         className="block p-2 bg-gray-50 rounded-lg hover:bg-orange-50 transition"
                       >
@@ -655,32 +710,24 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 </div>
               )}
               
-              {/* Section 5: Quick Navigation */}
+              {/* Quick Navigation */}
               <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
                   <span className="text-orange-500">📍</span>
                   <h3 className="font-bold text-gray-900 text-sm">Quick Navigation</h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'about', label: 'About' },
-                    { id: 'programs', label: 'Programs' },
-                    { id: 'eligibility', label: 'Eligibility' },
-                    { id: 'merit', label: 'Merit' },
-                    { id: 'how-to-apply', label: 'How to Apply' },
-                    { id: 'documents', label: 'Documents' },
-                    { id: 'faq', label: 'FAQ' },
-                  ].filter(item => !(item.id === 'merit' && !admission.meritInfo)).map((item) => (
+                  {sections.map((section, idx) => (
                     <button
-                      key={item.id}
-                      onClick={() => scrollToSection(item.id)}
+                      key={`nav-${section.id}-${idx}`}
+                      onClick={() => scrollToSection(section.id)}
                       className={`px-3 py-1.5 text-xs rounded-full transition ${
-                        activeSection === item.id
+                        activeSection === section.id
                           ? 'bg-orange-500 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-orange-100'
                       }`}
                     >
-                      {item.label}
+                      {section.label}
                     </button>
                   ))}
                 </div>
@@ -694,21 +741,11 @@ export default function AdmissionClient({ data }: AdmissionClientProps) {
                 <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
                   <div 
                     className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
-                    style={{ width: `${(() => {
-                      const sections = ['about', 'programs', 'eligibility', 'merit', 'how-to-apply', 'documents', 'faq'].filter(s => !(s === 'merit' && !admission.meritInfo));
-                      const index = sections.findIndex(s => s === activeSection);
-                      return ((index + 1) / sections.length) * 100;
-                    })()}%` }}
+                    style={{ width: `${progressPercentage}%` }}
                   ></div>
                 </div>
                 <div className="text-xs text-gray-400 text-center mt-2">
-                  Section {(() => {
-                    const sections = ['about', 'programs', 'eligibility', 'merit', 'how-to-apply', 'documents', 'faq'].filter(s => !(s === 'merit' && !admission.meritInfo));
-                    return sections.findIndex(s => s === activeSection) + 1;
-                  })()} of {(() => {
-                    const sections = ['about', 'programs', 'eligibility', 'merit', 'how-to-apply', 'documents', 'faq'].filter(s => !(s === 'merit' && !admission.meritInfo));
-                    return sections.length;
-                  })()}
+                  Section {currentIndex + 1} of {sections.length}
                 </div>
               </div>
               
