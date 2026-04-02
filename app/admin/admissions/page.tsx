@@ -280,97 +280,97 @@ export default function AdmissionsPage() {
         <span className="text-sm text-gray-600">{value || '—'}</span>
       )
     },
-    {
-      header: "Closing Date",
-      accessor: "expectedCloseDate",
-      render: (value: string | null, row: FlatAdmission) => {
-        if (!value) return <span className="text-gray-400 text-sm">—</span>;
-        
-        const date = new Date(value);
-        const formattedDate = date.toLocaleDateString('en-PK', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric'
-        });
-        
-        return (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">{formattedDate}</span>
-            {row.status === 'Open' && (
-              <span className={`text-xs mt-0.5 ${
-                row.isExpired ? 'text-red-600 font-semibold' : 
-                row.daysLeft && row.daysLeft <= 7 ? 'text-orange-600' : 
-                row.daysLeft && row.daysLeft <= 15 ? 'text-yellow-600' : 
-                'text-green-600'
-              }`}>
-                {row.isExpired 
-                  ? `⚠️ Expired (${row.daysLeft} days ago)`
-                  : row.daysLeft 
-                    ? `📅 ${row.daysLeft} days left`
-                    : ''
-                }
-              </span>
-            )}
-            {row.status === 'Closed' && (
-              <span className="text-xs text-gray-500 mt-0.5">
-                {row.isExpired ? `Closed ${row.daysLeft} days ago` : 'Closed'}
+{
+  header: "Closing Date",
+  accessor: "expectedCloseDate",
+  render: (value: string | null, row: FlatAdmission) => {
+    if (!value) return <span className="text-gray-400 text-sm">—</span>;
+    
+    const date = new Date(value);
+    const formattedDate = date.toLocaleDateString('en-PK', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    
+    return (
+      <div className="flex flex-col">
+        <span className="text-sm font-medium">{formattedDate}</span>
+        {row.status === 'Open' && (
+          <span className={`text-xs mt-0.5 font-semibold ${
+            row.isExpired ? 'text-red-600' : 
+            row.daysLeft && row.daysLeft <= 7 ? 'text-orange-600' : 
+            row.daysLeft && row.daysLeft <= 15 ? 'text-yellow-600' : 
+            'text-green-600'
+          }`}>
+            {row.isExpired 
+              ? '⚠️ Needs Closure!'
+              : row.daysLeft 
+                ? `📅 ${row.daysLeft} days left`
+                : ''
+            }
+          </span>
+        )}
+        {row.status === 'Closed' && (
+          <span className="text-xs text-gray-500 mt-0.5">
+            {row.isExpired ? `Closed ${row.daysLeft} days ago` : 'Closed'}
+          </span>
+        )}
+      </div>
+    );
+  }
+},
+{
+  header: "Status",
+  accessor: "status",
+  render: (value: string, row: FlatAdmission) => {
+    const colors = {
+      Expected: "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300",
+      Open: "bg-green-100 text-green-700 ring-1 ring-green-300",
+      Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
+    };
+    
+    // Show warning badge if Open but expired
+    const isExpiredOpen = value === 'Open' && row.isExpired;
+    
+    return (
+      <div className="relative">
+        {updatingStatus === row.id ? (
+          <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400 ring-1 ring-gray-200">
+            <span className="flex items-center gap-1">
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Updating</span>
+            </span>
+          </span>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <select
+              value={value}
+              onChange={(e) => updateStatus(row.id, e.target.value as "Expected" | "Open" | "Closed")}
+              className={`
+                px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
+                ${colors[value as keyof typeof colors]}
+                hover:ring-2 hover:ring-offset-1 transition-all
+              `}
+            >
+              <option value="Expected">Expected</option>
+              <option value="Open">Open</option>
+              <option value="Closed">Closed</option>
+            </select>
+            {isExpiredOpen && (
+              <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center animate-pulse">
+                ⚠️ Needs Closure!
               </span>
             )}
           </div>
-        );
-      }
-    },
-    {
-      header: "Status",
-      accessor: "status",
-      render: (value: string, row: FlatAdmission) => {
-        const colors = {
-          Expected: "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300",
-          Open: "bg-green-100 text-green-700 ring-1 ring-green-300",
-          Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
-        };
-        
-        // Show warning badge if Open but expired
-        const isExpiredOpen = value === 'Open' && row.isExpired;
-        
-        return (
-          <div className="relative">
-            {updatingStatus === row.id ? (
-              <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400 ring-1 ring-gray-200">
-                <span className="flex items-center gap-1">
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span>Updating</span>
-                </span>
-              </span>
-            ) : (
-              <div className="flex flex-col gap-1">
-                <select
-                  value={value}
-                  onChange={(e) => updateStatus(row.id, e.target.value as "Expected" | "Open" | "Closed")}
-                  className={`
-                    px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
-                    ${colors[value as keyof typeof colors]}
-                    hover:ring-2 hover:ring-offset-1 transition-all
-                  `}
-                >
-                  <option value="Expected">Expected</option>
-                  <option value="Open">Open</option>
-                  <option value="Closed">Closed</option>
-                </select>
-                {isExpiredOpen && (
-                  <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center">
-                    Needs Closure!
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      }
-    },
+        )}
+      </div>
+    );
+  }
+},
     {
       header: "Actions",
       accessor: "id",
