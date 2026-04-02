@@ -11,9 +11,10 @@ import {
   programs, 
   institutes,
   admissions,
-  admissionPrograms,  // ✅ Add this
+  admissionPrograms,
   results,
-  programInstitutes 
+  programInstitutes,
+  seoMetadata  // ✅ Added for centralized SEO
 } from '@/app/lib/schema';
 import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
 
@@ -23,29 +24,56 @@ interface Props {
   }>;
 }
 
+// ==================== GET SEO METADATA ====================
+async function getSeoMetadata(entityType: string, entityId: number) {
+  try {
+    const [seo] = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, entityType),
+          eq(seoMetadata.entityId, entityId)
+        )
+      )
+      .limit(1);
+    return seo || null;
+  } catch (error) {
+    console.error('Error fetching SEO metadata:', error);
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   
   try {
-    const degree = await db
+    const degreeResult = await db
       .select()
       .from(degrees)
       .where(and(eq(degrees.slug, slug), eq(degrees.status, true)))
       .limit(1);
 
-    if (!degree.length) {
+    if (!degreeResult.length) {
       return {
         title: 'Degree Not Found | NextID.pk',
       };
     }
 
-    const deg = degree[0];
+    const degree = degreeResult[0];
+    const seo = await getSeoMetadata('degree', degree.id);
 
     return {
-      title: `${deg.name} ${deg.fullForm || ''} Degree Programs, Admissions & Institutes | NextID.pk`,
-      description: `Find ${deg.name} ${deg.fullForm || ''} degree programs, admissions, institutes and results in Pakistan.`,
+      title: seo?.metaTitle || `${degree.name} ${degree.fullForm || ''} Degree Programs, Admissions & Institutes | NextID.pk`,
+      description: seo?.metaDescription || `Find ${degree.name} ${degree.fullForm || ''} degree programs, admissions, institutes and results in Pakistan.`,
+      openGraph: {
+        title: seo?.ogTitle || `${degree.name} Degree Guide`,
+        description: seo?.ogDescription || `Complete information about ${degree.name} degree programs, admissions, and results in Pakistan.`,
+        type: 'website',
+        images: seo?.ogImage ? [{ url: seo.ogImage }] : undefined,
+      },
       alternates: {
-        canonical: `https://www.nextid.pk/degrees/${deg.slug}`,
+        canonical: seo?.canonicalUrl || `https://www.nextid.pk/degrees/${degree.slug}`,
       },
     };
   } catch (error) {
@@ -125,7 +153,7 @@ async function getDegreeData(slug: string) {
       }
     }
 
-    // ✅ FIXED: Get active admissions using junction table
+    // Get active admissions using junction table
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {

@@ -8,7 +8,14 @@ import { eq, and, count, inArray, desc } from 'drizzle-orm';
 
 export const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
-  description: 'Browse all educational degrees in Pakistan including BS, BA, BSc, MA, MSc, and professional degrees.',
+  description: 'Browse all educational degrees in Pakistan including BS, BA, BSc, MA, MSc, and professional degrees. Find degree programs, admissions, and institutes.',
+  keywords: 'degrees in Pakistan, BS degree, BA degree, BSc degree, MA degree, MSc degree, professional degrees, educational degrees',
+  openGraph: {
+    title: 'Educational Degrees in Pakistan | BS, BA, BSc, MA, MSc & More',
+    description: 'Complete guide to educational degrees in Pakistan. Browse all degrees from Matric to PhD including professional programs.',
+    type: 'website',
+    url: 'https://www.nextid.pk/degrees',
+  },
   alternates: {
     canonical: 'https://www.nextid.pk/degrees',
   },
@@ -88,7 +95,7 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
           .from(programs)
           .where(and(eq(programs.degreeId, degree.id), eq(programs.status, true)));
 
-        const programsCount = programsResult[0]?.count || 0;
+        const programsCount = Number(programsResult[0]?.count) || 0;
         const level = levelMap.get(degree.levelId);
         const category = categoryMap.get(degree.categoryId);
 
@@ -103,7 +110,8 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
       })
     );
 
-    return degreesWithStats;
+    // Sort by programs count for popular degrees
+    return degreesWithStats.sort((a, b) => b.programsCount - a.programsCount);
   } catch (error) {
     console.error('Error fetching degrees:', error);
     return [];
@@ -138,10 +146,10 @@ const degreeIcons: Record<string, string> = {
 const defaultIcon = '🎓';
 
 export default async function DegreesPage() {
-  const degrees = await getDegreesWithStats();
+  const degreesList = await getDegreesWithStats();
 
   // Group degrees by level
-  const degreesByLevel = degrees.reduce((acc, degree) => {
+  const degreesByLevel = degreesList.reduce((acc, degree) => {
     const level = degree.levelName;
     if (!acc[level]) {
       acc[level] = [];
@@ -151,10 +159,10 @@ export default async function DegreesPage() {
   }, {} as Record<string, DegreeWithStats[]>);
 
   // Calculate stats
-  const totalDegrees = degrees.length;
+  const totalDegrees = degreesList.length;
   const totalLevels = Object.keys(degreesByLevel).length;
-  const totalPrograms = degrees.reduce((sum, d) => sum + d.programsCount, 0);
-  const popularDegrees = degrees.filter(d => d.programsCount > 0).length;
+  const totalPrograms = degreesList.reduce((sum, d) => sum + d.programsCount, 0);
+  const popularDegrees = degreesList.filter(d => d.programsCount > 0).length;
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -244,7 +252,7 @@ export default async function DegreesPage() {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
-        {degrees.length === 0 ? (
+        {degreesList.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm">
             <div className="text-6xl mb-4">🎓</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No degrees found</h3>
@@ -309,7 +317,7 @@ export default async function DegreesPage() {
                 </h2>
                 
                 <div className="space-y-3">
-                  {degrees
+                  {degreesList
                     .sort((a, b) => b.programsCount - a.programsCount)
                     .slice(0, 5)
                     .map((degree, index) => (
@@ -341,12 +349,13 @@ export default async function DegreesPage() {
                 </h2>
                 
                 <div className="space-y-2">
-                  {Array.from(new Set(degrees.map(d => d.categoryName))).slice(0, 8).map(category => {
-                    const count = degrees.filter(d => d.categoryName === category).length;
+                  {Array.from(new Set(degreesList.map(d => d.categoryName))).slice(0, 8).map(category => {
+                    const count = degreesList.filter(d => d.categoryName === category).length;
+                    const categorySlug = degreesList.find(d => d.categoryName === category)?.categorySlug;
                     return (
                       <Link
                         key={`cat-${category}`}
-                        href={`/categories/${degrees.find(d => d.categoryName === category)?.categorySlug}`}
+                        href={`/categories/${categorySlug || ''}`}
                         className="flex items-center justify-between p-2 hover:bg-purple-50 rounded-lg transition-colors"
                       >
                         <span className="text-gray-700">{category}</span>
@@ -402,7 +411,7 @@ export default async function DegreesPage() {
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Popular Degrees</h3>
                   <div className="flex flex-wrap gap-1">
-                    {degrees.slice(0, 8).map(degree => (
+                    {degreesList.slice(0, 8).map(degree => (
                       <Link
                         key={`tag-${degree.id}`}
                         href={`/degrees/${degree.slug}`}

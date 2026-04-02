@@ -3,7 +3,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
-import { cities, institutes, admissions, results, news } from '@/app/lib/schema';
+import { cities, institutes, admissions, results, news, seoMetadata } from '@/app/lib/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 
 // ==================== FORMAT DATE FUNCTION ====================
@@ -38,9 +38,6 @@ interface CityDetail {
   longitude: string | null;
   population: number | null;
   area: string | null;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  metaKeywords: string | null;
   isPopular: boolean | null;
   status: boolean | null;
   createdAt: Date | null;
@@ -107,9 +104,6 @@ async function getCityBySlug(slug: string): Promise<CityDetail | null> {
         longitude: cities.longitude,
         population: cities.population,
         area: cities.area,
-        metaTitle: cities.metaTitle,
-        metaDescription: cities.metaDescription,
-        metaKeywords: cities.metaKeywords,
         isPopular: cities.isPopular,
         status: cities.status,
         createdAt: cities.createdAt,
@@ -121,6 +115,26 @@ async function getCityBySlug(slug: string): Promise<CityDetail | null> {
     return city || null;
   } catch (error) {
     console.error('Error fetching city:', error);
+    return null;
+  }
+}
+
+// ==================== GET SEO METADATA ====================
+async function getSeoMetadata(entityType: string, entityId: number) {
+  try {
+    const [seo] = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, entityType),
+          eq(seoMetadata.entityId, entityId)
+        )
+      )
+      .limit(1);
+    return seo || null;
+  } catch (error) {
+    console.error('Error fetching SEO metadata:', error);
     return null;
   }
 }
@@ -355,18 +369,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
+  const seo = await getSeoMetadata('city', city.id);
+
   return {
-    title: city.metaTitle || `${city.name} - Educational Institutions, Admissions & Results`,
-    description: city.metaDescription || `Comprehensive guide to education in ${city.name}. Find universities, colleges, open admissions, exam results, and latest news.`,
-    keywords: city.metaKeywords || `${city.name} education, ${city.name} universities, ${city.name} admissions, ${city.name} results`,
+    title: seo?.metaTitle || `${city.name} - Educational Institutions, Admissions & Results`,
+    description: seo?.metaDescription || `Comprehensive guide to education in ${city.name}. Find universities, colleges, open admissions, exam results, and latest news.`,
     openGraph: {
-      title: city.metaTitle || `${city.name} Education Guide`,
-      description: city.metaDescription || `Complete information about educational institutions, admissions, and results in ${city.name}.`,
+      title: seo?.ogTitle || `${city.name} Education Guide`,
+      description: seo?.ogDescription || `Complete information about educational institutions, admissions, and results in ${city.name}.`,
       type: 'website',
-      images: city.imageUrl ? [{ url: city.imageUrl }] : undefined,
+      images: seo?.ogImage ? [{ url: seo.ogImage }] : city.imageUrl ? [{ url: city.imageUrl }] : undefined,
     },
     alternates: {
-      canonical: `https://www.nextid.pk/cities/${city.slug}`,
+      canonical: seo?.canonicalUrl || `https://www.nextid.pk/cities/${city.slug}`,
     },
   };
 }

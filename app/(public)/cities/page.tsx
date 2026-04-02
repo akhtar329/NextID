@@ -1,4 +1,4 @@
-// app/(public)/cities/page.tsx (Updated Stats Section)
+// app/(public)/cities/page.tsx (Updated - No meta columns)
 
 import { Metadata } from 'next';
 import Link from 'next/link';
@@ -89,10 +89,10 @@ async function getCitiesWithStats(): Promise<CityWithStats[]> {
             )
           );
         
-        const institutesCount = institutesResult[0]?.count || 0;
-        const admissionsCount = admissionsResult[0]?.count || 0;
-        const resultsCount = resultsResult[0]?.count || 0;
-        const newsCount = newsResult[0]?.count || 0;
+        const institutesCount = Number(institutesResult[0]?.count) || 0;
+        const admissionsCount = Number(admissionsResult[0]?.count) || 0;
+        const resultsCount = Number(resultsResult[0]?.count) || 0;
+        const newsCount = Number(newsResult[0]?.count) || 0;
         const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
         
         return {
@@ -118,17 +118,16 @@ async function getCitiesWithStats(): Promise<CityWithStats[]> {
 }
 
 export default async function CitiesPage() {
-  const cities = await getCitiesWithStats();
+  const citiesList = await getCitiesWithStats();
 
-  const totalCities = cities.length;
-  const popularCities = cities.filter(c => c.isPopular === true).length;
-  const totalInstitutes = cities.reduce((sum, city) => sum + city.institutesCount, 0);
-  const totalAdmissions = cities.reduce((sum, city) => sum + city.admissionsCount, 0);
-  const totalResults = cities.reduce((sum, city) => sum + city.resultsCount, 0);
-  const totalNews = cities.reduce((sum, city) => sum + city.newsCount, 0);
-  const topCity = cities.length > 0 ? cities[0].name : 'N/A';
+  const totalCities = citiesList.length;
+  const popularCities = citiesList.filter(c => c.isPopular === true).length;
+  const totalInstitutes = citiesList.reduce((sum, city) => sum + city.institutesCount, 0);
+  const totalAdmissions = citiesList.reduce((sum, city) => sum + city.admissionsCount, 0);
+  const totalResults = citiesList.reduce((sum, city) => sum + city.resultsCount, 0);
+  const totalNews = citiesList.reduce((sum, city) => sum + city.newsCount, 0);
 
-  const citiesByProvince = cities.reduce((acc, city) => {
+  const citiesByProvince = citiesList.reduce((acc, city) => {
     const province = city.province || 'Other';
     if (!acc[province]) {
       acc[province] = [];
@@ -206,7 +205,7 @@ export default async function CitiesPage() {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
-        {cities.length === 0 ? (
+        {citiesList.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm">
             <div className="text-6xl mb-4">🏙️</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No city data found</h3>
@@ -216,7 +215,7 @@ export default async function CitiesPage() {
           <>
             {/* Cities Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {cities.map((city) => {
+              {citiesList.map((city) => {
                 const emoji = city.province ? provinceEmoji[city.province] || '🏙️' : '🏙️';
                 
                 return (
@@ -297,11 +296,11 @@ export default async function CitiesPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">🏛️ Most Institutes</span>
                       <span className="text-xs text-gray-500">
-                        {Math.max(...cities.map(c => c.institutesCount))} Institutes
+                        {Math.max(...citiesList.map(c => c.institutesCount))} Institutes
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {cities.sort((a, b) => b.institutesCount - a.institutesCount).slice(0, 3).map((city, i) => (
+                      {citiesList.sort((a, b) => b.institutesCount - a.institutesCount).slice(0, 3).map((city, i) => (
                         <span key={city.id} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
                           {i+1}. {city.name}
                         </span>
@@ -313,11 +312,11 @@ export default async function CitiesPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">📝 Most Admissions</span>
                       <span className="text-xs text-gray-500">
-                        {Math.max(...cities.map(c => c.admissionsCount))} Admissions
+                        {Math.max(...citiesList.map(c => c.admissionsCount))} Admissions
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {cities.sort((a, b) => b.admissionsCount - a.admissionsCount).slice(0, 3).map((city, i) => (
+                      {citiesList.sort((a, b) => b.admissionsCount - a.admissionsCount).slice(0, 3).map((city, i) => (
                         <span key={city.id} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
                           {i+1}. {city.name}
                         </span>
@@ -329,11 +328,11 @@ export default async function CitiesPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">📊 Most Results</span>
                       <span className="text-xs text-gray-500">
-                        {Math.max(...cities.map(c => c.resultsCount))} Results
+                        {Math.max(...citiesList.map(c => c.resultsCount))} Results
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {cities.sort((a, b) => b.resultsCount - a.resultsCount).slice(0, 3).map((city, i) => (
+                      {citiesList.sort((a, b) => b.resultsCount - a.resultsCount).slice(0, 3).map((city, i) => (
                         <span key={city.id} className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
                           {i+1}. {city.name}
                         </span>
@@ -345,11 +344,11 @@ export default async function CitiesPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700">📰 Most News</span>
                       <span className="text-xs text-gray-500">
-                        {Math.max(...cities.map(c => c.newsCount))} News
+                        {Math.max(...citiesList.map(c => c.newsCount))} News
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {cities.sort((a, b) => b.newsCount - a.newsCount).slice(0, 3).map((city, i) => (
+                      {citiesList.sort((a, b) => b.newsCount - a.newsCount).slice(0, 3).map((city, i) => (
                         <span key={city.id} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
                           {i+1}. {city.name}
                         </span>
