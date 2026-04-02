@@ -332,13 +332,28 @@ function formatAdmissionName(ad: AdmissionWithDetails): string {
 }
 
 // Pagination Component
-function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number; totalPages: number; baseUrl: string }) {
+// Pagination Component - FIXED
+function Pagination({ currentPage, totalPages, showClosed, filters }: { 
+  currentPage: number; 
+  totalPages: number; 
+  showClosed: boolean;
+  filters: { city?: string; level?: string; q?: string };
+}) {
   if (totalPages <= 1) return null;
 
-  const getPageUrl = (page: number) => {
-    const url = new URL(baseUrl, 'http://dummy.com');
-    url.searchParams.set('page', page.toString());
-    return url.pathname + url.search;
+  const buildPageUrl = (page: number) => {
+    const params = new URLSearchParams();
+    
+    // Add existing filters
+    if (filters.city) params.set('city', filters.city);
+    if (filters.level) params.set('level', filters.level);
+    if (filters.q) params.set('q', filters.q);
+    if (showClosed) params.set('closed', 'true');
+    
+    // Add page number
+    params.set('page', page.toString());
+    
+    return `/admissions?${params.toString()}`;
   };
 
   const pages = [];
@@ -356,32 +371,35 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
 
   return (
     <div className="flex justify-center mt-8">
-      <nav className="flex items-center gap-2" aria-label="Pagination">
+      <nav className="flex items-center gap-2 flex-wrap" aria-label="Pagination">
+        {/* Previous Button */}
         <Link
-          href={currentPage > 1 ? getPageUrl(currentPage - 1) : '#'}
+          href={currentPage > 1 ? buildPageUrl(currentPage - 1) : '#'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             currentPage > 1
               ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none'
           }`}
           aria-disabled={currentPage <= 1}
         >
-          Previous
+          ← Previous
         </Link>
         
+        {/* First Page */}
         {startPage > 1 && (
           <>
-            <Link href={getPageUrl(1)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
+            <Link href={buildPageUrl(1)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
               1
             </Link>
             {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
           </>
         )}
         
+        {/* Page Numbers */}
         {pages.map(page => (
           <Link
             key={page}
-            href={getPageUrl(page)}
+            href={buildPageUrl(page)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               page === currentPage
                 ? 'bg-blue-600 text-white'
@@ -392,25 +410,27 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
           </Link>
         ))}
         
+        {/* Last Page */}
         {endPage < totalPages && (
           <>
             {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
-            <Link href={getPageUrl(totalPages)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
+            <Link href={buildPageUrl(totalPages)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
               {totalPages}
             </Link>
           </>
         )}
         
+        {/* Next Button */}
         <Link
-          href={currentPage < totalPages ? getPageUrl(currentPage + 1) : '#'}
+          href={currentPage < totalPages ? buildPageUrl(currentPage + 1) : '#'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
             currentPage < totalPages
               ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none'
           }`}
           aria-disabled={currentPage >= totalPages}
         >
-          Next
+          Next →
         </Link>
       </nav>
     </div>
@@ -902,10 +922,11 @@ export default async function AdmissionsPage({
 
             {/* Pagination */}
             <Pagination 
-              currentPage={currentAdmissions.currentPage}
-              totalPages={currentAdmissions.totalPages}
-              baseUrl={`/admissions${showClosed ? '?closed=true' : ''}`}
-            />
+  currentPage={currentAdmissions.currentPage}
+  totalPages={currentAdmissions.totalPages}
+  showClosed={showClosed}
+  filters={{ city: filters.city, level: filters.level, q: filters.q }}
+/>
           </div>
         </div>
       </div>
