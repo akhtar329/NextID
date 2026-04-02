@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { programs } from "@/app/lib/schema";
+import { programs, seoMetadata } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -29,10 +29,19 @@ export async function POST(request: Request) {
       duration, 
       careerScope, 
       feeRange, 
-      seoTitle, 
-      seoDescription,
+      // ❌ REMOVED: seoTitle, seoDescription
       isFeatured,
-      status 
+      status,
+      // SEO fields (now handled separately)
+      metaTitle,
+      metaDescription,
+      seoTitle,      // Legacy field name support
+      seoDescription, // Legacy field name support
+      canonicalUrl,
+      robots,
+      ogTitle,
+      ogDescription,
+      ogImage
     } = body;
 
     // Validate required fields
@@ -63,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert new program with all fields
+    // Insert new program (without SEO columns)
     const newProgram = await db.insert(programs).values({
       name,
       slug,
@@ -73,15 +82,52 @@ export async function POST(request: Request) {
       duration: duration || null,
       careerScope: careerScope || null,
       feeRange: feeRange || null,
-      seoTitle: seoTitle || null,
-      seoDescription: seoDescription || null,
+      // ❌ REMOVED: seoTitle, seoDescription
       isFeatured: isFeatured || false,
       status: status !== undefined ? status : true,
       // created_at and updated_at automatically set by database default
     }).returning();
+
+    const createdProgram = newProgram[0];
+
+    // Create SEO metadata if provided
+    let createdSeo = null;
+    const finalMetaTitle = metaTitle || seoTitle || null;
+    const finalMetaDescription = metaDescription || seoDescription || null;
+
+    if (finalMetaTitle || finalMetaDescription || canonicalUrl || ogTitle || ogDescription) {
+      try {
+        const seoData = {
+          entityType: 'program',
+          entityId: createdProgram.id,
+          metaTitle: finalMetaTitle,
+          metaDescription: finalMetaDescription,
+          canonicalUrl: canonicalUrl || null,
+          robots: robots || 'index, follow',
+          ogTitle: ogTitle || null,
+          ogDescription: ogDescription || null,
+          ogImage: ogImage || null,
+        };
+
+        const seoResult = await db
+          .insert(seoMetadata)
+          .values(seoData)
+          .returning();
+        
+        createdSeo = seoResult[0];
+      } catch (seoErr) {
+        console.error("❌ Error creating SEO metadata:", seoErr);
+        // Don't fail the whole request if SEO creation fails
+        // Just log the error and continue
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
-      program: newProgram[0],
+      program: {
+        ...createdProgram,
+        seo: createdSeo,
+      },
       message: "Program created successfully" 
     });
 

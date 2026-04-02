@@ -1,8 +1,8 @@
 // app/api/admin/cities/create/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { cities } from "@/app/lib/schema";
-import { eq, sql } from "drizzle-orm";
+import { cities, seoMetadata } from "@/app/lib/schema";
+import { eq, and, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
   
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       console.warn("⚠️ Could not reset sequence:", seqErr);
     }
 
-    // Create city with all fields
+    // Create city (without meta columns and without updatedAt - it doesn't exist in schema)
     const newCity = await db
       .insert(cities)
       .values({
@@ -67,23 +67,57 @@ export async function POST(request: Request) {
         description: body.description || null,
         imageUrl: body.imageUrl || null,
         thumbnailUrl: body.thumbnailUrl || null,
-        latitude: body.latitude || null,
-        longitude: body.longitude || null,
-        population: body.population || null,
+        latitude: body.latitude ? String(body.latitude) : null,
+        longitude: body.longitude ? String(body.longitude) : null,
+        population: body.population ? parseInt(String(body.population)) : null,
         area: body.area || null,
-        metaTitle: body.metaTitle || null,
-        metaDescription: body.metaDescription || null,
-        metaKeywords: body.metaKeywords || null,
         displayOrder: body.displayOrder ?? 0,
         isPopular: body.isPopular || false,
         status: body.status ?? true,
-        createdAt: new Date(),
+        // createdAt will be set by defaultNow() in the schema
       })
       .returning();
 
+    const createdCity = newCity[0];
+
+    // Create SEO metadata if provided
+    let createdSeo = null;
+    if (body.metaTitle || body.metaDescription || body.metaKeywords ||
+        body.seoTitle || body.seoDescription || body.ogTitle || body.ogDescription) {
+      
+      try {
+        const seoData = {
+          entityType: 'city',
+          entityId: createdCity.id,
+          metaTitle: body.metaTitle || body.seoTitle || null,
+          metaDescription: body.metaDescription || body.seoDescription || null,
+          canonicalUrl: body.canonicalUrl || null,
+          robots: body.robots || 'index, follow',
+          ogTitle: body.ogTitle || null,
+          ogDescription: body.ogDescription || null,
+          ogImage: body.ogImage || null,
+          // createdAt and updatedAt will be set by defaultNow() in the schema
+        };
+
+        const seoResult = await db
+          .insert(seoMetadata)
+          .values(seoData)
+          .returning();
+        
+        createdSeo = seoResult[0];
+      } catch (seoErr) {
+        console.error("❌ Error creating SEO metadata:", seoErr);
+        // Don't fail the whole request if SEO creation fails
+        // Just log the error and continue
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      city: newCity[0],
+      city: {
+        ...createdCity,
+        seo: createdSeo,
+      },
       message: "City created successfully",
     });
 
