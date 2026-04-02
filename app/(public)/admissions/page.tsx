@@ -4,7 +4,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { admissions, admissionPrograms, programs, institutes, degrees, cities, seoMetadata } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql, gt, lt } from 'drizzle-orm';
+import { eq, desc, like, and, or, sql } from 'drizzle-orm';
 import { generateSEO } from '@/app/lib/seo';
 
 // ==================== TYPES ====================
@@ -90,6 +90,82 @@ const ENTRY_TEST: Record<LevelType, string> = {
   'law': 'LAT required',
 };
 
+// ==================== HELPER FUNCTIONS FOR BADGES ====================
+function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
+  if (!closeDate) {
+    if (showClosed) return { label: 'Closed', color: 'gray', icon: '📅' };
+    return { label: null, color: null, hide: true };
+  }
+  
+  const now = new Date();
+  const close = new Date(closeDate);
+  const diffMs = close.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  
+  // For CLOSED ADMISSIONS - Show when it closed
+  if (diffMs < 0) {
+    const daysPassed = Math.abs(diffDays);
+    const hoursPassed = Math.abs(diffHours);
+    
+    if (daysPassed === 0) {
+      if (hoursPassed < 1) return { label: 'Closed just now', color: 'gray', icon: '📅', isExpired: true };
+      return { label: `Closed ${hoursPassed} hours ago`, color: 'gray', icon: '📅', isExpired: true };
+    }
+    if (daysPassed === 1) return { label: 'Closed yesterday', color: 'gray', icon: '📅', isExpired: true };
+    if (daysPassed <= 7) return { label: `Closed ${daysPassed} days ago`, color: 'gray', icon: '📅', isExpired: true };
+    return { label: `Closed on ${close.toLocaleDateString('en-PK')}`, color: 'gray', icon: '📅', isExpired: true };
+  }
+  
+  // For OPEN ADMISSIONS - Show remaining time
+  // Less than 24 hours - Show hours
+  if (diffHours <= 24) {
+    return { 
+      label: `${diffHours} hour${diffHours !== 1 ? 's' : ''} left`, 
+      color: 'red', 
+      icon: '⏰',
+      urgent: true 
+    };
+  }
+  // 7 days or less - Danger/Red
+  if (diffDays <= 7) {
+    return { 
+      label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
+      color: 'red', 
+      icon: '⚠️',
+      urgent: true 
+    };
+  }
+  // 8-15 days - Warning/Yellow
+  if (diffDays <= 15) {
+    return { 
+      label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
+      color: 'yellow', 
+      icon: '📅' 
+    };
+  }
+  // 16-30 days - Info/Green
+  if (diffDays <= 30) {
+    return { 
+      label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
+      color: 'green', 
+      icon: '📅' 
+    };
+  }
+  // 31+ days - No badge (hide)
+  return { label: null, color: null, hide: true };
+}
+
+function getBadgeStyles(color: string) {
+  const styles = {
+    red: 'bg-red-100 text-red-700',
+    yellow: 'bg-yellow-100 text-yellow-700',
+    green: 'bg-green-100 text-green-600',
+    gray: 'bg-gray-100 text-gray-500'
+  };
+  return styles[color as keyof typeof styles] || styles.gray;
+}
+
 // ==================== METADATA ====================
 export async function generateMetadata(): Promise<Metadata> {
   return generateSEO({
@@ -142,18 +218,18 @@ async function getAdmissions(filters: {
     
     const conditions: any[] = [];
     
-if (!filters.showClosed) {
-  conditions.push(eq(admissions.status, 'Open'));
-  // Only show future deadlines or null deadlines
-  conditions.push(
-    or(
-      sql`${admissions.expectedCloseDate} IS NULL`,
-      sql`${admissions.expectedCloseDate} >= CURRENT_DATE`
-    )
-  );
-} else {
-  conditions.push(eq(admissions.status, 'Closed'));
-}
+    if (!filters.showClosed) {
+      conditions.push(eq(admissions.status, 'Open'));
+      // Only show future deadlines or null deadlines
+      conditions.push(
+        or(
+          sql`${admissions.expectedCloseDate} IS NULL`,
+          sql`${admissions.expectedCloseDate} >= CURRENT_DATE`
+        )
+      );
+    } else {
+      conditions.push(eq(admissions.status, 'Closed'));
+    }
 
     if (filters.city) {
       conditions.push(eq(cities.slug, filters.city));
@@ -332,7 +408,6 @@ function formatAdmissionName(ad: AdmissionWithDetails): string {
 }
 
 // Pagination Component
-// Pagination Component - FIXED
 function Pagination({ currentPage, totalPages, showClosed, filters }: { 
   currentPage: number; 
   totalPages: number; 
@@ -344,13 +419,10 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
   const buildPageUrl = (page: number) => {
     const params = new URLSearchParams();
     
-    // Add existing filters
     if (filters.city) params.set('city', filters.city);
     if (filters.level) params.set('level', filters.level);
     if (filters.q) params.set('q', filters.q);
     if (showClosed) params.set('closed', 'true');
-    
-    // Add page number
     params.set('page', page.toString());
     
     return `/admissions?${params.toString()}`;
@@ -372,7 +444,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
   return (
     <div className="flex justify-center mt-8">
       <nav className="flex items-center gap-2 flex-wrap" aria-label="Pagination">
-        {/* Previous Button */}
         <Link
           href={currentPage > 1 ? buildPageUrl(currentPage - 1) : '#'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -380,12 +451,10 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
               ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none'
           }`}
-          aria-disabled={currentPage <= 1}
         >
           ← Previous
         </Link>
         
-        {/* First Page */}
         {startPage > 1 && (
           <>
             <Link href={buildPageUrl(1)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
@@ -395,7 +464,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
           </>
         )}
         
-        {/* Page Numbers */}
         {pages.map(page => (
           <Link
             key={page}
@@ -410,7 +478,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
           </Link>
         ))}
         
-        {/* Last Page */}
         {endPage < totalPages && (
           <>
             {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
@@ -420,7 +487,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
           </>
         )}
         
-        {/* Next Button */}
         <Link
           href={currentPage < totalPages ? buildPageUrl(currentPage + 1) : '#'}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -428,7 +494,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: {
               ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none'
           }`}
-          aria-disabled={currentPage >= totalPages}
         >
           Next →
         </Link>
@@ -504,13 +569,13 @@ export default async function AdmissionsPage({
     showClosed,
   };
 
-const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, closedCitiesWithCounts] = await Promise.all([
-  getAdmissions({ ...filters, showClosed: false, page: currentPage }), // ← Change from page: 1 to page: currentPage
-  getAdmissions({ ...filters, showClosed: true, page: currentPage }),
-  getStats(),
-  getCitiesWithAdmissionCounts(false),
-  getCitiesWithAdmissionCounts(true),
-]);
+  const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, closedCitiesWithCounts] = await Promise.all([
+    getAdmissions({ ...filters, showClosed: false, page: currentPage }),
+    getAdmissions({ ...filters, showClosed: true, page: currentPage }),
+    getStats(),
+    getCitiesWithAdmissionCounts(false),
+    getCitiesWithAdmissionCounts(true),
+  ]);
 
   const currentAdmissions = showClosed ? closedAdmissionsResult : openAdmissionsResult;
   const currentCitiesWithCounts = showClosed ? closedCitiesWithCounts : citiesWithCounts;
@@ -775,11 +840,7 @@ const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, cl
             <div className="space-y-5">
               {currentAdmissions.admissions.length > 0 ? (
                 currentAdmissions.admissions.map((ad) => {
-                  const daysLeft = ad.expectedCloseDate && !showClosed
-  ? Math.ceil((new Date(ad.expectedCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  : null;
-                  const isUrgent = daysLeft !== null && daysLeft <= 30 && daysLeft >= 0;
-                  const isExpired = daysLeft !== null && daysLeft < 0;
+                  const timeInfo = getTimeLeftInfo(ad.expectedCloseDate, showClosed);
                   const fullName = formatAdmissionName(ad);
                   const displayPrograms = ad.programs.slice(0, 3);
                   const remainingCount = ad.programs.length - 3;
@@ -876,26 +937,25 @@ const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, cl
                             </div>
                           </div>
                           
-                          {!showClosed && (
-  <div className="flex flex-col items-end gap-3 flex-shrink-0">
-    {isUrgent && (
-      <span className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold animate-pulse">
-        ⏰ {daysLeft} days left
-      </span>
-    )}
-    {isExpired && (
-      <span className="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">
-        📅 Deadline Passed
-      </span>
-    )}
-    <Link
-      href={`/admissions/${ad.slug}`}
-      className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium whitespace-nowrap shadow-sm"
-    >
-      View Details →
-    </Link>
-  </div>
-)}
+                          {/* Time Badge Section */}
+                          <div className="flex flex-col items-end gap-3 flex-shrink-0">
+                            {!showClosed && timeInfo.label && !timeInfo.hide && (
+                              <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getBadgeStyles(timeInfo.color)} ${timeInfo.urgent ? 'animate-pulse' : ''}`}>
+                                {timeInfo.icon} {timeInfo.label}
+                              </span>
+                            )}
+                            {showClosed && timeInfo.label && (
+                              <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getBadgeStyles(timeInfo.color)}`}>
+                                {timeInfo.icon} {timeInfo.label}
+                              </span>
+                            )}
+                            <Link
+                              href={`/admissions/${ad.slug}`}
+                              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium whitespace-nowrap shadow-sm"
+                            >
+                              View Details →
+                            </Link>
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -922,11 +982,11 @@ const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, cl
 
             {/* Pagination */}
             <Pagination 
-  currentPage={currentAdmissions.currentPage}
-  totalPages={currentAdmissions.totalPages}
-  showClosed={showClosed}
-  filters={{ city: filters.city, level: filters.level, q: filters.q }}
-/>
+              currentPage={currentAdmissions.currentPage}
+              totalPages={currentAdmissions.totalPages}
+              showClosed={showClosed}
+              filters={{ city: filters.city, level: filters.level, q: filters.q }}
+            />
           </div>
         </div>
       </div>
