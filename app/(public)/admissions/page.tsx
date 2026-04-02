@@ -142,11 +142,18 @@ async function getAdmissions(filters: {
     
     const conditions: any[] = [];
     
-    if (filters.showClosed) {
-      conditions.push(eq(admissions.status, 'Closed'));
-    } else {
-      conditions.push(eq(admissions.status, 'Open'));
-    }
+if (!filters.showClosed) {
+  conditions.push(eq(admissions.status, 'Open'));
+  // Only show future deadlines or null deadlines
+  conditions.push(
+    or(
+      sql`${admissions.expectedCloseDate} IS NULL`,
+      sql`${admissions.expectedCloseDate} >= CURRENT_DATE`
+    )
+  );
+} else {
+  conditions.push(eq(admissions.status, 'Closed'));
+}
 
     if (filters.city) {
       conditions.push(eq(cities.slug, filters.city));
@@ -749,9 +756,10 @@ export default async function AdmissionsPage({
               {currentAdmissions.admissions.length > 0 ? (
                 currentAdmissions.admissions.map((ad) => {
                   const daysLeft = ad.expectedCloseDate && !showClosed
-                    ? Math.ceil((new Date(ad.expectedCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                    : null;
-                  const isUrgent = daysLeft && daysLeft <= 30;
+  ? Math.ceil((new Date(ad.expectedCloseDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  : null;
+                  const isUrgent = daysLeft !== null && daysLeft <= 30 && daysLeft >= 0;
+                  const isExpired = daysLeft !== null && daysLeft < 0;
                   const fullName = formatAdmissionName(ad);
                   const displayPrograms = ad.programs.slice(0, 3);
                   const remainingCount = ad.programs.length - 3;
@@ -849,20 +857,25 @@ export default async function AdmissionsPage({
                           </div>
                           
                           {!showClosed && (
-                            <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                              {isUrgent && (
-                                <span className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold animate-pulse">
-                                  ⏰ {daysLeft} days left
-                                </span>
-                              )}
-                              <Link
-                                href={`/admissions/${ad.slug}`}
-                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium whitespace-nowrap shadow-sm"
-                              >
-                                View Details →
-                              </Link>
-                            </div>
-                          )}
+  <div className="flex flex-col items-end gap-3 flex-shrink-0">
+    {isUrgent && (
+      <span className="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold animate-pulse">
+        ⏰ {daysLeft} days left
+      </span>
+    )}
+    {isExpired && (
+      <span className="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">
+        📅 Deadline Passed
+      </span>
+    )}
+    <Link
+      href={`/admissions/${ad.slug}`}
+      className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition text-sm font-medium whitespace-nowrap shadow-sm"
+    >
+      View Details →
+    </Link>
+  </div>
+)}
                         </div>
                       </div>
                     </article>
