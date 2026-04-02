@@ -4,7 +4,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { toast } from "sonner";
 import PrimaryButton from "@/app/component/ui/Button";
 import SearchInput from "@/app/component/ui/SearchInput";
@@ -55,6 +54,9 @@ type FlatAdmission = {
   programCount: number;
   daysLeft: number | null;
   isExpired: boolean;
+  autoStatus: string;
+  isManuallyClosedButFuture: boolean;
+  needsAttention: boolean;
 };
 
 export default function AdmissionsPage() {
@@ -173,25 +175,72 @@ export default function AdmissionsPage() {
     }
   };
 
-  // Function to calculate days left
-  const getDaysLeft = (closeDate: string | null): { days: number | null; isExpired: boolean } => {
-    if (!closeDate) return { days: null, isExpired: false };
+  // Function to calculate days left and auto status
+  const getDaysAndStatus = (closeDate: string | null, currentStatus: string) => {
+    if (!closeDate) { 
+      return { 
+        days: null, 
+        isExpired: false, 
+        autoStatus: currentStatus, 
+        isManuallyClosedButFuture: false,
+        needsAttention: false
+      };
+    }
     
     const now = new Date();
     const close = new Date(closeDate);
     const diffMs = close.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const isExpired = diffMs < 0;
+    const days = Math.abs(diffDays);
+    
+    let autoStatus = currentStatus;
+    let isManuallyClosedButFuture = false;
+    let needsAttention = false;
+    
+    // If admin manually closed it but date is still future
+    if (currentStatus === 'Closed' && diffMs > 0) {
+      isManuallyClosedButFuture = true;
+      needsAttention = true;
+      if (diffDays > 30) {
+        autoStatus = 'Expected';
+      } else if (diffDays > 0 && diffDays <= 30) {
+        autoStatus = 'Open';
+      }
+    }
+    // If Open but expired
+    else if (currentStatus === 'Open' && isExpired) {
+      needsAttention = true;
+      autoStatus = 'Closed';
+    }
+    // Auto status based on days left (for Open/Expected)
+    else if (currentStatus !== 'Closed') {
+      if (diffDays > 30) {
+        if (currentStatus !== 'Expected') needsAttention = true;
+        autoStatus = 'Expected';
+      } else if (diffDays > 0 && diffDays <= 30) {
+        if (currentStatus !== 'Open') needsAttention = true;
+        autoStatus = 'Open';
+      } else {
+        if (currentStatus !== 'Closed') needsAttention = true;
+        autoStatus = 'Closed';
+      }
+    }
     
     return { 
-      days: Math.abs(diffDays), 
-      isExpired: diffMs < 0 
+      days, 
+      isExpired, 
+      autoStatus, 
+      isManuallyClosedButFuture,
+      needsAttention,
+      diffDays: diffDays > 0 ? diffDays : days
     };
   };
 
   const flattenedData: FlatAdmission[] = admissions.map(ad => {
     const programNames = ad.programs?.map(p => p.name).join(', ') || 'No programs';
     const programCount = ad.programs?.length || 0;
-    const { days, isExpired } = getDaysLeft(ad.expectedCloseDate);
+    const { days, isExpired, autoStatus, isManuallyClosedButFuture, needsAttention } = getDaysAndStatus(ad.expectedCloseDate, ad.status);
     
     return {
       id: ad.id,
@@ -209,6 +258,9 @@ export default function AdmissionsPage() {
       instituteId: ad.institute.id,
       daysLeft: days,
       isExpired: isExpired,
+      autoStatus: autoStatus,
+      isManuallyClosedButFuture: isManuallyClosedButFuture,
+      needsAttention: needsAttention,
     };
   });
 
@@ -274,6 +326,40 @@ export default function AdmissionsPage() {
       )
     },
     {
+      header: "Closing Date",
+      accessor: "expectedCloseDate",
+      render: (value: string | null, row: FlatAdmission) => {
+        if (!value) return <span className="text-gray-400 text-sm">—</span>;
+        
+        const date = new Date(value);
+        const formattedDate = date.toLocaleDateString('en-PK', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+        
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">{formattedDate}</span>
+            {row.daysLeft && (
+              <span className={`text-xs mt-0.5 ${
+                row.isExpired ? 'text-red-600' : 
+                row.daysLeft <= 7 ? 'text-red-600 font-semibold' : 
+                row.daysLeft <= 15 ? 'text-yellow-600' : 
+                row.daysLeft <= 30 ? 'text-green-600' :
+                'text-blue-600'
+              }`}>
+                {row.isExpired 
+                  ? `⚠️ Expired (${row.daysLeft} days ago)`
+                  : `📅 ${row.daysLeft} days left`
+                }
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
       header: "Status",
       accessor: "status",
       render: (value: string, row: FlatAdmission) => {
@@ -283,8 +369,9 @@ export default function AdmissionsPage() {
           Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
         };
         
-        // Show warning badge if Open but expired
         const isExpiredOpen = value === 'Open' && row.isExpired;
+        const needsToOpen = row.isManuallyClosedButFuture;
+        const shouldBeStatus = row.autoStatus !== value;
         
         return (
           <div className="relative">
@@ -307,15 +394,29 @@ export default function AdmissionsPage() {
                     px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
                     ${colors[value as keyof typeof colors]}
                     hover:ring-2 hover:ring-offset-1 transition-all
+                    ${row.needsAttention ? 'ring-2 ring-orange-400 ring-offset-1' : ''}
                   `}
                 >
                   <option value="Expected">Expected</option>
                   <option value="Open">Open</option>
                   <option value="Closed">Closed</option>
                 </select>
+                
                 {isExpiredOpen && (
                   <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center animate-pulse">
-                    Needs Closure!
+                    ⚠️ Needs Closure!
+                  </span>
+                )}
+                
+                {needsToOpen && (
+                  <span className="text-[10px] text-orange-600 font-semibold bg-orange-50 px-2 py-0.5 rounded-full text-center animate-pulse">
+                    🔓 Needs to Open (Should be {row.autoStatus})
+                  </span>
+                )}
+                
+                {shouldBeStatus && !needsToOpen && !isExpiredOpen && (
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full text-center">
+                    💡 Suggest: {row.autoStatus}
                   </span>
                 )}
               </div>
@@ -354,6 +455,7 @@ export default function AdmissionsPage() {
   ];
 
   const totalAdmissions = admissions.length;
+  const needsAttentionCount = flattenedData.filter(a => a.needsAttention).length;
 
   if (loading && admissions.length === 0) {
     return (
@@ -380,33 +482,39 @@ export default function AdmissionsPage() {
         </PrimaryButton>
       </div>
 
-      {/* Stats Card */}
-      {!loading && admissions.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="text-sm text-gray-500">Total Admissions</div>
-            <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="text-sm text-gray-500">Expected</div>
-            <div className="text-2xl font-semibold mt-1 text-yellow-600">
-              {admissions.filter(a => a.status === 'Expected').length}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="text-sm text-gray-500">Open</div>
-            <div className="text-2xl font-semibold mt-1 text-green-600">
-              {admissions.filter(a => a.status === 'Open').length}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm border p-4">
-            <div className="text-sm text-gray-500">Closed</div>
-            <div className="text-2xl font-semibold mt-1 text-red-600">
-              {admissions.filter(a => a.status === 'Closed').length}
-            </div>
-          </div>
-        </div>
-      )}
+{/* Stats Card */}
+{!loading && admissions.length > 0 && (
+  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+    <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="text-sm text-gray-500">Total Admissions</div>
+      <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
+    </div>
+    <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="text-sm text-gray-500">Expected</div>
+      <div className="text-2xl font-semibold mt-1 text-yellow-600">
+        {admissions.filter(a => a.status === 'Expected').length}
+      </div>
+    </div>
+    <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="text-sm text-gray-500">Open</div>
+      <div className="text-2xl font-semibold mt-1 text-green-600">
+        {admissions.filter(a => a.status === 'Open').length}
+      </div>
+    </div>
+    <div className="bg-white rounded-lg shadow-sm border p-4">
+      <div className="text-sm text-gray-500">Closed</div>
+      <div className="text-2xl font-semibold mt-1 text-red-600">
+        {admissions.filter(a => a.status === 'Closed').length}
+      </div>
+    </div>
+    <div className="bg-orange-50 rounded-lg shadow-sm border border-orange-200 p-4">
+      <div className="text-sm text-orange-700 font-medium">⚠️ Needs Attention</div>
+      <div className="text-2xl font-semibold mt-1 text-orange-600">
+        {needsAttentionCount}
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Filters */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
