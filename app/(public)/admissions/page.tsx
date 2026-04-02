@@ -504,13 +504,13 @@ export default async function AdmissionsPage({
     showClosed,
   };
 
-  const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, closedCitiesWithCounts] = await Promise.all([
-    getAdmissions({ ...filters, showClosed: false, page: 1 }),
-    getAdmissions({ ...filters, showClosed: true, page: currentPage }),
-    getStats(),
-    getCitiesWithAdmissionCounts(false),
-    getCitiesWithAdmissionCounts(true),
-  ]);
+const [openAdmissionsResult, closedAdmissionsResult, stats, citiesWithCounts, closedCitiesWithCounts] = await Promise.all([
+  getAdmissions({ ...filters, showClosed: false, page: currentPage }), // ← Change from page: 1 to page: currentPage
+  getAdmissions({ ...filters, showClosed: true, page: currentPage }),
+  getStats(),
+  getCitiesWithAdmissionCounts(false),
+  getCitiesWithAdmissionCounts(true),
+]);
 
   const currentAdmissions = showClosed ? closedAdmissionsResult : openAdmissionsResult;
   const currentCitiesWithCounts = showClosed ? closedCitiesWithCounts : citiesWithCounts;
