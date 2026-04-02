@@ -2,8 +2,8 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { cities } from "@/app/lib/schema";
-import { eq } from "drizzle-orm";
+import { cities, seoMetadata } from "@/app/lib/schema";
+import { eq, and } from "drizzle-orm";
 
 // GET - Fetch single city
 export async function GET(
@@ -35,9 +35,24 @@ export async function GET(
       );
     }
 
+    // Fetch SEO metadata for this city
+    const seo = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, 'city'),
+          eq(seoMetadata.entityId, cityId)
+        )
+      )
+      .limit(1);
+
     return NextResponse.json({
       success: true,
-      city: city[0],
+      city: {
+        ...city[0],
+        seo: seo[0] || null,
+      },
     });
 
   } catch (error) {
@@ -86,7 +101,7 @@ export async function PATCH(
       );
     }
 
-    // Update only provided fields
+    // Update city fields (no meta columns)
     const updateData: any = {};
     
     if (body.name !== undefined) updateData.name = body.name;
@@ -98,9 +113,6 @@ export async function PATCH(
     if (body.longitude !== undefined) updateData.longitude = body.longitude;
     if (body.population !== undefined) updateData.population = body.population;
     if (body.area !== undefined) updateData.area = body.area;
-    if (body.metaTitle !== undefined) updateData.metaTitle = body.metaTitle;
-    if (body.metaDescription !== undefined) updateData.metaDescription = body.metaDescription;
-    if (body.metaKeywords !== undefined) updateData.metaKeywords = body.metaKeywords;
     if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
     if (body.isPopular !== undefined) updateData.isPopular = Boolean(body.isPopular);
     if (body.status !== undefined) updateData.status = Boolean(body.status);
@@ -122,16 +134,67 @@ export async function PATCH(
       updateData.slug = body.slug;
     }
 
-    // Update
+    // Update city
     const updated = await db
       .update(cities)
       .set(updateData)
       .where(eq(cities.id, cityId))
       .returning();
 
+    // Handle SEO metadata update if provided
+    let updatedSeo = null;
+    if (body.seo && Object.keys(body.seo).length > 0) {
+      const existingSeo = await db
+        .select()
+        .from(seoMetadata)
+        .where(
+          and(
+            eq(seoMetadata.entityType, 'city'),
+            eq(seoMetadata.entityId, cityId)
+          )
+        )
+        .limit(1);
+
+      const seoData = {
+        entityType: 'city',
+        entityId: cityId,
+        metaTitle: body.seo.metaTitle || null,
+        metaDescription: body.seo.metaDescription || null,
+        canonicalUrl: body.seo.canonicalUrl || null,
+        robots: body.seo.robots || 'index, follow',
+        ogTitle: body.seo.ogTitle || null,
+        ogDescription: body.seo.ogDescription || null,
+        ogImage: body.seo.ogImage || null,
+        updatedAt: new Date(),
+      };
+
+      if (existingSeo.length > 0) {
+        // Update existing SEO
+        [updatedSeo] = await db
+          .update(seoMetadata)
+          .set(seoData)
+          .where(
+            and(
+              eq(seoMetadata.entityType, 'city'),
+              eq(seoMetadata.entityId, cityId)
+            )
+          )
+          .returning();
+      } else if (body.seo.metaTitle || body.seo.metaDescription) {
+        // Create new SEO only if there's actual data
+        [updatedSeo] = await db
+          .insert(seoMetadata)
+          .values(seoData)
+          .returning();
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      city: updated[0],
+      city: {
+        ...updated[0],
+        seo: updatedSeo || null,
+      },
       message: "City updated successfully",
     });
 
@@ -203,7 +266,7 @@ export async function PUT(
       );
     }
 
-    // Full update with all fields
+    // Full update with all fields (no meta columns)
     const updated = await db
       .update(cities)
       .set({
@@ -217,9 +280,6 @@ export async function PUT(
         longitude: body.longitude || null,
         population: body.population || null,
         area: body.area || null,
-        metaTitle: body.metaTitle || null,
-        metaDescription: body.metaDescription || null,
-        metaKeywords: body.metaKeywords || null,
         displayOrder: body.displayOrder ?? 0,
         isPopular: body.isPopular || false,
         status: body.status ?? true,
@@ -227,9 +287,60 @@ export async function PUT(
       .where(eq(cities.id, cityId))
       .returning();
 
+    // Handle SEO metadata
+    let updatedSeo = null;
+    
+    // First, check if SEO exists
+    const existingSeo = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, 'city'),
+          eq(seoMetadata.entityId, cityId)
+        )
+      )
+      .limit(1);
+
+    const seoData = {
+      entityType: 'city',
+      entityId: cityId,
+      metaTitle: body.seo?.metaTitle || null,
+      metaDescription: body.seo?.metaDescription || null,
+      canonicalUrl: body.seo?.canonicalUrl || null,
+      robots: body.seo?.robots || 'index, follow',
+      ogTitle: body.seo?.ogTitle || null,
+      ogDescription: body.seo?.ogDescription || null,
+      ogImage: body.seo?.ogImage || null,
+      updatedAt: new Date(),
+    };
+
+    if (existingSeo.length > 0) {
+      // Update existing SEO
+      [updatedSeo] = await db
+        .update(seoMetadata)
+        .set(seoData)
+        .where(
+          and(
+            eq(seoMetadata.entityType, 'city'),
+            eq(seoMetadata.entityId, cityId)
+          )
+        )
+        .returning();
+    } else if (body.seo && (body.seo.metaTitle || body.seo.metaDescription)) {
+      // Create new SEO only if there's actual data
+      [updatedSeo] = await db
+        .insert(seoMetadata)
+        .values(seoData)
+        .returning();
+    }
+
     return NextResponse.json({
       success: true,
-      city: updated[0],
+      city: {
+        ...updated[0],
+        seo: updatedSeo || null,
+      },
       message: "City updated successfully",
     });
 
@@ -246,7 +357,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete city
+// DELETE - Delete city (also delete associated SEO metadata)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -277,14 +388,24 @@ export async function DELETE(
       );
     }
 
-    // Delete
+    // Delete SEO metadata first (due to foreign key constraint if any)
+    await db
+      .delete(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, 'city'),
+          eq(seoMetadata.entityId, cityId)
+        )
+      );
+
+    // Delete city
     await db
       .delete(cities)
       .where(eq(cities.id, cityId));
 
     return NextResponse.json({
       success: true,
-      message: "City deleted successfully",
+      message: "City and its SEO metadata deleted successfully",
     });
 
   } catch (error) {
