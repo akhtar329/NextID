@@ -53,6 +53,8 @@ type FlatAdmission = {
   instituteCity: string;
   instituteId: number;
   programCount: number;
+  daysLeft: number | null;
+  isExpired: boolean;
 };
 
 export default function AdmissionsPage() {
@@ -171,9 +173,25 @@ export default function AdmissionsPage() {
     }
   };
 
+  // Function to calculate days left
+  const getDaysLeft = (closeDate: string | null): { days: number | null; isExpired: boolean } => {
+    if (!closeDate) return { days: null, isExpired: false };
+    
+    const now = new Date();
+    const close = new Date(closeDate);
+    const diffMs = close.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    return { 
+      days: Math.abs(diffDays), 
+      isExpired: diffMs < 0 
+    };
+  };
+
   const flattenedData: FlatAdmission[] = admissions.map(ad => {
     const programNames = ad.programs?.map(p => p.name).join(', ') || 'No programs';
     const programCount = ad.programs?.length || 0;
+    const { days, isExpired } = getDaysLeft(ad.expectedCloseDate);
     
     return {
       id: ad.id,
@@ -189,6 +207,8 @@ export default function AdmissionsPage() {
       instituteName: ad.institute.name,
       instituteCity: ad.institute.cityName,
       instituteId: ad.institute.id,
+      daysLeft: days,
+      isExpired: isExpired,
     };
   });
 
@@ -261,6 +281,46 @@ export default function AdmissionsPage() {
       )
     },
     {
+      header: "Closing Date",
+      accessor: "expectedCloseDate",
+      render: (value: string | null, row: FlatAdmission) => {
+        if (!value) return <span className="text-gray-400 text-sm">—</span>;
+        
+        const date = new Date(value);
+        const formattedDate = date.toLocaleDateString('en-PK', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+        
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">{formattedDate}</span>
+            {row.status === 'Open' && (
+              <span className={`text-xs mt-0.5 ${
+                row.isExpired ? 'text-red-600 font-semibold' : 
+                row.daysLeft && row.daysLeft <= 7 ? 'text-orange-600' : 
+                row.daysLeft && row.daysLeft <= 15 ? 'text-yellow-600' : 
+                'text-green-600'
+              }`}>
+                {row.isExpired 
+                  ? `⚠️ Expired (${row.daysLeft} days ago)`
+                  : row.daysLeft 
+                    ? `📅 ${row.daysLeft} days left`
+                    : ''
+                }
+              </span>
+            )}
+            {row.status === 'Closed' && (
+              <span className="text-xs text-gray-500 mt-0.5">
+                {row.isExpired ? `Closed ${row.daysLeft} days ago` : 'Closed'}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
+    {
       header: "Status",
       accessor: "status",
       render: (value: string, row: FlatAdmission) => {
@@ -269,6 +329,9 @@ export default function AdmissionsPage() {
           Open: "bg-green-100 text-green-700 ring-1 ring-green-300",
           Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
         };
+        
+        // Show warning badge if Open but expired
+        const isExpiredOpen = value === 'Open' && row.isExpired;
         
         return (
           <div className="relative">
@@ -283,19 +346,26 @@ export default function AdmissionsPage() {
                 </span>
               </span>
             ) : (
-              <select
-                value={value}
-                onChange={(e) => updateStatus(row.id, e.target.value as "Expected" | "Open" | "Closed")}
-                className={`
-                  px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
-                  ${colors[value as keyof typeof colors]}
-                  hover:ring-2 hover:ring-offset-1 transition-all
-                `}
-              >
-                <option value="Expected">Expected</option>
-                <option value="Open">Open</option>
-                <option value="Closed">Closed</option>
-              </select>
+              <div className="flex flex-col gap-1">
+                <select
+                  value={value}
+                  onChange={(e) => updateStatus(row.id, e.target.value as "Expected" | "Open" | "Closed")}
+                  className={`
+                    px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer outline-none
+                    ${colors[value as keyof typeof colors]}
+                    hover:ring-2 hover:ring-offset-1 transition-all
+                  `}
+                >
+                  <option value="Expected">Expected</option>
+                  <option value="Open">Open</option>
+                  <option value="Closed">Closed</option>
+                </select>
+                {isExpiredOpen && (
+                  <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center">
+                    Needs Closure!
+                  </span>
+                )}
+              </div>
             )}
           </div>
         );
@@ -359,7 +429,7 @@ export default function AdmissionsPage() {
 
       {/* Stats Card */}
       {!loading && admissions.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm border p-4">
             <div className="text-sm text-gray-500">Total Admissions</div>
             <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
@@ -380,6 +450,12 @@ export default function AdmissionsPage() {
             <div className="text-sm text-gray-500">Closed</div>
             <div className="text-2xl font-semibold mt-1 text-red-600">
               {admissions.filter(a => a.status === 'Closed').length}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border p-4">
+            <div className="text-sm text-gray-500">⚠️ Expired (Need Closure)</div>
+            <div className="text-2xl font-semibold mt-1 text-orange-600">
+              {admissions.filter(a => a.status === 'Open' && new Date(a.expectedCloseDate || '') < new Date()).length}
             </div>
           </div>
         </div>
