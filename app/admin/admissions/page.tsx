@@ -267,13 +267,6 @@ export default function AdmissionsPage() {
       )
     },
     {
-      header: "Year",
-      accessor: "year",
-      render: (value: number) => (
-        <span className="font-medium">{value}</span>
-      )
-    },
-    {
       header: "Session",
       accessor: "session",
       render: (value: string | null) => (
@@ -322,7 +315,7 @@ export default function AdmissionsPage() {
                 </select>
                 {isExpiredOpen && (
                   <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center animate-pulse">
-                    ⚠️ Needs Closure!
+                    Needs Closure!
                   </span>
                 )}
               </div>
