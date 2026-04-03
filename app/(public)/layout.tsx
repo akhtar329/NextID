@@ -3,17 +3,23 @@ import Header from '@/app/component/layout/Header';
 import Footer from '@/app/component/layout/Footer';
 import type { Metadata } from 'next';
 
-// ✅ Use static metadata (since this is a layout, we can't use async here)
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
   description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
   metadataBase: new URL("https://www.nextid.pk"),
   alternates: {
-    canonical: "/",
+    canonical: "https://www.nextid.pk", // ✅ Fix: full URL
   },
   robots: {
     index: true,
     follow: true,
+    googleBot: {                        // ✅ Fix: googleBot add kiya
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
   },
   openGraph: {
     type: "website",
@@ -21,6 +27,7 @@ export const metadata: Metadata = {
     description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
     siteName: "NextID",
     locale: "en_PK",
+    url: "https://www.nextid.pk",      // ✅ Fix: url add kiya
     images: [
       {
         url: "/og-image.png",

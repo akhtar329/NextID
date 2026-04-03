@@ -5,9 +5,18 @@ import { seoMetadata } from "@/app/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 const BASE_URL = "https://www.nextid.pk";
+const SITE_NAME = "NextID";
 
-// ✅ Updated EntityType to include 'page'
-export type EntityType = 'program' | 'city' | 'board' | 'institute' | 'admission' | 'news' | 'result' | 'dateSheet' | 'page';
+export type EntityType =
+  | "program"
+  | "city"
+  | "board"
+  | "institute"
+  | "admission"
+  | "news"
+  | "result"
+  | "dateSheet"
+  | "page";
 
 type SEOProps = {
   title?: string;
@@ -15,20 +24,51 @@ type SEOProps = {
   path?: string;
   image?: string;
   noIndex?: boolean;
-  // For database SEO
+  keywords?: string[];           // ✅ Added
   entityType?: EntityType;
   entityId?: number;
 };
 
-// Default values
-const DEFAULT_TITLE = "Latest Education News, Results & Admissions in Pakistan | NextID";
-const DEFAULT_DESCRIPTION = "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.";
-const DEFAULT_IMAGE = "/og-image.png";
+// ✅ Structured Data Types
+type JsonLdType =
+  | "WebSite"
+  | "WebPage"
+  | "Article"
+  | "EducationalOrganization"
+  | "Course"
+  | "Event";
 
-/**
- * Fetch SEO metadata from database for a specific entity
- */
-export async function fetchSeoMetadata(entityType: EntityType, entityId: number) {
+type JsonLdProps = {
+  type: JsonLdType;
+  title: string;
+  description: string;
+  url: string;
+  image?: string;
+  datePublished?: string;
+  dateModified?: string;
+  breadcrumbs?: { name: string; url: string }[];
+};
+
+const DEFAULT_TITLE =
+  "Latest Education News, Results & Admissions in Pakistan | NextID";
+const DEFAULT_DESCRIPTION =
+  "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.";
+const DEFAULT_IMAGE = "/og-image.png";
+const DEFAULT_KEYWORDS = [
+  "Pakistan education",
+  "university admissions Pakistan",
+  "board results Pakistan",
+  "education news Pakistan",
+  "NextID",
+];
+
+// ─────────────────────────────────────────────
+// ✅ Fetch SEO from DB
+// ─────────────────────────────────────────────
+export async function fetchSeoMetadata(
+  entityType: EntityType,
+  entityId: number
+) {
   try {
     const [metadata] = await db
       .select()
@@ -40,23 +80,127 @@ export async function fetchSeoMetadata(entityType: EntityType, entityId: number)
         )
       )
       .limit(1);
-    
+
     return metadata || null;
   } catch (error) {
-    console.error(`Error fetching SEO metadata for ${entityType}/${entityId}:`, error);
+    console.error(
+      `Error fetching SEO metadata for ${entityType}/${entityId}:`,
+      error
+    );
     return null;
   }
 }
 
-/**
- * Generate SEO metadata - Priority: Database SEO > Provided Props > Defaults
- */
+// ─────────────────────────────────────────────
+// ✅ Parse robots string safely
+// "noindex, nofollow" → { index: false, follow: false }
+// ─────────────────────────────────────────────
+function parseRobotsString(robots: string) {
+  const noIndex = /\bnoindex\b/i.test(robots);
+  const noFollow = /\bnofollow\b/i.test(robots);
+  return {
+    index: !noIndex,
+    follow: !noFollow,
+  };
+}
+
+// ─────────────────────────────────────────────
+// ✅ Generate JSON-LD Structured Data
+// ─────────────────────────────────────────────
+export function generateJsonLd({
+  type,
+  title,
+  description,
+  url,
+  image,
+  datePublished,
+  dateModified,
+  breadcrumbs,
+}: JsonLdProps): object {
+  const base = {
+    "@context": "https://schema.org",
+    "@type": type,
+    name: title,
+    description,
+    url,
+    ...(image && { image: `${BASE_URL}${image}` }),
+    ...(datePublished && { datePublished }),
+    ...(dateModified && { dateModified }),
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: BASE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${BASE_URL}/logo.png`,
+      },
+    },
+  };
+
+  // ✅ BreadcrumbList — Google rich results ke liye
+  if (breadcrumbs && breadcrumbs.length > 0) {
+    return {
+      ...base,
+      breadcrumb: {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumbs.map((crumb, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: crumb.name,
+          item: crumb.url,
+        })),
+      },
+    };
+  }
+
+  return base;
+}
+
+// ─────────────────────────────────────────────
+// ✅ Website-level JSON-LD (Home page ke liye)
+// ─────────────────────────────────────────────
+export function generateWebsiteJsonLd(): object {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: BASE_URL,
+    description: DEFAULT_DESCRIPTION,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${BASE_URL}/search?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: BASE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${BASE_URL}/logo.png`,
+      },
+      sameAs: [
+        "https://www.facebook.com/nextidpk",
+        "https://www.instagram.com/nextidpk",
+        "https://twitter.com/nextidpk",
+      ],
+    },
+  };
+}
+
+// ─────────────────────────────────────────────
+// ✅ Async generateSEO — DB se data + props
+// ─────────────────────────────────────────────
 export async function generateSEO({
   title,
   description,
   path = "",
   image = DEFAULT_IMAGE,
   noIndex = false,
+  keywords = [],
   entityType,
   entityId,
 }: SEOProps = {}): Promise<Metadata> {
@@ -64,48 +208,56 @@ export async function generateSEO({
   let finalDescription = description || DEFAULT_DESCRIPTION;
   let finalImage = image;
   let finalCanonical = path;
-  let finalRobots = noIndex ? { index: false, follow: false } : { index: true, follow: true };
-  
-  // Fetch SEO from database if entityType and entityId are provided
+  let finalRobots = noIndex
+    ? { index: false, follow: false }
+    : { index: true, follow: true };
+
+  // ✅ DB SEO fetch
   if (entityType && entityId) {
     const dbSeo = await fetchSeoMetadata(entityType, entityId);
-    
+
     if (dbSeo) {
-      // Database SEO takes priority
       finalTitle = dbSeo.metaTitle || finalTitle;
       finalDescription = dbSeo.metaDescription || finalDescription;
       finalImage = dbSeo.ogImage || finalImage;
       finalCanonical = dbSeo.canonicalUrl || path;
-      
-      // Handle robots from database
+
       if (dbSeo.robots) {
-        finalRobots = {
-          index: dbSeo.robots.includes('index'),
-          follow: dbSeo.robots.includes('follow'),
-        };
+        finalRobots = parseRobotsString(dbSeo.robots); // ✅ Fixed parsing
       }
     }
   }
 
   const url = `${BASE_URL}${finalCanonical}`;
+  const finalKeywords = [...DEFAULT_KEYWORDS, ...keywords];
 
   return {
     title: finalTitle,
     description: finalDescription,
+    keywords: finalKeywords,                            // ✅ Added
     metadataBase: new URL(BASE_URL),
 
     alternates: {
       canonical: url,
     },
 
-    robots: finalRobots,
+    robots: {
+      ...finalRobots,
+      googleBot: {                                      // ✅ Added
+        index: finalRobots.index,
+        follow: finalRobots.follow,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
+    },
 
     openGraph: {
       type: "website",
       url,
       title: finalTitle,
       description: finalDescription,
-      siteName: "NextID",
+      siteName: SITE_NAME,
       locale: "en_PK",
       images: [
         {
@@ -122,86 +274,32 @@ export async function generateSEO({
       title: finalTitle,
       description: finalDescription,
       images: [`${BASE_URL}${finalImage}`],
+      site: "@nextidpk",                               // ✅ Added
+      creator: "@nextidpk",                            // ✅ Added
     },
   };
 }
 
-/**
- * Save SEO metadata to database
- */
-export async function saveSeoMetadata(
-  entityType: EntityType,
-  entityId: number,
-  data: {
-    metaTitle?: string;
-    metaDescription?: string;
-    canonicalUrl?: string;
-    robots?: string;
-    ogTitle?: string;
-    ogDescription?: string;
-    ogImage?: string;
-  }
-) {
-  try {
-    const existing = await fetchSeoMetadata(entityType, entityId);
-    
-    if (existing) {
-      // Update existing
-      const [updated] = await db
-        .update(seoMetadata)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(seoMetadata.entityType, entityType),
-            eq(seoMetadata.entityId, entityId)
-          )
-        )
-        .returning();
-      
-      return updated;
-    } else {
-      // Create new
-      const [created] = await db
-        .insert(seoMetadata)
-        .values({
-          entityType,
-          entityId,
-          ...data,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-      
-      return created;
-    }
-  } catch (error) {
-    console.error(`Error saving SEO metadata for ${entityType}/${entityId}:`, error);
-    return null;
-  }
-}
-
-
-/**
- * Synchronous version for static pages (home, about, contact, etc.)
- */
-
+// ─────────────────────────────────────────────
+// ✅ Sync generateSEOClient — Static pages ke liye
+// ─────────────────────────────────────────────
 export function generateSEOClient({
   title,
   description,
   path = "",
-  image = "/og-image.png",
+  image = DEFAULT_IMAGE,
   noIndex = false,
+  keywords = [],
 }: SEOProps = {}): Metadata {
   const url = `${BASE_URL}${path}`;
   const finalTitle = title || DEFAULT_TITLE;
   const finalDescription = description || DEFAULT_DESCRIPTION;
+  const finalKeywords = [...DEFAULT_KEYWORDS, ...keywords];
 
   return {
     title: finalTitle,
     description: finalDescription,
+    keywords: finalKeywords,                            // ✅ Added
     metadataBase: new URL(BASE_URL),
 
     alternates: {
@@ -211,6 +309,13 @@ export function generateSEOClient({
     robots: {
       index: !noIndex,
       follow: !noIndex,
+      googleBot: {                                      // ✅ Added
+        index: !noIndex,
+        follow: !noIndex,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
+      },
     },
 
     openGraph: {
@@ -218,7 +323,7 @@ export function generateSEOClient({
       url,
       title: finalTitle,
       description: finalDescription,
-      siteName: "NextID",
+      siteName: SITE_NAME,
       locale: "en_PK",
       images: [
         {
@@ -235,6 +340,63 @@ export function generateSEOClient({
       title: finalTitle,
       description: finalDescription,
       images: [`${BASE_URL}${image}`],
+      site: "@nextidpk",                               // ✅ Added
+      creator: "@nextidpk",                            // ✅ Added
     },
   };
+}
+
+// ─────────────────────────────────────────────
+// ✅ Save SEO to DB
+// ─────────────────────────────────────────────
+export async function saveSeoMetadata(
+  entityType: EntityType,
+  entityId: number,
+  data: {
+    metaTitle?: string;
+    metaDescription?: string;
+    canonicalUrl?: string;
+    robots?: string;
+    ogTitle?: string;
+    ogDescription?: string;
+    ogImage?: string;
+  }
+) {
+  try {
+    const existing = await fetchSeoMetadata(entityType, entityId);
+
+    if (existing) {
+      const [updated] = await db
+        .update(seoMetadata)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(
+            eq(seoMetadata.entityType, entityType),
+            eq(seoMetadata.entityId, entityId)
+          )
+        )
+        .returning();
+
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(seoMetadata)
+        .values({
+          entityType,
+          entityId,
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      return created;
+    }
+  } catch (error) {
+    console.error(
+      `Error saving SEO metadata for ${entityType}/${entityId}:`,
+      error
+    );
+    return null;
+  }
 }
