@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
-import { eq, desc, and, like, or, sql, asc } from 'drizzle-orm';
+import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import type { NewsItem, TrendingItem } from '@/app/types/types';
 
 // ==================== FORMAT FUNCTIONS ====================
@@ -44,14 +44,12 @@ export const metadata: Metadata = {
 // ==================== DYNAMIC CATEGORY COUNTS FROM NEWS TABLE ====================
 async function getDynamicCategories() {
   try {
-    // Total news count
     const totalNews = await db
       .select({ count: sql<number>`count(*)` })
       .from(news)
       .where(eq(news.status, true))
       .then(r => Number(r[0]?.count) || 0);
 
-    // Category wise counts based on keywords in news table
     const categoryKeywords: Record<string, string[]> = {
       admissions: ['admission', 'apply', 'enroll', 'registration', 'open admissions'],
       results: ['result', 'announced', 'gazette', 'position', 'marks', 'grade'],
@@ -61,16 +59,8 @@ async function getDynamicCategories() {
       jobs: ['job', 'career', 'vacancy', 'recruitment', 'employment', 'apply online'],
     };
 
-    const categoriesWithCounts = [];
+    const categoriesWithCounts = [{ name: 'All News', slug: 'all', count: totalNews }];
 
-    // Add All News category
-    categoriesWithCounts.push({
-      name: 'All News',
-      slug: 'all',
-      count: totalNews,
-    });
-
-    // Get counts for each category
     for (const [slug, keywords] of Object.entries(categoryKeywords)) {
       const conditions = keywords.flatMap(keyword => [
         like(news.title, `%${keyword}%`),
@@ -83,7 +73,6 @@ async function getDynamicCategories() {
         .where(and(eq(news.status, true), or(...conditions)))
         .then(r => Number(r[0]?.count) || 0);
       
-      // Only add category if it has at least one news item
       if (result > 0) {
         categoriesWithCounts.push({
           name: slug === 'admissions' ? 'Admissions' :
@@ -96,77 +85,15 @@ async function getDynamicCategories() {
         });
       }
     }
-
     return categoriesWithCounts;
   } catch (error) {
-    console.error('Error getting dynamic categories:', error);
     return [{ name: 'All News', slug: 'all', count: 0 }];
   }
 }
 
-// ==================== DATA FETCHING WITH CATEGORY FILTER ====================
-async function getNews(filters: { page?: number; category?: string }) {
-  try {
-    const conditions: any[] = [eq(news.status, true)];
-    
-    const page = filters.page || 1;
-    const limit = 12;
-    const offset = (page - 1) * limit;
+// ==================== DATA FETCHING ====================
 
-    // Apply category filter if selected
-    if (filters.category && filters.category !== 'all') {
-      const categoryKeywords: Record<string, string[]> = {
-        admissions: ['admission', 'apply', 'enroll', 'registration', 'open admissions'],
-        results: ['result', 'announced', 'gazette', 'position', 'marks', 'grade'],
-        scholarships: ['scholarship', 'financial aid', 'grant', 'fund', 'stipend'],
-        boards: ['board', 'bise', 'fbise', 'examination', 'matric', 'inter', 'board exam'],
-        universities: ['university', 'college', 'campus', 'faculty', 'department', 'hec'],
-        jobs: ['job', 'career', 'vacancy', 'recruitment', 'employment', 'apply online'],
-      };
-      
-      const keywords = categoryKeywords[filters.category] || [];
-      if (keywords.length > 0) {
-        const keywordConditions = keywords.flatMap(keyword => [
-          like(news.title, `%${keyword}%`),
-          like(news.excerpt, `%${keyword}%`),
-        ]);
-        conditions.push(or(...keywordConditions));
-      }
-    }
-
-    const data = await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        excerpt: news.excerpt,
-        content: news.content,
-        imageUrl: news.imageUrl,
-        source: news.source,
-        author: news.author,
-        isBreaking: news.isBreaking,
-        views: news.views,
-        publishedAt: news.publishedAt,
-      })
-      .from(news)
-      .where(and(...conditions))
-      .orderBy(desc(news.publishedAt))
-      .limit(limit)
-      .offset(offset);
-
-    const total = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(news)
-      .where(and(...conditions))
-      .then(r => Number(r[0]?.count) || 0);
-
-    return { news: data as NewsItem[], total, page, pages: Math.ceil(total / limit) };
-  } catch (error) {
-    console.error('Error fetching news:', error);
-    return { news: [], total: 0, page: 1, pages: 0 };
-  }
-}
-
+// Sirf Breaking News (isBreaking = true)
 async function getBreakingNews() {
   try {
     const data = await db
@@ -184,62 +111,18 @@ async function getBreakingNews() {
         publishedAt: news.publishedAt,
       })
       .from(news)
-      .where(and(
-        eq(news.status, true), 
-        eq(news.isBreaking, true)
-      ))
+      .where(and(eq(news.status, true), eq(news.isBreaking, true)))
       .orderBy(desc(news.publishedAt))
       .limit(4);
-    
     return data as NewsItem[];
   } catch (error) {
-    console.error('Error fetching breaking news:', error);
     return [];
   }
 }
 
-// Future news - published date future mein hai
-async function getFutureNews() {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const data = await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        excerpt: news.excerpt,
-        content: news.content,
-        imageUrl: news.imageUrl,
-        source: news.source,
-        author: news.author,
-        isBreaking: news.isBreaking,
-        views: news.views,
-        publishedAt: news.publishedAt,
-      })
-      .from(news)
-      .where(and(
-        eq(news.status, true),
-        eq(news.isBreaking, false),
-        sql`${news.publishedAt} > ${today.toISOString()}`
-      ))
-      .orderBy(asc(news.publishedAt))
-      .limit(3);
-    
-    return data as NewsItem[];
-  } catch (error) {
-    console.error('Error fetching future news:', error);
-    return [];
-  }
-}
-
-// Simple news - published date past mein hai aur breaking nahi hai
+// Sirf Simple News (isBreaking = false) - No breaking, No future
 async function getSimpleNews() {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
     const data = await db
       .select({
         id: news.id,
@@ -255,21 +138,16 @@ async function getSimpleNews() {
         publishedAt: news.publishedAt,
       })
       .from(news)
-      .where(and(
-        eq(news.status, true),
-        eq(news.isBreaking, false),
-        sql`${news.publishedAt} <= ${today.toISOString()}`
-      ))
+      .where(and(eq(news.status, true), eq(news.isBreaking, false)))
       .orderBy(desc(news.publishedAt))
       .limit(6);
-    
     return data as NewsItem[];
   } catch (error) {
-    console.error('Error fetching simple news:', error);
     return [];
   }
 }
 
+// Trending News
 async function getTrending() {
   try {
     const data = await db
@@ -292,7 +170,6 @@ async function getTrending() {
 
 // ==================== CATEGORY DATA FROM RELEVANT TABLES ====================
 
-// City news - from cities table
 async function getCityNews() {
   try {
     const data = await db
@@ -308,15 +185,12 @@ async function getCityNews() {
       .where(eq(cities.status, true))
       .orderBy(desc(cities.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching city news:', error);
     return [];
   }
 }
 
-// Admissions - from admissions table
 async function getAdmissionsNews() {
   try {
     const data = await db
@@ -332,15 +206,12 @@ async function getAdmissionsNews() {
       .where(eq(admissions.status, 'open'))
       .orderBy(desc(admissions.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching admissions news:', error);
     return [];
   }
 }
 
-// Results - from results table
 async function getResultsNews() {
   try {
     const data = await db
@@ -356,15 +227,12 @@ async function getResultsNews() {
       .where(eq(results.status, true))
       .orderBy(desc(results.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching results news:', error);
     return [];
   }
 }
 
-// Universities - from institutes table
 async function getUniversitiesNews() {
   try {
     const data = await db
@@ -380,15 +248,12 @@ async function getUniversitiesNews() {
       .where(eq(institutes.status, true))
       .orderBy(desc(institutes.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching universities news:', error);
     return [];
   }
 }
 
-// Boards - from boards table
 async function getBoardsNews() {
   try {
     const data = await db
@@ -404,15 +269,12 @@ async function getBoardsNews() {
       .where(eq(boards.status, true))
       .orderBy(desc(boards.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching boards news:', error);
     return [];
   }
 }
 
-// Programs - from programs table
 async function getProgramsNews() {
   try {
     const data = await db
@@ -428,68 +290,66 @@ async function getProgramsNews() {
       .where(eq(programs.status, true))
       .orderBy(desc(programs.createdAt))
       .limit(5);
-    
     return data;
   } catch (error) {
-    console.error('Error fetching programs news:', error);
     return [];
   }
 }
 
 // ==================== COMPONENTS ====================
 
-// 1. HeroSection - Breaking News Banner + 3 Future News
-function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; futureNews: NewsItem[] }) {
+// HeroSection - Sirf Breaking News Banner
+function HeroSection({ breakingNews }: { breakingNews: NewsItem[] }) {
   const topBreaking = breakingNews[0];
-  const topFutureNews = futureNews.slice(0, 3);
+  const otherBreaking = breakingNews.slice(1, 4);
   
+  if (!topBreaking) return null;
+
   return (
     <div className="mb-10">
-      {/* Breaking News Banner */}
-      {topBreaking && (
-        <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
-          {topBreaking.imageUrl && (
-            <img 
-              src={topBreaking.imageUrl} 
-              alt={topBreaking.title}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
-                BREAKING NEWS
-              </span>
-              <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
-            </div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
-              {topBreaking.title}
-            </h2>
-            <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
-              {topBreaking.excerpt}
-            </p>
-            <Link 
-              href={`/news/${topBreaking.slug}`}
-              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
-            >
-              Read Full Story <span className="text-lg">→</span>
-            </Link>
+      {/* Bara Breaking News Banner */}
+      <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
+        {topBreaking.imageUrl && (
+          <img 
+            src={topBreaking.imageUrl} 
+            alt={topBreaking.title}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
+              BREAKING NEWS
+            </span>
+            <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
           </div>
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
+            {topBreaking.title}
+          </h2>
+          <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
+            {topBreaking.excerpt}
+          </p>
+          <Link 
+            href={`/news/${topBreaking.slug}`}
+            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
+          >
+            Read Full Story <span className="text-lg">→</span>
+          </Link>
         </div>
-      )}
+      </div>
 
-      {/* Future News - 3 cards (only if future news exist) */}
-      {topFutureNews.length > 0 && (
+      {/* Neeche 3 Breaking News Items */}
+      {otherBreaking.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {topFutureNews.map((item) => (
+          {otherBreaking.map((item) => (
             <Link
               key={item.id}
               href={`/news/${item.slug}`}
-              className="group block bg-white rounded-lg p-4 border border-gray-200 hover:shadow-md transition hover:border-red-200"
+              className="group block bg-red-50 rounded-lg p-4 border-l-4 border-red-600 hover:shadow-md transition"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-orange-600 text-xs font-bold">FUTURE</span>
+                <span className="text-red-600 text-xs font-bold">BREAKING</span>
                 <span className="text-xs text-gray-500">{formatDate(item.publishedAt)}</span>
               </div>
               <h3 className="font-bold text-gray-900 group-hover:text-red-600 transition line-clamp-2 text-sm">
@@ -503,7 +363,7 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
   );
 }
 
-// 2. Simple News Card
+// Simple News Card (Sirf normal news, koi breaking nahi)
 function SimpleNewsCard({ item }: { item: NewsItem }) {
   return (
     <Link 
@@ -542,7 +402,7 @@ function SimpleNewsCard({ item }: { item: NewsItem }) {
   );
 }
 
-// 3. CategorySection
+// CategorySection
 function CategorySection({ 
   cityNews, 
   admissionsNews, 
@@ -618,82 +478,12 @@ function CategorySection({
   );
 }
 
-// 4. Pagination
-function Pagination({ currentPage, totalPages, buildUrl }: { currentPage: number; totalPages: number; buildUrl: (page: number) => string }) {
-  if (totalPages <= 1) return null;
-  
-  const pages = [];
-  const maxVisible = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-  
-  if (endPage - startPage + 1 < maxVisible) {
-    startPage = Math.max(1, endPage - maxVisible + 1);
-  }
-  
-  for (let i = startPage; i <= endPage; i++) pages.push(i);
-
-  return (
-    <div className="flex justify-center mt-10">
-      <nav className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200">
-        <Link
-          href={currentPage > 1 ? buildUrl(currentPage - 1) : '#'}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            currentPage > 1 ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed pointer-events-none'
-          }`}
-        >
-          Previous
-        </Link>
-        
-        {startPage > 1 && (
-          <>
-            <Link href={buildUrl(1)} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">
-              1
-            </Link>
-            {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
-          </>
-        )}
-        
-        {pages.map(page => (
-          <Link
-            key={page}
-            href={buildUrl(page)}
-            className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition ${
-              page === currentPage ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            {page}
-          </Link>
-        ))}
-        
-        {endPage < totalPages && (
-          <>
-            {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
-            <Link href={buildUrl(totalPages)} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">
-              {totalPages}
-            </Link>
-          </>
-        )}
-        
-        <Link
-          href={currentPage < totalPages ? buildUrl(currentPage + 1) : '#'}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            currentPage < totalPages ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed pointer-events-none'
-          }`}
-        >
-          Next
-        </Link>
-      </nav>
-    </div>
-  );
-}
-
-// 5. TrendingSidebar
+// Trending Sidebar (Sticky)
 function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
   if (!trending.length) return null;
   
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
         <h3 className="font-bold text-white text-lg">Trending Now</h3>
       </div>
@@ -727,12 +517,12 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
   );
 }
 
-// 6. CategorySidebar - DYNAMIC
+// Category Sidebar (Sticky)
 function CategorySidebar({ categories, activeCategory }: { categories: any[]; activeCategory: string }) {
   if (!categories.length) return null;
   
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-gradient-to-r from-gray-800 to-gray-700 px-5 py-3">
         <h3 className="font-bold text-white text-lg">News Categories</h3>
       </div>
@@ -760,13 +550,11 @@ function CategorySidebar({ categories, activeCategory }: { categories: any[]; ac
 
 // ==================== PAGE COMPONENT ====================
 export default async function NewsPage({ searchParams }: { searchParams?: { [key: string]: string } }) {
-  const page = Number(searchParams?.page) || 1;
   const category = searchParams?.category || 'all';
 
   // Fetch all data in parallel
   const [
     breakingNews,
-    futureNews,
     simpleNews,
     trending,
     dynamicCategories,
@@ -778,7 +566,6 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
     programsNews
   ] = await Promise.all([
     getBreakingNews(),
-    getFutureNews(),
     getSimpleNews(),
     getTrending(),
     getDynamicCategories(),
@@ -790,21 +577,15 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
     getProgramsNews(),
   ]);
 
-  const buildUrl = (pageNum: number) => {
-    const params = new URLSearchParams();
-    params.set('page', pageNum.toString());
-    if (category !== 'all') params.set('category', category);
-    return `/news?${params.toString()}`;
-  };
-
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* Hero Section - Breaking News Banner + Future News */}
-      <HeroSection breakingNews={breakingNews} futureNews={futureNews} />
+      {/* Hero Section - Sirf Breaking News */}
+      <HeroSection breakingNews={breakingNews} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          {/* Simple News Cards - Only past/present news (no breaking, no future) */}
+        {/* Main Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Simple News Cards - Sirf normal news (breaking = false) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {simpleNews.map((item) => (
               <SimpleNewsCard key={item.id} item={item} />
@@ -822,9 +603,12 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
           />
         </div>
 
-        <div className="lg:col-span-1 space-y-6">
-          <TrendingSidebar trending={trending} />
-          <CategorySidebar categories={dynamicCategories} activeCategory={category} />
+        {/* Sidebar Column - Sticky */}
+        <div className="lg:col-span-1">
+          <div className="sticky top-24 space-y-6">
+            <TrendingSidebar trending={trending} />
+            <CategorySidebar categories={dynamicCategories} activeCategory={category} />
+          </div>
         </div>
       </div>
     </div>
