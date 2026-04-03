@@ -172,9 +172,45 @@ export async function generateMetadata(): Promise<Metadata> {
     entityType: 'page',
     entityId: 1,
     path: '/admissions',
+
     title: 'All Admissions 2026 in Pakistan – Matric, Inter, BS, MS & Apply Online | NextID.pk',
-    description: 'Explore all 2026 admissions in Pakistan for Matric, Inter, BS, MS & professional programs. Check last dates, fees, entry test info & apply online now.',
+
+    description:
+      'Explore all 2026 admissions in Pakistan for Matric, Inter, BS, MS & professional programs. Check last dates, fees, entry test info & apply online now.',
+
     image: '/images/og-admissions.jpg',
+
+    alternates: {
+      canonical: 'https://www.nextid.pk/admissions',
+    },
+
+    openGraph: {
+      title:
+        'All Admissions 2026 in Pakistan – Matric, Inter, BS, MS & Apply Online',
+      description:
+        'Explore all 2026 admissions in Pakistan with last dates, fees, and entry test details.',
+      url: 'https://www.nextid.pk/admissions',
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: 'https://www.nextid.pk/images/og-admissions.jpg',
+          width: 1200,
+          height: 630,
+          alt: 'Admissions 2026 in Pakistan',
+        },
+      ],
+      locale: 'en_PK',
+      type: 'website',
+    },
+
+    twitter: {
+      card: 'summary_large_image',
+      title:
+        'All Admissions 2026 in Pakistan – Apply Online',
+      description:
+        'Check latest admissions in Pakistan for Matric, Inter, BS & MS programs.',
+      images: ['https://www.nextid.pk/images/og-admissions.jpg'],
+    },
   });
 }
 
@@ -1130,24 +1166,194 @@ export default async function AdmissionsPage({
       </section>
 
       {/* Schema Markup */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "ItemList",
-            "name": showClosed ? "Closed Admissions in Pakistan" : "Admissions 2026 in Pakistan",
-            "description": showClosed ? "Past admission records in Pakistani universities and colleges" : "Latest admissions in Pakistani universities and colleges",
-            "numberOfItems": currentAdmissions.admissions.length,
-            "itemListElement": currentAdmissions.admissions.slice(0, 10).map((ad, index) => ({
-              "@type": "ListItem",
-              "position": index + 1,
-              "url": `https://www.nextid.pk/admissions/${ad.slug}`,
-              "name": formatAdmissionName(ad)
-            }))
-          })
-        }}
-      />
+
+{/* 1. ItemList Schema */}
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      "name": showClosed ? "Closed Admissions in Pakistan" : "Admissions 2026 in Pakistan",
+      "description": showClosed
+        ? "Past admission records in Pakistani universities and colleges"
+        : "Latest university and college admissions 2026 in Pakistan",
+      "url": `https://www.nextid.pk/admissions${showClosed ? '?closed=true' : ''}`,
+      "numberOfItems": currentAdmissions.totalCount,
+      "itemListElement": currentAdmissions.admissions.slice(0, 10).map((ad, index) => ({
+        "@type": "ListItem",
+        "position": index + 1,
+        "url": `https://www.nextid.pk/admissions/${ad.slug}`,
+        "name": formatAdmissionName(ad),
+        "item": {
+          "@type": "EducationEvent",
+          "name": formatAdmissionName(ad),
+          "url": `https://www.nextid.pk/admissions/${ad.slug}`,
+          "organizer": {
+            "@type": "EducationalOrganization",
+            "name": ad.instituteName,
+            "url": `https://www.nextid.pk/universities/${ad.instituteSlug}`,
+          },
+          "location": {
+            "@type": "Place",
+            "name": ad.cityName,
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": ad.cityName,
+              "addressCountry": "PK"
+            }
+          },
+          ...(ad.expectedCloseDate && {
+            "endDate": new Date(ad.expectedCloseDate).toISOString().split('T')[0],
+          }),
+          "eventStatus": ad.status === 'Open'
+            ? "https://schema.org/EventScheduled"
+            : "https://schema.org/EventCancelled",
+          "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+        }
+      }))
+    })
+  }}
+/>
+
+{/* 2. FAQ Schema */}
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "When do admissions start in Pakistan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Most universities start admissions in July-August for Fall semester and December-January for Spring semester. Matric and Intermediate admissions usually begin after results announcement in August-September."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the last date for admissions 2026?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Last dates vary by university and program. Many top universities including NUST, FAST, and LUMS close admissions by March-April for Fall semester 2026. Check individual admission listings on NextID.pk for exact deadlines."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How much are admission fees in Pakistan universities?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Admission fees vary by program level: Matric (PKR 5,000-25,000/semester), Intermediate (PKR 8,000-35,000/semester), BS programs (PKR 40,000-150,000/semester), MBA (PKR 80,000-300,000/semester), and Medical MBBS (PKR 200,000-800,000/semester)."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which entry test is required for university admissions in Pakistan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Entry test requirements depend on the program: BS programs require NTS or university-specific test, Medical (MBBS/BDS) requires MDCAT or NUMS, Engineering requires NET or ECAT, MBA requires NTS or GAT, and Law requires LAT. Matric and Intermediate admissions are merit-based."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which are the top universities open for admissions in Pakistan 2026?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Top universities currently accepting admissions in Pakistan 2026 include NUST, FAST-NUCES, LUMS, University of the Punjab, Karachi University, UET Lahore, COMSATS, and Aga Khan University. Check NextID.pk for complete and updated admission listings."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How can I apply for university admissions online in Pakistan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You can apply online by visiting the university's official website or through NextID.pk. Required documents typically include matric and intermediate certificates, CNIC copy, passport photos, and entry test result. Application forms are available on university portals."
+          }
+        }
+      ]
+    })
+  }}
+/>
+
+{/* 3. BreadcrumbList Schema */}
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://www.nextid.pk"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": showClosed ? "Closed Admissions" : "Admissions 2026",
+          "item": `https://www.nextid.pk/admissions${showClosed ? '?closed=true' : ''}`
+        },
+        ...(filters.level ? [{
+          "@type": "ListItem",
+          "position": 3,
+          "name": PROGRAM_TYPES.find(p => p.slug === filters.level)?.name || filters.level,
+          "item": `https://www.nextid.pk/admissions?level=${filters.level}`
+        }] : []),
+        ...(filters.city ? [{
+          "@type": "ListItem",
+          "position": filters.level ? 4 : 3,
+          "name": currentCitiesWithCounts.find(c => c.slug === filters.city)?.name || filters.city,
+          "item": `https://www.nextid.pk/admissions?city=${filters.city}`
+        }] : []),
+      ]
+    })
+  }}
+/>
+
+{/* 4. WebPage Schema */}
+<script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": showClosed
+        ? "Closed Admissions in Pakistan | NextID.pk"
+        : "Admissions 2026 in Pakistan | NextID.pk",
+      "url": `https://www.nextid.pk/admissions${showClosed ? '?closed=true' : ''}`,
+      "description": showClosed
+        ? "Past admission records in Pakistani universities and colleges"
+        : "Find latest university admissions 2026 in Pakistan. Check last dates, fees, entry test info for Matric, Inter, BS, MS, MBA, Medical and Engineering programs.",
+      "inLanguage": "en-PK",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "NextID.pk",
+        "url": "https://www.nextid.pk",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://www.nextid.pk/admissions?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        }
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "NextID.pk",
+        "url": "https://www.nextid.pk",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://www.nextid.pk/logo.png"
+        }
+      }
+    })
+  }}
+/>
     </main>
   );
 }

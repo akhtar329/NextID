@@ -24,9 +24,14 @@ type SEOProps = {
   path?: string;
   image?: string;
   noIndex?: boolean;
-  keywords?: string[];           // ✅ Added
+  keywords?: string[];  
+  alternates?: {
+    canonical?: string;
+  };
   entityType?: EntityType;
   entityId?: number;
+  openGraph?: Metadata['openGraph'];
+  twitter?: Metadata['twitter'];
 };
 
 // ✅ Structured Data Types
