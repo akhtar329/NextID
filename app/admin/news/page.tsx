@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import PrimaryButton from "@/app/component/ui/Button";
 import SearchInput from "@/app/component/ui/SearchInput";
-import Table from "@/app/component/ui/Table";
+import Table, { Column } from "@/app/component/ui/Table";
 
 type NewsItem = {
   id: number;
@@ -54,7 +54,7 @@ export default function NewsPage() {
     if (!confirm(`Delete "${title}"?`)) return;
 
     setDeleteLoading(id);
-    toast.loading("Deleting news...", { id: `delete-${id}` });
+    toast.loading("Deleting...", { id: `delete-${id}` });
 
     try {
       const res = await fetch(`/api/admin/news/${id}`, {
@@ -64,52 +64,69 @@ export default function NewsPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to delete");
+        throw new Error(data.error || "Failed");
       }
 
-      toast.success("News deleted", { id: `delete-${id}` });
-      await fetchNews();
+      setNews((prev) => prev.filter((n) => n.id !== id));
+      toast.success("Deleted", { id: `delete-${id}` });
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Delete failed",
-        { id: `delete-${id}` }
-      );
+      toast.error("Delete failed", { id: `delete-${id}` });
     } finally {
       setDeleteLoading(null);
     }
   };
 
   /* ---------------- Toggle Status ---------------- */
-  const toggleStatus = async (
-    id: number,
-    current: boolean,
-    title: string
-  ) => {
+  const toggleStatus = async (id: number, current: boolean) => {
     setStatusLoading(id);
-    const newStatus = !current;
-
-    toast.loading("Updating status...", { id: `status-${id}` });
 
     try {
       const res = await fetch(`/api/admin/news/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: !current }),
       });
 
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to update");
-      }
+      if (!res.ok || !data.success) throw new Error("Failed");
 
-      toast.success(`"${title}" updated`, { id: `status-${id}` });
-      await fetchNews();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Update failed",
-        { id: `status-${id}` }
+      setNews((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, status: !current } : n))
       );
+    } catch {
+      toast.error("Status update failed");
+    } finally {
+      setStatusLoading(null);
+    }
+  };
+
+  /* ---------------- Toggle Breaking / Featured ---------------- */
+  const toggleField = async (
+    id: number,
+    field: "isFeatured" | "isBreaking",
+    current: boolean
+  ) => {
+    setStatusLoading(id);
+
+    try {
+      const res = await fetch(`/api/admin/news/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: !current }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error("Failed");
+
+      setNews((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, [field]: !current } : n
+        )
+      );
+      toast.success(`${field} updated`);
+    } catch {
+      toast.error("Update failed");
     } finally {
       setStatusLoading(null);
     }
@@ -121,15 +138,11 @@ export default function NewsPage() {
   );
 
   /* ---------------- Columns ---------------- */
-  const columns: {
-  header: string;
-  accessor: keyof NewsItem;
-  render?: (value: any, row: NewsItem) => React.ReactNode;
-}[] = [
+  const columns: Column<NewsItem>[] = [
     {
       header: "Title",
       accessor: "title",
-      render: (value: string, row: NewsItem) => (
+      render: (value, row) => (
         <button
           onClick={() => router.push(`/admin/news/${row.id}`)}
           className="text-blue-600 hover:underline text-left"
@@ -138,42 +151,51 @@ export default function NewsPage() {
         </button>
       ),
     },
-    {
-      header: "Views",
-      accessor: "views",
-    },
+    { header: "Views", accessor: "views" },
     {
       header: "Featured",
       accessor: "isFeatured",
-      render: (value: boolean) =>
-        value ? (
-          <span className="text-purple-600 text-xs font-medium">
-            Yes
-          </span>
-        ) : (
-          "-"
-        ),
+      render: (value, row) => (
+        <button
+          onClick={() =>
+            toggleField(row.id, "isFeatured", value)
+          }
+          className={`px-3 py-1 rounded-full text-xs ${
+            value
+              ? "bg-purple-100 text-purple-700"
+              : "bg-gray-100 text-gray-500"
+          }`}
+          disabled={statusLoading === row.id}
+        >
+          {value ? "Yes" : "No"}
+        </button>
+      ),
     },
     {
       header: "Breaking",
       accessor: "isBreaking",
-      render: (value: boolean) =>
-        value ? (
-          <span className="text-red-600 text-xs font-medium">
-            Yes
-          </span>
-        ) : (
-          "-"
-        ),
+      render: (value, row) => (
+        <button
+          onClick={() =>
+            toggleField(row.id, "isBreaking", value)
+          }
+          className={`px-3 py-1 rounded-full text-xs ${
+            value
+              ? "bg-red-100 text-red-700"
+              : "bg-gray-100 text-gray-500"
+          }`}
+          disabled={statusLoading === row.id}
+        >
+          {value ? "Yes" : "No"}
+        </button>
+      ),
     },
     {
       header: "Status",
       accessor: "status",
-      render: (value: boolean, row: NewsItem) => (
+      render: (value, row) => (
         <button
-          onClick={() =>
-            toggleStatus(row.id, value, row.title)
-          }
+          onClick={() => toggleStatus(row.id, value)}
           disabled={statusLoading === row.id}
           className={`px-3 py-1 rounded-full text-xs ${
             value
@@ -181,32 +203,23 @@ export default function NewsPage() {
               : "bg-yellow-100 text-yellow-700"
           }`}
         >
-          {statusLoading === row.id
-            ? "..."
-            : value
-            ? "Active"
-            : "Inactive"}
+          {statusLoading === row.id ? "..." : value ? "Active" : "Inactive"}
         </button>
       ),
     },
     {
       header: "Actions",
       accessor: "id",
-      render: (_: number, row: NewsItem) => (
+      render: (_, row) => (
         <div className="flex gap-2">
           <button
-            onClick={() =>
-              router.push(`/admin/news/${row.id}/edit`)
-            }
+            onClick={() => router.push(`/admin/news/${row.id}/edit`)}
             className="px-3 py-1 text-xs bg-blue-50 text-blue-600 rounded-full"
           >
             Edit
           </button>
-
           <button
-            onClick={() =>
-              deleteNews(row.id, row.title)
-            }
+            onClick={() => deleteNews(row.id, row.title)}
             disabled={deleteLoading === row.id}
             className="px-3 py-1 text-xs bg-red-50 text-red-600 rounded-full"
           >
@@ -225,23 +238,17 @@ export default function NewsPage() {
 
   return (
     <div className="p-6">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-semibold">News</h1>
-          <p className="text-sm text-gray-500">
-            Manage all news articles
-          </p>
+          <p className="text-sm text-gray-500">Manage all news articles</p>
         </div>
 
-        <PrimaryButton
-          onClick={() => router.push("/admin/news/create")}
-        >
+        <PrimaryButton onClick={() => router.push("/admin/news/create")}>
           + Add News
         </PrimaryButton>
       </div>
 
-      {/* Stats */}
       {!loading && news.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatCard label="Total" value={total} />
@@ -251,23 +258,13 @@ export default function NewsPage() {
         </div>
       )}
 
-      {/* Search */}
       <div className="mb-4">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search news..."
-        />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search news..." />
       </div>
 
-      {/* Table */}
       {filtered.length === 0 ? (
         <div className="bg-white p-12 text-center rounded shadow">
-          <div className="text-gray-500">
-            {search
-              ? "No news found"
-              : "No news available"}
-          </div>
+          <div className="text-gray-500">{search ? "No news found" : "No news available"}</div>
         </div>
       ) : (
         <div className="bg-white rounded shadow">
@@ -278,19 +275,11 @@ export default function NewsPage() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4">
       <div className="text-sm text-gray-500">{label}</div>
-      <div className="text-2xl font-semibold mt-1">
-        {value}
-      </div>
+      <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
