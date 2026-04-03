@@ -1,9 +1,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { news } from '@/app/lib/schema';
-import { eq, desc, and, like, or, sql } from 'drizzle-orm';
-import type { NewsItem, TrendingItem, Category } from '@/app/types/types';
+import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
+import { eq, desc, and, like, or, sql, count } from 'drizzle-orm';
+import type { NewsItem, TrendingItem } from '@/app/types/types';
 
 // ==================== FORMAT FUNCTIONS ====================
 function formatDate(date: Date | null): string {
@@ -41,8 +41,71 @@ export const metadata: Metadata = {
   }
 };
 
-// ==================== DATA FETCHING ====================
-async function getNews(filters: { q?: string; page?: number; category?: string }) {
+// ==================== DYNAMIC CATEGORY COUNTS FROM NEWS TABLE ====================
+async function getDynamicCategories() {
+  try {
+    // Total news count
+    const totalNews = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(news)
+      .where(eq(news.status, true))
+      .then(r => Number(r[0]?.count) || 0);
+
+    // Category wise counts based on keywords in news table
+    const categoryKeywords: Record<string, string[]> = {
+      admissions: ['admission', 'apply', 'enroll', 'registration', 'open admissions'],
+      results: ['result', 'announced', 'gazette', 'position', 'marks', 'grade'],
+      scholarships: ['scholarship', 'financial aid', 'grant', 'fund', 'stipend'],
+      boards: ['board', 'bise', 'fbise', 'examination', 'matric', 'inter', 'board exam'],
+      universities: ['university', 'college', 'campus', 'faculty', 'department', 'hec'],
+      jobs: ['job', 'career', 'vacancy', 'recruitment', 'employment', 'apply online'],
+    };
+
+    const categoriesWithCounts = [];
+
+    // Add All News category
+    categoriesWithCounts.push({
+      name: 'All News',
+      slug: 'all',
+      count: totalNews,
+    });
+
+    // Get counts for each category
+    for (const [slug, keywords] of Object.entries(categoryKeywords)) {
+      const conditions = keywords.flatMap(keyword => [
+        like(news.title, `%${keyword}%`),
+        like(news.excerpt, `%${keyword}%`),
+      ]);
+      
+      const result = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(news)
+        .where(and(eq(news.status, true), or(...conditions)))
+        .then(r => Number(r[0]?.count) || 0);
+      
+      // Only add category if it has at least one news item
+      if (result > 0) {
+        categoriesWithCounts.push({
+          name: slug === 'admissions' ? 'Admissions' :
+                slug === 'results' ? 'Results' :
+                slug === 'scholarships' ? 'Scholarships' :
+                slug === 'boards' ? 'Board News' :
+                slug === 'universities' ? 'Universities' : 'Jobs',
+          slug: slug,
+          count: result,
+        });
+      }
+    }
+
+    return categoriesWithCounts;
+  } catch (error) {
+    console.error('Error getting dynamic categories:', error);
+    return [{ name: 'All News', slug: 'all', count: 0 }];
+  }
+}
+
+// ==================== DATA FETCHING WITH CATEGORY FILTER ====================
+async function getNews(filters: { page?: number; category?: string }) {
   try {
     const conditions: any[] = [eq(news.status, true)];
     
@@ -50,23 +113,15 @@ async function getNews(filters: { q?: string; page?: number; category?: string }
     const limit = 12;
     const offset = (page - 1) * limit;
 
-    if (filters.q) {
-      const term = `%${filters.q}%`;
-      conditions.push(or(
-        like(news.title, term),
-        like(news.excerpt, term),
-        like(news.content, term)
-      ));
-    }
-
+    // Apply category filter if selected
     if (filters.category && filters.category !== 'all') {
       const categoryKeywords: Record<string, string[]> = {
-        'admissions': ['admission', 'apply', 'enroll', 'registration', 'open'],
-        'results': ['result', 'announced', 'gazette', 'position', 'marks'],
-        'scholarships': ['scholarship', 'financial aid', 'grant', 'fund', 'stipend'],
-        'boards': ['board', 'bise', 'fbise', 'examination', 'matric', 'inter'],
-        'universities': ['university', 'college', 'campus', 'faculty', 'department'],
-        'jobs': ['job', 'career', 'vacancy', 'recruitment', 'employment'],
+        admissions: ['admission', 'apply', 'enroll', 'registration', 'open admissions'],
+        results: ['result', 'announced', 'gazette', 'position', 'marks', 'grade'],
+        scholarships: ['scholarship', 'financial aid', 'grant', 'fund', 'stipend'],
+        boards: ['board', 'bise', 'fbise', 'examination', 'matric', 'inter', 'board exam'],
+        universities: ['university', 'college', 'campus', 'faculty', 'department', 'hec'],
+        jobs: ['job', 'career', 'vacancy', 'recruitment', 'employment', 'apply online'],
       };
       
       const keywords = categoryKeywords[filters.category] || [];
@@ -132,21 +187,175 @@ async function getTrending() {
   }
 }
 
+// ==================== CATEGORY DATA FROM RELEVANT TABLES ====================
+
+// City news - from cities table
+async function getCityNews() {
+  try {
+    const data = await db
+      .select({
+        id: cities.id,
+        title: cities.name,
+        slug: cities.slug,
+        excerpt: cities.description,
+        imageUrl: cities.imageUrl,
+        publishedAt: cities.createdAt,
+      })
+      .from(cities)
+      .where(eq(cities.status, true))
+      .orderBy(desc(cities.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching city news:', error);
+    return [];
+  }
+}
+
+// Admissions - from admissions table
+async function getAdmissionsNews() {
+  try {
+    const data = await db
+      .select({
+        id: admissions.id,
+        title: admissions.name,
+        slug: admissions.slug,
+        excerpt: admissions.note,
+        imageUrl: admissions.featuredImage,
+        publishedAt: admissions.createdAt,
+      })
+      .from(admissions)
+      .where(eq(admissions.status, 'open'))
+      .orderBy(desc(admissions.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching admissions news:', error);
+    return [];
+  }
+}
+
+// Results - from results table
+async function getResultsNews() {
+  try {
+    const data = await db
+      .select({
+        id: results.id,
+        title: results.title,
+        slug: results.slug,
+        excerpt: sql<string>`NULL`.as('excerpt'),
+        imageUrl: sql<string>`NULL`.as('imageUrl'),
+        publishedAt: results.createdAt,
+      })
+      .from(results)
+      .where(eq(results.status, true))
+      .orderBy(desc(results.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching results news:', error);
+    return [];
+  }
+}
+
+// Universities - from institutes table
+async function getUniversitiesNews() {
+  try {
+    const data = await db
+      .select({
+        id: institutes.id,
+        title: institutes.name,
+        slug: institutes.slug,
+        excerpt: institutes.description,
+        imageUrl: institutes.featuredImage,
+        publishedAt: institutes.createdAt,
+      })
+      .from(institutes)
+      .where(eq(institutes.status, true))
+      .orderBy(desc(institutes.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching universities news:', error);
+    return [];
+  }
+}
+
+// Boards - from boards table
+async function getBoardsNews() {
+  try {
+    const data = await db
+      .select({
+        id: boards.id,
+        title: boards.name,
+        slug: boards.slug,
+        excerpt: boards.description,
+        imageUrl: sql<string>`NULL`.as('imageUrl'),
+        publishedAt: boards.createdAt,
+      })
+      .from(boards)
+      .where(eq(boards.status, true))
+      .orderBy(desc(boards.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching boards news:', error);
+    return [];
+  }
+}
+
+// Programs - from programs table
+async function getProgramsNews() {
+  try {
+    const data = await db
+      .select({
+        id: programs.id,
+        title: programs.name,
+        slug: programs.slug,
+        excerpt: programs.overview,
+        imageUrl: sql<string>`NULL`.as('imageUrl'),
+        publishedAt: programs.createdAt,
+      })
+      .from(programs)
+      .where(eq(programs.status, true))
+      .orderBy(desc(programs.createdAt))
+      .limit(5);
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching programs news:', error);
+    return [];
+  }
+}
+
 // ==================== COMPONENTS ====================
 
-// 1. HeroSection – upar breaking news ka banner + chhoti breaking news items neeche (top 1 + 3 items)
-function HeroSection({ breakingNews }: { breakingNews: NewsItem[] }) {
+// 1. HeroSection
+function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; futureNews: NewsItem[] }) {
   const topBreaking = breakingNews[0];
-  const otherBreaking = breakingNews.slice(1, 4);
+  const topFutureNews = futureNews.slice(0, 3);
+  
   if (!topBreaking) return null;
 
   return (
-    <div className="mb-8">
-      <div className="relative bg-gradient-to-r from-red-700 to-red-600 rounded-xl overflow-hidden mb-4 shadow-lg">
-        <div className="absolute inset-0 bg-black/30"></div>
-        <div className="relative p-6 md:p-8">
+    <div className="mb-10">
+      <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
+        {topBreaking.imageUrl && (
+          <img 
+            src={topBreaking.imageUrl} 
+            alt={topBreaking.title}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
           <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-1 bg-white text-red-600 text-xs font-bold rounded-md animate-pulse">
+            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
               BREAKING NEWS
             </span>
             <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
@@ -154,28 +363,28 @@ function HeroSection({ breakingNews }: { breakingNews: NewsItem[] }) {
           <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
             {topBreaking.title}
           </h2>
-          <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base">
+          <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
             {topBreaking.excerpt}
           </p>
           <Link 
             href={`/news/${topBreaking.slug}`}
-            className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-5 py-2 rounded-lg font-medium transition-all"
+            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
           >
             Read Full Story <span className="text-lg">→</span>
           </Link>
         </div>
       </div>
 
-      {otherBreaking.length > 0 && (
+      {topFutureNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {otherBreaking.map((item) => (
+          {topFutureNews.map((item) => (
             <Link
               key={item.id}
               href={`/news/${item.slug}`}
-              className="group block bg-red-50 rounded-lg p-4 border-l-4 border-red-600 hover:shadow-md transition"
+              className="group block bg-white rounded-lg p-4 border border-gray-200 hover:shadow-md transition hover:border-red-200"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-red-600 text-xs font-bold">BREAKING</span>
+                <span className="text-orange-600 text-xs font-bold">FUTURE</span>
                 <span className="text-xs text-gray-500">{formatDate(item.publishedAt)}</span>
               </div>
               <h3 className="font-bold text-gray-900 group-hover:text-red-600 transition line-clamp-2 text-sm">
@@ -189,29 +398,21 @@ function HeroSection({ breakingNews }: { breakingNews: NewsItem[] }) {
   );
 }
 
-// 2 & 3. NewsCard – featured card (with image) and normal card (without image)
-function NewsCard({ item, isFeatured = false }: { item: NewsItem; isFeatured?: boolean }) {
-  const hasImage = !!item.imageUrl;
+// 2. NewsCard
+function NewsCard({ item }: { item: NewsItem }) {
   return (
     <Link 
       href={`/news/${item.slug}`}
-      className={`group block bg-white rounded-xl shadow-sm hover:shadow-lg transition-all overflow-hidden border border-gray-200 ${isFeatured ? '' : 'h-full'}`}
+      className="group block bg-white rounded-xl shadow-sm hover:shadow-lg transition-all overflow-hidden border border-gray-200 h-full"
     >
-      {hasImage && (
-        <div className={`relative ${isFeatured ? 'h-64' : 'h-48'} w-full overflow-hidden`}>
+      {item.imageUrl && (
+        <div className="h-52 w-full overflow-hidden">
           <img
-            src={item.imageUrl!}
+            src={item.imageUrl}
             alt={item.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
-          {item.isBreaking && (
-            <div className="absolute top-4 left-4">
-              <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded">
-                BREAKING
-              </span>
-            </div>
-          )}
         </div>
       )}
       <div className="p-4">
@@ -220,11 +421,15 @@ function NewsCard({ item, isFeatured = false }: { item: NewsItem; isFeatured?: b
           <span>•</span>
           <span>{getReadTime(item.content)}</span>
         </div>
-        <h3 className="font-bold text-gray-900 group-hover:text-red-600 transition line-clamp-2 mb-2">
+        <h3 className="font-bold text-gray-900 group-hover:text-red-600 transition line-clamp-2 mb-2 text-lg">
           {item.title}
         </h3>
-        {item.excerpt && <p className="text-sm text-gray-600 line-clamp-2 mb-3">{item.excerpt}</p>}
-        <div className="flex items-center text-red-600 text-xs font-medium">
+        {item.excerpt && (
+          <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+            {item.excerpt}
+          </p>
+        )}
+        <div className="flex items-center text-red-600 text-sm font-medium">
           Read more <span className="ml-1 group-hover:ml-2 transition-all">→</span>
         </div>
       </div>
@@ -232,131 +437,46 @@ function NewsCard({ item, isFeatured = false }: { item: NewsItem; isFeatured?: b
   );
 }
 
-// 6. TrendingSidebar – sidebar mein trending news with ranking numbers (sticky)
-function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
-  if (!trending.length) return null;
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-      <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
-        <h3 className="font-bold text-white">Trending Now</h3>
-      </div>
-      <div className="p-4 space-y-3">
-        {trending.map((item, idx) => (
-          <Link key={item.id} href={`/news/${item.slug}`} className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group">
-            <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-xs font-bold ${
-              idx===0?'bg-red-100 text-red-700': idx===1?'bg-gray-100 text-gray-700': idx===2?'bg-orange-100 text-orange-700':'bg-blue-50 text-blue-600'}`}>
-              {idx+1}
-            </span>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">{item.title}</h4>
-              <p className="text-xs text-gray-500 mt-1">{formatDate(item.publishedAt)} • {formatViews(item.views || 0)} views</p>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Quick Resources (additional sidebar component)
-function QuickResources() {
-  const resources = [
-    { name: 'Admissions 2026', href: '/admissions' },
-    { name: 'Exam Results 2026', href: '/results' },
-    { name: 'Education Boards', href: '/boards' },
-    { name: 'Universities', href: '/universities' },
-  ];
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-      <h3 className="font-bold text-gray-900 mb-3">Quick Resources</h3>
-      <div className="space-y-2">
-        {resources.map((link, i) => (
-          <Link key={i} href={link.href} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition group">
-            <span className="text-gray-700 group-hover:text-red-600">{link.name}</span>
-            <span className="text-gray-400 group-hover:text-red-600">→</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 4. Pagination
-function Pagination({ currentPage, totalPages, buildUrl }: { currentPage: number; totalPages: number; buildUrl: (key: string, value: string)=>string }) {
-  if (totalPages <= 1) return null;
-  const pages = [];
-  const maxVisible = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxVisible/2));
-  let endPage = Math.min(totalPages, startPage + maxVisible -1);
-  if (endPage-startPage+1<maxVisible) startPage = Math.max(1,endPage-maxVisible+1);
-  for(let i=startPage;i<=endPage;i++) pages.push(i);
-
-  return (
-    <div className="flex justify-center mt-8">
-      <nav className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200">
-        <Link href={currentPage>1?buildUrl('page',(currentPage-1).toString()):'#'} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${currentPage>1?'text-gray-700 hover:bg-gray-100':'text-gray-400 cursor-not-allowed pointer-events-none'}`}>Previous</Link>
-        {startPage>1 && <>
-          <Link href={buildUrl('page','1')} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">1</Link>
-          {startPage>2 && <span className="px-2 text-gray-400">...</span>}
-        </>}
-        {pages.map(page=><Link key={page} href={buildUrl('page',page.toString())} className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition ${page===currentPage?'bg-red-600 text-white':'text-gray-700 hover:bg-gray-100'}`}>{page}</Link>)}
-        {endPage<totalPages && <>
-          {endPage<totalPages-1 && <span className="px-2 text-gray-400">...</span>}
-          <Link href={buildUrl('page',totalPages.toString())} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">{totalPages}</Link>
-        </>}
-        <Link href={currentPage<totalPages?buildUrl('page',(currentPage+1).toString()):'#'} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${currentPage<totalPages?'text-gray-700 hover:bg-gray-100':'text-gray-400 cursor-not-allowed pointer-events-none'}`}>Next</Link>
-      </nav>
-    </div>
-  );
-}
-
-// 5. 3-Column Category Sections – City, Admissions, Results, Universities, Boards, Programs
-function CategorySection({ allNews }: { allNews: NewsItem[] }) {
-  // Helper function to get news by category keywords
-  const getNewsByCategory = (keywords: string[]): NewsItem[] => {
-    return allNews.filter(item => 
-      keywords.some(keyword => 
-        item.title.toLowerCase().includes(keyword.toLowerCase()) ||
-        (item.excerpt && item.excerpt.toLowerCase().includes(keyword.toLowerCase()))
-      )
-    ).slice(0, 5);
-  };
-
-  const categoriesConfig = [
-    { name: 'City', keywords: ['city', 'lahore', 'karachi', 'islamabad', 'rawalpindi', 'urban'] },
-    { name: 'Admissions', keywords: ['admission', 'apply', 'enroll', 'registration', 'open'] },
-    { name: 'Results', keywords: ['result', 'announced', 'gazette', 'position', 'marks'] },
-    { name: 'Universities', keywords: ['university', 'college', 'campus', 'faculty', 'department', 'hec'] },
-    { name: 'Boards', keywords: ['board', 'bise', 'fbise', 'examination', 'matric', 'inter'] },
-    { name: 'Programs', keywords: ['program', 'course', 'degree', 'diploma', 'certificate', 'bs', 'ms', 'phd'] },
-  ];
-
-  const firstRow = categoriesConfig.slice(0, 3);
-  const secondRow = categoriesConfig.slice(3, 6);
-
-  const renderCategoryColumn = (cat: { name: string; keywords: string[] }) => {
-    const items = getNewsByCategory(cat.keywords);
+// 3. CategorySection
+function CategorySection({ 
+  cityNews, 
+  admissionsNews, 
+  resultsNews, 
+  universitiesNews, 
+  boardsNews, 
+  programsNews 
+}: { 
+  cityNews: any[];
+  admissionsNews: any[];
+  resultsNews: any[];
+  universitiesNews: any[];
+  boardsNews: any[];
+  programsNews: any[];
+}) {
+  
+  const renderCategoryColumn = (catName: string, items: any[], basePath: string, hasImage: boolean = true) => {
     if (items.length === 0) return null;
 
     const topItem = items[0];
     const restItems = items.slice(1);
 
     return (
-      <div key={cat.name} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition">
-        <div className="bg-gradient-to-r from-red-600 to-red-500 px-4 py-2">
-          <h3 className="font-bold text-white text-lg">{cat.name}</h3>
+      <div key={catName} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition">
+        <div className="border-b border-gray-200 px-4 py-3 bg-gray-50">
+          <h3 className="font-bold text-gray-800 text-xl">{catName}</h3>
+          <div className="w-12 h-0.5 bg-red-500 mt-1"></div>
         </div>
         <div className="p-4">
           {topItem && (
-            <Link href={`/news/${topItem.slug}`} className="block mb-3 group">
-              {topItem.imageUrl && (
+            <Link href={`/${basePath}/${topItem.slug}`} className="block mb-4 group">
+              {hasImage && topItem.imageUrl && (
                 <img 
                   src={topItem.imageUrl} 
                   alt={topItem.title} 
-                  className="w-full h-36 object-cover rounded-lg mb-2 group-hover:opacity-90 transition"
+                  className="w-full h-40 object-cover rounded-lg mb-2 group-hover:opacity-90 transition"
                 />
               )}
-              <h4 className="font-semibold text-gray-900 group-hover:text-red-600 transition line-clamp-2 text-sm">
+              <h4 className="font-semibold text-gray-900 group-hover:text-red-600 transition line-clamp-2">
                 {topItem.title}
               </h4>
             </Link>
@@ -365,8 +485,8 @@ function CategorySection({ allNews }: { allNews: NewsItem[] }) {
             {restItems.map((item) => (
               <Link 
                 key={item.id} 
-                href={`/news/${item.slug}`} 
-                className="block text-gray-700 hover:text-red-600 text-sm line-clamp-1 transition"
+                href={`/${basePath}/${item.slug}`} 
+                className="block text-gray-600 hover:text-red-600 text-sm line-clamp-1 transition py-1 border-b border-gray-100 last:border-0"
               >
                 • {item.title}
               </Link>
@@ -378,12 +498,156 @@ function CategorySection({ allNews }: { allNews: NewsItem[] }) {
   };
 
   return (
-    <div className="space-y-6 mt-10">
+    <div className="space-y-8 mt-10">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {firstRow.map(renderCategoryColumn)}
+        {renderCategoryColumn('City', cityNews, 'cities', true)}
+        {renderCategoryColumn('Admissions', admissionsNews, 'admissions', true)}
+        {renderCategoryColumn('Results', resultsNews, 'results', false)}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {secondRow.map(renderCategoryColumn)}
+        {renderCategoryColumn('Universities', universitiesNews, 'universities', true)}
+        {renderCategoryColumn('Boards', boardsNews, 'boards', false)}
+        {renderCategoryColumn('Programs', programsNews, 'programs', false)}
+      </div>
+    </div>
+  );
+}
+
+// 4. Pagination
+function Pagination({ currentPage, totalPages, buildUrl }: { currentPage: number; totalPages: number; buildUrl: (page: number) => string }) {
+  if (totalPages <= 1) return null;
+  
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  
+  if (endPage - startPage + 1 < maxVisible) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) pages.push(i);
+
+  return (
+    <div className="flex justify-center mt-10">
+      <nav className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200">
+        <Link
+          href={currentPage > 1 ? buildUrl(currentPage - 1) : '#'}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            currentPage > 1 ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed pointer-events-none'
+          }`}
+        >
+          Previous
+        </Link>
+        
+        {startPage > 1 && (
+          <>
+            <Link href={buildUrl(1)} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">
+              1
+            </Link>
+            {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+          </>
+        )}
+        
+        {pages.map(page => (
+          <Link
+            key={page}
+            href={buildUrl(page)}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition ${
+              page === currentPage ? 'bg-red-600 text-white' : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {page}
+          </Link>
+        ))}
+        
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+            <Link href={buildUrl(totalPages)} className="w-10 h-10 flex items-center justify-center rounded-lg text-sm hover:bg-gray-100">
+              {totalPages}
+            </Link>
+          </>
+        )}
+        
+        <Link
+          href={currentPage < totalPages ? buildUrl(currentPage + 1) : '#'}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            currentPage < totalPages ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed pointer-events-none'
+          }`}
+        >
+          Next
+        </Link>
+      </nav>
+    </div>
+  );
+}
+
+// 5. TrendingSidebar
+function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
+  if (!trending.length) return null;
+  
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+      <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
+        <h3 className="font-bold text-white text-lg">Trending Now</h3>
+      </div>
+      <div className="p-4 space-y-3">
+        {trending.map((item, idx) => (
+          <Link 
+            key={item.id} 
+            href={`/news/${item.slug}`} 
+            className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group"
+          >
+            <span className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold ${
+              idx === 0 ? 'bg-red-100 text-red-700' : 
+              idx === 1 ? 'bg-gray-100 text-gray-700' : 
+              idx === 2 ? 'bg-orange-100 text-orange-700' : 
+              'bg-blue-50 text-blue-600'
+            }`}>
+              {idx + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
+                {item.title}
+              </h4>
+              <p className="text-xs text-gray-500 mt-1">
+                {formatDate(item.publishedAt)} • {formatViews(item.views || 0)} views
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 6. CategorySidebar - DYNAMIC (only shows categories that have news)
+function CategorySidebar({ categories, activeCategory }: { categories: any[]; activeCategory: string }) {
+  if (!categories.length) return null;
+  
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+      <div className="bg-gradient-to-r from-gray-800 to-gray-700 px-5 py-3">
+        <h3 className="font-bold text-white text-lg">News Categories</h3>
+      </div>
+      <div className="p-4 space-y-1">
+        {categories.map((cat) => (
+          <Link
+            key={cat.slug}
+            href={`/news${cat.slug !== 'all' ? `?category=${cat.slug}` : ''}`}
+            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
+              activeCategory === cat.slug 
+                ? 'bg-red-50 text-red-600 font-medium' 
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <span>{cat.name}</span>
+            <span className={`${activeCategory === cat.slug ? 'text-red-500' : 'text-gray-400'} text-xs font-medium`}>
+              {cat.count}
+            </span>
+          </Link>
+        ))}
       </div>
     </div>
   );
@@ -393,60 +657,68 @@ function CategorySection({ allNews }: { allNews: NewsItem[] }) {
 export default async function NewsPage({ searchParams }: { searchParams?: { [key: string]: string } }) {
   const page = Number(searchParams?.page) || 1;
   const category = searchParams?.category || 'all';
-  const q = searchParams?.q || '';
 
-  const [{ news: allNews, total, pages }, trending] = await Promise.all([
-    getNews({ page, category, q }),
+  // Fetch all data in parallel
+  const [
+    { news: allNews, total, pages },
+    trending,
+    dynamicCategories,
+    cityNews,
+    admissionsNews,
+    resultsNews,
+    universitiesNews,
+    boardsNews,
+    programsNews
+  ] = await Promise.all([
+    getNews({ page, category }),
     getTrending(),
+    getDynamicCategories(),
+    getCityNews(),
+    getAdmissionsNews(),
+    getResultsNews(),
+    getUniversitiesNews(),
+    getBoardsNews(),
+    getProgramsNews(),
   ]);
 
-  const breakingNews = allNews.filter(n=>n.isBreaking);
-  // Featured card is the first news item (with image)
-  const featuredNews = allNews[0] ? [allNews[0]] : [];
-  // Rest of the news for normal cards
-  const restNews = allNews.slice(1);
+  const breakingNews = allNews.filter(n => n.isBreaking);
+  const futureNews = allNews.filter(n => !n.isBreaking);
+  const normalNews = allNews.slice(0, 6);
 
-  const buildUrl = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParams as any);
-    params.set(key,value);
+  const buildUrl = (pageNum: number) => {
+    const params = new URLSearchParams();
+    params.set('page', pageNum.toString());
+    if (category !== 'all') params.set('category', category);
     return `/news?${params.toString()}`;
   };
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* 1. Hero Section - Breaking News Banner + 3 small items */}
-      <HeroSection breakingNews={breakingNews} />
+      <HeroSection breakingNews={breakingNews} futureNews={futureNews} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* 2. Featured News Card (with image, large) */}
-          {featuredNews.map(item => (
-            <NewsCard key={item.id} item={item} isFeatured />
-          ))}
-
-          {/* 3. Normal News Cards Grid (without image) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {restNews.map(item => (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {normalNews.map((item) => (
               <NewsCard key={item.id} item={item} />
             ))}
           </div>
 
-          {/* 5. 3-Column Category Sections - City, Admissions, Results, Universities, Boards, Programs */}
-          <CategorySection allNews={allNews} />
-
-          {/* 4. Pagination */}
           <Pagination currentPage={page} totalPages={pages} buildUrl={buildUrl} />
+
+          <CategorySection 
+            cityNews={cityNews}
+            admissionsNews={admissionsNews}
+            resultsNews={resultsNews}
+            universitiesNews={universitiesNews}
+            boardsNews={boardsNews}
+            programsNews={programsNews}
+          />
         </div>
 
-        {/* Sidebar - Sticky */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-24 space-y-6">
-            {/* 6. Trending Sidebar with ranking numbers */}
-            <TrendingSidebar trending={trending} />
-            {/* Quick Resources */}
-            <QuickResources />
-          </div>
+        <div className="lg:col-span-1 space-y-6">
+          <TrendingSidebar trending={trending} />
+          <CategorySidebar categories={dynamicCategories} activeCategory={category} />
         </div>
       </div>
     </div>
