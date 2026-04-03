@@ -1,11 +1,9 @@
-// app/(public)/results/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { results, programs, institutes, cities, boards } from '@/app/lib/schema';
 import { eq, and, ne, desc } from 'drizzle-orm';
-import ResultClient from './ResultClient';
 
 // ==================== TYPES ====================
 interface ProgramType {
@@ -68,7 +66,7 @@ interface ResultType {
   board: BoardType | null;
 }
 
-// ==================== HELPER FUNCTIONS (Server Side Only) ====================
+// ==================== HELPER FUNCTIONS ====================
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -86,19 +84,9 @@ function formatShortDate(date: Date | null): string {
   });
 }
 
-function getDaysRemaining(date: Date | null): number | null {
-  if (!date) return null;
-  const today = new Date();
-  const target = new Date(date);
-  const diffTime = target.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
-
 // ==================== GET RESULT BY SLUG ====================
 async function getResultBySlug(slug: string): Promise<ResultType | null> {
   try {
-    
     const [result] = await db
       .select({
         id: results.id,
@@ -120,9 +108,7 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
       .where(eq(results.slug, slug))
       .limit(1);
 
-    if (!result) {
-      return null;
-    }
+    if (!result) return null;
 
     // Get program details
     let program: ProgramType | null = null;
@@ -220,7 +206,7 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
 
     return { ...result, program, institute, board };
   } catch (error) {
-    console.error('❌ Error fetching result:', error);
+    console.error('Error fetching result:', error);
     return null;
   }
 }
@@ -269,63 +255,14 @@ async function getRelatedResults(result: ResultType) {
   }
 }
 
-// ==================== GET RESULTS IN SAME CITY ====================
-async function getCityResults(result: ResultType) {
-  try {
-    const cityId = result.institute?.city?.id || result.board?.city?.id;
-    if (!cityId) return [];
-    
-    const cityResultsList = await db
-      .select({
-        id: results.id,
-        slug: results.slug,
-        title: results.title,
-        year: results.year,
-        resultDate: results.resultDate,
-        instituteName: institutes.name,
-        boardName: boards.name,
-      })
-      .from(results)
-      .leftJoin(institutes, eq(results.instituteId, institutes.id))
-      .leftJoin(boards, eq(results.boardId, boards.id))
-      .where(
-        and(
-          eq(results.status, true),
-          ne(results.slug, result.slug || '')
-        )
-      )
-      .orderBy(desc(results.resultDate))
-      .limit(5);
-    
-    return cityResultsList;
-  } catch (error) {
-    console.error('Error fetching city results:', error);
-    return [];
-  }
-}
-
-// ==================== STATUS BADGE ====================
-function getStatusBadge(status: boolean | null) {
-  if (status === true) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
-  if (status === false) return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '⏳ Result Pending', icon: '⏳' };
-  return { bg: 'bg-gray-100', text: 'text-gray-700', label: '❓ Unknown', icon: '❓' };
-}
-
 // ==================== SEO FUNCTIONS ====================
 function generateMetaTitle(result: ResultType): string {
   const programName = result.program?.name || 'Exam';
   const institutionName = result.institute?.name || result.board?.name || 'Board';
   const year = result.year || '2026';
   
-  let title = `${programName} Result ${year} - ${institutionName}`;
-  
-  if (title.length <= 55) {
-    title = `${title} | NextID.pk`;
-  }
-  
-  if (title.length > 60) {
-    title = title.substring(0, 57) + '...';
-  }
+  let title = `${programName} Result ${year} - ${institutionName} | NextID.pk`;
+  if (title.length > 60) title = title.substring(0, 57) + '...';
   return title;
 }
 
@@ -337,50 +274,11 @@ function generateMetaDescription(result: ResultType): string {
   const resultDate = result.resultDate ? formatShortDate(result.resultDate) : 'TBA';
   const status = result.status ? 'published' : 'pending';
   
-  let description = `Check ${programName} result ${year} for ${institutionName} in ${cityName}. `;
-  description += `Result date: ${resultDate}. Status: ${status}. `;
+  let description = `Check ${programName} result ${year} for ${institutionName} in ${cityName}. Result date: ${resultDate}. Status: ${status}. `;
+  description += `Download marksheet, check passing percentage at NextID.pk.`;
   
-  if (result.officialLink) {
-    description += `View official result online. `;
-  }
-  
-  description += `Download marksheet, check passing percentage, and more details at NextID.pk.`;
-  
-  if (description.length > 160) {
-    description = description.substring(0, 157) + '...';
-  }
+  if (description.length > 160) description = description.substring(0, 157) + '...';
   return description;
-}
-
-function generateMetaKeywords(result: ResultType): string {
-  const programName = result.program?.name || '';
-  const institutionName = result.institute?.name || result.board?.name || '';
-  const cityName = result.institute?.city?.name || result.board?.city?.name || '';
-  const provinceName = result.institute?.city?.province || result.board?.city?.province || '';
-  const year = result.year || '2026';
-  
-  const keywords = [
-    programName,
-    institutionName,
-    cityName,
-    provinceName,
-    'result',
-    `result ${year}`,
-    `${programName} result`,
-    `${institutionName} result`,
-    `${cityName} result`,
-    'exam result',
-    'board result',
-    'university result',
-    'Pakistan',
-    'marksheet',
-    'download result',
-    'online result',
-    'passing percentage',
-    'merit list',
-  ].filter(Boolean).join(', ');
-  
-  return keywords;
 }
 
 // ==================== METADATA ====================
@@ -389,120 +287,264 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const result = await getResultBySlug(slug);
 
   if (!result) {
-    return {
-      title: 'Result Not Found | NextID.pk',
-      description: 'The requested result could not be found. Browse other results.',
-      robots: { index: false },
-    };
+    return { title: 'Result Not Found', robots: { index: false } };
   }
 
-  const canonicalUrl = `https://www.nextid.pk/results/${result.slug}`;
-  const title = generateMetaTitle(result);
-  const description = generateMetaDescription(result);
-  const keywords = generateMetaKeywords(result);
-  const institutionName = result.institute?.name || result.board?.name || 'Institution';
-  const cityName = result.institute?.city?.name || result.board?.city?.name || 'Pakistan';
-  const imageUrl = '/images/results-og.jpg';
-
   return {
-    title,
-    description,
-    keywords,
-    alternates: {
-      canonical: canonicalUrl,
-    },
+    title: generateMetaTitle(result),
+    description: generateMetaDescription(result),
+    alternates: { canonical: `https://www.nextid.pk/results/${result.slug}` },
     openGraph: {
-      title,
-      description,
-      url: canonicalUrl,
+      title: generateMetaTitle(result),
+      description: generateMetaDescription(result),
       type: 'article',
-      publishedTime: result.createdAt?.toISOString(),
-      modifiedTime: result.updatedAt?.toISOString(),
-      authors: ['NextID.pk'],
-      tags: [
-        result.program?.name || 'Exam',
-        institutionName,
-        cityName,
-        `Year ${result.year}`,
-        'Result',
-      ].filter(Boolean) as string[],
-      images: [{ url: imageUrl, width: 1200, height: 630, alt: title }],
-      siteName: 'NextID.pk',
+      images: ['/images/results-og.jpg'],
     },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: [imageUrl],
-    },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        'max-image-preview': 'large',
-        'max-snippet': 160,
-      },
-    },
-    authors: [{ name: 'NextID.pk', url: 'https://www.nextid.pk' }],
-    publisher: 'NextID.pk',
-    category: 'Education',
   };
 }
 
-// ==================== MAIN PAGE (Server Component) ====================
+// ==================== STATUS BADGE ====================
+function getStatusBadge(status: boolean | null) {
+  if (status === true) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
+  if (status === false) return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
+  return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Unknown', icon: '❓' };
+}
+
+// ==================== MAIN PAGE (Server Component - NO CLIENT) ====================
 export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  
   const result = await getResultBySlug(slug);
   
-  if (!result) {
-    notFound();
-  }
+  if (!result) notFound();
 
   const relatedResults = await getRelatedResults(result);
-  const cityResults = await getCityResults(result);
   const statusBadge = getStatusBadge(result.status);
-  const daysRemaining = getDaysRemaining(result.resultDate);
 
-  // Determine institution with proper null handling
+  // Determine institution info
   const institutionName = result.institute?.name || result.board?.name || '';
   const institutionSlug = result.institute?.slug || result.board?.slug || '';
   const institutionType = result.institute ? 'universities' : 'boards';
   const cityName = result.institute?.city?.name || result.board?.city?.name || '';
-  const provinceName = result.institute?.city?.province || result.board?.city?.province || '';
-  
-  // Get official website
   const officialWebsite = result.institute?.website || result.board?.website || '';
 
-  // Prepare data for client component - NO FUNCTIONS!
-  const serializedResult = {
-    ...result,
-    resultDate: result.resultDate?.toISOString() || null,
-    createdAt: result.createdAt?.toISOString() || null,
-    updatedAt: result.updatedAt?.toISOString() || null,
-    officialLink: result.officialLink || null,
-  };
+  return (
+    <main className="min-h-screen bg-gray-50">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-green-700 to-emerald-800 text-white">
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-4xl">
+            {/* Breadcrumbs */}
+            <div className="text-sm text-green-200 mb-4">
+              <Link href="/" className="hover:text-white">Home</Link>
+              {' / '}
+              <Link href="/results" className="hover:text-white">Results</Link>
+              {' / '}
+              <span className="text-white">{result.title || result.program?.name || 'Result'}</span>
+            </div>
+            
+            {/* Status Badge */}
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
+              <span>{statusBadge.icon}</span>
+              <span>{statusBadge.label}</span>
+              {result.isPopular && (
+                <span className="ml-2 px-2 py-0.5 bg-yellow-500 text-white rounded-full text-xs">Popular</span>
+              )}
+            </div>
+            
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              {result.title || `${result.program?.name || 'Exam'} Result ${result.year || '2026'}`}
+            </h1>
+            
+            <div className="flex flex-wrap gap-4 text-green-200">
+              {institutionName && (
+                <div className="flex items-center gap-1">
+                  <span>🏛️</span>
+                  <Link href={`/${institutionType}/${institutionSlug}`} className="hover:text-white">
+                    {institutionName}
+                  </Link>
+                </div>
+              )}
+              {cityName && (
+                <div className="flex items-center gap-1">
+                  <span>📍</span>
+                  <span>{cityName}</span>
+                </div>
+              )}
+              {result.year && (
+                <div className="flex items-center gap-1">
+                  <span>📅</span>
+                  <span>Year: {result.year}</span>
+                </div>
+              )}
+              {result.resultDate && (
+                <div className="flex items-center gap-1">
+                  <span>⏰</span>
+                  <span>Announced: {formatDate(result.resultDate)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
-  const resultData = {
-    result: serializedResult,
-    relatedResults: relatedResults || [],
-    cityResults: cityResults || [],
-    statusBadge,
-    daysRemaining,
-    institutionName,
-    institutionSlug,
-    institutionType,
-    cityName,
-    provinceName,
-    officialWebsite,
-    // ✅ Pass formatted strings instead of functions
-    formattedResultDate: formatDate(result.resultDate),
-    formattedShortResultDate: formatShortDate(result.resultDate),
-    formattedCreatedAt: formatDate(result.createdAt),
-    formattedUpdatedAt: formatDate(result.updatedAt || result.createdAt),
-  };
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Result Card */}
+            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Result Information</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Program</p>
+                  <p className="font-semibold text-gray-900">{result.program?.name || '—'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Institution</p>
+                  <p className="font-semibold text-gray-900">{institutionName || '—'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Result Year</p>
+                  <p className="font-semibold text-gray-900">{result.year || '—'}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Announcement Date</p>
+                  <p className="font-semibold text-gray-900">{formatDate(result.resultDate) || 'TBA'}</p>
+                </div>
+              </div>
 
-  return <ResultClient data={resultData} />;
+              {/* Official Links */}
+              {(result.officialLink || officialWebsite) && (
+                <div className="border-t border-gray-200 pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">Official Resources</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {result.officialLink && (
+                      <a 
+                        href={result.officialLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                      >
+                        <span>📄</span> Check Result Online
+                      </a>
+                    )}
+                    {officialWebsite && (
+                      <a 
+                        href={officialWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+                      >
+                        <span>🌐</span> Official Website
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Program Details */}
+            {result.program && (result.program.overview || result.program.eligibility || result.program.duration) && (
+              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Program Details</h2>
+                {result.program.overview && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-800">Overview</h3>
+                    <p className="text-gray-600">{result.program.overview}</p>
+                  </div>
+                )}
+                {result.program.eligibility && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-800">Eligibility</h3>
+                    <p className="text-gray-600">{result.program.eligibility}</p>
+                  </div>
+                )}
+                {result.program.duration && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-800">Duration</h3>
+                    <p className="text-gray-600">{result.program.duration}</p>
+                  </div>
+                )}
+                {result.program.careerScope && (
+                  <div>
+                    <h3 className="font-semibold text-gray-800">Career Scope</h3>
+                    <p className="text-gray-600">{result.program.careerScope}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <aside className="lg:w-80">
+            {/* How to Check Result */}
+            <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <span>📝</span> How to Check Result?
+              </h3>
+              <ol className="space-y-3 text-sm text-gray-600">
+                <li className="flex gap-2">
+                  <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                  <span>Click the "Check Result Online" button above</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                  <span>Enter your Roll Number</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                  <span>Select your exam type (Annual/Supplementary)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                  <span>Click "Submit" to view your result</span>
+                </li>
+              </ol>
+            </div>
+
+            {/* Related Results */}
+            {relatedResults.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
+                <h3 className="font-bold text-gray-900 mb-3">Related Results</h3>
+                <div className="space-y-3">
+                  {relatedResults.map((rel) => (
+                    <Link key={rel.id} href={`/results/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-green-50 transition">
+                      <p className="font-medium text-gray-800 text-sm">{rel.title || rel.instituteName || rel.boardName}</p>
+                      <p className="text-xs text-gray-500">{rel.year}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+
+      {/* Schema Markup */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "EducationEvent",
+            "name": result.title || `${result.program?.name} Result ${result.year}`,
+            "description": generateMetaDescription(result),
+            "startDate": result.resultDate?.toISOString(),
+            "location": {
+              "@type": "Place",
+              "name": institutionName,
+              "address": { "@type": "PostalAddress", "addressLocality": cityName, "addressCountry": "PK" }
+            },
+            "organizer": {
+              "@type": "Organization",
+              "name": institutionName,
+              "url": officialWebsite
+            }
+          })
+        }}
+      />
+    </main>
+  );
 }

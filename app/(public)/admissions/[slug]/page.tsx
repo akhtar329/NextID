@@ -1,11 +1,9 @@
-// app/(public)/admissions/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { admissions, admissionPrograms, programs, institutes, cities, degrees, seoMetadata } from '@/app/lib/schema';
 import { eq, and, ne, desc } from 'drizzle-orm';
-import AdmissionClient from './AdmissionClient';
 
 // ==================== TYPES ====================
 interface ProgramWithDetails {
@@ -39,16 +37,6 @@ interface InstituteType {
   logo?: string | null;
 }
 
-interface SeoDataType {
-  metaTitle: string | null;
-  metaDescription: string | null;
-  canonicalUrl: string | null;
-  robots: string | null;
-  ogTitle: string | null;
-  ogDescription: string | null;
-  ogImage: string | null;
-}
-
 interface AdmissionWithPrograms {
   id: number;
   name: string;
@@ -68,7 +56,6 @@ interface AdmissionWithPrograms {
   updatedAt: Date | null;
   featuredImage?: string | null;
   galleryImages?: string | null;
-  seo?: SeoDataType | null;
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -125,35 +112,11 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       .where(eq(admissions.slug, slug))
       .limit(1);
     
-    if (admissionResult.length === 0) {
-      return null;
-    }
+    if (admissionResult.length === 0) return null;
     
     const admission = admissionResult[0];
     
-    // Fetch SEO metadata
-    const seoResult = await db
-      .select()
-      .from(seoMetadata)
-      .where(
-        and(
-          eq(seoMetadata.entityType, 'admission'),
-          eq(seoMetadata.entityId, admission.id)
-        )
-      )
-      .limit(1);
-    
-    const seo = seoResult[0] ? {
-      metaTitle: seoResult[0].metaTitle,
-      metaDescription: seoResult[0].metaDescription,
-      canonicalUrl: seoResult[0].canonicalUrl,
-      robots: seoResult[0].robots,
-      ogTitle: seoResult[0].ogTitle,
-      ogDescription: seoResult[0].ogDescription,
-      ogImage: seoResult[0].ogImage,
-    } : null;
-    
-    // Get institute details with logo
+    // Get institute details
     let institute: InstituteType | null = null;
     if (admission.instituteId) {
       const instituteResult = await db
@@ -185,7 +148,6 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
             .from(cities)
             .where(eq(cities.id, instituteResult[0].cityId))
             .limit(1);
-          
           city = cityResult[0] || null;
         }
 
@@ -203,7 +165,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       }
     }
 
-    // Get ALL programs for this admission
+    // Get programs
     const programList = await db
       .select({
         id: programs.id,
@@ -220,7 +182,6 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
       .where(eq(admissionPrograms.admissionId, admission.id));
 
-    // Get degree names for programs
     const programsWithDegrees: ProgramWithDetails[] = await Promise.all(
       programList.map(async (p) => {
         let degreeName: string | null = null;
@@ -232,7 +193,6 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
             .limit(1);
           degreeName = degreeResult[0]?.name || null;
         }
-        
         return {
           id: p.id,
           name: p.name,
@@ -253,11 +213,10 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       institute,
       programs: programsWithDegrees,
       programCount: programsWithDegrees.length,
-      seo,
     };
 
   } catch (error) {
-    console.error('❌ Error fetching admission:', error);
+    console.error('Error fetching admission:', error);
     return null;
   }
 }
@@ -266,8 +225,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
 async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
   try {
     if (!admission.institute?.id) return [];
-    
-    const related = await db
+    return await db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -280,53 +238,10 @@ async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
       })
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(
-        and(
-          eq(admissions.instituteId, admission.institute.id),
-          ne(admissions.slug, admission.slug)
-        )
-      )
+      .where(and(eq(admissions.instituteId, admission.institute.id), ne(admissions.slug, admission.slug)))
       .orderBy(desc(admissions.createdAt))
       .limit(5);
-    
-    return related;
   } catch (error) {
-    console.error('Error fetching related admissions:', error);
-    return [];
-  }
-}
-
-// ==================== GET ADMISSIONS IN SAME CITY ====================
-async function getCityAdmissions(admission: AdmissionWithPrograms) {
-  try {
-    if (!admission.institute?.city?.id) return [];
-    
-    const cityAdmissions = await db
-      .select({
-        id: admissions.id,
-        name: admissions.name,
-        slug: admissions.slug,
-        year: admissions.year,
-        session: admissions.session,
-        status: admissions.status,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-      })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(
-        and(
-          eq(institutes.cityId, admission.institute.city.id),
-          ne(admissions.slug, admission.slug),
-          eq(admissions.status, 'Open')
-        )
-      )
-      .orderBy(desc(admissions.createdAt))
-      .limit(5);
-    
-    return cityAdmissions;
-  } catch (error) {
-    console.error('Error fetching city admissions:', error);
     return [];
   }
 }
@@ -338,12 +253,7 @@ function getStatusBadge(status: string) {
     'Closed': { bg: 'bg-red-100', text: 'text-red-700', label: 'Applications Closed', icon: '🔴' },
     'Expected': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Opening Soon', icon: '🟡' },
   };
-  return badges[status as keyof typeof badges] || { 
-    bg: 'bg-gray-100', 
-    text: 'text-gray-700', 
-    label: status,
-    icon: '📌'
-  };
+  return badges[status as keyof typeof badges] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status, icon: '📌' };
 }
 
 // ==================== METADATA ====================
@@ -352,174 +262,208 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const admission = await getAdmissionBySlug(slug);
   
   if (!admission) {
-    return {
-      title: 'Admission Not Found | NextID.pk',
-      description: 'The requested admission information could not be found.',
-      robots: { index: false },
-    };
+    return { title: 'Admission Not Found', robots: { index: false } };
   }
 
-  const canonicalUrl = admission.seo?.canonicalUrl || `https://www.nextid.pk/admissions/${admission.slug}`;
-  const metaTitle = admission.seo?.metaTitle || generateFallbackTitle(admission);
-  const metaDescription = admission.seo?.metaDescription || generateFallbackDescription(admission);
-  const ogImage = admission.seo?.ogImage || admission.featuredImage || '/images/og-admissions.jpg';
-  const ogTitle = admission.seo?.ogTitle || metaTitle;
-  const ogDescription = admission.seo?.ogDescription || metaDescription;
-  const robots = admission.seo?.robots || 'index, follow';
-
-  return {
-    title: metaTitle,
-    description: metaDescription,
-    alternates: {
-      canonical: canonicalUrl,
-    },
-    robots: {
-      index: robots.includes('index'),
-      follow: robots.includes('follow'),
-    },
-    openGraph: {
-      title: ogTitle,
-      description: ogDescription,
-      url: canonicalUrl,
-      type: 'article',
-      publishedTime: admission.createdAt?.toISOString(),
-      modifiedTime: admission.updatedAt?.toISOString(),
-      siteName: 'NextID.pk',
-      locale: 'en_PK',
-      images: [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: `${admission.institute?.name} Admissions ${admission.year}`,
-        }
-      ],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: ogTitle,
-      description: ogDescription,
-      images: [ogImage],
-    },
-  };
-}
-
-// Fallback title generator (if no SEO data)
-function generateFallbackTitle(admission: AdmissionWithPrograms): string {
   const instituteName = admission.institute?.name || 'University';
   const year = admission.year || '2026';
-  const status = admission.status?.toLowerCase() || 'open';
   
-  if (status === 'open') {
-    return `Admissions Open ${year} at ${instituteName} | NextID.pk`;
-  } else if (status === 'expected') {
-    return `Admissions Expected ${year} at ${instituteName} | NextID.pk`;
-  }
-  return `Admissions ${year} at ${instituteName} | NextID.pk`;
+  return {
+    title: `${admission.name || `${instituteName} Admissions ${year}`} | NextID.pk`,
+    description: `${instituteName} admissions ${year}. ${admission.programs.length} programs offered. Last date: ${formatDate(admission.expectedCloseDate) || 'TBA'}. Apply online at NextID.pk`,
+    alternates: { canonical: `https://www.nextid.pk/admissions/${admission.slug}` },
+    openGraph: {
+      title: `${instituteName} Admissions ${year}`,
+      description: `Apply for ${admission.programs.slice(0, 3).map(p => p.name).join(', ')} at ${instituteName}`,
+      url: `https://www.nextid.pk/admissions/${admission.slug}`,
+      type: 'article',
+    },
+  };
 }
 
-// Fallback description generator (if no SEO data)
-function generateFallbackDescription(admission: AdmissionWithPrograms): string {
-  const instituteName = admission.institute?.name || 'university';
-  const year = admission.year || '2026';
-  const status = admission.status?.toLowerCase() || 'open';
-  const programCount = admission.programs.length;
-  
-  let description = `${instituteName} has announced admissions for ${year}. `;
-  
-  if (programCount > 0) {
-    const programNames = admission.programs.slice(0, 3).map(p => p.name).join(', ');
-    description += `Offering ${programCount} programs including ${programNames}. `;
-  }
-  
-  if (status === 'open') {
-    const deadline = admission.expectedCloseDate ? formatDate(admission.expectedCloseDate) : 'TBA';
-    description += `Last date to apply: ${deadline}. `;
-  }
-  
-  description += `Check eligibility criteria and apply online at NextID.pk.`;
-  
-  if (description.length > 160) {
-    description = description.substring(0, 157) + '...';
-  }
-  return description;
-}
-
-// ==================== MAIN PAGE (Server Component) ====================
+// ==================== MAIN PAGE (Server Component - NO CLIENT COMPONENT) ====================
 export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  
   const admission = await getAdmissionBySlug(slug);
   
-  if (!admission) {
-    notFound();
-  }
+  if (!admission) notFound();
 
   const relatedAdmissions = await getRelatedAdmissions(admission);
-  const cityAdmissions = await getCityAdmissions(admission);
   const statusBadge = getStatusBadge(admission.status);
   const daysRemaining = getDaysRemaining(admission.expectedCloseDate);
-  
-  // Group programs by degree level
-  const undergradPrograms = admission.programs.filter(p => 
-    p.degreeName?.toLowerCase().includes('bachelor') || 
-    p.degreeName?.toLowerCase().includes('bs') ||
-    p.degreeName?.toLowerCase().includes('bsc') ||
-    p.degreeName?.toLowerCase().includes('bba') ||
-    p.degreeName?.toLowerCase().includes('ba')
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-4xl">
+            {/* Breadcrumbs */}
+            <div className="text-sm text-blue-200 mb-4">
+              <Link href="/" className="hover:text-white">Home</Link>
+              {' / '}
+              <Link href="/admissions" className="hover:text-white">Admissions</Link>
+              {' / '}
+              <span className="text-white">{admission.institute?.name}</span>
+            </div>
+            
+            {/* Status Badge */}
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
+              <span>{statusBadge.icon}</span>
+              <span>{statusBadge.label}</span>
+              {daysRemaining && (
+                <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">
+                  {daysRemaining} days left
+                </span>
+              )}
+            </div>
+            
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              {admission.name || `${admission.institute?.name} Admissions ${admission.year}`}
+            </h1>
+            
+            <div className="flex flex-wrap gap-4 text-blue-200">
+              {admission.institute?.city && (
+                <div className="flex items-center gap-1">
+                  <span>📍</span>
+                  <Link href={`/cities/${admission.institute.city.slug}`} className="hover:text-white">
+                    {admission.institute.city.name}
+                  </Link>
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <span>📅</span>
+                <span>Session: {admission.session || `Fall ${admission.year}`}</span>
+              </div>
+              {admission.expectedCloseDate && (
+                <div className="flex items-center gap-1">
+                  <span>⏰</span>
+                  <span>Last Date: {formatDate(admission.expectedCloseDate)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Institute Info Card */}
+            {admission.institute && (
+              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+                <div className="flex items-start gap-4">
+                  {admission.institute.logo && (
+                    <img src={admission.institute.logo} alt={admission.institute.name} className="w-16 h-16 object-contain" />
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">{admission.institute.name}</h2>
+                    <p className="text-gray-600">{admission.institute.description}</p>
+                    {admission.institute.website && (
+                      <a href={admission.institute.website} target="_blank" rel="noopener noreferrer" 
+                         className="inline-block mt-3 text-blue-600 hover:underline">
+                        Visit Official Website →
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Programs Section */}
+            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Available Programs</h2>
+              <div className="space-y-4">
+                {admission.programs.map((program) => (
+                  <div key={program.id} className="border-b border-gray-100 pb-4 last:border-0">
+                    <Link href={`/programs/${program.slug}`}>
+                      <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
+                        {program.name}
+                      </h3>
+                    </Link>
+                    {program.degreeName && (
+                      <p className="text-sm text-gray-500 mt-1">Degree: {program.degreeName}</p>
+                    )}
+                    {program.duration && (
+                      <p className="text-sm text-gray-600 mt-1">Duration: {program.duration}</p>
+                    )}
+                    {program.eligibility && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm font-medium text-gray-700">Eligibility:</p>
+                        <p className="text-sm text-gray-600">{program.eligibility}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Important Information */}
+            {(admission.meritInfo || admission.note || admission.officialLink) && (
+              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Important Information</h2>
+                {admission.meritInfo && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-800">Merit Information</h3>
+                    <p className="text-gray-600">{admission.meritInfo}</p>
+                  </div>
+                )}
+                {admission.note && (
+                  <div className="mb-4">
+                    <h3 className="font-semibold text-gray-800">Additional Notes</h3>
+                    <p className="text-gray-600">{admission.note}</p>
+                  </div>
+                )}
+                {admission.officialLink && (
+                  <a href={admission.officialLink} target="_blank" rel="noopener noreferrer"
+                     className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Apply Online →
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <aside className="lg:w-80">
+            {/* Related Admissions */}
+            {relatedAdmissions.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
+                <h3 className="font-bold text-gray-900 mb-3">Related Admissions</h3>
+                <div className="space-y-3">
+                  {relatedAdmissions.map((rel) => (
+                    <Link key={rel.id} href={`/admissions/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition">
+                      <p className="font-medium text-gray-800 text-sm">{rel.name || rel.instituteName}</p>
+                      <p className="text-xs text-gray-500">{rel.year} • {rel.session || 'Fall'}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+
+      {/* Schema Markup */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "EducationalOrganization",
+            "name": admission.institute?.name,
+            "url": `https://www.nextid.pk/admissions/${admission.slug}`,
+            "description": `${admission.institute?.name} admissions ${admission.year}`,
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": admission.institute?.city?.name,
+              "addressCountry": "PK"
+            }
+          })
+        }}
+      />
+    </main>
   );
-  
-  const gradPrograms = admission.programs.filter(p => 
-    p.degreeName?.toLowerCase().includes('master') || 
-    p.degreeName?.toLowerCase().includes('ms') ||
-    p.degreeName?.toLowerCase().includes('m.phil') ||
-    p.degreeName?.toLowerCase().includes('phd') ||
-    p.degreeName?.toLowerCase().includes('mba')
-  );
-  
-  const diplomaPrograms = admission.programs.filter(p => 
-    p.degreeName?.toLowerCase().includes('diploma') || 
-    p.degreeName?.toLowerCase().includes('certificate')
-  );
-
-  // Parse gallery images
-  let galleryImagesArray: string[] = [];
-  if (admission.galleryImages) {
-    try {
-      galleryImagesArray = JSON.parse(admission.galleryImages);
-    } catch (e) {
-      console.error('Error parsing gallery images:', e);
-    }
-  }
-
-  // Convert dates to ISO strings for serialization
-  const serializedAdmission = {
-    ...admission,
-    expectedOpenDate: admission.expectedOpenDate?.toISOString() || null,
-    expectedCloseDate: admission.expectedCloseDate?.toISOString() || null,
-    createdAt: admission.createdAt?.toISOString() || null,
-    updatedAt: admission.updatedAt?.toISOString() || null,
-    featuredImage: admission.featuredImage || null,
-    galleryImages: galleryImagesArray,
-    seo: admission.seo,
-  };
-
-  // Prepare data for client component
-  const admissionData = {
-    admission: serializedAdmission,
-    relatedAdmissions: relatedAdmissions || [],
-    cityAdmissions: cityAdmissions || [],
-    statusBadge,
-    daysRemaining,
-    undergradPrograms: undergradPrograms,
-    gradPrograms: gradPrograms,
-    diplomaPrograms: diplomaPrograms,
-    formattedPostedDate: formatShortDate(admission.createdAt) || '—',
-    formattedLastDate: formatShortDate(admission.expectedCloseDate) || 'TBA',
-    formattedDeadline: formatDate(admission.expectedCloseDate) || 'TBA',
-    formattedOpenDate: formatDate(admission.expectedOpenDate) || 'TBA',
-    formattedLastUpdated: formatDate(admission.updatedAt || admission.createdAt),
-  };
-
-  return <AdmissionClient data={admissionData} />;
 }
