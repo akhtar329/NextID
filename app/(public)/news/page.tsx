@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
-import { eq, desc, and, like, or, sql, count } from 'drizzle-orm';
+import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import type { NewsItem, TrendingItem } from '@/app/types/types';
 
 // ==================== FORMAT FUNCTIONS ====================
@@ -150,7 +150,7 @@ async function getNews(filters: { page?: number; category?: string }) {
       })
       .from(news)
       .where(and(...conditions))
-      .orderBy(desc(news.isBreaking), desc(news.publishedAt))
+      .orderBy(desc(news.publishedAt))
       .limit(limit)
       .offset(offset);
 
@@ -164,6 +164,90 @@ async function getNews(filters: { page?: number; category?: string }) {
   } catch (error) {
     console.error('Error fetching news:', error);
     return { news: [], total: 0, page: 1, pages: 0 };
+  }
+}
+
+async function getBreakingNews() {
+  try {
+    const data = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        slug: news.slug,
+        excerpt: news.excerpt,
+        content: news.content,
+        imageUrl: news.imageUrl,
+        source: news.source,
+        author: news.author,
+        isBreaking: news.isBreaking,
+        views: news.views,
+        publishedAt: news.publishedAt,
+      })
+      .from(news)
+      .where(and(eq(news.status, true), eq(news.isBreaking, true)))
+      .orderBy(desc(news.publishedAt))
+      .limit(4);
+    
+    return data as NewsItem[];
+  } catch (error) {
+    console.error('Error fetching breaking news:', error);
+    return [];
+  }
+}
+
+async function getFutureNews() {
+  try {
+    const data = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        slug: news.slug,
+        excerpt: news.excerpt,
+        content: news.content,
+        imageUrl: news.imageUrl,
+        source: news.source,
+        author: news.author,
+        isBreaking: news.isBreaking,
+        views: news.views,
+        publishedAt: news.publishedAt,
+      })
+      .from(news)
+      .where(and(eq(news.status, true), eq(news.isBreaking, false)))
+      .orderBy(desc(news.publishedAt))
+      .limit(3);
+    
+    return data as NewsItem[];
+  } catch (error) {
+    console.error('Error fetching future news:', error);
+    return [];
+  }
+}
+
+async function getSimpleNews() {
+  try {
+    const data = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        slug: news.slug,
+        excerpt: news.excerpt,
+        content: news.content,
+        imageUrl: news.imageUrl,
+        source: news.source,
+        author: news.author,
+        isBreaking: news.isBreaking,
+        views: news.views,
+        publishedAt: news.publishedAt,
+      })
+      .from(news)
+      .where(and(eq(news.status, true), eq(news.isBreaking, false)))
+      .orderBy(desc(news.publishedAt))
+      .limit(6);
+    
+    return data as NewsItem[];
+  } catch (error) {
+    console.error('Error fetching simple news:', error);
+    return [];
   }
 }
 
@@ -335,7 +419,7 @@ async function getProgramsNews() {
 
 // ==================== COMPONENTS ====================
 
-// 1. HeroSection
+// 1. HeroSection - Breaking News Banner + 3 Future News
 function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; futureNews: NewsItem[] }) {
   const topBreaking = breakingNews[0];
   const topFutureNews = futureNews.slice(0, 3);
@@ -344,6 +428,7 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
 
   return (
     <div className="mb-10">
+      {/* Bara Banner with Image - Breaking News */}
       <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
         {topBreaking.imageUrl && (
           <img 
@@ -375,6 +460,7 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
         </div>
       </div>
 
+      {/* Neeche 3 Future News */}
       {topFutureNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {topFutureNews.map((item) => (
@@ -398,8 +484,8 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
   );
 }
 
-// 2. NewsCard
-function NewsCard({ item }: { item: NewsItem }) {
+// 2. Simple News Card (No Breaking, No Future)
+function SimpleNewsCard({ item }: { item: NewsItem }) {
   return (
     <Link 
       href={`/news/${item.slug}`}
@@ -622,7 +708,7 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
   );
 }
 
-// 6. CategorySidebar - DYNAMIC (only shows categories that have news)
+// 6. CategorySidebar - DYNAMIC
 function CategorySidebar({ categories, activeCategory }: { categories: any[]; activeCategory: string }) {
   if (!categories.length) return null;
   
@@ -660,7 +746,9 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
 
   // Fetch all data in parallel
   const [
-    { news: allNews, total, pages },
+    breakingNews,
+    futureNews,
+    simpleNews,
     trending,
     dynamicCategories,
     cityNews,
@@ -670,7 +758,9 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
     boardsNews,
     programsNews
   ] = await Promise.all([
-    getNews({ page, category }),
+    getBreakingNews(),
+    getFutureNews(),
+    getSimpleNews(),
     getTrending(),
     getDynamicCategories(),
     getCityNews(),
@@ -681,10 +771,6 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
     getProgramsNews(),
   ]);
 
-  const breakingNews = allNews.filter(n => n.isBreaking);
-  const futureNews = allNews.filter(n => !n.isBreaking);
-  const normalNews = allNews.slice(0, 6);
-
   const buildUrl = (pageNum: number) => {
     const params = new URLSearchParams();
     params.set('page', pageNum.toString());
@@ -694,18 +780,22 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
+      {/* Hero Section - Only Breaking + Future News */}
       <HeroSection breakingNews={breakingNews} futureNews={futureNews} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
+          {/* Simple News Cards - Only normal news (no breaking, no future) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {normalNews.map((item) => (
-              <NewsCard key={item.id} item={item} />
+            {simpleNews.map((item) => (
+              <SimpleNewsCard key={item.id} item={item} />
             ))}
           </div>
 
-          <Pagination currentPage={page} totalPages={pages} buildUrl={buildUrl} />
+          {/* Pagination */}
+          <Pagination currentPage={page} totalPages={1} buildUrl={buildUrl} />
 
+          {/* Category Section */}
           <CategorySection 
             cityNews={cityNews}
             admissionsNews={admissionsNews}
