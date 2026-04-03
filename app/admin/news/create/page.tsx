@@ -1,4 +1,4 @@
-// app/admin/news/create/page.tsx (Fixed Version)
+// app/admin/news/create/page.tsx (Updated with isFuture field)
 
 "use client";
 
@@ -69,6 +69,7 @@ export default function CreateNewsPage() {
   const [author, setAuthor] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
   const [isBreaking, setIsBreaking] = useState(false);
+  const [isFuture, setIsFuture] = useState(false);  // ✅ ADDED
   const [publishedAt, setPublishedAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [status, setStatus] = useState(true);
@@ -124,7 +125,7 @@ export default function CreateNewsPage() {
       headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       startIndex = 1;
     } else {
-      headers = ['title', 'content', 'slug', 'excerpt', 'programid', 'instituteid', 'boardid', 'cityid', 'imageurl', 'source', 'author', 'isfeatured', 'isbreaking', 'status'];
+      headers = ['title', 'content', 'slug', 'excerpt', 'programid', 'instituteid', 'boardid', 'cityid', 'imageurl', 'source', 'author', 'isfeatured', 'isbreaking', 'isfuture', 'status'];  // ✅ ADDED isfuture
     }
     
     const items: BulkItem[] = [];
@@ -147,6 +148,7 @@ export default function CreateNewsPage() {
       const displayOrder = parseInt(obj.displayorder || '0') || 0;
       const isFeatured = obj.isfeatured === 'true' || obj.featured === 'true' || false;
       const isBreaking = obj.isbreaking === 'true' || obj.breaking === 'true' || false;
+      const isFuture = obj.isfuture === 'true' || obj.future === 'true' || false;  // ✅ ADDED
       const status = obj.status === 'false' ? false : true;
       
       if (title && content) {
@@ -167,6 +169,7 @@ export default function CreateNewsPage() {
           author: obj.author || '',
           isFeatured,
           isBreaking,
+          isFuture,  // ✅ ADDED
           publishedAt: obj.publishedat || '',
           expiresAt: obj.expiresat || '',
         });
@@ -319,6 +322,7 @@ export default function CreateNewsPage() {
           author: author.trim() || null,
           isFeatured,
           isBreaking,
+          isFuture,  // ✅ ADDED
           publishedAt: publishedAt || null,
           expiresAt: expiresAt || null,
           status,
@@ -354,10 +358,10 @@ export default function CreateNewsPage() {
 
   // Download sample CSV
   const downloadSample = () => {
-    const headers = ['title', 'content', 'slug', 'excerpt', 'programId', 'instituteId', 'boardId', 'cityId', 'imageUrl', 'source', 'author', 'isFeatured', 'isBreaking', 'status'];
+    const headers = ['title', 'content', 'slug', 'excerpt', 'programId', 'instituteId', 'boardId', 'cityId', 'imageUrl', 'source', 'author', 'isFeatured', 'isBreaking', 'isFuture', 'status'];  // ✅ ADDED isFuture
     const sampleData = [
-      ['University Announces New Policy', '<h2>New Admission Policy 2026</h2><p>The university has announced a new admission policy for 2026. <strong>Important dates:</strong></p><ul><li>Application start: <em>June 1, 2026</em></li><li>Last date: <em>July 15, 2026</em></li></ul><p>Visit our <a href="https://university.edu.pk/admissions">website</a> for details.</p>', 'university-new-policy', 'New admission policy announced with key dates', '1', '', '', '', 'https://example.com/image.jpg', 'University News', 'Admin', 'true', 'false', 'true'],
-      ['Board Exam Results 2026', '<h2>Matric & Intermediate Results Announced</h2><p>The board exam results for 2026 have been announced. <strong>Check your results:</strong></p><ol><li>Visit official website</li><li>Enter roll number</li><li>Download result card</li></ol><p><a href="https://results.bise.edu.pk">Check Online →</a></p>', 'board-exam-results-2026', 'Check your results online with complete guide', '', '2', '1', '3', '', 'Education Board', 'Official', 'true', 'true', 'true'],
+      ['University Announces New Policy', '<h2>New Admission Policy 2026</h2><p>The university has announced a new admission policy for 2026. <strong>Important dates:</strong></p><ul><li>Application start: <em>June 1, 2026</em></li><li>Last date: <em>July 15, 2026</em></li></ul><p>Visit our <a href="https://university.edu.pk/admissions">website</a> for details.</p>', 'university-new-policy', 'New admission policy announced with key dates', '1', '', '', '', 'https://example.com/image.jpg', 'University News', 'Admin', 'true', 'false', 'false', 'true'],  // ✅ ADDED isFuture
+      ['Board Exam Results 2026', '<h2>Matric & Intermediate Results Announced</h2><p>The board exam results for 2026 have been announced. <strong>Check your results:</strong></p><ol><li>Visit official website</li><li>Enter roll number</li><li>Download result card</li></ol><p><a href="https://results.bise.edu.pk">Check Online →</a></p>', 'board-exam-results-2026', 'Check your results online with complete guide', '', '2', '1', '3', '', 'Education Board', 'Official', 'true', 'true', 'false', 'true'],  // ✅ ADDED isFuture
     ];
     
     const csvContent = [
@@ -380,8 +384,8 @@ export default function CreateNewsPage() {
 
   // Sample data for preview
   const sampleData = [
-    ['University Announces New Policy', '<h2>New Policy</h2><p>University announces new admission policy...</p>', 'university-new-policy', 'New admission policy', '1', '', '', '', 'https://example.com/image.jpg', 'University News', 'Admin', 'true', 'false', 'true'],
-    ['Board Exam Results 2026', '<h2>Results Announced</h2><p>Board exam results for 2026...</p>', 'board-exam-results-2026', 'Check your results', '', '2', '1', '3', '', 'Education Board', 'Official', 'true', 'true', 'true'],
+    ['University Announces New Policy', '<h2>New Policy</h2><p>University announces new admission policy...</p>', 'university-new-policy', 'New admission policy', '1', '', '', '', 'https://example.com/image.jpg', 'University News', 'Admin', 'true', 'false', 'false', 'true'],
+    ['Board Exam Results 2026', '<h2>Results Announced</h2><p>Board exam results for 2026...</p>', 'board-exam-results-2026', 'Check your results', '', '2', '1', '3', '', 'Education Board', 'Official', 'true', 'true', 'false', 'true'],
   ];
 
   if (fetchLoading) {
@@ -628,7 +632,6 @@ export default function CreateNewsPage() {
                     />
                   </div>
 
-                  {/* 👇 FIXED: Regular button instead of PrimaryButton */}
                   <button
                     type="submit"
                     disabled={singleLoading}
@@ -768,13 +771,13 @@ export default function CreateNewsPage() {
                 </div>
               </div>
 
-              {/* News Flags Box */}
+              {/* News Flags Box - UPDATED with isFuture */}
               <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
                 <div className="bg-gray-50 px-4 py-3 border-b">
                   <h3 className="font-medium">News Flags</h3>
                 </div>
                 <div className="p-4 space-y-2">
-                  <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                  <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                     <input
                       type="checkbox"
                       checked={isFeatured}
@@ -783,14 +786,24 @@ export default function CreateNewsPage() {
                     />
                     <span className="text-sm text-gray-700">⭐ Featured News</span>
                   </label>
-                  <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                  <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                     <input
                       type="checkbox"
                       checked={isBreaking}
                       onChange={(e) => setIsBreaking(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 rounded"
+                      className="h-4 w-4 text-red-600 rounded"
                     />
                     <span className="text-sm text-gray-700">🔴 Breaking News</span>
+                  </label>
+                  {/* ✅ NEW: Future News Checkbox */}
+                  <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isFuture}
+                      onChange={(e) => setIsFuture(e.target.checked)}
+                      className="h-4 w-4 text-orange-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">🕐 Future News (Upcoming)</span>
                   </label>
                 </div>
               </div>
@@ -804,10 +817,10 @@ export default function CreateNewsPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="font-medium text-blue-800 mb-2">CSV Format with HTML Support</h3>
             <p className="text-sm text-blue-600 mb-2">
-              Headers: title, content, slug, excerpt, programId, instituteId, boardId, cityId, imageUrl, source, author, isFeatured, isBreaking, status
+              Headers: title, content, slug, excerpt, programId, instituteId, boardId, cityId, imageUrl, source, author, isFeatured, isBreaking, isFuture, status
             </p>
             <pre className="mt-2 p-2 bg-white rounded text-xs overflow-x-auto">
-              {`"University News","<h2>Important</h2><p>New <strong>policy</strong>...</p>","university-news","Summary","1","","","","","Source","Author","true","false","true"`}
+              {`"University News","<h2>Important</h2><p>New <strong>policy</strong>...</p>","university-news","Summary","1","","","","","Source","Author","true","false","false","true"`}
             </pre>
           </div>
 
