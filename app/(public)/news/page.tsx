@@ -5,6 +5,11 @@ import { news, admissions, results, boards, institutes, cities, programs } from 
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import type { NewsItem, TrendingItem } from '@/app/types/types';
 
+// ==================== NEXT.JS 15 CONFIG ====================
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 // ==================== FORMAT FUNCTIONS ====================
 function formatDate(date: Date | null): string {
   if (!date) return '';
@@ -67,6 +72,7 @@ async function getAllBreakingNews() {
       .limit(4);
     return data as NewsItem[];
   } catch (error) {
+    console.error('Error fetching breaking news:', error);
     return [];
   }
 }
@@ -90,6 +96,7 @@ async function getFeaturedNews() {
       .limit(5);
     return data;
   } catch (error) {
+    console.error('Error fetching featured news:', error);
     return [];
   }
 }
@@ -122,6 +129,7 @@ async function getRegularNews() {
       .limit(6);
     return data as NewsItem[];
   } catch (error) {
+    console.error('Error fetching regular news:', error);
     return [];
   }
 }
@@ -143,6 +151,7 @@ async function getTrending() {
       .limit(5);
     return data as TrendingItem[];
   } catch (error) {
+    console.error('Error fetching trending news:', error);
     return [];
   }
 }
@@ -193,6 +202,7 @@ async function getDynamicCategories() {
     }
     return categoriesWithCounts;
   } catch (error) {
+    console.error('Error fetching dynamic categories:', error);
     return [{ name: 'All News', slug: 'all', count: 0 }];
   }
 }
@@ -215,6 +225,7 @@ async function getCityNews() {
       .orderBy(desc(cities.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching city news:', error);
     return [];
   }
 }
@@ -235,6 +246,7 @@ async function getAdmissionsNews() {
       .orderBy(desc(admissions.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching admissions news:', error);
     return [];
   }
 }
@@ -255,6 +267,7 @@ async function getResultsNews() {
       .orderBy(desc(results.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching results news:', error);
     return [];
   }
 }
@@ -275,6 +288,7 @@ async function getUniversitiesNews() {
       .orderBy(desc(institutes.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching universities news:', error);
     return [];
   }
 }
@@ -295,6 +309,7 @@ async function getBoardsNews() {
       .orderBy(desc(boards.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching boards news:', error);
     return [];
   }
 }
@@ -315,6 +330,7 @@ async function getProgramsNews() {
       .orderBy(desc(programs.createdAt))
       .limit(5);
   } catch (error) {
+    console.error('Error fetching programs news:', error);
     return [];
   }
 }
@@ -323,24 +339,24 @@ async function getProgramsNews() {
 
 // HeroSection: 1 Breaking Banner + 3 Breaking Cards
 function HeroSection({ allBreakingNews }: { allBreakingNews: NewsItem[] }) {
-  // First item goes to banner
   const bannerNews = allBreakingNews[0];
-  // Next 3 items go to cards
   const cardNews = allBreakingNews.slice(1, 4);
+  
+  if (!bannerNews && cardNews.length === 0) return null;
   
   return (
     <div className="mb-10">
-      {/* Breaking News Banner - Only if exists */}
+      {/* Breaking News Banner */}
       {bannerNews && (
-        <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
+        <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px] group">
           {bannerNews.imageUrl && (
             <img 
               src={bannerNews.imageUrl} 
               alt={bannerNews.title}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent"></div>
           <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
             <div className="flex items-center gap-2 mb-3">
               <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
@@ -348,7 +364,7 @@ function HeroSection({ allBreakingNews }: { allBreakingNews: NewsItem[] }) {
               </span>
               <span className="text-white/80 text-sm">{formatDate(bannerNews.publishedAt)}</span>
             </div>
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight line-clamp-3">
               {bannerNews.title}
             </h2>
             <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
@@ -364,14 +380,14 @@ function HeroSection({ allBreakingNews }: { allBreakingNews: NewsItem[] }) {
         </div>
       )}
 
-      {/* Other Breaking News Cards - 3 items */}
+      {/* Other Breaking News Cards */}
       {cardNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {cardNews.map((item) => (
             <Link
               key={item.id}
               href={`/news/${item.slug}`}
-              className="group block bg-red-50 rounded-lg p-4 border-l-4 border-red-600 hover:shadow-md transition"
+              className="group block bg-red-50 rounded-lg p-4 border-l-4 border-red-600 hover:shadow-md transition hover:bg-red-100"
             >
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-red-600 text-xs font-bold">BREAKING</span>
@@ -396,19 +412,16 @@ function FeaturedNewsCard({ item }: { item: any }) {
       className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition group border-b border-gray-100 last:border-0"
     >
       {item.imageUrl && (
-        <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden">
+        <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
           <img
             src={item.imageUrl}
             alt={item.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition"
+            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+            loading="lazy"
           />
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 mb-1">
-          <span className="text-yellow-500 text-xs">⭐</span>
-          <span className="text-xs text-gray-500">Featured</span>
-        </div>
         <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
           {item.title}
         </h4>
@@ -426,7 +439,7 @@ function RegularNewsCard({ item }: { item: NewsItem }) {
       className="group block bg-white rounded-xl shadow-sm hover:shadow-lg transition-all overflow-hidden border border-gray-200 h-full"
     >
       {item.imageUrl && (
-        <div className="h-52 w-full overflow-hidden">
+        <div className="h-52 w-full overflow-hidden bg-gray-100">
           <img
             src={item.imageUrl}
             alt={item.title}
@@ -478,14 +491,25 @@ function CategorySection({
           {topItem && (
             <Link href={`/${basePath}/${topItem.slug}`} className="block mb-4 group">
               {hasImage && topItem.imageUrl && (
-                <img src={topItem.imageUrl} alt={topItem.title} className="w-full h-40 object-cover rounded-lg mb-2 group-hover:opacity-90 transition" />
+                <img 
+                  src={topItem.imageUrl} 
+                  alt={topItem.title} 
+                  className="w-full h-40 object-cover rounded-lg mb-2 group-hover:opacity-90 transition" 
+                  loading="lazy"
+                />
               )}
-              <h4 className="font-semibold text-gray-900 group-hover:text-red-600 transition line-clamp-2">{topItem.title}</h4>
+              <h4 className="font-semibold text-gray-900 group-hover:text-red-600 transition line-clamp-2">
+                {topItem.title}
+              </h4>
             </Link>
           )}
           <div className="space-y-2">
             {restItems.map((item) => (
-              <Link key={item.id} href={`/${basePath}/${item.slug}`} className="block text-gray-600 hover:text-red-600 text-sm line-clamp-1 transition py-1 border-b border-gray-100 last:border-0">
+              <Link 
+                key={item.id} 
+                href={`/${basePath}/${item.slug}`} 
+                className="block text-gray-600 hover:text-red-600 text-sm line-clamp-1 transition py-1 border-b border-gray-100 last:border-0"
+              >
                 • {item.title}
               </Link>
             ))}
@@ -515,7 +539,7 @@ function CategorySection({
 function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
   if (!trending.length) return null;
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
       <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
         <h3 className="font-bold text-white text-lg">📈 Trending Now</h3>
       </div>
@@ -523,7 +547,10 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
         {trending.map((item, idx) => (
           <Link key={item.id} href={`/news/${item.slug}`} className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group">
             <span className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold ${
-              idx === 0 ? 'bg-red-100 text-red-700' : idx === 1 ? 'bg-gray-100 text-gray-700' : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-600'
+              idx === 0 ? 'bg-red-100 text-red-700' : 
+              idx === 1 ? 'bg-gray-100 text-gray-700' : 
+              idx === 2 ? 'bg-orange-100 text-orange-700' : 
+              'bg-blue-50 text-blue-600'
             }`}>
               {idx + 1}
             </span>
@@ -542,7 +569,7 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
 function FeaturedSidebar({ featuredNews }: { featuredNews: any[] }) {
   if (!featuredNews.length) return null;
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
       <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 px-5 py-3">
         <h3 className="font-bold text-white text-lg">⭐ Featured Stories</h3>
       </div>
@@ -559,17 +586,25 @@ function FeaturedSidebar({ featuredNews }: { featuredNews: any[] }) {
 function CategorySidebar({ categories, activeCategory }: { categories: any[]; activeCategory: string }) {
   if (!categories.length) return null;
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
       <div className="bg-gradient-to-r from-gray-800 to-gray-700 px-5 py-3">
         <h3 className="font-bold text-white text-lg">📂 News Categories</h3>
       </div>
       <div className="p-4 space-y-1">
         {categories.map((cat) => (
-          <Link key={cat.slug} href={`/news${cat.slug !== 'all' ? `?category=${cat.slug}` : ''}`} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
-            activeCategory === cat.slug ? 'bg-red-50 text-red-600 font-medium' : 'text-gray-700 hover:bg-gray-50'
-          }`}>
+          <Link 
+            key={cat.slug} 
+            href={`/news${cat.slug !== 'all' ? `?category=${cat.slug}` : ''}`} 
+            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
+              activeCategory === cat.slug 
+                ? 'bg-red-50 text-red-600 font-medium' 
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
             <span>{cat.name}</span>
-            <span className={`${activeCategory === cat.slug ? 'text-red-500' : 'text-gray-400'} text-xs font-medium`}>{cat.count}</span>
+            <span className={`${activeCategory === cat.slug ? 'text-red-500' : 'text-gray-400'} text-xs font-medium`}>
+              {cat.count}
+            </span>
           </Link>
         ))}
       </div>
@@ -578,10 +613,29 @@ function CategorySidebar({ categories, activeCategory }: { categories: any[]; ac
 }
 
 // ==================== PAGE COMPONENT ====================
-export default async function NewsPage({ searchParams }: { searchParams?: { [key: string]: string } }) {
-  const category = searchParams?.category || 'all';
+export default async function NewsPage({ 
+  searchParams 
+}: { 
+  searchParams?: Promise<{ [key: string]: string }>
+}) {
+  // ✅ Await searchParams (Next.js 15 requirement)
+  const params = await searchParams || {};
+  const category = params.category || 'all';
 
-  const [allBreakingNews, regularNews, trending, featuredNews, dynamicCategories, cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews] = await Promise.all([
+  // Fetch all data in parallel
+  const [
+    allBreakingNews,
+    regularNews,
+    trending,
+    featuredNews,
+    dynamicCategories,
+    cityNews,
+    admissionsNews,
+    resultsNews,
+    universitiesNews,
+    boardsNews,
+    programsNews
+  ] = await Promise.all([
     getAllBreakingNews(),
     getRegularNews(),
     getTrending(),
@@ -628,7 +682,7 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
 
         {/* Sidebar - Sticky */}
         <div className="lg:col-span-1">
-          <div className="sticky top-24 space-y-6">
+          <div className="space-y-6">
             <TrendingSidebar trending={trending} />
             <FeaturedSidebar featuredNews={featuredNews} />
             <CategorySidebar categories={dynamicCategories} activeCategory={category} />
