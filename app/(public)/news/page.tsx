@@ -493,7 +493,6 @@ function CategorySection({
 
   return (
     <div className="space-y-8 mt-10">
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {renderCategoryColumn('Universities', universitiesNews, 'universities', true)}
         {renderCategoryColumn('Boards', boardsNews, 'boards', false)}
