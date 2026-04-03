@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
-import { eq, desc, and, like, or, sql } from 'drizzle-orm';
+import { eq, desc, and, like, or, sql, asc } from 'drizzle-orm';
 import type { NewsItem, TrendingItem } from '@/app/types/types';
 
 // ==================== FORMAT FUNCTIONS ====================
@@ -184,7 +184,10 @@ async function getBreakingNews() {
         publishedAt: news.publishedAt,
       })
       .from(news)
-      .where(and(eq(news.status, true), eq(news.isBreaking, true)))
+      .where(and(
+        eq(news.status, true), 
+        eq(news.isBreaking, true)
+      ))
       .orderBy(desc(news.publishedAt))
       .limit(4);
     
@@ -195,8 +198,12 @@ async function getBreakingNews() {
   }
 }
 
+// Future news - published date future mein hai
 async function getFutureNews() {
   try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     const data = await db
       .select({
         id: news.id,
@@ -212,8 +219,12 @@ async function getFutureNews() {
         publishedAt: news.publishedAt,
       })
       .from(news)
-      .where(and(eq(news.status, true), eq(news.isBreaking, false)))
-      .orderBy(desc(news.publishedAt))
+      .where(and(
+        eq(news.status, true),
+        eq(news.isBreaking, false),
+        sql`${news.publishedAt} > ${today.toISOString()}`
+      ))
+      .orderBy(asc(news.publishedAt))
       .limit(3);
     
     return data as NewsItem[];
@@ -223,8 +234,12 @@ async function getFutureNews() {
   }
 }
 
+// Simple news - published date past mein hai aur breaking nahi hai
 async function getSimpleNews() {
   try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
     const data = await db
       .select({
         id: news.id,
@@ -240,7 +255,11 @@ async function getSimpleNews() {
         publishedAt: news.publishedAt,
       })
       .from(news)
-      .where(and(eq(news.status, true), eq(news.isBreaking, false)))
+      .where(and(
+        eq(news.status, true),
+        eq(news.isBreaking, false),
+        sql`${news.publishedAt} <= ${today.toISOString()}`
+      ))
       .orderBy(desc(news.publishedAt))
       .limit(6);
     
@@ -424,43 +443,43 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
   const topBreaking = breakingNews[0];
   const topFutureNews = futureNews.slice(0, 3);
   
-  if (!topBreaking) return null;
-
   return (
     <div className="mb-10">
-      {/* Bara Banner with Image - Breaking News */}
-      <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
-        {topBreaking.imageUrl && (
-          <img 
-            src={topBreaking.imageUrl} 
-            alt={topBreaking.title}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
-        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
-              BREAKING NEWS
-            </span>
-            <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
+      {/* Breaking News Banner */}
+      {topBreaking && (
+        <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
+          {topBreaking.imageUrl && (
+            <img 
+              src={topBreaking.imageUrl} 
+              alt={topBreaking.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
+          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
+                BREAKING NEWS
+              </span>
+              <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
+              {topBreaking.title}
+            </h2>
+            <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
+              {topBreaking.excerpt}
+            </p>
+            <Link 
+              href={`/news/${topBreaking.slug}`}
+              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
+            >
+              Read Full Story <span className="text-lg">→</span>
+            </Link>
           </div>
-          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
-            {topBreaking.title}
-          </h2>
-          <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
-            {topBreaking.excerpt}
-          </p>
-          <Link 
-            href={`/news/${topBreaking.slug}`}
-            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
-          >
-            Read Full Story <span className="text-lg">→</span>
-          </Link>
         </div>
-      </div>
+      )}
 
-      {/* Neeche 3 Future News */}
+      {/* Future News - 3 cards (only if future news exist) */}
       {topFutureNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {topFutureNews.map((item) => (
@@ -484,7 +503,7 @@ function HeroSection({ breakingNews, futureNews }: { breakingNews: NewsItem[]; f
   );
 }
 
-// 2. Simple News Card (No Breaking, No Future)
+// 2. Simple News Card
 function SimpleNewsCard({ item }: { item: NewsItem }) {
   return (
     <Link 
@@ -780,20 +799,17 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* Hero Section - Only Breaking + Future News */}
+      {/* Hero Section - Breaking News Banner + Future News */}
       <HeroSection breakingNews={breakingNews} futureNews={futureNews} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          {/* Simple News Cards - Only normal news (no breaking, no future) */}
+          {/* Simple News Cards - Only past/present news (no breaking, no future) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {simpleNews.map((item) => (
               <SimpleNewsCard key={item.id} item={item} />
             ))}
           </div>
-
-          {/* Pagination */}
-          <Pagination currentPage={page} totalPages={1} buildUrl={buildUrl} />
 
           {/* Category Section */}
           <CategorySection 
