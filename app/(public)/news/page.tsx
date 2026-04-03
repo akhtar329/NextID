@@ -43,8 +43,8 @@ export const metadata: Metadata = {
 
 // ==================== DATA FETCHING ====================
 
-// 1. Breaking News (isBreaking = true) - For Hero Banner
-async function getBreakingNews() {
+// 1. Breaking News - Get all breaking news first
+async function getAllBreakingNews() {
   try {
     const data = await db
       .select({
@@ -321,51 +321,53 @@ async function getProgramsNews() {
 
 // ==================== COMPONENTS ====================
 
-// HeroSection: Breaking News Banner Only
-function HeroSection({ breakingNews }: { breakingNews: NewsItem[] }) {
-  const topBreaking = breakingNews[0];
-  const otherBreaking = breakingNews.slice(1, 4);
+// HeroSection: 1 Breaking Banner + 3 Breaking Cards
+function HeroSection({ allBreakingNews }: { allBreakingNews: NewsItem[] }) {
+  // First item goes to banner
+  const bannerNews = allBreakingNews[0];
+  // Next 3 items go to cards
+  const cardNews = allBreakingNews.slice(1, 4);
   
-  if (!topBreaking) return null;
-
   return (
     <div className="mb-10">
-      {/* Breaking News Banner */}
-      <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
-        {topBreaking.imageUrl && (
-          <img 
-            src={topBreaking.imageUrl} 
-            alt={topBreaking.title}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
-        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
-              🔴 BREAKING NEWS
-            </span>
-            <span className="text-white/80 text-sm">{formatDate(topBreaking.publishedAt)}</span>
+      {/* Breaking News Banner - Only if exists */}
+      {bannerNews && (
+        <div className="relative rounded-xl overflow-hidden mb-5 shadow-lg h-[400px] md:h-[450px]">
+          {bannerNews.imageUrl && (
+            <img 
+              src={bannerNews.imageUrl} 
+              alt={bannerNews.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
+          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="px-2 py-1 bg-red-600 text-white text-xs font-bold rounded-md animate-pulse">
+                🔴 BREAKING NEWS
+              </span>
+              <span className="text-white/80 text-sm">{formatDate(bannerNews.publishedAt)}</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
+              {bannerNews.title}
+            </h2>
+            <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
+              {bannerNews.excerpt}
+            </p>
+            <Link 
+              href={`/news/${bannerNews.slug}`}
+              className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
+            >
+              Read Full Story <span className="text-lg">→</span>
+            </Link>
           </div>
-          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-3 leading-tight">
-            {topBreaking.title}
-          </h2>
-          <p className="text-white/90 mb-4 line-clamp-2 text-sm md:text-base max-w-2xl">
-            {topBreaking.excerpt}
-          </p>
-          <Link 
-            href={`/news/${topBreaking.slug}`}
-            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition-all"
-          >
-            Read Full Story <span className="text-lg">→</span>
-          </Link>
         </div>
-      </div>
+      )}
 
-      {/* Other Breaking News Cards (3 items) */}
-      {otherBreaking.length > 0 && (
+      {/* Other Breaking News Cards - 3 items */}
+      {cardNews.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {otherBreaking.map((item) => (
+          {cardNews.map((item) => (
             <Link
               key={item.id}
               href={`/news/${item.slug}`}
@@ -404,6 +406,8 @@ function FeaturedNewsCard({ item }: { item: any }) {
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 mb-1">
+          <span className="text-yellow-500 text-xs">⭐</span>
+          <span className="text-xs text-gray-500">Featured</span>
         </div>
         <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
           {item.title}
@@ -494,14 +498,14 @@ function CategorySection({
   return (
     <div className="space-y-8 mt-10">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {renderCategoryColumn('Universities', universitiesNews, 'universities', true)}
-        {renderCategoryColumn('Boards', boardsNews, 'boards', false)}
-        {renderCategoryColumn('Programs', programsNews, 'programs', false)}
-      </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {renderCategoryColumn('City', cityNews, 'cities', true)}
         {renderCategoryColumn('Admissions', admissionsNews, 'admissions', true)}
         {renderCategoryColumn('Results', resultsNews, 'results', false)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {renderCategoryColumn('Universities', universitiesNews, 'universities', true)}
+        {renderCategoryColumn('Boards', boardsNews, 'boards', false)}
+        {renderCategoryColumn('Programs', programsNews, 'programs', false)}
       </div>
     </div>
   );
@@ -513,7 +517,7 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
-        <h3 className="font-bold text-white text-lg">Trending Now</h3>
+        <h3 className="font-bold text-white text-lg">📈 Trending Now</h3>
       </div>
       <div className="p-4 space-y-3">
         {trending.map((item, idx) => (
@@ -540,7 +544,7 @@ function FeaturedSidebar({ featuredNews }: { featuredNews: any[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 px-5 py-3">
-        <h3 className="font-bold text-white text-lg">Featured Stories</h3>
+        <h3 className="font-bold text-white text-lg">⭐ Featured Stories</h3>
       </div>
       <div className="p-3 space-y-1">
         {featuredNews.map((item) => (
@@ -577,8 +581,8 @@ function CategorySidebar({ categories, activeCategory }: { categories: any[]; ac
 export default async function NewsPage({ searchParams }: { searchParams?: { [key: string]: string } }) {
   const category = searchParams?.category || 'all';
 
-  const [breakingNews, regularNews, trending, featuredNews, dynamicCategories, cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews] = await Promise.all([
-    getBreakingNews(),
+  const [allBreakingNews, regularNews, trending, featuredNews, dynamicCategories, cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews] = await Promise.all([
+    getAllBreakingNews(),
     getRegularNews(),
     getTrending(),
     getFeaturedNews(),
@@ -593,8 +597,8 @@ export default async function NewsPage({ searchParams }: { searchParams?: { [key
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* HeroSection: Breaking News Banner + 3 Breaking Cards */}
-      <HeroSection breakingNews={breakingNews} />
+      {/* HeroSection: 1 Breaking Banner + 3 Breaking Cards */}
+      <HeroSection allBreakingNews={allBreakingNews} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
