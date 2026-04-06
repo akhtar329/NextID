@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
-import { admissions, admissionPrograms, programs, institutes, cities, degrees, seoMetadata } from '@/app/lib/schema';
+import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from '@/app/lib/schema';
 import { eq, and, ne, desc } from 'drizzle-orm';
 
 // ==================== TYPES ====================
@@ -10,12 +10,9 @@ interface ProgramWithDetails {
   id: number;
   name: string;
   slug: string;
-  degreeName: string | null;
-  overview: string | null;
-  eligibility: string | null;
   duration: string | null;
-  careerScope: string | null;
   feeRange: string | null;
+  specificEligibility: string | null;
 }
 
 interface CityType {
@@ -55,7 +52,7 @@ interface AdmissionWithPrograms {
   createdAt: Date | null;
   updatedAt: Date | null;
   featuredImage?: string | null;
-  galleryImages?: string | null;
+  galleryImages?: string | null;  // ✅ Fixed: added optional
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -64,15 +61,6 @@ function formatDate(date: Date | null): string {
   return new Date(date).toLocaleDateString('en-PK', { 
     day: 'numeric', 
     month: 'long', 
-    year: 'numeric' 
-  });
-}
-
-function formatShortDate(date: Date | null): string {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', { 
-    day: 'numeric', 
-    month: 'short', 
     year: 'numeric' 
   });
 }
@@ -165,54 +153,37 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       }
     }
 
-    // Get programs
-    const programList = await db
+    // ✅ Fetch programs using admissionOfferings + programOfferings
+    const programsResult = await db
       .select({
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        degreeId: programs.degreeId,
-        overview: programs.overview,
-        eligibility: programs.eligibility,
-        duration: programs.duration,
-        careerScope: programs.careerScope,
-        feeRange: programs.feeRange,
+        duration: programOfferings.duration,
+        feeRange: programOfferings.feeRange,
+        specificEligibility: programOfferings.specificEligibility,
       })
-      .from(admissionPrograms)
-      .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-      .where(eq(admissionPrograms.admissionId, admission.id));
+      .from(admissionOfferings)
+      .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .innerJoin(programs, eq(programOfferings.programId, programs.id))
+      .where(eq(admissionOfferings.admissionId, admission.id));
 
-    const programsWithDegrees: ProgramWithDetails[] = await Promise.all(
-      programList.map(async (p) => {
-        let degreeName: string | null = null;
-        if (p.degreeId) {
-          const degreeResult = await db
-            .select({ name: degrees.name })
-            .from(degrees)
-            .where(eq(degrees.id, p.degreeId))
-            .limit(1);
-          degreeName = degreeResult[0]?.name || null;
-        }
-        return {
-          id: p.id,
-          name: p.name,
-          slug: p.slug,
-          degreeName,
-          overview: p.overview,
-          eligibility: p.eligibility,
-          duration: p.duration,
-          careerScope: p.careerScope,
-          feeRange: p.feeRange,
-        };
-      })
-    );
+    const programsWithDetails: ProgramWithDetails[] = programsResult.map(p => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      duration: p.duration,
+      feeRange: p.feeRange,
+      specificEligibility: p.specificEligibility,
+    }));
 
     return {
       ...admission,
       status: admission.status as 'Expected' | 'Open' | 'Closed',
       institute,
-      programs: programsWithDegrees,
-      programCount: programsWithDegrees.length,
+      programs: programsWithDetails,
+      programCount: programsWithDetails.length,
+      galleryImages: admission.galleryImages as string | null | undefined,  // ✅ Fixed type
     };
 
   } catch (error) {
@@ -246,6 +217,32 @@ async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
   }
 }
 
+// ==================== GET SEO METADATA FROM DATABASE ====================
+async function getSEOMetadata(admissionId: number) {  // ✅ Fixed: use number instead of string
+  try {
+    const result = await db
+      .select({
+        metaTitle: seoMetadata.metaTitle,
+        metaDescription: seoMetadata.metaDescription,
+        canonicalUrl: seoMetadata.canonicalUrl,
+        ogTitle: seoMetadata.ogTitle,
+        ogDescription: seoMetadata.ogDescription,
+        ogImage: seoMetadata.ogImage,
+      })
+      .from(seoMetadata)
+      .where(and(
+        eq(seoMetadata.entityType, 'admission'),
+        eq(seoMetadata.entityId, admissionId)  // ✅ Fixed: number, not string
+      ))
+      .limit(1);
+    
+    return result[0] || null;
+  } catch (error) {
+    console.error('Error fetching SEO metadata:', error);
+    return null;
+  }
+}
+
 // ==================== STATUS BADGE ====================
 function getStatusBadge(status: string) {
   const badges = {
@@ -256,21 +253,41 @@ function getStatusBadge(status: string) {
   return badges[status as keyof typeof badges] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status, icon: '📌' };
 }
 
-// ==================== METADATA ====================
+// ==================== METADATA (from database seo_metadata table) ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  
+  // First get admission to get ID for SEO metadata
   const admission = await getAdmissionBySlug(slug);
   
   if (!admission) {
     return { title: 'Admission Not Found', robots: { index: false } };
   }
 
+  // ✅ Try to get SEO metadata from database using admission ID
+  const seoData = await getSEOMetadata(admission.id);
+  
+  if (seoData?.metaTitle && seoData?.metaDescription) {
+    return {
+      title: seoData.metaTitle,
+      description: seoData.metaDescription,
+      alternates: seoData.canonicalUrl ? { canonical: seoData.canonicalUrl } : undefined,
+      openGraph: {
+        title: seoData.ogTitle || seoData.metaTitle,
+        description: seoData.ogDescription || seoData.metaDescription,
+        images: seoData.ogImage ? [{ url: seoData.ogImage }] : undefined,
+        type: 'article',
+      },
+    };
+  }
+  
+  // Fallback: dynamic metadata
   const instituteName = admission.institute?.name || 'University';
   const year = admission.year || '2026';
   
   return {
     title: `${admission.name || `${instituteName} Admissions ${year}`} | NextID.pk`,
-    description: `${instituteName} admissions ${year}. ${admission.programs.length} programs offered. Last date: ${formatDate(admission.expectedCloseDate) || 'TBA'}. Apply online at NextID.pk`,
+    description: `${instituteName} admissions ${year}. ${admission.programCount} programs offered. Last date: ${formatDate(admission.expectedCloseDate) || 'TBA'}. Apply online at NextID.pk`,
     alternates: { canonical: `https://www.nextid.pk/admissions/${admission.slug}` },
     openGraph: {
       title: `${instituteName} Admissions ${year}`,
@@ -281,7 +298,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== MAIN PAGE (Server Component - NO CLIENT COMPONENT) ====================
+// ==================== MAIN PAGE ====================
 export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const admission = await getAdmissionBySlug(slug);
@@ -383,16 +400,16 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
                         {program.name}
                       </h3>
                     </Link>
-                    {program.degreeName && (
-                      <p className="text-sm text-gray-500 mt-1">Degree: {program.degreeName}</p>
-                    )}
                     {program.duration && (
                       <p className="text-sm text-gray-600 mt-1">Duration: {program.duration}</p>
                     )}
-                    {program.eligibility && (
+                    {program.feeRange && (
+                      <p className="text-sm text-gray-600">Fee Range: {program.feeRange}</p>
+                    )}
+                    {program.specificEligibility && (
                       <div className="mt-2 p-3 bg-gray-50 rounded-lg">
                         <p className="text-sm font-medium text-gray-700">Eligibility:</p>
-                        <p className="text-sm text-gray-600">{program.eligibility}</p>
+                        <p className="text-sm text-gray-600">{program.specificEligibility}</p>
                       </div>
                     )}
                   </div>

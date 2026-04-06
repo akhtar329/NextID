@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { admissions, admissionPrograms, programs, institutes } from "@/app/lib/schema";
+import { admissions, admissionOfferings, programOfferings, programs, institutes } from "@/app/lib/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const programId = searchParams.get('programId');
     const instituteId = searchParams.get('instituteId');
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20;
-    const slug = searchParams.get('slug'); // Add slug filter for single admission
+    const slug = searchParams.get('slug');
 
     // Build conditions array
     const conditions = [];
@@ -77,34 +77,58 @@ export async function GET(request: Request) {
     // Filter by programId if provided
     let filteredAdmissions = admissionsList;
     if (programId && !slug) {
-      const admissionIdsWithProgram = await db
-        .select({ admissionId: admissionPrograms.admissionId })
-        .from(admissionPrograms)
-        .where(eq(admissionPrograms.programId, parseInt(programId)));
+      // First get offeringIds for the program
+      const offeringIds = await db
+        .select({ id: programOfferings.id })
+        .from(programOfferings)
+        .where(eq(programOfferings.programId, parseInt(programId)));
 
-      const validAdmissionIds = new Set(admissionIdsWithProgram.map(item => item.admissionId));
+      const offeringIdList = offeringIds.map(o => o.id);
       
-      filteredAdmissions = admissionsList.filter(ad => 
-        validAdmissionIds.has(ad.id)
-      );
+      if (offeringIdList.length > 0) {
+        const admissionIdsWithOffering = await db
+          .select({ admissionId: admissionOfferings.admissionId })
+          .from(admissionOfferings)
+          .where(inArray(admissionOfferings.offeringId, offeringIdList));  // ✅ Fixed: use inArray
+
+        const validAdmissionIds = new Set(admissionIdsWithOffering.map(item => item.admissionId));
+        
+        filteredAdmissions = admissionsList.filter(ad => 
+          validAdmissionIds.has(ad.id)
+        );
+      } else {
+        filteredAdmissions = [];
+      }
     }
 
     // Fetch programs for each admission
     const admissionsWithPrograms = await Promise.all(
       filteredAdmissions.slice(0, slug ? 1 : limit).map(async (ad) => {
-        const programList = await db
-          .select({
-            id: programs.id,
-            name: programs.name,
-            slug: programs.slug,
-            overview: programs.overview,
-            eligibility: programs.eligibility,
-            duration: programs.duration,
-            feeRange: programs.feeRange,
-          })
-          .from(admissionPrograms)
-          .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-          .where(eq(admissionPrograms.admissionId, ad.id));
+        // Get offerings for this admission
+        const offerings = await db
+          .select({ offeringId: admissionOfferings.offeringId })
+          .from(admissionOfferings)
+          .where(eq(admissionOfferings.admissionId, ad.id));
+
+        const offeringIds = offerings.map(o => o.offeringId);
+        
+        let programList: any[] = [];
+        
+        if (offeringIds.length > 0) {
+          programList = await db
+            .select({
+              id: programs.id,
+              name: programs.name,
+              slug: programs.slug,
+              detailedOverview: programs.detailedOverview,
+              commonEligibility: programs.commonEligibility,
+              typicalDuration: programs.typicalDuration,
+              typicalFeeRange: programs.typicalFeeRange,
+            })
+            .from(programOfferings)
+            .innerJoin(programs, eq(programOfferings.programId, programs.id))
+            .where(inArray(programOfferings.id, offeringIds));  // ✅ Fixed: use inArray
+        }
 
         return {
           ...ad,

@@ -1,9 +1,7 @@
-// app/(public)/admissions/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { admissions, admissionPrograms, programs, institutes, degrees, cities, seoMetadata } from '@/app/lib/schema';
+import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from '@/app/lib/schema';
 import { eq, desc, like, and, or, sql } from 'drizzle-orm';
 import { generateSEO } from '@/app/lib/seo';
 
@@ -118,7 +116,6 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
   }
   
   // For OPEN ADMISSIONS - Show remaining time
-  // Less than 24 hours - Show hours
   if (diffHours <= 24) {
     return { 
       label: `${diffHours} hour${diffHours !== 1 ? 's' : ''} left`, 
@@ -127,7 +124,6 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
       urgent: true 
     };
   }
-  // 7 days or less - Danger/Red
   if (diffDays <= 7) {
     return { 
       label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
@@ -136,7 +132,6 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
       urgent: true 
     };
   }
-  // 8-15 days - Warning/Yellow
   if (diffDays <= 15) {
     return { 
       label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
@@ -144,7 +139,6 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
       icon: '📅' 
     };
   }
-  // 16-30 days - Info/Green
   if (diffDays <= 30) {
     return { 
       label: `${diffDays} day${diffDays !== 1 ? 's' : ''} left`, 
@@ -152,7 +146,6 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
       icon: '📅' 
     };
   }
-  // 31+ days - No badge (hide)
   return { label: null, color: null, hide: true };
 }
 
@@ -256,7 +249,6 @@ async function getAdmissions(filters: {
     
     if (!filters.showClosed) {
       conditions.push(eq(admissions.status, 'Open'));
-      // Only show future deadlines or null deadlines
       conditions.push(
         or(
           sql`${admissions.expectedCloseDate} IS NULL`,
@@ -330,6 +322,7 @@ async function getAdmissions(filters: {
 
     if (admissionsList.length === 0) return { admissions: [], totalCount, totalPages, currentPage };
 
+    // ✅ UPDATED: Use admissionOfferings + programOfferings instead of admissionPrograms
     const admissionsWithPrograms = await Promise.all(
       admissionsList.map(async (ad) => {
         const admissionProgramsList = await db
@@ -337,12 +330,12 @@ async function getAdmissions(filters: {
             id: programs.id,
             name: programs.name,
             slug: programs.slug,
-            degreeName: degrees.name,
+            degreeName: sql<string>`NULL`,
           })
-          .from(admissionPrograms)
-          .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-          .innerJoin(degrees, eq(programs.degreeId, degrees.id))
-          .where(eq(admissionPrograms.admissionId, ad.id));
+          .from(admissionOfferings)
+          .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+          .innerJoin(programs, eq(programOfferings.programId, programs.id))
+          .where(eq(admissionOfferings.admissionId, ad.id));
 
         return {
           ...ad,

@@ -1,10 +1,9 @@
-
 // app/api/public/institutes/route.ts
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { institutes, cities, programInstitutes, programs } from "@/app/lib/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { institutes, cities, programOfferings, programs } from "@/app/lib/schema";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -21,15 +20,15 @@ export async function GET() {
         isFeatured: institutes.isFeatured,
         programs: sql`COALESCE(
           json_agg(
-            json_build_object('name', ${programs.name})
+            json_build_object('name', ${programs.name}, 'slug', ${programs.slug})
           ) FILTER (WHERE ${programs.id} IS NOT NULL),
           '[]'::json
         )`.as('programs')
       })
       .from(institutes)
       .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .leftJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
-      .leftJoin(programs, eq(programInstitutes.programId, programs.id))
+      .leftJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
       .where(eq(institutes.status, true))
       .groupBy(institutes.id, cities.name);
 

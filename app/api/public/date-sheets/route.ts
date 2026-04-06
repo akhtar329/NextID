@@ -17,8 +17,12 @@ export async function GET(request: Request) {
       .select({
         id: dateSheets.id,
         title: dateSheets.title,
+        slug: dateSheets.slug,
         examDate: dateSheets.examDate,
+        examType: dateSheets.examType,
         officialLink: dateSheets.officialLink,
+        downloadLink: dateSheets.downloadLink,
+        pdfFile: dateSheets.pdfFile,
         isPopular: dateSheets.isPopular,
         boardName: boards.name,
         boardSlug: boards.slug,
@@ -27,7 +31,7 @@ export async function GET(request: Request) {
       })
       .from(dateSheets)
       .leftJoin(boards, eq(dateSheets.boardId, boards.id))
-      .leftJoin(institutes, eq(dateSheets.universityId, institutes.id));
+      .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id));  // ✅ Fixed: universityId → instituteId
 
     // Conditions
     let conditions = [eq(dateSheets.status, true)];
@@ -35,7 +39,7 @@ export async function GET(request: Request) {
     if (type === 'board') {
       conditions.push(sql`${dateSheets.boardId} IS NOT NULL`);
     } else if (type === 'university') {
-      conditions.push(sql`${dateSheets.universityId} IS NOT NULL`);
+      conditions.push(sql`${dateSheets.instituteId} IS NOT NULL`);  // ✅ Fixed: universityId → instituteId
     }
 
     if (year) {

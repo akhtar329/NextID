@@ -2,10 +2,10 @@
 
 import { db } from "./db";
 import { 
-  categories, programs, degrees, institutes, cities, 
-  results, dateSheets, programInstitutes, programCities 
+  categories, programs, institutes, cities, 
+  results, dateSheets, programOfferings 
 } from "./schema";
-import { eq, and, desc, asc, inArray } from "drizzle-orm";  // 👈 Fix: inArray import kiya
+import { eq, and, desc, asc, inArray } from "drizzle-orm";
 
 // Types
 type ProgramData = {
@@ -13,7 +13,6 @@ type ProgramData = {
   name: string;
   slug: string;
   isFeatured: boolean | null;
-  degreeName: string | null;
 };
 
 type InstituteData = {
@@ -65,37 +64,22 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
 
     // 4. Fetch data for active category
     if (activeCategoryId) {
-      // Get degrees for this category
-      const categoryDegrees = await db
-        .select({ id: degrees.id })
-        .from(degrees)
+      // Get programs for this category directly (categoryId is in programs table)
+      programsData = await db
+        .select({
+          id: programs.id,
+          name: programs.name,
+          slug: programs.slug,
+          isFeatured: programs.isFeatured,
+        })
+        .from(programs)
         .where(and(
-          eq(degrees.status, true),
-          eq(degrees.categoryId, activeCategoryId)
-        ));
+          eq(programs.status, true),
+          eq(programs.categoryId, activeCategoryId)
+        ))
+        .limit(8);
 
-      const degreeIds = categoryDegrees.map(d => d.id);
-
-      // Get programs for this category
-      if (degreeIds.length > 0) {
-        programsData = await db
-          .select({
-            id: programs.id,
-            name: programs.name,
-            slug: programs.slug,
-            isFeatured: programs.isFeatured,
-            degreeName: degrees.name,
-          })
-          .from(programs)
-          .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-          .where(and(
-            eq(programs.status, true),
-            inArray(programs.degreeId, degreeIds)  // 👈 inArray use kiya
-          ))
-          .limit(8);
-      }
-
-      // Get institutes for this category
+      // Get institutes for this category (through programOfferings)
       if (programsData.length > 0) {
         const programIds = programsData.map(p => p.id);
         
@@ -109,16 +93,16 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
           })
           .from(institutes)
           .leftJoin(cities, eq(institutes.cityId, cities.id))
-          .innerJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
+          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
           .where(and(
             eq(institutes.status, true),
-            inArray(programInstitutes.programId, programIds)  // 👈 inArray use kiya
+            inArray(programOfferings.programId, programIds)
           ))
           .groupBy(institutes.id, cities.name)
           .limit(8);
       }
 
-      // Get cities for this category
+      // Get cities for this category (through programOfferings and institutes)
       if (programsData.length > 0) {
         const programIds = programsData.map(p => p.id);
         
@@ -131,10 +115,11 @@ export async function getMenuData(menuId: string, categorySlug?: string) {
             isPopular: cities.isPopular,
           })
           .from(cities)
-          .innerJoin(programCities, eq(cities.id, programCities.cityId))
+          .innerJoin(institutes, eq(cities.id, institutes.cityId))
+          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
           .where(and(
             eq(cities.status, true),
-            inArray(programCities.programId, programIds)  // 👈 inArray use kiya
+            inArray(programOfferings.programId, programIds)
           ))
           .groupBy(cities.id)
           .limit(8);

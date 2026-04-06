@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         author: news.author,
         isFeatured: news.isFeatured,
         isBreaking: news.isBreaking,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
         expiresAt: news.expiresAt,
         status: news.status,
@@ -38,19 +38,17 @@ export async function GET(request: Request) {
       .orderBy(desc(news.publishedAt))
       .limit(limit);
 
-    // ✅ FIXED: Return as 'data' field for frontend
     return NextResponse.json({
       success: true,
-      data: allNews || [],  // 👈 Change from 'news' to 'data'
+      data: allNews || [],
     });
 
   } catch (error) {
     console.error('Error fetching news:', error);
     
-    // ✅ FIXED: Return empty array on error
     return NextResponse.json({ 
       success: false, 
-      data: [],  // 👈 Always return array
+      data: [],
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }

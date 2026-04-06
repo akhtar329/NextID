@@ -4,8 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { 
   programs, 
-  degrees, 
-  programInstitutes, 
+  programOfferings, 
   institutes,
   seoMetadata 
 } from "@/app/lib/schema";
@@ -16,13 +15,13 @@ type ProgramWithInstitutes = {
   id: number;
   name: string;
   slug: string;
-  overview: string | null;
-  eligibility: string | null;
-  duration: string | null;
-  careerScope: string | null;
-  feeRange: string | null;
+  shortDescription: string | null;
+  detailedOverview: string | null;
+  typicalDuration: string | null;
+  commonEligibility: string | null;
+  careerOutlook: string | null;
+  typicalFeeRange: string | null;
   isFeatured: boolean | null;
-  degreeName: string | null;
   instituteNames: string[];
   seoTitle: string | null;
   seoDescription: string | null;
@@ -35,13 +34,13 @@ export async function GET() {
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        overview: programs.overview,
-        eligibility: programs.eligibility,
-        duration: programs.duration,
-        careerScope: programs.careerScope,
-        feeRange: programs.feeRange,
+        shortDescription: programs.shortDescription,
+        detailedOverview: programs.detailedOverview,
+        typicalDuration: programs.typicalDuration,
+        commonEligibility: programs.commonEligibility,
+        careerOutlook: programs.careerOutlook,
+        typicalFeeRange: programs.typicalFeeRange,
         isFeatured: programs.isFeatured,
-        degreeName: degrees.name,
         // ✅ Get SEO from centralized seo_metadata table
         seoTitle: seoMetadata.metaTitle,
         seoDescription: seoMetadata.metaDescription,
@@ -53,9 +52,8 @@ export async function GET() {
         )`
       })
       .from(programs)
-      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-      .leftJoin(programInstitutes, eq(programs.id, programInstitutes.programId))
-      .leftJoin(institutes, eq(programInstitutes.instituteId, institutes.id))
+      .leftJoin(programOfferings, eq(programs.id, programOfferings.programId))
+      .leftJoin(institutes, eq(programOfferings.instituteId, institutes.id))
       .leftJoin(seoMetadata, 
         and(
           eq(seoMetadata.entityType, 'program'),
@@ -63,7 +61,7 @@ export async function GET() {
         )
       )
       .where(eq(programs.status, true))
-      .groupBy(programs.id, degrees.name, seoMetadata.metaTitle, seoMetadata.metaDescription)
+      .groupBy(programs.id, seoMetadata.metaTitle, seoMetadata.metaDescription)
       .orderBy(asc(programs.id));
 
     // Transform to simple string array
@@ -71,13 +69,13 @@ export async function GET() {
       id: program.id,
       name: program.name,
       slug: program.slug,
-      overview: program.overview,
-      eligibility: program.eligibility,
-      duration: program.duration,
-      careerScope: program.careerScope,
-      feeRange: program.feeRange,
+      shortDescription: program.shortDescription,
+      detailedOverview: program.detailedOverview,
+      typicalDuration: program.typicalDuration,
+      commonEligibility: program.commonEligibility,
+      careerOutlook: program.careerOutlook,
+      typicalFeeRange: program.typicalFeeRange,
       isFeatured: program.isFeatured,
-      degreeName: program.degreeName,
       seoTitle: program.seoTitle,
       seoDescription: program.seoDescription,
       instituteNames: (program.instituteNames || []).map((i: { name: string }) => i.name)

@@ -1,4 +1,5 @@
 // app/api/public/results/route.ts
+
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { results, boards, institutes } from "@/app/lib/schema";
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
     const type = searchParams.get("type"); // 'board' or 'university'
     const year = searchParams.get("year");
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 20;
-    const slug = searchParams.get("slug"); // add slug support
+    const slug = searchParams.get("slug");
 
     // Build conditions array
     const conditions: any[] = [eq(results.status, true)];
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
     if (type === "board") {
       conditions.push(sql`${results.boardId} IS NOT NULL`);
     } else if (type === "university") {
-      conditions.push(sql`${results.universityId} IS NOT NULL`);
+      conditions.push(sql`${results.instituteId} IS NOT NULL`);
     }
 
     if (year) {
@@ -26,18 +27,16 @@ export async function GET(request: Request) {
     }
 
     if (slug) {
-      conditions.push(eq(results.slug, slug)); // slug filter
+      conditions.push(eq(results.slug, slug));
     }
 
     const allResults = await db
       .select({
         id: results.id,
         title: results.title,
-        slug: results.slug, // include slug
-        programId: results.programId,
+        slug: results.slug,
         instituteId: results.instituteId,
         boardId: results.boardId,
-        universityId: results.universityId,
         year: results.year,
         resultDate: results.resultDate,
         officialLink: results.officialLink,
@@ -52,7 +51,7 @@ export async function GET(request: Request) {
       })
       .from(results)
       .leftJoin(boards, eq(results.boardId, boards.id))
-      .leftJoin(institutes, eq(results.universityId, institutes.id))
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))
       .where(and(...conditions))
       .orderBy(desc(results.year), desc(results.resultDate))
       .limit(limit);

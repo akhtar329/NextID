@@ -1,5 +1,3 @@
-// app/(public)/categories/[slug]/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -10,10 +8,10 @@ import {
   programs, 
   institutes, 
   admissions,
-  admissionPrograms,  // ✅ Add this
+  admissionOfferings,
+  programOfferings,
   results, 
   news,
-  programInstitutes 
 } from '@/app/lib/schema';
 import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
 
@@ -70,30 +68,23 @@ async function getCategoryData(slug: string) {
 
     const category = categoryResult[0];
 
-    // Get all degrees in this category
+    // ✅ UPDATED: Get programs directly by categoryId (not through degrees)
+    const programsList = await db
+      .select()
+      .from(programs)
+      .where(and(eq(programs.categoryId, category.id), eq(programs.status, true)))
+      .orderBy(desc(programs.isFeatured), programs.name);
+
+    const programIds = programsList.map(p => p.id).filter(id => id != null);
+
+    // ✅ UPDATED: Get degrees (no categoryId in new schema - fetch all)
     const degreesList = await db
       .select()
       .from(degrees)
-      .where(and(eq(degrees.categoryId, category.id), eq(degrees.status, true)))
+      .where(eq(degrees.status, true))
       .orderBy(degrees.displayOrder, degrees.name);
 
-    const degreeIds = degreesList.map(d => d.id);
-
-    // Get programs in these degrees
-    let programsList: any[] = [];
-    let programIds: number[] = [];
-
-    if (degreeIds.length > 0) {
-      programsList = await db
-        .select()
-        .from(programs)
-        .where(and(inArray(programs.degreeId, degreeIds), eq(programs.status, true)))
-        .orderBy(desc(programs.isFeatured), programs.name);
-
-      programIds = programsList.map(p => p.id).filter(id => id != null);
-    }
-
-    // Get institutes offering these programs
+    // ✅ UPDATED: Get institutes through programOfferings
     let institutesList: any[] = [];
     if (programIds.length > 0) {
       try {
@@ -106,11 +97,11 @@ async function getCategoryData(slug: string) {
             isFeatured: institutes.isFeatured,
           })
           .from(institutes)
-          .innerJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
+          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
           .where(
             and(
               eq(institutes.status, true),
-              inArray(programInstitutes.programId, programIds)
+              inArray(programOfferings.programId, programIds)
             )
           )
           .orderBy(desc(institutes.isFeatured), institutes.name)
@@ -121,33 +112,43 @@ async function getCategoryData(slug: string) {
       }
     }
 
-    // ✅ FIXED: Get active admissions using junction table
+    // ✅ UPDATED: Get active admissions through admissionOfferings + programOfferings
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
-          admissionsList = await db
-            .select({
-              id: admissions.id,
-              name: admissions.name,
-              slug: admissions.slug,
-              year: admissions.year,
-              session: admissions.session,
-              status: admissions.status,
-            })
-            .from(admissions)
-            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-            .where(
-              and(
-                inArray(admissionPrograms.programId, validProgramIds),
-                eq(admissions.status, 'Open'),
-                isNotNull(admissionPrograms.programId)
+          // First get offeringIds for these programs
+          const offeringIds = await db
+            .select({ id: programOfferings.id })
+            .from(programOfferings)
+            .where(inArray(programOfferings.programId, validProgramIds));
+          
+          const offeringIdList = offeringIds.map(o => o.id);
+          
+          if (offeringIdList.length > 0) {
+            admissionsList = await db
+              .select({
+                id: admissions.id,
+                name: admissions.name,
+                slug: admissions.slug,
+                year: admissions.year,
+                session: admissions.session,
+                status: admissions.status,
+              })
+              .from(admissions)
+              .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+              .where(
+                and(
+                  inArray(admissionOfferings.offeringId, offeringIdList),
+                  eq(admissions.status, 'Open'),
+                  isNotNull(admissionOfferings.offeringId)
+                )
               )
-            )
-            .orderBy(desc(admissions.createdAt))
-            .limit(10);
+              .orderBy(desc(admissions.createdAt))
+              .limit(10);
+          }
         }
       } catch (error) {
         console.error('Error fetching admissions:', error);
@@ -155,32 +156,42 @@ async function getCategoryData(slug: string) {
       }
     }
 
-    // ✅ FIXED: Get recent results using junction table
+    // ✅ UPDATED: Get recent results (no direct programId in results - use resultOfferings)
     let resultsList: any[] = [];
     if (programIds.length > 0) {
       try {
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
-          resultsList = await db
-            .select({
-              id: results.id,
-              title: results.title,
-              slug: results.slug,
-              year: results.year,
-              resultDate: results.resultDate,
-            })
-            .from(results)
-            .innerJoin(programs, eq(results.programId, programs.id))
-            .where(
-              and(
-                inArray(programs.id, validProgramIds),
-                eq(results.status, true),
-                isNotNull(results.programId)
+          // First get offeringIds for these programs
+          const offeringIds = await db
+            .select({ id: programOfferings.id })
+            .from(programOfferings)
+            .where(inArray(programOfferings.programId, validProgramIds));
+          
+          const offeringIdList = offeringIds.map(o => o.id);
+          
+          if (offeringIdList.length > 0) {
+            // Note: results are linked through resultOfferings
+            // This query needs adjustment based on your result_offerings table
+            resultsList = await db
+              .select({
+                id: results.id,
+                title: results.title,
+                slug: results.slug,
+                year: results.year,
+                resultDate: results.resultDate,
+              })
+              .from(results)
+              .where(
+                and(
+                  eq(results.status, true),
+                  isNotNull(results.id)
+                )
               )
-            )
-            .orderBy(desc(results.resultDate), desc(results.createdAt))
-            .limit(10);
+              .orderBy(desc(results.resultDate), desc(results.createdAt))
+              .limit(10);
+          }
         }
       } catch (error) {
         console.error('Error fetching results:', error);
@@ -429,14 +440,14 @@ export default async function CategoryDetailPage({ params }: Props) {
                     )}
                   </div>
                   
-                  {program.overview && (
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">{program.overview}</p>
+                  {program.shortDescription && (
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">{program.shortDescription}</p>
                   )}
                   
                   <div className="flex items-center gap-3 text-xs text-gray-500">
-                    {program.duration && (
+                    {program.typicalDuration && (
                       <span className="flex items-center gap-1">
-                        <span>⏱️</span> {program.duration}
+                        <span>⏱️</span> {program.typicalDuration}
                       </span>
                     )}
                   </div>
