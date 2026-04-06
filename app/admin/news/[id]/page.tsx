@@ -37,7 +37,7 @@ export default async function NewsDetailPage({ params }: PageProps) {
       author: news.author,
       isFeatured: news.isFeatured,
       isBreaking: news.isBreaking,
-      views: news.views,
+      views: news.viewCount,
       publishedAt: news.publishedAt,
       expiresAt: news.expiresAt,
       status: news.status,
