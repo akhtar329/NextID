@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         author: news.author,
         isFeatured: news.isFeatured,
         isBreaking: news.isBreaking,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
         expiresAt: news.expiresAt,
         status: news.status,

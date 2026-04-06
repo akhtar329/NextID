@@ -1,4 +1,3 @@
-// app/(public)/universities/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -8,9 +7,9 @@ import {
   cities, 
   programs, 
   admissions,
-  admissionPrograms,  // ✅ Add this
+  admissionOfferings,
+  programOfferings,
   results, 
-  programInstitutes 
 } from '@/app/lib/schema';
 import { eq, and, desc, count, sql, inArray, isNotNull } from 'drizzle-orm';
 
@@ -39,38 +38,20 @@ interface UniversityDetail {
   name: string;
   slug: string;
   type: string | null;
-  establishedYear?: number;
   description: string | null;
-  mission?: string | null;
-  vision?: string | null;
   website: string | null;
-  email?: string | null;
-  phone?: string | null;
-  logo?: string | null;
-  coverImage?: string | null;
-  address?: string | null;
   cityId: number | null;
   cityName: string | null;
   citySlug: string | null;
   province: string | null;
-  hasHostel?: boolean | null;
-  hasTransport?: boolean | null;
-  hasLibrary?: boolean | null;
-  hasSportsComplex?: boolean | null;
-  facilities?: string[] | null;
-  accreditations?: string[] | null;
-  rankings?: any | null;
 }
 
 interface Program {
   id: number;
   name: string;
   slug: string;
-  degreeName: string | null;
-  levelName: string | null;
-  categoryName: string | null;
-  duration: string | null;
-  feeRange: string | null;
+  typicalDuration: string | null;
+  typicalFeeRange: string | null;
   admissionsCount: number;
   resultsCount: number;
 }
@@ -92,7 +73,6 @@ interface Result {
   slug: string;
   year: number;
   resultDate: Date | null;
-  programName: string | null;
   isPopular: boolean | null;
 }
 
@@ -127,51 +107,45 @@ async function getUniversityBySlug(slug: string): Promise<UniversityDetail | nul
 // ==================== GET PROGRAMS WITH STATS ====================
 async function getProgramsWithStats(universityId: number): Promise<Program[]> {
   try {
+    // Get programs through programOfferings
     const programsList = await db
       .select({
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        degreeName: programs.name,
-        levelName: sql<string>`NULL`,
-        categoryName: sql<string>`NULL`,
-        duration: programs.duration,
-        feeRange: programs.feeRange,
+        typicalDuration: programs.typicalDuration,
+        typicalFeeRange: programs.typicalFeeRange,
       })
       .from(programs)
-      .innerJoin(programInstitutes, eq(programs.id, programInstitutes.programId))
-      .where(eq(programInstitutes.instituteId, universityId))
+      .innerJoin(programOfferings, eq(programs.id, programOfferings.programId))
+      .where(eq(programOfferings.instituteId, universityId))
       .orderBy(programs.name);
+
+    // Get offerings for this university
+    const offerings = await db
+      .select({ id: programOfferings.id, programId: programOfferings.programId })
+      .from(programOfferings)
+      .where(eq(programOfferings.instituteId, universityId));
+
+    const offeringMap = new Map(offerings.map(o => [o.programId, o.id]));
 
     const programsWithStats = await Promise.all(
       programsList.map(async (prog) => {
-        // ✅ FIXED: Count admissions through junction table
-        const [admissionsResult] = await db
-          .select({ count: count() })
-          .from(admissions)
-          .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-          .where(
-            and(
-              eq(admissions.instituteId, universityId),
-              eq(admissionPrograms.programId, prog.id),
-              eq(admissions.status, 'Open')
-            )
-          );
-
-        const [resultsResult] = await db
-          .select({ count: count() })
-          .from(results)
-          .where(
-            and(
-              eq(results.instituteId, universityId),
-              eq(results.programId, prog.id)
-            )
-          );
+        const offeringId = offeringMap.get(prog.id);
+        
+        let admissionsCount = 0;
+        if (offeringId) {
+          const [admissionsResult] = await db
+            .select({ count: count() })
+            .from(admissionOfferings)
+            .where(eq(admissionOfferings.offeringId, offeringId));
+          admissionsCount = Number(admissionsResult?.count) || 0;
+        }
 
         return {
           ...prog,
-          admissionsCount: Number(admissionsResult?.count) || 0,
-          resultsCount: Number(resultsResult?.count) || 0,
+          admissionsCount,
+          resultsCount: 0,
         };
       })
     );
@@ -186,29 +160,75 @@ async function getProgramsWithStats(universityId: number): Promise<Program[]> {
 // ==================== GET ADMISSIONS ====================
 async function getAdmissions(universityId: number, limit = 5): Promise<Admission[]> {
   try {
-    return await db
+    // Get offerings for this university
+    const offerings = await db
+      .select({ id: programOfferings.id, programId: programOfferings.programId })
+      .from(programOfferings)
+      .where(eq(programOfferings.instituteId, universityId));
+
+    const offeringIds = offerings.map(o => o.id);
+    
+    if (offeringIds.length === 0) return [];
+
+    // Get admissions through admissionOfferings
+    const admissionsList = await db
+      .select({
+        admissionId: admissionOfferings.admissionId,
+        offeringId: admissionOfferings.offeringId,
+      })
+      .from(admissionOfferings)
+      .where(inArray(admissionOfferings.offeringId, offeringIds));
+
+    const admissionIds = admissionsList.map(a => a.admissionId);
+    
+    if (admissionIds.length === 0) return [];
+
+    // Create a map of offeringId to programId
+    const offeringToProgram = new Map(offerings.map(o => [o.id, o.programId]));
+    
+    // Get program names
+    const programMap = new Map();
+    for (const prog of offerings) {
+      const [program] = await db
+        .select({ name: programs.name, slug: programs.slug })
+        .from(programs)
+        .where(eq(programs.id, prog.programId))
+        .limit(1);
+      if (program) {
+        programMap.set(prog.id, program);
+      }
+    }
+
+    // Get admission details
+    const result = await db
       .select({
         id: admissions.id,
-        programName: programs.name,
-        programSlug: programs.slug,
         slug: admissions.slug,
         year: admissions.year,
         session: admissions.session,
         status: admissions.status,
         expectedCloseDate: admissions.expectedCloseDate,
+        offeringId: admissionOfferings.offeringId,
       })
       .from(admissions)
-      .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-      .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-      .where(
-        and(
-          eq(admissions.instituteId, universityId),
-          eq(admissions.status, 'Open'),
-          isNotNull(admissionPrograms.programId)
-        )
-      )
+      .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+      .where(inArray(admissions.id, admissionIds))
       .orderBy(admissions.expectedCloseDate)
       .limit(limit);
+
+    return result.map(r => {
+      const program = programMap.get(r.offeringId);
+      return {
+        id: r.id,
+        programName: program?.name || 'Program',
+        programSlug: program?.slug || '',
+        slug: r.slug || '',
+        year: r.year || 2026,
+        session: r.session,
+        status: r.status,
+        expectedCloseDate: r.expectedCloseDate,
+      };
+    });
   } catch (error) {
     console.error('Error fetching admissions:', error);
     return [];
@@ -225,11 +245,9 @@ async function getResults(universityId: number, limit = 5): Promise<Result[]> {
         slug: results.slug,
         year: results.year,
         resultDate: results.resultDate,
-        programName: programs.name,
         isPopular: results.isPopular,
       })
       .from(results)
-      .leftJoin(programs, eq(results.programId, programs.id))
       .where(eq(results.instituteId, universityId))
       .orderBy(desc(results.resultDate), desc(results.year))
       .limit(limit);
@@ -242,40 +260,57 @@ async function getResults(universityId: number, limit = 5): Promise<Result[]> {
 // ==================== GET STATS ====================
 async function getStats(universityId: number) {
   try {
+    // Get programs count through programOfferings
     const [programsCount] = await db
       .select({ count: count() })
-      .from(programInstitutes)
-      .where(eq(programInstitutes.instituteId, universityId));
+      .from(programOfferings)
+      .where(eq(programOfferings.instituteId, universityId));
 
-    // ✅ FIXED: Count admissions through junction table
-    const [admissionsCount] = await db
-      .select({ count: count() })
-      .from(admissionPrograms)
-      .innerJoin(admissions, eq(admissionPrograms.admissionId, admissions.id))
-      .where(eq(admissions.instituteId, universityId));
+    // Get offerings for admissions count
+    const offerings = await db
+      .select({ id: programOfferings.id })
+      .from(programOfferings)
+      .where(eq(programOfferings.instituteId, universityId));
+
+    const offeringIds = offerings.map(o => o.id);
+    
+    let admissionsCount = 0;
+    let openAdmissions = 0;
+    
+    if (offeringIds.length > 0) {
+      // Get admission IDs through admissionOfferings
+      const admissionLinks = await db
+        .select({ admissionId: admissionOfferings.admissionId })
+        .from(admissionOfferings)
+        .where(inArray(admissionOfferings.offeringId, offeringIds));
+      
+      const admissionIds = admissionLinks.map(a => a.admissionId);
+      
+      if (admissionIds.length > 0) {
+        const [admissionsResult] = await db
+          .select({ count: count() })
+          .from(admissions)
+          .where(inArray(admissions.id, admissionIds));
+        admissionsCount = Number(admissionsResult?.count) || 0;
+
+        const [openResult] = await db
+          .select({ count: count() })
+          .from(admissions)
+          .where(and(inArray(admissions.id, admissionIds), eq(admissions.status, 'Open')));
+        openAdmissions = Number(openResult?.count) || 0;
+      }
+    }
 
     const [resultsCount] = await db
       .select({ count: count() })
       .from(results)
       .where(eq(results.instituteId, universityId));
 
-    // ✅ FIXED: Count open admissions through junction table
-    const [openAdmissions] = await db
-      .select({ count: count() })
-      .from(admissionPrograms)
-      .innerJoin(admissions, eq(admissionPrograms.admissionId, admissions.id))
-      .where(
-        and(
-          eq(admissions.instituteId, universityId),
-          eq(admissions.status, 'Open')
-        )
-      );
-
     return {
       totalPrograms: Number(programsCount?.count) || 0,
-      totalAdmissions: Number(admissionsCount?.count) || 0,
+      totalAdmissions: admissionsCount,
       totalResults: Number(resultsCount?.count) || 0,
-      openAdmissions: Number(openAdmissions?.count) || 0,
+      openAdmissions,
     };
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -356,16 +391,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
     getSimilarUniversities(university.cityId, university.id, 3),
   ]);
 
-  // Group programs by level (will need to fetch level data properly)
-  const groupedPrograms = programs.reduce((acc: Record<string, Program[]>, prog) => {
-    const level = prog.levelName || 'Other Programs';
-    if (!acc[level]) {
-      acc[level] = [];
-    }
-    acc[level].push(prog);
-    return acc;
-  }, {} as Record<string, Program[]>);
-
   return (
     <main className="min-h-screen bg-gray-50">
       
@@ -382,14 +407,12 @@ export default async function UniversityDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      {/* Hero Section with Cover Image - Updated Layout */}
+      {/* Hero Section */}
       <div className="relative bg-gradient-to-r from-blue-900 to-indigo-900 text-white">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-4xl">
-            {/* University Name - Large and Bold */}
             <h1 className="text-5xl md:text-6xl font-bold mb-4">{university.name}</h1>
             
-            {/* University Type and Location */}
             <div className="flex flex-wrap items-center gap-4 text-lg mb-8">
               {university.type && (
                 <span className="px-4 py-1.5 bg-yellow-500 text-gray-900 rounded-full text-sm font-medium">
@@ -409,7 +432,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               )}
             </div>
 
-            {/* Stats Cards - Now below the name */}
+            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                 <div className="text-3xl font-bold">{stats.totalPrograms}</div>
@@ -507,40 +530,30 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               </div>
 
               {programs.length > 0 ? (
-                <div className="space-y-6">
-                  {Object.entries(groupedPrograms).map(([level, levelPrograms]) => (
-                    <div key={level}>
-                      <h3 className="font-semibold text-gray-700 mb-3">{level}</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {levelPrograms.slice(0, 4).map((prog) => (
-                          <Link
-                            key={prog.id}
-                            href={`/programs/${prog.slug}`}
-                            className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-md transition group"
-                          >
-                            <h4 className="font-bold text-gray-900 group-hover:text-blue-600 mb-2">
-                              {prog.name}
-                            </h4>
-                            <div className="flex flex-wrap gap-2 text-xs mb-2">
-                              {prog.duration && (
-                                <span className="px-2 py-1 bg-gray-100 rounded-full">⏱️ {prog.duration}</span>
-                              )}
-                              {prog.feeRange && (
-                                <span className="px-2 py-1 bg-gray-100 rounded-full">💰 {prog.feeRange}</span>
-                              )}
-                            </div>
-                            <div className="flex gap-3 text-xs">
-                              {prog.admissionsCount > 0 && (
-                                <span className="text-green-600">📝 {prog.admissionsCount} Open</span>
-                              )}
-                              {prog.resultsCount > 0 && (
-                                <span className="text-orange-600">📊 {prog.resultsCount} Results</span>
-                              )}
-                            </div>
-                          </Link>
-                        ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {programs.slice(0, 6).map((prog) => (
+                    <Link
+                      key={prog.id}
+                      href={`/programs/${prog.slug}`}
+                      className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-md transition group"
+                    >
+                      <h3 className="font-bold text-gray-900 group-hover:text-blue-600 mb-2">
+                        {prog.name}
+                      </h3>
+                      <div className="flex flex-wrap gap-2 text-xs mb-2">
+                        {prog.typicalDuration && (
+                          <span className="px-2 py-1 bg-gray-100 rounded-full">⏱️ {prog.typicalDuration}</span>
+                        )}
+                        {prog.typicalFeeRange && (
+                          <span className="px-2 py-1 bg-gray-100 rounded-full">💰 {prog.typicalFeeRange}</span>
+                        )}
                       </div>
-                    </div>
+                      <div className="flex gap-3 text-xs">
+                        {prog.admissionsCount > 0 && (
+                          <span className="text-green-600">📝 {prog.admissionsCount} Open</span>
+                        )}
+                      </div>
+                    </Link>
                   ))}
                 </div>
               ) : (
@@ -608,7 +621,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                     >
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="font-bold text-gray-900 group-hover:text-blue-600">
-                          {res.programName || 'Result'}
+                          {res.title || `Result ${res.year}`}
                         </h3>
                         {res.isPopular && (
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
@@ -617,7 +630,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                         )}
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
-                        {res.title || `Result ${res.year}`}
+                        Year: {res.year}
                       </p>
                       {res.resultDate && (
                         <p className="text-xs text-gray-500">

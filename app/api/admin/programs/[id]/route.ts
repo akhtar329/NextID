@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { programs, degrees, levels, seoMetadata } from "@/app/lib/schema";
+import { programs, categories, seoMetadata } from "@/app/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 // Helper to parse program ID safely
@@ -29,22 +29,33 @@ export async function GET(
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        degreeId: programs.degreeId,
-        degreeName: degrees.name,
-        levelName: levels.name,
-        overview: programs.overview,
-        eligibility: programs.eligibility,
-        duration: programs.duration,
-        careerScope: programs.careerScope,
-        feeRange: programs.feeRange,
-        // ❌ REMOVED: seoTitle, seoDescription
+        categoryId: programs.categoryId,
+        categoryName: categories.name,
+        shortDescription: programs.shortDescription,
+        detailedOverview: programs.detailedOverview,
+        whatYouLearn: programs.whatYouLearn,
+        whyStudyThis: programs.whyStudyThis,
+        careerOutlook: programs.careerOutlook,
+        industryDemand: programs.industryDemand,
+        typicalDuration: programs.typicalDuration,
+        typicalFeeRange: programs.typicalFeeRange,
+        commonEligibility: programs.commonEligibility,
+        featuredImage: programs.featuredImage,
+        icon: programs.icon,
+        isFeatured: programs.isFeatured,
+        isPopular: programs.isPopular,
+        metaTitle: programs.metaTitle,
+        metaDescription: programs.metaDescription,
+        focusKeyword: programs.focusKeyword,
+        introVideoUrl: programs.introVideoUrl,
+        graduatesCount: programs.graduatesCount,
+        placementRate: programs.placementRate,
         status: programs.status,
         createdAt: programs.createdAt,
         updatedAt: programs.updatedAt,
       })
       .from(programs)
-      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-      .leftJoin(levels, eq(degrees.levelId, levels.id))
+      .leftJoin(categories, eq(programs.categoryId, categories.id))
       .where(eq(programs.id, programId))
       .limit(1);
 
@@ -97,15 +108,22 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: "Program not found" }, { status: 404 });
     }
 
-    // Update program fields (without SEO columns)
+    // Update program fields (new schema columns)
     const updateData: Record<string, any> = { updatedAt: new Date() };
-    const fields = ["name", "slug", "degreeId", "duration", "status", "overview", "eligibility", "careerScope", "feeRange"];
+    
+    const fields = [
+      "name", "slug", "categoryId", "status", "isFeatured", "isPopular",
+      "shortDescription", "detailedOverview", "whatYouLearn", "whyStudyThis",
+      "careerOutlook", "industryDemand", "typicalDuration", "typicalFeeRange",
+      "commonEligibility", "featuredImage", "icon", "metaTitle", "metaDescription",
+      "focusKeyword", "introVideoUrl", "graduatesCount", "placementRate"
+    ];
     
     fields.forEach(field => {
       if (body[field] !== undefined) {
-        if (field === "degreeId") {
-          updateData[field] = Number(body[field]);
-        } else if (field === "status") {
+        if (field === "categoryId" || field === "graduatesCount" || field === "placementRate") {
+          updateData[field] = body[field] ? Number(body[field]) : null;
+        } else if (field === "status" || field === "isFeatured" || field === "isPopular") {
           updateData[field] = Boolean(body[field]);
         } else {
           updateData[field] = body[field];
@@ -147,7 +165,6 @@ export async function PATCH(
       };
 
       if (existingSeo.length > 0) {
-        // Update existing SEO
         const seoResult = await db
           .update(seoMetadata)
           .set(seoData)
@@ -160,7 +177,6 @@ export async function PATCH(
           .returning();
         updatedSeo = seoResult[0];
       } else if (body.seo.metaTitle || body.seo.metaDescription) {
-        // Create new SEO only if there's actual data
         const seoResult = await db
           .insert(seoMetadata)
           .values({
@@ -202,9 +218,9 @@ export async function PUT(
     const body = await request.json();
 
     // Validate required fields
-    if (!body.name || !body.slug || !body.degreeId) {
+    if (!body.name || !body.slug) {
       return NextResponse.json(
-        { success: false, error: "Name, slug, and degreeId are required" },
+        { success: false, error: "Name and slug are required" },
         { status: 400 }
       );
     }
@@ -234,12 +250,26 @@ export async function PUT(
       .set({
         name: body.name,
         slug: body.slug,
-        degreeId: Number(body.degreeId),
-        overview: body.overview || null,
-        eligibility: body.eligibility || null,
-        duration: body.duration || null,
-        careerScope: body.careerScope || null,
-        feeRange: body.feeRange || null,
+        categoryId: body.categoryId ? Number(body.categoryId) : null,
+        shortDescription: body.shortDescription || null,
+        detailedOverview: body.detailedOverview || null,
+        whatYouLearn: body.whatYouLearn || null,
+        whyStudyThis: body.whyStudyThis || null,
+        careerOutlook: body.careerOutlook || null,
+        industryDemand: body.industryDemand || null,
+        typicalDuration: body.typicalDuration || null,
+        typicalFeeRange: body.typicalFeeRange || null,
+        commonEligibility: body.commonEligibility || null,
+        featuredImage: body.featuredImage || null,
+        icon: body.icon || null,
+        isFeatured: body.isFeatured ?? false,
+        isPopular: body.isPopular ?? false,
+        metaTitle: body.metaTitle || null,
+        metaDescription: body.metaDescription || null,
+        focusKeyword: body.focusKeyword || null,
+        introVideoUrl: body.introVideoUrl || null,
+        graduatesCount: body.graduatesCount ? Number(body.graduatesCount) : null,
+        placementRate: body.placementRate ? Number(body.placementRate) : null,
         status: body.status ?? true,
         updatedAt: new Date(),
       })
@@ -262,8 +292,8 @@ export async function PUT(
     const seoData = {
       entityType: 'program',
       entityId: programId,
-      metaTitle: body.seo?.metaTitle || null,
-      metaDescription: body.seo?.metaDescription || null,
+      metaTitle: body.seo?.metaTitle || body.metaTitle || null,
+      metaDescription: body.seo?.metaDescription || body.metaDescription || null,
       canonicalUrl: body.seo?.canonicalUrl || null,
       robots: body.seo?.robots || 'index, follow',
       ogTitle: body.seo?.ogTitle || null,
@@ -309,7 +339,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete program (also delete associated SEO metadata)
+// DELETE - Delete program (also delete associated SEO metadata and offerings)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -337,12 +367,16 @@ export async function DELETE(
         )
       );
 
+    // Delete program offerings (cascade should handle, but explicit for safety)
+    const { programOfferings } = await import("@/app/lib/schema");
+    await db.delete(programOfferings).where(eq(programOfferings.programId, programId));
+
     // Delete program
     await db.delete(programs).where(eq(programs.id, programId));
 
     return NextResponse.json({ 
       success: true, 
-      message: "Program and its SEO metadata deleted successfully" 
+      message: "Program and its associated data deleted successfully" 
     });
   } catch (error) {
     console.error("DELETE program error:", error);

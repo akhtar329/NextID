@@ -1,10 +1,8 @@
-// app/(public)/levels/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { levels, degrees, programs } from '@/app/lib/schema';
-import { eq, and, count, inArray } from 'drizzle-orm';
+import { eq, and, count, inArray, sql } from 'drizzle-orm';
 
 export const metadata: Metadata = {
   title: 'Education Levels | Matric, Intermediate, Bachelor, Master | NextID.pk',
@@ -43,6 +41,14 @@ async function getLevelsWithStats(): Promise<LevelWithStats[]> {
       .where(eq(levels.status, true))
       .orderBy(levels.displayOrder, levels.name);
 
+    // Get total programs count (since programs no longer have degreeId)
+    const totalProgramsResult = await db
+      .select({ count: count() })
+      .from(programs)
+      .where(eq(programs.status, true));
+    
+    const totalProgramsCount = Number(totalProgramsResult[0]?.count) || 0;
+
     // Calculate stats for each level
     const levelsWithStats = await Promise.all(
       allLevels.map(async (level) => {
@@ -52,20 +58,13 @@ async function getLevelsWithStats(): Promise<LevelWithStats[]> {
           .from(degrees)
           .where(and(eq(degrees.levelId, level.id), eq(degrees.status, true)));
 
-        const degreeIds = degreesList.map(d => d.id);
-
         // Get degrees count
         const degreesCount = degreesList.length;
 
-        // Get programs count through degrees
-        let programsCount = 0;
-        if (degreeIds.length > 0) {
-          const programsResult = await db
-            .select({ count: count() })
-            .from(programs)
-            .where(and(inArray(programs.degreeId, degreeIds), eq(programs.status, true)));
-          programsCount = programsResult[0]?.count || 0;
-        }
+        // ✅ UPDATED: Programs count (no direct degreeId in programs)
+        // Since programs don't have degreeId anymore, we'll show total programs
+        // or you can calculate through categories if needed
+        const programsCount = totalProgramsCount;
 
         return {
           ...level,

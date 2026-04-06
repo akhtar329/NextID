@@ -63,7 +63,7 @@ async function getAllBreakingNews() {
         author: news.author,
         isBreaking: news.isBreaking,
         isFeatured: news.isFeatured,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
       })
       .from(news)
@@ -88,7 +88,7 @@ async function getFeaturedNews() {
         excerpt: news.excerpt,
         imageUrl: news.imageUrl,
         publishedAt: news.publishedAt,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
       })
       .from(news)
       .where(and(eq(news.status, true), eq(news.isFeatured, true)))
@@ -116,7 +116,7 @@ async function getRegularNews() {
         author: news.author,
         isBreaking: news.isBreaking,
         isFeatured: news.isFeatured,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
       })
       .from(news)
@@ -142,12 +142,12 @@ async function getTrending() {
         id: news.id,
         title: news.title,
         slug: news.slug,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
       })
       .from(news)
       .where(eq(news.status, true))
-      .orderBy(desc(news.views))
+      .orderBy(desc(news.viewCount))  // ✅ Fixed: views → viewCount
       .limit(5);
     return data as TrendingItem[];
   } catch (error) {
@@ -242,7 +242,7 @@ async function getAdmissionsNews() {
         publishedAt: admissions.createdAt,
       })
       .from(admissions)
-      .where(eq(admissions.status, 'open'))
+      .where(eq(admissions.status, 'Open'))  // ✅ Fixed: 'open' → 'Open'
       .orderBy(desc(admissions.createdAt))
       .limit(5);
   } catch (error) {
@@ -321,7 +321,7 @@ async function getProgramsNews() {
         id: programs.id,
         title: programs.name,
         slug: programs.slug,
-        excerpt: programs.overview,
+        excerpt: programs.shortDescription,  // ✅ Fixed: overview → shortDescription
         imageUrl: sql<string>`NULL`.as('imageUrl'),
         publishedAt: programs.createdAt,
       })
@@ -556,7 +556,7 @@ function TrendingSidebar({ trending }: { trending: TrendingItem[] }) {
             </span>
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">{item.title}</h4>
-              <p className="text-xs text-gray-500 mt-1">{formatDate(item.publishedAt)} • {formatViews(item.views || 0)} views</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDate(item.publishedAt)} • {formatViews(item.viewCount || 0)} views</p>
             </div>
           </Link>
         ))}

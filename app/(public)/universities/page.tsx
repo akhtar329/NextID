@@ -4,8 +4,8 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { institutes, cities, programs, admissions } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql } from 'drizzle-orm';
+import { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
+import { eq, desc, like, and, or, sql, count } from 'drizzle-orm';
 
 // ==================== METADATA ====================
 export const metadata: Metadata = {
@@ -33,8 +33,6 @@ export const metadata: Metadata = {
 };
 
 // ==================== TYPES ====================
-type UniversityType = 'public' | 'private' | 'all';
-
 interface University {
   id: number;
   name: string;
@@ -85,22 +83,21 @@ const UNIVERSITY_RANKINGS: Record<string, number> = {
   'air': 10,
 };
 
-// ==================== DATA FETCHING - TYPE FILTER HATAYA ====================
+// ==================== DATA FETCHING ====================
 async function getUniversities(filters: {
   city?: string;
   type?: string;
   q?: string;
 }) {
   try {
-    // ✅ TYPE FILTER HATAYA - Ab sab institutes show honge
-    const conditions: any[] = [];  // ❌ Pehle: [eq(institutes.type, 'university')] tha
+    const conditions: any[] = [];
 
     // City filter
     if (filters.city) {
       conditions.push(eq(cities.slug, filters.city));
     }
 
-    // Type filter (public/private) - yeh abhi bhi kaam karega
+    // Type filter (public/private)
     if (filters.type) {
       conditions.push(eq(institutes.type, filters.type));
     }
@@ -116,7 +113,8 @@ async function getUniversities(filters: {
       );
     }
 
-    const data = await db
+    // First get all institutes with basic info
+    const institutesList = await db
       .select({
         id: institutes.id,
         name: institutes.name,
@@ -124,30 +122,42 @@ async function getUniversities(filters: {
         type: institutes.type,
         city: cities.name,
         citySlug: cities.slug,
-        established: sql<string | null>`null`,
         website: institutes.website,
         description: institutes.description,
         isFeatured: institutes.isFeatured,
-        programsCount: sql<number>`(
-          SELECT COUNT(DISTINCT program_institutes.program_id)
-          FROM program_institutes
-          WHERE program_institutes.institute_id = ${institutes.id}
-        )`,
-        admissionsCount: sql<number>`(
-          SELECT COUNT(*)
-          FROM admissions
-          WHERE admissions.institute_id = ${institutes.id}
-          AND admissions.status = 'Open'
-        )`,
       })
       .from(institutes)
       .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)  // ✅ Sab institutes
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(institutes.isFeatured), institutes.name)
       .limit(100);
 
+    // Get programs count for each institute through programOfferings
+    const institutesWithStats = await Promise.all(
+      institutesList.map(async (inst) => {
+        // Count programs through programOfferings
+        const [programsResult] = await db
+          .select({ count: count() })
+          .from(programOfferings)
+          .where(eq(programOfferings.instituteId, inst.id));
+
+        // Count open admissions
+        const [admissionsResult] = await db
+          .select({ count: count() })
+          .from(admissions)
+          .where(and(eq(admissions.instituteId, inst.id), eq(admissions.status, 'Open')));
+
+        return {
+          ...inst,
+          programsCount: Number(programsResult?.count) || 0,
+          admissionsCount: Number(admissionsResult?.count) || 0,
+          established: null,
+        };
+      })
+    );
+
     // Add rankings
-    const universitiesWithRanking = data.map(uni => ({
+    const universitiesWithRanking = institutesWithStats.map(uni => ({
       ...uni,
       ranking: UNIVERSITY_RANKINGS[uni.slug] || 999,
     }));
@@ -162,9 +172,8 @@ async function getUniversities(filters: {
 
 async function getStats() {
   try {
-    // ✅ TOTAL INSTITUTES - type filter hataya
-    const totalInstitutes = await db.$count(institutes);  // Changed from totalUniversities
-    const totalCities = await db.$count(cities);
+    const [totalInstitutes] = await db.select({ count: count() }).from(institutes);
+    const [totalCities] = await db.select({ count: count() }).from(cities);
     
     // Institutes with open admissions
     const institutesWithAdmissions = await db
@@ -175,11 +184,12 @@ async function getStats() {
       .then(result => Number(result[0]?.count) || 0);
 
     return {
-      totalInstitutes,  // Changed name
-      totalCities,
-      institutesWithAdmissions,  // Changed name
+      totalInstitutes: Number(totalInstitutes?.count) || 0,
+      totalCities: Number(totalCities?.count) || 0,
+      institutesWithAdmissions,
     };
   } catch (error) {
+    console.error('Stats error:', error);
     return { totalInstitutes: 0, totalCities: 0, institutesWithAdmissions: 0 };
   }
 }
@@ -266,7 +276,7 @@ export default async function UniversitiesPage({
               NUST • FAST • LUMS • Punjab University • Karachi University • 200+ Universities
             </p>
             
-            {/* Stats Cards - Updated names */}
+            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
                 <div className="text-2xl font-bold">{stats.totalInstitutes}+</div>
@@ -347,7 +357,6 @@ export default async function UniversitiesPage({
                   ))}
                 </div>
               </div>
-
 
               {/* Clear Filters */}
               {(filters.city || filters.type || filters.q) && (

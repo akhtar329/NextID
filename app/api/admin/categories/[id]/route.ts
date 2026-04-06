@@ -1,4 +1,5 @@
 // app/api/admin/categories/[id]/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { categories } from "@/app/lib/schema";
@@ -7,12 +8,10 @@ import { eq } from "drizzle-orm";
 // Next.js 15+ mein params ab Promise hai - isko await karna hoga
 export async function GET(
   req: NextRequest, 
-  { params }: { params: Promise<{ id: string }> }  // params is a Promise
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Await params first
     const { id } = await params;
-    
     const categoryId = Number(id);
     
     if (isNaN(categoryId)) {
@@ -61,6 +60,7 @@ export async function PATCH(
     }
 
     const body = await req.json();
+    
     // Check if category exists
     const existing = await db.select().from(categories).where(eq(categories.id, categoryId));
     if (existing.length === 0) {
@@ -97,6 +97,8 @@ export async function PATCH(
       .set({
         ...(body.name && { name: body.name }),
         ...(body.slug && { slug: body.slug }),
+        ...(body.description !== undefined && { description: body.description }),
+        ...(body.icon !== undefined && { icon: body.icon }),
         ...(body.displayOrder !== undefined && { displayOrder: body.displayOrder }),
         ...(body.status !== undefined && { status: Boolean(body.status) }),
         updatedAt: new Date(),
@@ -143,15 +145,18 @@ export async function DELETE(
       );
     }
 
-    // Check if category is being used by any degrees
-    const { degrees } = await import("@/app/lib/schema");
-    const usedByDegrees = await db.select().from(degrees).where(eq(degrees.categoryId, categoryId));
+    // ✅ REMOVED: degrees.categoryId check (no longer exists in new schema)
+    // Categories can be deleted freely now since programs have direct categoryId
     
-    if (usedByDegrees.length > 0) {
+    // Check if category is being used by any programs
+    const { programs } = await import("@/app/lib/schema");
+    const usedByPrograms = await db.select().from(programs).where(eq(programs.categoryId, categoryId));
+    
+    if (usedByPrograms.length > 0) {
       return NextResponse.json(
         { 
           success: false, 
-          error: `Cannot delete category "${existing[0].name}" because it is being used by ${usedByDegrees.length} degree(s). Please reassign these degrees first.` 
+          error: `Cannot delete category "${existing[0].name}" because it is being used by ${usedByPrograms.length} program(s). Please reassign these programs first.` 
         },
         { status: 409 }
       );

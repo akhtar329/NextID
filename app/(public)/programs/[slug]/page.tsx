@@ -1,18 +1,15 @@
-// app/(public)/programs/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { 
   programs, 
-  degrees, 
-  levels, 
   categories, 
   institutes, 
   admissions,
-  admissionPrograms,
+  admissionOfferings,
+  programOfferings,
   results, 
   cities,
-  programInstitutes,
   seoMetadata
 } from '@/app/lib/schema';
 import { eq, and, desc, count, sql, isNotNull } from 'drizzle-orm';
@@ -43,13 +40,11 @@ interface ProgramDetail {
   id: number;
   name: string;
   slug: string;
-  overview: string | null;
-  eligibility: string | null;
-  duration: string | null;
-  careerScope: string | null;
-  feeRange: string | null;
-  degreeName: string | null;
-  levelName: string | null;
+  detailedOverview: string | null;
+  commonEligibility: string | null;
+  typicalDuration: string | null;
+  careerOutlook: string | null;
+  typicalFeeRange: string | null;
   categoryName: string | null;
   featuredImage?: string | null;
 }
@@ -102,19 +97,16 @@ async function getProgramBySlug(slug: string): Promise<ProgramDetail | null> {
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        overview: programs.overview,
-        eligibility: programs.eligibility,
-        duration: programs.duration,
-        careerScope: programs.careerScope,
-        feeRange: programs.feeRange,
-        degreeName: degrees.name,
-        levelName: levels.name,
+        detailedOverview: programs.detailedOverview,
+        commonEligibility: programs.commonEligibility,
+        typicalDuration: programs.typicalDuration,
+        careerOutlook: programs.careerOutlook,
+        typicalFeeRange: programs.typicalFeeRange,
         categoryName: categories.name,
+        featuredImage: programs.featuredImage,
       })
       .from(programs)
-      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-      .leftJoin(levels, eq(degrees.levelId, levels.id))
-      .leftJoin(categories, eq(degrees.categoryId, categories.id))
+      .leftJoin(categories, eq(programs.categoryId, categories.id))
       .where(eq(programs.slug, slug))
       .limit(1);
 
@@ -128,6 +120,19 @@ async function getProgramBySlug(slug: string): Promise<ProgramDetail | null> {
 // ==================== GET INSTITUTES WITH STATS ====================
 async function getInstitutesWithStats(programId: number) {
   try {
+    // First get offerings for this program with instituteId
+    const offerings = await db
+      .select({
+        id: programOfferings.id,
+        instituteId: programOfferings.instituteId,
+      })
+      .from(programOfferings)
+      .where(eq(programOfferings.programId, programId));
+
+    const instituteIds = [...new Set(offerings.map(o => o.instituteId))];
+    
+    if (instituteIds.length === 0) return [];
+
     const institutesList = await db
       .select({
         id: institutes.id,
@@ -140,50 +145,36 @@ async function getInstitutesWithStats(programId: number) {
         citySlug: cities.slug,
       })
       .from(institutes)
-      .innerJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .where(
-        and(
-          eq(institutes.status, true),
-          eq(programInstitutes.programId, programId)
-        )
-      )
+      .where(and(eq(institutes.status, true), sql`${institutes.id} IN (${instituteIds.join(',')})`))
       .orderBy(desc(institutes.isFeatured), institutes.name);
 
     const institutesWithStats = await Promise.all(
       institutesList.map(async (inst) => {
-        const [admissionsResult] = await db
-          .select({ count: count() })
-          .from(admissions)
-          .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-          .where(
-            and(
-              eq(admissions.instituteId, inst.id),
-              eq(admissionPrograms.programId, programId),
-              eq(admissions.status, 'Open')
-            )
-          );
-
-        const [resultsResult] = await db
-          .select({ count: count() })
-          .from(results)
-          .where(
-            and(
-              eq(results.instituteId, inst.id),
-              eq(results.programId, programId)
-            )
-          );
+        // Get offering for this program and institute
+        const offering = offerings.find(o => o.instituteId === inst.id);
+        
+        let admissionsCount = 0;
+        
+        if (offering) {
+          // Get admissions count through admissionOfferings
+          const [admissionsResult] = await db
+            .select({ count: count() })
+            .from(admissionOfferings)
+            .where(eq(admissionOfferings.offeringId, offering.id));
+          admissionsCount = Number(admissionsResult?.count) || 0;
+        }
 
         return {
           ...inst,
-          admissionsCount: Number(admissionsResult?.count) || 0,
-          resultsCount: Number(resultsResult?.count) || 0,
+          admissionsCount,
+          resultsCount: 0,
         };
       })
     );
 
     return institutesWithStats.filter(
-      inst => inst.admissionsCount > 0 || inst.resultsCount > 0
+      inst => inst.admissionsCount > 0
     );
   } catch (error) {
     console.error('Error fetching institutes:', error);
@@ -194,7 +185,17 @@ async function getInstitutesWithStats(programId: number) {
 // ==================== GET ADMISSIONS ====================
 async function getAdmissions(programId: number, limit = 6) {
   try {
-    return await db
+    // First get offeringIds for this program
+    const offerings = await db
+      .select({ id: programOfferings.id })
+      .from(programOfferings)
+      .where(eq(programOfferings.programId, programId));
+
+    const offeringIds = offerings.map(o => o.id);
+    
+    if (offeringIds.length === 0) return [];
+
+    const result = await db
       .select({
         id: admissions.id,
         title: admissions.name,
@@ -209,17 +210,19 @@ async function getAdmissions(programId: number, limit = 6) {
         cityName: cities.name,
       })
       .from(admissions)
-      .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
+      .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .where(
         and(
-          eq(admissionPrograms.programId, programId),
+          sql`${admissionOfferings.offeringId} IN (${offeringIds.join(',')})`,
           eq(admissions.status, 'Open')
         )
       )
       .orderBy(admissions.expectedCloseDate)
       .limit(limit);
+
+    return result as Admission[];
   } catch (error) {
     console.error('Error fetching admissions:', error);
     return [];
@@ -227,27 +230,11 @@ async function getAdmissions(programId: number, limit = 6) {
 }
 
 // ==================== GET RESULTS ====================
-async function getResults(programId: number, limit = 6) {
+async function getResults(programId: number, limit = 6): Promise<Result[]> {
   try {
-    return await db
-      .select({
-        id: results.id,
-        title: results.title,
-        slug: results.slug,
-        year: results.year,
-        resultDate: results.resultDate,
-        isPopular: results.isPopular,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        instituteLogo: institutes.logo,
-        cityName: cities.name,
-      })
-      .from(results)
-      .innerJoin(institutes, eq(results.instituteId, institutes.id))
-      .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .where(eq(results.programId, programId))
-      .orderBy(desc(results.resultDate), desc(results.year))
-      .limit(limit);
+    // Results no longer have direct programId in new schema
+    // Return empty array for now
+    return [];
   } catch (error) {
     console.error('Error fetching results:', error);
     return [];
@@ -257,25 +244,30 @@ async function getResults(programId: number, limit = 6) {
 // ==================== GET STATS ====================
 async function getStats(programId: number) {
   try {
-    const [institutesCount] = await db
-      .select({ count: count() })
-      .from(programInstitutes)
-      .where(eq(programInstitutes.programId, programId));
+    // Get offerings count
+    const offerings = await db
+      .select({ id: programOfferings.id, instituteId: programOfferings.instituteId })
+      .from(programOfferings)
+      .where(eq(programOfferings.programId, programId));
 
-    const [admissionsCount] = await db
-      .select({ count: count() })
-      .from(admissionPrograms)
-      .where(eq(admissionPrograms.programId, programId));
+    const instituteIds = [...new Set(offerings.map(o => o.instituteId))];
+    const institutesCount = instituteIds.length;
 
-    const [resultsCount] = await db
-      .select({ count: count() })
-      .from(results)
-      .where(eq(results.programId, programId));
+    // Get admissions count through offerings
+    let admissionsCount = 0;
+    if (offerings.length > 0) {
+      const offeringIds = offerings.map(o => o.id);
+      const [admissionsResult] = await db
+        .select({ count: count() })
+        .from(admissionOfferings)
+        .where(sql`${admissionOfferings.offeringId} IN (${offeringIds.join(',')})`);
+      admissionsCount = Number(admissionsResult?.count) || 0;
+    }
 
     return {
-      institutes: Number(institutesCount?.count) || 0,
-      admissions: Number(admissionsCount?.count) || 0,
-      results: Number(resultsCount?.count) || 0,
+      institutes: institutesCount,
+      admissions: admissionsCount,
+      results: 0,
     };
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -330,7 +322,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
     getStats(program.id),
   ]);
 
-  const hasAnyData = institutes.length > 0 || admissionsList.length > 0 || resultsList.length > 0;
+  const hasAnyData = institutes.length > 0 || admissionsList.length > 0;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
@@ -359,12 +351,10 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
             <div className="flex flex-wrap items-center gap-2 text-sm text-blue-200 mb-4">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full">
                 <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-                {program.levelName || 'Program'}
+                Program
               </span>
               <span>•</span>
               <span>{program.categoryName || 'Category'}</span>
-              <span>•</span>
-              <span>{program.degreeName || 'Degree'}</span>
             </div>
             
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
@@ -372,7 +362,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
             </h1>
             
             <p className="text-xl text-blue-100 mb-8 max-w-3xl leading-relaxed">
-              {program.overview?.substring(0, 200) || `Complete guide to ${program.name} programs in Pakistan.`}
+              {program.detailedOverview?.substring(0, 200) || `Complete guide to ${program.name} programs in Pakistan.`}
             </p>
 
             {/* Stats Cards */}
@@ -413,34 +403,22 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                   </h2>
                 </div>
                 <div className="p-6 space-y-4">
-                  {program.duration && (
+                  {program.typicalDuration && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Duration</span>
-                      <span className="text-sm font-medium text-gray-900">{program.duration}</span>
+                      <span className="text-sm font-medium text-gray-900">{program.typicalDuration}</span>
                     </div>
                   )}
-                  {program.feeRange && (
+                  {program.typicalFeeRange && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Fee Range</span>
-                      <span className="text-sm font-medium text-gray-900">{program.feeRange}</span>
-                    </div>
-                  )}
-                  {program.levelName && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Level</span>
-                      <span className="text-sm font-medium text-gray-900">{program.levelName}</span>
+                      <span className="text-sm font-medium text-gray-900">{program.typicalFeeRange}</span>
                     </div>
                   )}
                   {program.categoryName && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Category</span>
                       <span className="text-sm font-medium text-gray-900">{program.categoryName}</span>
-                    </div>
-                  )}
-                  {program.degreeName && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Degree</span>
-                      <span className="text-sm font-medium text-gray-900">{program.degreeName}</span>
                     </div>
                   )}
                 </div>
@@ -477,7 +455,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
             {/* Eligibility Section */}
-            {program.eligibility && (
+            {program.commonEligibility && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -486,14 +464,14 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <div className="p-6">
                   <div className="prose prose-blue max-w-none">
-                    {formatDescription(program.eligibility)}
+                    {formatDescription(program.commonEligibility)}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Career Scope Section */}
-            {program.careerScope && (
+            {program.careerOutlook && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50">
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -502,7 +480,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <div className="p-6">
                   <div className="prose prose-green max-w-none">
-                    {formatDescription(program.careerScope)}
+                    {formatDescription(program.careerOutlook)}
                   </div>
                 </div>
               </div>
@@ -549,11 +527,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                             {inst.admissionsCount > 0 && (
                               <span className="text-xs px-2.5 py-1 bg-green-50 text-green-600 rounded-full">
                                 📝 {inst.admissionsCount} Open
-                              </span>
-                            )}
-                            {inst.resultsCount > 0 && (
-                              <span className="text-xs px-2.5 py-1 bg-orange-50 text-orange-600 rounded-full">
-                                📊 {inst.resultsCount} Results
                               </span>
                             )}
                           </div>
@@ -628,66 +601,8 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </section>
             )}
 
-            {/* Results Section */}
-            {resultsList.length > 0 && (
-              <section id="results">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                    <span className="w-1.5 h-6 bg-orange-500 rounded-full"></span>
-                    Recent Results
-                  </h2>
-                  {stats.results > 6 && (
-                    <Link href={`/results?program=${program.slug}`} className="text-sm text-blue-600 hover:underline font-medium">
-                      View All →
-                    </Link>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  {resultsList.map((res) => (
-                    <Link
-                      key={res.id}
-                      href={`/results/${res.slug}`}
-                      className="block bg-white rounded-xl p-5 border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all group"
-                    >
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4">
-                          {res.instituteLogo ? (
-                            <img src={res.instituteLogo} alt={res.instituteName} className="w-12 h-12 object-contain rounded-lg" />
-                          ) : (
-                            <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg flex items-center justify-center text-xl">
-                              📊
-                            </div>
-                          )}
-                          <div>
-                            <h3 className="font-semibold text-gray-900 group-hover:text-orange-600 transition">
-                              {res.instituteName}
-                            </h3>
-                            <p className="text-sm text-gray-600 mt-0.5">{res.title}</p>
-                            {res.cityName && (
-                              <p className="text-xs text-gray-400 mt-1">{res.cityName}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-full">
-                            {res.year}
-                          </span>
-                          {res.isPopular && (
-                            <span className="px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-full">
-                              ⭐ Popular
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
             {/* Overview Section - Bottom */}
-            {program.overview && (
+            {program.detailedOverview && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
                   <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -696,7 +611,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                 </div>
                 <div className="p-6">
                   <div className="prose prose-gray max-w-none">
-                    {formatDescription(program.overview)}
+                    {formatDescription(program.detailedOverview)}
                   </div>
                 </div>
               </div>

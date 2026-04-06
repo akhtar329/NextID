@@ -1,15 +1,25 @@
-// app/api/admin/program-institutes/route.ts
+// app/api/admin/program-offerings/route.ts
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { programInstitutes } from "@/app/lib/schema";
-import { eq } from "drizzle-orm";
+import { programOfferings } from "@/app/lib/schema";
+import { eq, and } from "drizzle-orm";
 
 // GET - Get all relations (for testing)
 export async function GET() {
-  
   try {
-    const all = await db.select().from(programInstitutes);
+    const all = await db
+      .select({
+        id: programOfferings.id,
+        programId: programOfferings.programId,
+        instituteId: programOfferings.instituteId,
+        degreeId: programOfferings.degreeId,
+        status: programOfferings.status,
+        createdAt: programOfferings.createdAt,
+        updatedAt: programOfferings.updatedAt,
+      })
+      .from(programOfferings);
+    
     return NextResponse.json({ 
       success: true, 
       data: all,
@@ -30,13 +40,12 @@ export async function GET() {
 
 // POST - Bulk assign
 export async function POST(request: Request) {
-  
   try {
     const body = await request.json();
 
-    // Check both possible field names
     const instituteId = body.instituteId;
     const programIds = body.programIds || [];
+    const degreeId = body.degreeId || 31; // Default degree ID (Bachelor of Commerce)
     
     if (!instituteId) {
       return NextResponse.json(
@@ -46,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     if (!Array.isArray(programIds)) {
-      ("❌ Program IDs must be an array");
+      console.log("❌ Program IDs must be an array");
       return NextResponse.json(
         { success: false, error: "Program IDs must be an array" },
         { status: 400 }
@@ -56,18 +65,19 @@ export async function POST(request: Request) {
     try {
       // Delete all existing assignments for this institute
       await db
-        .delete(programInstitutes)
-        .where(eq(programInstitutes.instituteId, instituteId));
+        .delete(programOfferings)
+        .where(eq(programOfferings.instituteId, instituteId));
 
       // Insert new assignments
       if (programIds.length > 0) {
         const values = programIds.map((programId: number) => ({
-          instituteId: instituteId,
           programId: programId,
+          instituteId: instituteId,
+          degreeId: degreeId,
           status: true,
         }));
 
-        await db.insert(programInstitutes).values(values);
+        await db.insert(programOfferings).values(values);
       }
 
       return NextResponse.json({

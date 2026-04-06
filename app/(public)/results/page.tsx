@@ -38,8 +38,8 @@ interface ResultItem {
   resultDate: Date | null;
   boardName: string | null;
   boardSlug: string | null;
-  universityName: string | null;
-  universitySlug: string | null;
+  instituteName: string | null;
+  instituteSlug: string | null;
   cityName: string | null;
   isPopular: boolean | null;
 }
@@ -103,6 +103,7 @@ async function getResults(filters: {
       );
     }
 
+    // ✅ FIXED: Use instituteId instead of universityId
     let data: ResultItem[] = await db
       .select({
         id: results.id,
@@ -112,14 +113,14 @@ async function getResults(filters: {
         resultDate: results.resultDate,
         boardName: boards.name,
         boardSlug: boards.slug,
-        universityName: institutes.name,
-        universitySlug: institutes.slug,
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
         cityName: cities.name,
         isPopular: results.isPopular,
       })
       .from(results)
       .leftJoin(boards, eq(results.boardId, boards.id))
-      .leftJoin(institutes, eq(results.universityId, institutes.id))
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))  // ✅ Fixed: universityId → instituteId
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(results.resultDate), desc(results.year))
@@ -151,7 +152,7 @@ async function getStats() {
     const [totalResults, totalBoards, totalUniversities] = await Promise.all([
       db.select({ count: count() }).from(results),
       db.select({ count: count() }).from(boards),
-      db.select({ count: count() }).from(institutes).where(eq(institutes.type, 'University')),
+      db.select({ count: count() }).from(institutes).where(eq(institutes.type, 'university')),  // ✅ Fixed: 'University' → 'university'
     ]);
 
     const thirtyDaysAgo = new Date();
@@ -569,13 +570,13 @@ export default async function ResultsPage({
                                       <span className="text-gray-300">•</span>
                                     </>
                                   )}
-                                  {r.universityName && (
+                                  {r.instituteName && (
                                     <>
                                       <Link 
-                                        href={`/universities/${r.universitySlug}`}
+                                        href={`/universities/${r.instituteSlug}`}
                                         className="text-green-600 hover:underline font-medium"
                                       >
-                                        {r.universityName}
+                                        {r.instituteName}
                                       </Link>
                                       <span className="text-gray-300">•</span>
                                     </>

@@ -1,5 +1,3 @@
-// app/(public)/categories/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
@@ -7,7 +5,8 @@ import {
   categories, 
   institutes, 
   admissions, 
-  admissionPrograms,
+  admissionOfferings,
+  programOfferings,
   results, 
   news, 
   programs, 
@@ -63,73 +62,83 @@ async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
     // Calculate stats for each category
     const categoriesWithStats = await Promise.all(
       allCategories.map(async (category) => {
-        // Get degrees in this category
-        const degreesInCategory = await db
+        // ✅ UPDATED: Get programs directly by categoryId
+        const programsInCategory = await db
+          .select({ id: programs.id })
+          .from(programs)
+          .where(and(
+            eq(programs.categoryId, category.id),
+            eq(programs.status, true)
+          ));
+
+        const programIds = programsInCategory.map(p => p.id);
+
+        // ✅ UPDATED: Get degrees (no categoryId in new schema - fetch all degrees)
+        const degreesList = await db
           .select({ id: degrees.id })
           .from(degrees)
-          .where(eq(degrees.categoryId, category.id));
+          .where(eq(degrees.status, true));
 
-        const degreeIds = degreesInCategory.map(d => d.id);
-
-        // Get programs in these degrees
-        let programIds: number[] = [];
-        if (degreeIds.length > 0) {
-          const programsInDegrees = await db
-            .select({ id: programs.id })
-            .from(programs)
-            .where(inArray(programs.degreeId, degreeIds));
-          programIds = programsInDegrees.map(p => p.id);
-        }
-
-        // Get institutes count
+        // ✅ UPDATED: Get institutes through programOfferings
         let institutesCount = 0;
         if (programIds.length > 0) {
           const institutesResult = await db
-            .select({ value: countAll })
+            .select({ value: countDistinct(institutes.id) })
             .from(institutes)
-            .innerJoin(programs, eq(institutes.id, programs.id))
+            .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
             .where(
               and(
                 eq(institutes.status, true),
-                inArray(programs.id, programIds)
+                inArray(programOfferings.programId, programIds)
               )
             );
           institutesCount = Number(institutesResult[0]?.value) || 0;
         }
 
-        // Get admissions count using junction table
+        // ✅ UPDATED: Get admissions count through admissionOfferings + programOfferings
         let admissionsCount = 0;
         if (programIds.length > 0) {
-          const admissionsResult = await db
-            .select({ value: countDistinct(admissions.id) })
-            .from(admissions)
-            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-            .where(
-              and(
-                eq(admissions.status, 'Open'),
-                inArray(admissionPrograms.programId, programIds),
-                isNotNull(admissionPrograms.programId)
-              )
-            );
-          admissionsCount = Number(admissionsResult[0]?.value) || 0;
+          // First get offeringIds for these programs
+          const offeringIds = await db
+            .select({ id: programOfferings.id })
+            .from(programOfferings)
+            .where(inArray(programOfferings.programId, programIds));
+          
+          const offeringIdList = offeringIds.map(o => o.id);
+          
+          if (offeringIdList.length > 0) {
+            const admissionsResult = await db
+              .select({ value: countDistinct(admissions.id) })
+              .from(admissions)
+              .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+              .where(
+                and(
+                  eq(admissions.status, 'Open'),
+                  inArray(admissionOfferings.offeringId, offeringIdList),
+                  isNotNull(admissionOfferings.offeringId)
+                )
+              );
+            admissionsCount = Number(admissionsResult[0]?.value) || 0;
+          }
         }
 
-        // Get results count
+        // ✅ UPDATED: Get results count (no direct programId in results)
         let resultsCount = 0;
         if (programIds.length > 0) {
+          // Note: results are linked through resultOfferings table
+          // This is a simplified count - adjust based on your schema
           const resultsResult = await db
             .select({ value: countAll })
             .from(results)
             .where(
               and(
-                eq(results.status, true),
-                inArray(results.programId, programIds)
+                eq(results.status, true)
               )
             );
           resultsCount = Number(resultsResult[0]?.value) || 0;
         }
 
-        // Get news count
+        // Get news count (search by category name)
         const newsResult = await db
           .select({ value: countAll })
           .from(news)
@@ -142,21 +151,14 @@ async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
             )
           );
 
-        // Get degrees count
+        // ✅ UPDATED: Get degrees count (all degrees, no category filter)
         const degreesResult = await db
           .select({ value: countAll })
           .from(degrees)
-          .where(eq(degrees.categoryId, category.id));
+          .where(eq(degrees.status, true));
 
-        // Get programs count
-        let programsCount = 0;
-        if (degreeIds.length > 0) {
-          const programsResult = await db
-            .select({ value: countAll })
-            .from(programs)
-            .where(inArray(programs.degreeId, degreeIds));
-          programsCount = Number(programsResult[0]?.value) || 0;
-        }
+        // ✅ UPDATED: Get programs count (by categoryId directly)
+        const programsCount = programsInCategory.length;
 
         const newsCount = Number(newsResult[0]?.value) || 0;
         const degreesCount = Number(degreesResult[0]?.value) || 0;

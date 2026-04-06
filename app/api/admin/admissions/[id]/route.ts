@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { admissions, admissionPrograms, programs, institutes, cities, degrees, seoMetadata } from "@/app/lib/schema";
+import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from "@/app/lib/schema";
 import { eq, and } from "drizzle-orm";
 
 // ==================== TYPES ====================
@@ -18,7 +18,7 @@ interface AdmissionUpdateData {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  programIds: number[];
+  offeringIds: number[];
   featuredImage?: string | null;
   galleryImages?: string[] | null;
   // SEO Fields
@@ -37,8 +37,8 @@ const validateStatus = (status: string): status is 'Expected' | 'Open' | 'Closed
   return ['Expected', 'Open', 'Closed'].includes(status);
 };
 
-const validateProgramIds = (programIds: any): programIds is number[] => {
-  return Array.isArray(programIds) && programIds.length > 0 && programIds.every(id => typeof id === 'number');
+const validateOfferingIds = (offeringIds: any): offeringIds is number[] => {
+  return Array.isArray(offeringIds) && offeringIds.length > 0 && offeringIds.every(id => typeof id === 'number');
 };
 
 const parseDate = (date: string | null): Date | null => {
@@ -102,20 +102,20 @@ export async function GET(
       );
     }
 
-    // Fetch programs for this admission
-    const programList = await db
+    // Fetch offerings for this admission through admissionOfferings
+    const offeringList = await db
       .select({
-        id: programs.id,
-        name: programs.name,
-        slug: programs.slug,
-        degreeName: degrees.name,
-        duration: programs.duration,
-        feeRange: programs.feeRange,
+        id: programOfferings.id,
+        programId: programs.id,
+        programName: programs.name,
+        programSlug: programs.slug,
+        typicalDuration: programs.typicalDuration,
+        typicalFeeRange: programs.typicalFeeRange,
       })
-      .from(admissionPrograms)
-      .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-      .where(eq(admissionPrograms.admissionId, admissionId));
+      .from(admissionOfferings)
+      .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .innerJoin(programs, eq(programOfferings.programId, programs.id))
+      .where(eq(admissionOfferings.admissionId, admissionId));
 
     // Fetch SEO metadata
     const seo = await db
@@ -129,11 +129,15 @@ export async function GET(
       )
       .limit(1);
 
-    // Parse gallery images
+    // Parse gallery images - handle both JSON string and array
     let galleryImagesArray: string[] = [];
     if (admission[0].galleryImages) {
       try {
-        galleryImagesArray = JSON.parse(admission[0].galleryImages);
+        if (typeof admission[0].galleryImages === 'string') {
+          galleryImagesArray = JSON.parse(admission[0].galleryImages);
+        } else if (Array.isArray(admission[0].galleryImages)) {
+          galleryImagesArray = admission[0].galleryImages;
+        }
       } catch (e) {
         console.error('Error parsing gallery images:', e);
       }
@@ -174,8 +178,8 @@ export async function GET(
         updatedAt: admission[0].updatedAt,
         instituteId: admission[0].instituteId,
         institute: instituteObj,
-        programs: programList,
-        programCount: programList.length,
+        offerings: offeringList,
+        offeringCount: offeringList.length,
         seo: seo[0] || null,
       },
     };
@@ -225,10 +229,10 @@ export async function PUT(
       );
     }
 
-    // Validate program IDs
-    if (!validateProgramIds(body.programIds)) {
+    // Validate offering IDs
+    if (!validateOfferingIds(body.offeringIds)) {
       return NextResponse.json(
-        { success: false, error: "At least one valid program ID is required" },
+        { success: false, error: "At least one valid offering ID is required" },
         { status: 400 }
       );
     }
@@ -281,24 +285,25 @@ export async function PUT(
           note: body.note || null,
           officialLink: body.officialLink || null,
           featuredImage: body.featuredImage || null,
-          galleryImages: body.galleryImages ? JSON.stringify(body.galleryImages) : null,
+          galleryImages: body.galleryImages && body.galleryImages.length > 0 ? body.galleryImages : null,
           updatedAt: new Date(),
         })
         .where(eq(admissions.id, admissionId))
         .returning();
 
-      // 2. Update program links (delete old, insert new)
+      // 2. Update offering links (delete old, insert new) - using admissionOfferings
       await tx
-        .delete(admissionPrograms)
-        .where(eq(admissionPrograms.admissionId, admissionId));
+        .delete(admissionOfferings)
+        .where(eq(admissionOfferings.admissionId, admissionId));
 
-      const programLinks = await Promise.all(
-        body.programIds.map(async (programId: number) => {
+      const offeringLinks = await Promise.all(
+        body.offeringIds.map(async (offeringId: number) => {
           const [link] = await tx
-            .insert(admissionPrograms)
+            .insert(admissionOfferings)
             .values({
               admissionId,
-              programId,
+              offeringId,
+              status: true,
               createdAt: new Date(),
             })
             .returning();
@@ -357,7 +362,7 @@ export async function PUT(
 
       return {
         admission: updatedAdmission,
-        programCount: programLinks.length,
+        offeringCount: offeringLinks.length,
         seo: seoRecord,
       };
     });
@@ -365,9 +370,9 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       admission: result.admission,
-      programCount: result.programCount,
+      offeringCount: result.offeringCount,
       seo: result.seo ? 'updated' : 'skipped',
-      message: `Admission updated successfully with ${result.programCount} program(s)`,
+      message: `Admission updated successfully with ${result.offeringCount} offering(s)`,
     });
 
   } catch (error: any) {
@@ -392,7 +397,7 @@ export async function PUT(
     // Handle foreign key violations
     if (error.code === '23503') {
       return NextResponse.json(
-        { success: false, error: "Invalid institute ID or program ID. Please check your data." },
+        { success: false, error: "Invalid institute ID or offering ID. Please check your data." },
         { status: 400 }
       );
     }
@@ -513,10 +518,10 @@ export async function DELETE(
           )
         );
 
-      // Delete program links
+      // Delete offering links (admissionOfferings)
       await tx
-        .delete(admissionPrograms)
-        .where(eq(admissionPrograms.admissionId, admissionId));
+        .delete(admissionOfferings)
+        .where(eq(admissionOfferings.admissionId, admissionId));
 
       // Delete admission
       await tx

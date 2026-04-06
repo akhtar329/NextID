@@ -17,7 +17,7 @@ interface NewsDetail {
   author: string | null;
   isFeatured: boolean | null;
   isBreaking: boolean | null;
-  views: number | null;
+  viewCount: number | null;  // ✅ Fixed: views → viewCount
   publishedAt: Date | null;
   expiresAt: Date | null;
   createdAt: Date | null;
@@ -99,7 +99,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
         author: news.author,
         isFeatured: news.isFeatured,
         isBreaking: news.isBreaking,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
         expiresAt: news.expiresAt,
         createdAt: news.createdAt,
@@ -191,12 +191,12 @@ async function getMostPopular(limit = 5) {
         id: news.id,
         title: news.title,
         slug: news.slug,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
       })
       .from(news)
       .where(eq(news.status, true))
-      .orderBy(desc(news.views))
+      .orderBy(desc(news.viewCount))  // ✅ Fixed: views → viewCount
       .limit(limit);
   } catch (error) {
     return [];
@@ -208,7 +208,7 @@ async function incrementViewCount(id: number) {
   try {
     await db
       .update(news)
-      .set({ views: sql`${news.views} + 1` })
+      .set({ viewCount: sql`${news.viewCount} + 1` })  // ✅ Fixed: views → viewCount
       .where(eq(news.id, id));
   } catch (error) {
     console.error('Error incrementing view count:', error);
@@ -445,7 +445,7 @@ function PopularNews({ popularNews }: { popularNews: any[] }) {
                   {item.title}
                 </h4>
                 <p className="text-xs text-gray-500 mt-1">
-                  {formatShortDate(item.publishedAt)} • {formatViews(item.views)} views
+                  {formatShortDate(item.publishedAt)} • {formatViews(item.viewCount)} views
                 </p>
               </div>
             </Link>

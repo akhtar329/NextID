@@ -9,7 +9,7 @@ export interface NewsItem {
   source: string | null;
   author: string | null;
   isBreaking: boolean | null;
-  views: number | null;
+  viewCount: number | null;  // ✅ Fixed: views → viewCount
   publishedAt: Date | null;
 }
 
@@ -17,7 +17,7 @@ export interface TrendingItem {
   id: number;
   title: string;
   slug: string;
-  views: number | null;
+  viewCount: number | null;  // ✅ Fixed: views → viewCount
   publishedAt: Date | null;
 }
 
@@ -28,7 +28,8 @@ export interface Category {
   icon: string;
 }
 
-export function formatViews(views: number): string {
+export function formatViews(views: number | null): string {  // ✅ Fixed: allow null
+  if (!views) return '0';
   if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
   if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
   return views.toString();

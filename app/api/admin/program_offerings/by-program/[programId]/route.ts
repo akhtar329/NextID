@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { programInstitutes, institutes, cities } from "@/app/lib/schema";
+import { programOfferings, institutes, cities } from "@/app/lib/schema";  // ✅ Changed: programInstitutes → programOfferings
 import { eq } from "drizzle-orm";
 
 export async function GET(
@@ -22,18 +22,20 @@ export async function GET(
       );
     }
 
-    // Get all institutes offering this program
+    // ✅ UPDATED: Get all institutes offering this program through programOfferings
     const institutesList = await db
       .select({
         id: institutes.id,
         name: institutes.name,
+        slug: institutes.slug,
         type: institutes.type,
         cityName: cities.name,
+        citySlug: cities.slug,
       })
-      .from(programInstitutes)
-      .innerJoin(institutes, eq(programInstitutes.instituteId, institutes.id))
+      .from(programOfferings)  // ✅ Changed
+      .innerJoin(institutes, eq(programOfferings.instituteId, institutes.id))
       .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .where(eq(programInstitutes.programId, id));
+      .where(eq(programOfferings.programId, id));
 
     return NextResponse.json({
       success: true,

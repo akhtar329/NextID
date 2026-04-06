@@ -1,9 +1,9 @@
-// app/api/admin/results/bulk/route.ts (or wherever this code is)
+// app/api/admin/results/bulk/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { results, programs, boards, institutes } from "@/app/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { results, boards, institutes } from "@/app/lib/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,23 +52,10 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Validate at least one of programId, boardId, or universityId exists
-      if (!result.programId && !result.boardId && !result.universityId) {
-        errors.push(`Row ${i + 1}: At least one of programId, boardId, or universityId is required`);
+      // ✅ UPDATED: Validate at least one of boardId or instituteId exists (programId and universityId removed)
+      if (!result.boardId && !result.instituteId) {
+        errors.push(`Row ${i + 1}: At least one of boardId or instituteId is required`);
         continue;
-      }
-
-      // Verify program exists if provided
-      if (result.programId) {
-        const programExists = await db
-          .select({ id: programs.id })
-          .from(programs)
-          .where(eq(programs.id, Number(result.programId)));
-
-        if (programExists.length === 0) {
-          errors.push(`Row ${i + 1}: Program ID ${result.programId} does not exist`);
-          continue;
-        }
       }
 
       // Verify board exists if provided
@@ -84,15 +71,15 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Verify university exists if provided
-      if (result.universityId) {
-        const universityExists = await db
+      // ✅ UPDATED: Verify institute exists if provided (replaces universityId)
+      if (result.instituteId) {
+        const instituteExists = await db
           .select({ id: institutes.id })
           .from(institutes)
-          .where(eq(institutes.id, Number(result.universityId)));
+          .where(eq(institutes.id, Number(result.instituteId)));
 
-        if (universityExists.length === 0) {
-          errors.push(`Row ${i + 1}: University ID ${result.universityId} does not exist`);
+        if (instituteExists.length === 0) {
+          errors.push(`Row ${i + 1}: Institute ID ${result.instituteId} does not exist`);
           continue;
         }
       }
@@ -100,9 +87,7 @@ export async function POST(req: NextRequest) {
       validResults.push({
         title: result.title,
         slug: result.slug,
-        programId: result.programId ? Number(result.programId) : null,
         boardId: result.boardId ? Number(result.boardId) : null,
-        universityId: result.universityId ? Number(result.universityId) : null,
         instituteId: result.instituteId ? Number(result.instituteId) : null,
         year: Number(result.year),
         resultDate: result.resultDate ? new Date(result.resultDate) : null,
@@ -134,9 +119,7 @@ export async function POST(req: NextRequest) {
           .values({
             title: result.title,
             slug: result.slug,
-            programId: result.programId,
             boardId: result.boardId,
-            universityId: result.universityId,
             instituteId: result.instituteId,
             year: result.year,
             resultDate: result.resultDate,
@@ -187,7 +170,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           { 
             success: false, 
-            error: "Invalid program ID, board ID, or university ID. Please check that all IDs exist." 
+            error: "Invalid board ID or institute ID. Please check that all IDs exist." 
           },
           { status: 400 }
         );

@@ -27,20 +27,20 @@ export async function GET(
       .select({
         id: results.id,
         title: results.title,
+        instituteId: results.instituteId,  // ✅ Changed: universityId → instituteId
         boardId: results.boardId,
-        universityId: results.universityId,
         year: results.year,
         resultDate: results.resultDate,
         officialLink: results.officialLink,
         isPopular: results.isPopular,
         status: results.status,
         createdAt: results.createdAt,
-        // Get board/university details if available
-        boardName: institutes.name,
-        universityName: institutes.name,
+        // Get institute details
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
       })
       .from(results)
-      .leftJoin(institutes, eq(results.boardId, institutes.id))
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))  // ✅ Changed: boardId → instituteId
       .where(eq(results.id, resultId))
       .limit(1);
 
@@ -118,8 +118,8 @@ export async function PUT(
       .update(results)
       .set({
         title: body.title,
+        instituteId: body.instituteId ? Number(body.instituteId) : null,  // ✅ Changed: universityId → instituteId
         boardId: body.boardId ? Number(body.boardId) : null,
-        universityId: body.universityId ? Number(body.universityId) : null,
         year: Number(body.year),
         resultDate: body.resultDate ? new Date(body.resultDate) : null,
         officialLink: body.officialLink || null,

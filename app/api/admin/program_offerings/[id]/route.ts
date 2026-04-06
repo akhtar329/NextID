@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
-import { programInstitutes } from '@/app/lib/schema';
+import { programOfferings } from '@/app/lib/schema';  // ✅ Changed
 import { eq } from 'drizzle-orm';
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   }>;
 }
 
-// GET single program-institute relation
+// GET single program-offering relation
 export async function GET(
   request: NextRequest, 
   props: Props
@@ -29,28 +29,28 @@ export async function GET(
 
     const relation = await db
       .select()
-      .from(programInstitutes)
-      .where(eq(programInstitutes.id, relationId))
+      .from(programOfferings)  // ✅ Changed
+      .where(eq(programOfferings.id, relationId))
       .limit(1);
 
     if (!relation.length) {
       return NextResponse.json(
-        { error: 'Program-Institute relation not found' },
+        { error: 'Program-Offering relation not found' },
         { status: 404 }
       );
     }
 
     return NextResponse.json(relation[0]);
   } catch (error) {
-    console.error('Error fetching program-institute relation:', error);
+    console.error('Error fetching program-offering relation:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch program-institute relation' },
+      { error: 'Failed to fetch program-offering relation' },
       { status: 500 }
     );
   }
 }
 
-// PUT update program-institute relation
+// PUT update program-offering relation
 export async function PUT(
   request: NextRequest, 
   props: Props
@@ -67,44 +67,45 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { programId, instituteId, status } = body;
+    const { programId, instituteId, degreeId, status } = body;
 
     // Validate required fields
-    if (!programId || !instituteId) {
+    if (!programId || !instituteId || !degreeId) {  // ✅ Added degreeId validation
       return NextResponse.json(
-        { error: 'Program ID and Institute ID are required' },
+        { error: 'Program ID, Institute ID, and Degree ID are required' },
         { status: 400 }
       );
     }
 
     const updatedRelation = await db
-      .update(programInstitutes)
+      .update(programOfferings)  // ✅ Changed
       .set({
         programId: parseInt(programId),
         instituteId: parseInt(instituteId),
+        degreeId: parseInt(degreeId),  // ✅ Added degreeId
         status: status !== undefined ? status : true,
       })
-      .where(eq(programInstitutes.id, relationId))
+      .where(eq(programOfferings.id, relationId))
       .returning();
 
     if (!updatedRelation.length) {
       return NextResponse.json(
-        { error: 'Program-Institute relation not found' },
+        { error: 'Program-Offering relation not found' },
         { status: 404 }
       );
     }
 
     return NextResponse.json(updatedRelation[0]);
   } catch (error) {
-    console.error('Error updating program-institute relation:', error);
+    console.error('Error updating program-offering relation:', error);
     return NextResponse.json(
-      { error: 'Failed to update program-institute relation' },
+      { error: 'Failed to update program-offering relation' },
       { status: 500 }
     );
   }
 }
 
-// DELETE program-institute relation
+// DELETE program-offering relation
 export async function DELETE(
   request: NextRequest, 
   props: Props
@@ -121,16 +122,16 @@ export async function DELETE(
     }
 
     await db
-      .delete(programInstitutes)
-      .where(eq(programInstitutes.id, relationId));
+      .delete(programOfferings)  // ✅ Changed
+      .where(eq(programOfferings.id, relationId));
 
     return NextResponse.json(
-      { success: true, message: 'Program-Institute relation deleted successfully' }
+      { success: true, message: 'Program-Offering relation deleted successfully' }
     );
   } catch (error) {
-    console.error('Error deleting program-institute relation:', error);
+    console.error('Error deleting program-offering relation:', error);
     return NextResponse.json(
-      { error: 'Failed to delete program-institute relation' },
+      { error: 'Failed to delete program-offering relation' },
       { status: 500 }
     );
   }

@@ -21,22 +21,54 @@ export async function POST(request: Request) {
     if (body instanceof NextResponse) return body;
 
     const { 
+      // Basic Info
       name, 
       slug, 
-      degreeId, 
-      overview, 
-      eligibility, 
-      duration, 
-      careerScope, 
-      feeRange, 
-      // ❌ REMOVED: seoTitle, seoDescription
+      categoryId,
+      
+      // Rich Content
+      shortDescription,
+      detailedOverview,
+      whatYouLearn,
+      whyStudyThis,
+      careerOutlook,
+      industryDemand,
+      
+      // Typical Info
+      typicalDuration,
+      typicalFeeRange,
+      commonEligibility,
+      
+      // Media
+      featuredImage,
+      icon,
+      
+      // Stats
+      totalOfferings,
+      totalAdmissionsOpen,
+      averageSalaryRange,
+      
+      // Settings
       isFeatured,
+      isPopular,
       status,
-      // SEO fields (now handled separately)
+      
+      // SEO fields
       metaTitle,
       metaDescription,
-      seoTitle,      // Legacy field name support
-      seoDescription, // Legacy field name support
+      focusKeyword,
+      introVideoUrl,
+      graduatesCount,
+      placementRate,
+      
+      // Legacy fields (for backward compatibility)
+      overview,           // will map to detailedOverview
+      eligibility,        // will map to commonEligibility
+      duration,           // will map to typicalDuration
+      careerScope,        // will map to careerOutlook
+      feeRange,           // will map to typicalFeeRange
+      
+      // SEO metadata (separate table)
       canonicalUrl,
       robots,
       ogTitle,
@@ -45,11 +77,11 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate required fields
-    if (!name || !slug || !degreeId) {
+    if (!name || !slug) {
       return NextResponse.json(
         { 
           success: false, 
-          error: "Name, slug, and degreeId are required" 
+          error: "Name and slug are required" 
         }, 
         { status: 400 }
       );
@@ -72,36 +104,68 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert new program (without SEO columns)
+    // Map legacy fields to new schema
+    const finalDetailedOverview = detailedOverview || overview || null;
+    const finalCommonEligibility = commonEligibility || eligibility || null;
+    const finalTypicalDuration = typicalDuration || duration || null;
+    const finalCareerOutlook = careerOutlook || careerScope || null;
+    const finalTypicalFeeRange = typicalFeeRange || feeRange || null;
+
+    // Insert new program
     const newProgram = await db.insert(programs).values({
+      // Basic Info
       name,
       slug,
-      degreeId: Number(degreeId),
-      overview: overview || null,
-      eligibility: eligibility || null,
-      duration: duration || null,
-      careerScope: careerScope || null,
-      feeRange: feeRange || null,
-      // ❌ REMOVED: seoTitle, seoDescription
-      isFeatured: isFeatured || false,
-      status: status !== undefined ? status : true,
-      // created_at and updated_at automatically set by database default
+      categoryId: categoryId ? Number(categoryId) : null,
+      
+      // Rich Content
+      shortDescription: shortDescription || null,
+      detailedOverview: finalDetailedOverview,
+      whatYouLearn: whatYouLearn || null,
+      whyStudyThis: whyStudyThis || null,
+      careerOutlook: finalCareerOutlook,
+      industryDemand: industryDemand || null,
+      
+      // Typical Info
+      typicalDuration: finalTypicalDuration,
+      typicalFeeRange: finalTypicalFeeRange,
+      commonEligibility: finalCommonEligibility,
+      
+      // Media
+      featuredImage: featuredImage || null,
+      icon: icon || null,
+      
+      // Stats
+      totalOfferings: totalOfferings ? Number(totalOfferings) : 0,
+      totalAdmissionsOpen: totalAdmissionsOpen ? Number(totalAdmissionsOpen) : 0,
+      averageSalaryRange: averageSalaryRange || null,
+      
+      // Settings
+      isFeatured: isFeatured !== undefined ? Boolean(isFeatured) : false,
+      isPopular: isPopular !== undefined ? Boolean(isPopular) : false,
+      status: status !== undefined ? Boolean(status) : true,
+      
+      // SEO fields (in programs table)
+      metaTitle: metaTitle || null,
+      metaDescription: metaDescription || null,
+      focusKeyword: focusKeyword || null,
+      introVideoUrl: introVideoUrl || null,
+      graduatesCount: graduatesCount ? Number(graduatesCount) : null,
+      placementRate: placementRate ? Number(placementRate) : null,
+      
     }).returning();
 
     const createdProgram = newProgram[0];
 
-    // Create SEO metadata if provided
+    // Create SEO metadata (in seo_metadata table)
     let createdSeo = null;
-    const finalMetaTitle = metaTitle || seoTitle || null;
-    const finalMetaDescription = metaDescription || seoDescription || null;
-
-    if (finalMetaTitle || finalMetaDescription || canonicalUrl || ogTitle || ogDescription) {
+    if (metaTitle || metaDescription || canonicalUrl || ogTitle || ogDescription || ogImage) {
       try {
         const seoData = {
           entityType: 'program',
           entityId: createdProgram.id,
-          metaTitle: finalMetaTitle,
-          metaDescription: finalMetaDescription,
+          metaTitle: metaTitle || null,
+          metaDescription: metaDescription || null,
           canonicalUrl: canonicalUrl || null,
           robots: robots || 'index, follow',
           ogTitle: ogTitle || null,
@@ -118,7 +182,6 @@ export async function POST(request: Request) {
       } catch (seoErr) {
         console.error("❌ Error creating SEO metadata:", seoErr);
         // Don't fail the whole request if SEO creation fails
-        // Just log the error and continue
       }
     }
 

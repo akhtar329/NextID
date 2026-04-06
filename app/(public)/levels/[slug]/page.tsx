@@ -1,5 +1,3 @@
-// app/(public)/levels/[slug]/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -11,9 +9,9 @@ import {
   categories,
   institutes,
   admissions,
-  admissionPrograms,  // ✅ Add this
+  admissionOfferings,
+  programOfferings,
   results,
-  programInstitutes 
 } from '@/app/lib/schema';
 import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
 
@@ -77,7 +75,6 @@ async function getLevelData(slug: string) {
         name: degrees.name,
         slug: degrees.slug,
         fullForm: degrees.fullForm,
-        categoryId: degrees.categoryId,
         displayOrder: degrees.displayOrder,
       })
       .from(degrees)
@@ -86,34 +83,38 @@ async function getLevelData(slug: string) {
 
     const degreeIds = degreesList.map(d => d.id);
 
-    // Get categories for these degrees
+    // Get all categories (no direct link to degrees anymore)
     let categoriesList: any[] = [];
-    if (degreeIds.length > 0) {
-      const categoryIds = [...new Set(degreesList.map(d => d.categoryId))];
-      if (categoryIds.length > 0) {
-        categoriesList = await db
-          .select()
-          .from(categories)
-          .where(and(inArray(categories.id, categoryIds), eq(categories.status, true)))
-          .orderBy(categories.displayOrder, categories.name);
-      }
+    try {
+      categoriesList = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.status, true))
+        .orderBy(categories.displayOrder, categories.name)
+        .limit(12);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
     }
 
-    // Get programs in these degrees
+    // ✅ UPDATED: Get programs (no degreeId in new schema)
+    // Programs are linked to categories, not degrees
     let programsList: any[] = [];
     let programIds: number[] = [];
 
-    if (degreeIds.length > 0) {
+    try {
       programsList = await db
         .select()
         .from(programs)
-        .where(and(inArray(programs.degreeId, degreeIds), eq(programs.status, true)))
-        .orderBy(desc(programs.isFeatured), programs.name);
+        .where(eq(programs.status, true))
+        .orderBy(desc(programs.isFeatured), programs.name)
+        .limit(15);
 
       programIds = programsList.map(p => p.id).filter(id => id != null);
+    } catch (error) {
+      console.error('Error fetching programs:', error);
     }
 
-    // Get institutes offering these programs
+    // ✅ UPDATED: Get institutes through programOfferings
     let institutesList: any[] = [];
     if (programIds.length > 0) {
       try {
@@ -126,11 +127,11 @@ async function getLevelData(slug: string) {
             isFeatured: institutes.isFeatured,
           })
           .from(institutes)
-          .innerJoin(programInstitutes, eq(institutes.id, programInstitutes.instituteId))
+          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
           .where(
             and(
               eq(institutes.status, true),
-              inArray(programInstitutes.programId, programIds)
+              inArray(programOfferings.programId, programIds)
             )
           )
           .orderBy(desc(institutes.isFeatured), institutes.name)
@@ -141,33 +142,43 @@ async function getLevelData(slug: string) {
       }
     }
 
-    // ✅ FIXED: Get active admissions using junction table
+    // ✅ UPDATED: Get active admissions through admissionOfferings + programOfferings
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
-          admissionsList = await db
-            .select({
-              id: admissions.id,
-              name: admissions.name,
-              slug: admissions.slug,
-              year: admissions.year,
-              session: admissions.session,
-              status: admissions.status,
-            })
-            .from(admissions)
-            .innerJoin(admissionPrograms, eq(admissions.id, admissionPrograms.admissionId))
-            .where(
-              and(
-                inArray(admissionPrograms.programId, validProgramIds),
-                eq(admissions.status, 'Open'),
-                isNotNull(admissionPrograms.programId)
+          // First get offeringIds for these programs
+          const offeringIds = await db
+            .select({ id: programOfferings.id })
+            .from(programOfferings)
+            .where(inArray(programOfferings.programId, validProgramIds));
+          
+          const offeringIdList = offeringIds.map(o => o.id);
+          
+          if (offeringIdList.length > 0) {
+            admissionsList = await db
+              .select({
+                id: admissions.id,
+                name: admissions.name,
+                slug: admissions.slug,
+                year: admissions.year,
+                session: admissions.session,
+                status: admissions.status,
+              })
+              .from(admissions)
+              .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+              .where(
+                and(
+                  inArray(admissionOfferings.offeringId, offeringIdList),
+                  eq(admissions.status, 'Open'),
+                  isNotNull(admissionOfferings.offeringId)
+                )
               )
-            )
-            .orderBy(desc(admissions.createdAt))
-            .limit(10);
+              .orderBy(desc(admissions.createdAt))
+              .limit(10);
+          }
         }
       } catch (error) {
         console.error('Error fetching admissions:', error);
@@ -175,36 +186,24 @@ async function getLevelData(slug: string) {
       }
     }
 
-    // Get recent results in this level
+    // ✅ UPDATED: Get recent results (no direct programId in results)
     let resultsList: any[] = [];
-    if (programIds.length > 0) {
-      try {
-        const validProgramIds = programIds.filter(id => id != null && id > 0);
-        
-        if (validProgramIds.length > 0) {
-          resultsList = await db
-            .select({
-              id: results.id,
-              title: results.title,
-              slug: results.slug,
-              year: results.year,
-              resultDate: results.resultDate,
-            })
-            .from(results)
-            .where(
-              and(
-                inArray(results.programId, validProgramIds),
-                eq(results.status, true),
-                isNotNull(results.programId)
-              )
-            )
-            .orderBy(desc(results.resultDate), desc(results.createdAt))
-            .limit(10);
-        }
-      } catch (error) {
-        console.error('Error fetching results:', error);
-        resultsList = [];
-      }
+    try {
+      resultsList = await db
+        .select({
+          id: results.id,
+          title: results.title,
+          slug: results.slug,
+          year: results.year,
+          resultDate: results.resultDate,
+        })
+        .from(results)
+        .where(eq(results.status, true))
+        .orderBy(desc(results.resultDate), desc(results.createdAt))
+        .limit(10);
+    } catch (error) {
+      console.error('Error fetching results:', error);
+      resultsList = [];
     }
 
     // Remove duplicates
@@ -372,10 +371,10 @@ export default async function LevelDetailPage({ params }: Props) {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <span className="w-1.5 h-8 bg-purple-600 rounded-full"></span>
-                Categories in {level.name}
+                Categories
               </h2>
               <Link
-                href={`/categories?level=${level.slug}`}
+                href={`/categories`}
                 className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
               >
                 View All Categories
@@ -389,7 +388,7 @@ export default async function LevelDetailPage({ params }: Props) {
               {categories.map((category) => (
                 <Link
                   key={`category-${category.id}`}
-                  href={`/categories/${category.slug}?level=${level.slug}`}
+                  href={`/categories/${category.slug}`}
                   className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all p-4 text-center border border-gray-200 hover:border-purple-400 group"
                 >
                   <div className="text-3xl mb-2">{categoryIcons[category.name] || '📂'}</div>
@@ -411,7 +410,7 @@ export default async function LevelDetailPage({ params }: Props) {
                 {level.name} Degrees
               </h2>
               <Link
-                href={`/degrees?level=${level.slug}`}
+                href={`/degrees`}
                 className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
               >
                 View All Degrees
@@ -447,10 +446,10 @@ export default async function LevelDetailPage({ params }: Props) {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <span className="w-1.5 h-8 bg-blue-600 rounded-full"></span>
-                Popular {level.name} Programs
+                Popular Programs
               </h2>
               <Link
-                href={`/programs?level=${level.slug}`}
+                href={`/programs`}
                 className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
               >
                 View All Programs
@@ -478,14 +477,14 @@ export default async function LevelDetailPage({ params }: Props) {
                     )}
                   </div>
                   
-                  {program.overview && (
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">{program.overview}</p>
+                  {program.shortDescription && (
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">{program.shortDescription}</p>
                   )}
                   
                   <div className="flex items-center gap-3 text-xs text-gray-500">
-                    {program.duration && (
+                    {program.typicalDuration && (
                       <span className="flex items-center gap-1">
-                        <span>⏱️</span> {program.duration}
+                        <span>⏱️</span> {program.typicalDuration}
                       </span>
                     )}
                   </div>
@@ -505,10 +504,10 @@ export default async function LevelDetailPage({ params }: Props) {
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                     <span className="w-1.5 h-8 bg-purple-600 rounded-full"></span>
-                    Institutes Offering {level.name}
+                    Institutes
                   </h2>
                   <Link
-                    href={`/institutes?level=${level.slug}`}
+                    href={`/institutes`}
                     className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1 text-sm"
                   >
                     View All
@@ -544,7 +543,7 @@ export default async function LevelDetailPage({ params }: Props) {
               <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-gray-200">
                 <div className="text-4xl mb-3">🏛️</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">No Institutes Yet</h3>
-                <p className="text-gray-500">No institutes found for {level.name} level.</p>
+                <p className="text-gray-500">No institutes found.</p>
               </div>
             )}
           </div>
@@ -559,7 +558,7 @@ export default async function LevelDetailPage({ params }: Props) {
                     Open Admissions
                   </h2>
                   <Link
-                    href={`/admissions?level=${level.slug}`}
+                    href={`/admissions`}
                     className="text-green-600 hover:text-green-700 font-medium flex items-center gap-1 text-sm"
                   >
                     View All
@@ -595,7 +594,7 @@ export default async function LevelDetailPage({ params }: Props) {
               <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-200">
                 <div className="text-4xl mb-2">📝</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">No Open Admissions</h3>
-                <p className="text-sm text-gray-500">No current admissions in {level.name}.</p>
+                <p className="text-sm text-gray-500">No current admissions available.</p>
               </div>
             )}
           </div>
@@ -614,7 +613,7 @@ export default async function LevelDetailPage({ params }: Props) {
                     Recent Results
                   </h2>
                   <Link
-                    href={`/results?level=${level.slug}`}
+                    href={`/results`}
                     className="text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1 text-sm"
                   >
                     View All
@@ -650,7 +649,7 @@ export default async function LevelDetailPage({ params }: Props) {
               <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-200">
                 <div className="text-4xl mb-2">📊</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">No Results Yet</h3>
-                <p className="text-sm text-gray-500">No results announced for {level.name} yet.</p>
+                <p className="text-sm text-gray-500">No results announced yet.</p>
               </div>
             )}
           </div>

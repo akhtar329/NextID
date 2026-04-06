@@ -1,4 +1,5 @@
 // app/api/admin/news/[id]/route.ts
+
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { news, programs, institutes, cities } from "@/app/lib/schema";
@@ -33,7 +34,7 @@ export async function GET(
         author: news.author,
         isFeatured: news.isFeatured,
         isBreaking: news.isBreaking,
-        views: news.views,
+        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
         publishedAt: news.publishedAt,
         expiresAt: news.expiresAt,
         status: news.status,
@@ -111,6 +112,7 @@ export async function PATCH(
     if (body.author !== undefined) updateData.author = body.author || null;
     if (body.isFeatured !== undefined) updateData.isFeatured = body.isFeatured;
     if (body.isBreaking !== undefined) updateData.isBreaking = body.isBreaking;
+    if (body.viewCount !== undefined) updateData.viewCount = body.viewCount;  // ✅ Fixed: views → viewCount
     if (body.publishedAt !== undefined) updateData.publishedAt = body.publishedAt ? new Date(body.publishedAt) : null;
     if (body.expiresAt !== undefined) updateData.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
     if (body.status !== undefined) updateData.status = body.status;

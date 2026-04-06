@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         author: body.author || null,
         isFeatured: body.isFeatured || false,
         isBreaking: body.isBreaking || false,
-        views: 0,
+        viewCount: 0,  // ✅ Fixed: views → viewCount
         publishedAt: body.publishedAt ? new Date(body.publishedAt) : new Date(),
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         status: body.status ?? true,

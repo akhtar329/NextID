@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
-import { admissions, admissionPrograms, seoMetadata } from '@/app/lib/schema';
+import { admissions, admissionOfferings, programOfferings, seoMetadata } from '@/app/lib/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -10,22 +10,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // Validation
-    if (!body.name || !body.slug || !body.programIds || !body.instituteId || !body.year || !body.status) {
+    if (!body.name || !body.slug || !body.offeringIds || !body.instituteId || !body.year || !body.status) {
       return NextResponse.json(
         { 
           error: 'Missing required fields', 
-          details: 'Name, slug, programIds (array), instituteId, year, and status are required' 
+          details: 'Name, slug, offeringIds (array), instituteId, year, and status are required' 
         },
         { status: 400 }
       );
     }
 
-    // Ensure programIds is an array
-    const programIds = Array.isArray(body.programIds) ? body.programIds : [body.programIds];
+    // Ensure offeringIds is an array
+    const offeringIds = Array.isArray(body.offeringIds) ? body.offeringIds : [body.offeringIds];
     
-    if (programIds.length === 0) {
+    if (offeringIds.length === 0) {
       return NextResponse.json(
-        { error: 'At least one program is required' },
+        { error: 'At least one offering is required' },
         { status: 400 }
       );
     }
@@ -40,6 +40,19 @@ export async function POST(request: NextRequest) {
     if (existingAdmission.length > 0) {
       return NextResponse.json(
         { error: 'Slug already exists', details: 'Please use a different slug' },
+        { status: 400 }
+      );
+    }
+
+    // Verify that all offeringIds exist
+    const validOfferings = await db
+      .select({ id: programOfferings.id })
+      .from(programOfferings)
+      .where(eq(programOfferings.id, offeringIds));
+
+    if (validOfferings.length !== offeringIds.length) {
+      return NextResponse.json(
+        { error: 'Invalid offering IDs', details: 'One or more offering IDs do not exist' },
         { status: 400 }
       );
     }
@@ -62,20 +75,21 @@ export async function POST(request: NextRequest) {
           note: body.note || null,
           officialLink: body.officialLink || null,
           featuredImage: body.featuredImage || null,
-          galleryImages: body.galleryImages ? JSON.stringify(body.galleryImages) : null,
+          galleryImages: body.galleryImages && body.galleryImages.length > 0 ? body.galleryImages : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
         .returning();
 
-      // 2. Insert into junction table for each program
+      // 2. Insert into junction table for each offering
       const junctionRecords = await Promise.all(
-        programIds.map(async (programId: number) => {
+        offeringIds.map(async (offeringId: number) => {
           const [record] = await tx
-            .insert(admissionPrograms)
+            .insert(admissionOfferings)
             .values({
               admissionId: newAdmission.id,
-              programId: Number(programId),
+              offeringId: Number(offeringId),
+              status: true,
               createdAt: new Date(),
             })
             .returning();
@@ -83,7 +97,7 @@ export async function POST(request: NextRequest) {
         })
       );
 
-      // 3. Insert SEO metadata (WITHOUT metaKeywords)
+      // 3. Insert SEO metadata
       let seoRecord = null;
       const hasSeoData = body.metaTitle || body.metaDescription || body.canonicalUrl;
       
@@ -95,7 +109,7 @@ export async function POST(request: NextRequest) {
             entityId: newAdmission.id,
             metaTitle: body.metaTitle || null,
             metaDescription: body.metaDescription || null,
-            // metaKeywords: body.metaKeywords || null, // ❌ REMOVED
+            metaKeywords: body.metaKeywords || null,
             canonicalUrl: body.canonicalUrl || null,
             robots: body.robots || 'index, follow',
             ogTitle: body.ogTitle || body.metaTitle || null,
@@ -114,9 +128,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       admission: result.newAdmission,
-      programCount: result.junctionRecords.length,
+      offeringCount: result.junctionRecords.length,
       seo: result.seoRecord ? 'created' : 'skipped',
-      message: `Admission created successfully with ${result.junctionRecords.length} program(s)`
+      message: `Admission created successfully with ${result.junctionRecords.length} offering(s)`
     });
 
   } catch (error: any) {
@@ -133,11 +147,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (error.message?.includes('admission_programs_admission_id_program_id_unique')) {
+      if (error.message?.includes('admission_offerings_admission_id_offering_id_unique')) {
         return NextResponse.json(
           { 
-            error: 'Duplicate program', 
-            details: 'This program is already linked to this admission.' 
+            error: 'Duplicate offering', 
+            details: 'This offering is already linked to this admission.' 
           },
           { status: 400 }
         );
@@ -158,7 +172,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: 'Invalid reference', 
-          details: 'One or more program IDs or institute ID do not exist.' 
+          details: 'One or more offering IDs or institute ID do not exist.' 
         },
         { status: 400 }
       );

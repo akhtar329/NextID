@@ -1,6 +1,8 @@
+// app/api/admin/results/route.ts
+
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { results, programs, institutes, boards } from "@/app/lib/schema";
+import { results, institutes, boards } from "@/app/lib/schema";
 import { desc, eq, and } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -23,7 +25,7 @@ export async function GET(request: Request) {
       conditions.push(eq(results.status, statusBool));
     }
 
-    // Query with joins for names (optional)
+    // ✅ UPDATED: Removed programId and programs join
     const filteredResults = await db
       .select({
         id: results.id,
@@ -31,8 +33,6 @@ export async function GET(request: Request) {
         slug: results.slug,
         year: results.year,
         status: results.status,
-        programId: results.programId,
-        programName: programs.name,
         instituteId: results.instituteId,
         instituteName: institutes.name,
         boardId: results.boardId,
@@ -40,7 +40,6 @@ export async function GET(request: Request) {
         createdAt: results.createdAt,
       })
       .from(results)
-      .leftJoin(programs, eq(results.programId, programs.id))
       .leftJoin(institutes, eq(results.instituteId, institutes.id))
       .leftJoin(boards, eq(results.boardId, boards.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)

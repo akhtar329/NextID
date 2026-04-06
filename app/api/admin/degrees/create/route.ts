@@ -1,4 +1,5 @@
 // app/api/admin/degrees/create/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { degrees } from "@/app/lib/schema";
@@ -7,7 +8,8 @@ import { eq, sql } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();    
-    const { name, slug, fullForm, levelId, categoryId, displayOrder, status } = body;
+    const { name, slug, fullForm, levelId, displayOrder, status } = body;
+    
     // Required fields validation
     if (!name) {
       return NextResponse.json(
@@ -23,12 +25,7 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    if (!categoryId) {
-      return NextResponse.json(
-        { success: false, error: "Category ID is required", field: "categoryId" },
-        { status: 400 }
-      );
-    }
+    // ✅ REMOVED: categoryId validation - no longer exists in degrees table
 
     // Check for duplicate degree name
     const existing = await db.select().from(degrees).where(eq(degrees.name, name));
@@ -50,7 +47,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fix sequence if needed - FIXED TYPE ERROR
+    // Generate slug if not provided
+    const generatedSlug = slug || name.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+
+    // Fix sequence if needed
     try {
       // Get the max ID with proper typing
       const result = await db.execute<{ max: number | null }>(sql`SELECT MAX(id) as max FROM degrees`);
@@ -66,13 +66,14 @@ export async function POST(req: NextRequest) {
     // Insert new degree
     const inserted = await db.insert(degrees).values({
       name: name,
-      slug: slug || name.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+      slug: generatedSlug,
       fullForm: fullForm ?? null,
       levelId: Number(levelId),
-      categoryId: Number(categoryId),
+      // ✅ REMOVED: categoryId - no longer exists
       displayOrder: displayOrder ?? 0,
       status: status !== undefined ? Boolean(status) : true,
     }).returning();
+    
     return NextResponse.json({ success: true, degree: inserted[0] });
 
   } catch (err) {
@@ -83,6 +84,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "This degree already exists (duplicate ID). Please try again." },
         { status: 409 }
+      );
+    }
+    
+    // Foreign key violation
+    if (err instanceof Error && 'code' in err && err.code === '23503') {
+      return NextResponse.json(
+        { success: false, error: "Invalid level ID. Please select a valid level." },
+        { status: 400 }
       );
     }
     

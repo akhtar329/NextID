@@ -1,7 +1,8 @@
 // app/api/admin/degrees/[id]/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { degrees } from "@/app/lib/schema";
+import { degrees, programOfferings } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
 // GET /api/admin/degrees/:id
@@ -57,7 +58,7 @@ export async function PATCH(
 
     const body = await req.json();
     
-    const { name, slug, fullForm, levelId, categoryId, displayOrder, status } = body;
+    const { name, slug, fullForm, levelId, displayOrder, status } = body;
 
     // Validation
     if (!name) {
@@ -125,7 +126,7 @@ export async function PATCH(
     if (slug) updateData.slug = slug.trim();
     if (fullForm !== undefined) updateData.fullForm = fullForm || null;
     if (levelId !== undefined && levelId !== null) updateData.levelId = Number(levelId);
-    if (categoryId !== undefined && categoryId !== null) updateData.categoryId = Number(categoryId);
+    // ✅ REMOVED: categoryId - no longer exists in degrees table
     if (displayOrder !== undefined) updateData.displayOrder = Number(displayOrder);
     if (statusValue !== undefined) updateData.status = statusValue;
 
@@ -158,7 +159,7 @@ export async function PATCH(
       // Foreign key violation
       if (err.code === '23503') {
         return NextResponse.json(
-          { success: false, error: "Invalid level or category ID. Please check your selection." },
+          { success: false, error: "Invalid level ID. Please check your selection." },
           { status: 400 }
         );
       }
@@ -197,18 +198,17 @@ export async function DELETE(
       );
     }
 
-    // Check if degree is being used by any programs
-    const { programs } = await import("@/app/lib/schema");
-    const usedByPrograms = await db
+    // ✅ UPDATED: Check if degree is being used by any program offerings
+    const usedByOfferings = await db
       .select()
-      .from(programs)
-      .where(eq(programs.degreeId, numericId));
+      .from(programOfferings)
+      .where(eq(programOfferings.degreeId, numericId));
 
-    if (usedByPrograms.length > 0) {
+    if (usedByOfferings.length > 0) {
       return NextResponse.json(
         { 
           success: false, 
-          error: `Cannot delete degree "${existing.name}" because it is used by ${usedByPrograms.length} program(s). Please reassign these programs first.` 
+          error: `Cannot delete degree "${existing.name}" because it is used by ${usedByOfferings.length} program offering(s). Please reassign these offerings first.` 
         },
         { status: 409 }
       );

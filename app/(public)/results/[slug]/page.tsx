@@ -10,12 +10,11 @@ interface ProgramType {
   id: number;
   name: string | null;
   slug: string | null;
-  degreeId: number | null;
-  overview: string | null;
-  eligibility: string | null;
-  duration: string | null;
-  careerScope: string | null;
-  feeRange: string | null;
+  detailedOverview: string | null;
+  commonEligibility: string | null;
+  typicalDuration: string | null;
+  careerOutlook: string | null;
+  typicalFeeRange: string | null;
 }
 
 interface CityType {
@@ -50,10 +49,8 @@ interface ResultType {
   id: number;
   slug: string | null;
   title: string | null;
-  programId: number | null;
   instituteId: number | null;
   boardId: number | null;
-  universityId: number | null;
   year: number | null;
   resultDate: Date | null;
   officialLink: string | null;
@@ -92,10 +89,8 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
         id: results.id,
         slug: results.slug,
         title: results.title,
-        programId: results.programId,
         instituteId: results.instituteId,
         boardId: results.boardId,
-        universityId: results.universityId,
         year: results.year,
         resultDate: results.resultDate,
         officialLink: results.officialLink,
@@ -110,32 +105,13 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
 
     if (!result) return null;
 
-    // Get program details
+    // Get program details - no longer directly linked, so return null
     let program: ProgramType | null = null;
-    if (result.programId) {
-      const [prog] = await db
-        .select({
-          id: programs.id,
-          name: programs.name,
-          slug: programs.slug,
-          degreeId: programs.degreeId,
-          overview: programs.overview,
-          eligibility: programs.eligibility,
-          duration: programs.duration,
-          careerScope: programs.careerScope,
-          feeRange: programs.feeRange,
-        })
-        .from(programs)
-        .where(eq(programs.id, result.programId))
-        .limit(1);
-      program = prog || null;
-    }
 
-    // Get institute/university details
+    // Get institute details
     let institute: InstituteType | null = null;
-    const instituteId = result.instituteId || result.universityId;
     
-    if (instituteId) {
+    if (result.instituteId) {
       const [inst] = await db
         .select({
           id: institutes.id,
@@ -147,7 +123,7 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
           website: institutes.website,
         })
         .from(institutes)
-        .where(eq(institutes.id, instituteId))
+        .where(eq(institutes.id, result.instituteId))
         .limit(1);
 
       if (inst) {
@@ -220,8 +196,6 @@ async function getRelatedResults(result: ResultType) {
     
     if (result.instituteId) {
       conditions.push(eq(results.instituteId, result.instituteId));
-    } else if (result.universityId) {
-      conditions.push(eq(results.universityId, result.universityId));
     } else if (result.boardId) {
       conditions.push(eq(results.boardId, result.boardId));
     }
@@ -257,24 +231,22 @@ async function getRelatedResults(result: ResultType) {
 
 // ==================== SEO FUNCTIONS ====================
 function generateMetaTitle(result: ResultType): string {
-  const programName = result.program?.name || 'Exam';
   const institutionName = result.institute?.name || result.board?.name || 'Board';
   const year = result.year || '2026';
   
-  let title = `${programName} Result ${year} - ${institutionName} | NextID.pk`;
+  let title = `Result ${year} - ${institutionName} | NextID.pk`;
   if (title.length > 60) title = title.substring(0, 57) + '...';
   return title;
 }
 
 function generateMetaDescription(result: ResultType): string {
-  const programName = result.program?.name || 'exam';
   const institutionName = result.institute?.name || result.board?.name || 'board';
   const cityName = result.institute?.city?.name || result.board?.city?.name || 'Pakistan';
   const year = result.year || '2026';
   const resultDate = result.resultDate ? formatShortDate(result.resultDate) : 'TBA';
   const status = result.status ? 'published' : 'pending';
   
-  let description = `Check ${programName} result ${year} for ${institutionName} in ${cityName}. Result date: ${resultDate}. Status: ${status}. `;
+  let description = `Check ${institutionName} result ${year} in ${cityName}. Result date: ${resultDate}. Status: ${status}. `;
   description += `Download marksheet, check passing percentage at NextID.pk.`;
   
   if (description.length > 160) description = description.substring(0, 157) + '...';
@@ -310,7 +282,7 @@ function getStatusBadge(status: boolean | null) {
   return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Unknown', icon: '❓' };
 }
 
-// ==================== MAIN PAGE (Server Component - NO CLIENT) ====================
+// ==================== MAIN PAGE ====================
 export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const result = await getResultBySlug(slug);
@@ -339,7 +311,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               {' / '}
               <Link href="/results" className="hover:text-white">Results</Link>
               {' / '}
-              <span className="text-white">{result.title || result.program?.name || 'Result'}</span>
+              <span className="text-white">{result.title || 'Result'}</span>
             </div>
             
             {/* Status Badge */}
@@ -352,7 +324,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
             </div>
             
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              {result.title || `${result.program?.name || 'Exam'} Result ${result.year || '2026'}`}
+              {result.title || `Result ${result.year || '2026'}`}
             </h1>
             
             <div className="flex flex-wrap gap-4 text-green-200">
@@ -398,10 +370,6 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Program</p>
-                  <p className="font-semibold text-gray-900">{result.program?.name || '—'}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-sm text-gray-500">Institution</p>
                   <p className="font-semibold text-gray-900">{institutionName || '—'}</p>
                 </div>
@@ -444,37 +412,6 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                 </div>
               )}
             </div>
-
-            {/* Program Details */}
-            {result.program && (result.program.overview || result.program.eligibility || result.program.duration) && (
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Program Details</h2>
-                {result.program.overview && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-800">Overview</h3>
-                    <p className="text-gray-600">{result.program.overview}</p>
-                  </div>
-                )}
-                {result.program.eligibility && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-800">Eligibility</h3>
-                    <p className="text-gray-600">{result.program.eligibility}</p>
-                  </div>
-                )}
-                {result.program.duration && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-800">Duration</h3>
-                    <p className="text-gray-600">{result.program.duration}</p>
-                  </div>
-                )}
-                {result.program.careerScope && (
-                  <div>
-                    <h3 className="font-semibold text-gray-800">Career Scope</h3>
-                    <p className="text-gray-600">{result.program.careerScope}</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Sidebar */}
@@ -529,7 +466,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "EducationEvent",
-            "name": result.title || `${result.program?.name} Result ${result.year}`,
+            "name": result.title || `Result ${result.year}`,
             "description": generateMetaDescription(result),
             "startDate": result.resultDate?.toISOString(),
             "location": {

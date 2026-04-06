@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { programs, degrees, levels } from "@/app/lib/schema";
+import { programs, categories } from "@/app/lib/schema";
 import { eq, desc } from "drizzle-orm";
 
 export async function GET() {
@@ -12,16 +12,18 @@ export async function GET() {
         id: programs.id,
         name: programs.name,
         slug: programs.slug,
-        degreeName: degrees.name,
-        levelName: levels.name,
-        duration: programs.duration,
-        feeRange: programs.feeRange,
+        categoryId: programs.categoryId,
+        categoryName: categories.name,
+        shortDescription: programs.shortDescription,
+        typicalDuration: programs.typicalDuration,
+        typicalFeeRange: programs.typicalFeeRange,
+        isFeatured: programs.isFeatured,
+        isPopular: programs.isPopular,
         status: programs.status,
         createdAt: programs.createdAt,
       })
       .from(programs)
-      .leftJoin(degrees, eq(programs.degreeId, degrees.id))
-      .leftJoin(levels, eq(degrees.levelId, levels.id))
+      .leftJoin(categories, eq(programs.categoryId, categories.id))
       .orderBy(desc(programs.createdAt));
 
     return NextResponse.json({

@@ -38,16 +38,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create result
+    // ✅ UPDATED: Removed programId and universityId, keep instituteId and boardId
     const newResult = await db
       .insert(results)
       .values({
         title: body.title,
-        slug: body.slug, // ✅ Now slug exists
-        programId: body.programId ? Number(body.programId) : null,
+        slug: body.slug,
         instituteId: body.instituteId ? Number(body.instituteId) : null,
         boardId: body.boardId ? Number(body.boardId) : null,
-        universityId: body.universityId ? Number(body.universityId) : null,
         year: Number(body.year),
         resultDate: body.resultDate ? new Date(body.resultDate) : null,
         officialLink: body.officialLink || null,

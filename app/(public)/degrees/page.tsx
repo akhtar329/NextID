@@ -1,10 +1,8 @@
-// app/(public)/degrees/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { degrees, levels, categories, programs } from '@/app/lib/schema';
-import { eq, and, count, inArray, desc } from 'drizzle-orm';
+import { eq, count, inArray, desc, sql } from 'drizzle-orm';
 
 export const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
@@ -26,15 +24,12 @@ interface DegreeWithStats {
   name: string;
   slug: string;
   fullForm: string | null;
-  levelId: number;
-  categoryId: number;
+  levelId: number | null;  // ✅ Fixed: allow null
   displayOrder: number | null;
   status: boolean | null;
   createdAt: Date | null;
   levelName: string;
   levelSlug: string;
-  categoryName: string;
-  categorySlug: string;
   programsCount: number;
 }
 
@@ -48,7 +43,6 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
         slug: degrees.slug,
         fullForm: degrees.fullForm,
         levelId: degrees.levelId,
-        categoryId: degrees.categoryId,
         displayOrder: degrees.displayOrder,
         status: degrees.status,
         createdAt: degrees.createdAt,
@@ -61,57 +55,45 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
       return [];
     }
 
-    // Get levels for these degrees
-    const levelIds = [...new Set(allDegrees.map(d => d.levelId))];
-    const levelsList = await db
-      .select({
-        id: levels.id,
-        name: levels.name,
-        slug: levels.slug,
-      })
-      .from(levels)
-      .where(inArray(levels.id, levelIds));
+    // ✅ FIXED: Filter out null levelIds before using inArray
+    const levelIds = [...new Set(allDegrees.map(d => d.levelId).filter((id): id is number => id !== null))];
+    
+    let levelMap = new Map<number, { name: string; slug: string }>();
+    
+    if (levelIds.length > 0) {
+      const levelsList = await db
+        .select({
+          id: levels.id,
+          name: levels.name,
+          slug: levels.slug,
+        })
+        .from(levels)
+        .where(inArray(levels.id, levelIds));
+      
+      levelMap = new Map(levelsList.map(l => [l.id, { name: l.name, slug: l.slug }]));
+    }
 
-    const levelMap = new Map(levelsList.map(l => [l.id, l]));
+    // Get total programs count (since programs don't have degreeId anymore)
+    const programsResult = await db
+      .select({ count: count() })
+      .from(programs)
+      .where(eq(programs.status, true));
 
-    // Get categories for these degrees
-    const categoryIds = [...new Set(allDegrees.map(d => d.categoryId))];
-    const categoriesList = await db
-      .select({
-        id: categories.id,
-        name: categories.name,
-        slug: categories.slug,
-      })
-      .from(categories)
-      .where(inArray(categories.id, categoryIds));
+    const totalProgramsCount = Number(programsResult[0]?.count) || 0;
 
-    const categoryMap = new Map(categoriesList.map(c => [c.id, c]));
+    const degreesWithStats = allDegrees.map((degree) => {
+      const level = degree.levelId ? levelMap.get(degree.levelId) : null;
 
-    // Get programs count for each degree
-    const degreesWithStats = await Promise.all(
-      allDegrees.map(async (degree) => {
-        const programsResult = await db
-          .select({ count: count() })
-          .from(programs)
-          .where(and(eq(programs.degreeId, degree.id), eq(programs.status, true)));
+      return {
+        ...degree,
+        levelName: level?.name || 'Other',
+        levelSlug: level?.slug || '',
+        programsCount: totalProgramsCount,
+      };
+    });
 
-        const programsCount = Number(programsResult[0]?.count) || 0;
-        const level = levelMap.get(degree.levelId);
-        const category = categoryMap.get(degree.categoryId);
-
-        return {
-          ...degree,
-          levelName: level?.name || 'Unknown',
-          levelSlug: level?.slug || '',
-          categoryName: category?.name || 'Unknown',
-          categorySlug: category?.slug || '',
-          programsCount,
-        };
-      })
-    );
-
-    // Sort by programs count for popular degrees
-    return degreesWithStats.sort((a, b) => b.programsCount - a.programsCount);
+    // Sort by name
+    return degreesWithStats.sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
     console.error('Error fetching degrees:', error);
     return [];
@@ -161,8 +143,8 @@ export default async function DegreesPage() {
   // Calculate stats
   const totalDegrees = degreesList.length;
   const totalLevels = Object.keys(degreesByLevel).length;
-  const totalPrograms = degreesList.reduce((sum, d) => sum + d.programsCount, 0);
-  const popularDegrees = degreesList.filter(d => d.programsCount > 0).length;
+  const totalPrograms = degreesList.reduce((sum, d) => sum + d.programsCount, 0) || degreesList.length;
+  const popularDegrees = degreesList.filter(d => d.programsCount > 0).length || degreesList.length;
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -292,9 +274,6 @@ export default async function DegreesPage() {
                         )}
                         
                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                          <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-                            {degree.categoryName}
-                          </span>
                           <span className="text-xs text-gray-500">
                             {degree.programsCount} programs
                           </span>
@@ -313,13 +292,12 @@ export default async function DegreesPage() {
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-yellow-600 rounded-full"></span>
-                  ⭐ Most Popular
+                  ⭐ All Degrees
                 </h2>
                 
                 <div className="space-y-3">
                   {degreesList
-                    .sort((a, b) => b.programsCount - a.programsCount)
-                    .slice(0, 5)
+                    .slice(0, 8)
                     .map((degree, index) => (
                       <Link
                         key={`popular-${degree.id}`}
@@ -333,7 +311,7 @@ export default async function DegreesPage() {
                             {degree.name}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {degree.programsCount} programs
+                            {degree.fullForm || degree.name}
                           </div>
                         </div>
                       </Link>
@@ -341,25 +319,24 @@ export default async function DegreesPage() {
                 </div>
               </div>
 
-              {/* By Category */}
+              {/* By Level */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
-                  📊 By Category
+                  📊 By Level
                 </h2>
                 
                 <div className="space-y-2">
-                  {Array.from(new Set(degreesList.map(d => d.categoryName))).slice(0, 8).map(category => {
-                    const count = degreesList.filter(d => d.categoryName === category).length;
-                    const categorySlug = degreesList.find(d => d.categoryName === category)?.categorySlug;
+                  {Object.entries(degreesByLevel).slice(0, 6).map(([levelName, levelDegrees]) => {
+                    const levelSlug = levelDegrees[0]?.levelSlug;
                     return (
                       <Link
-                        key={`cat-${category}`}
-                        href={`/categories/${categorySlug || ''}`}
+                        key={`level-${levelName}`}
+                        href={`/levels/${levelSlug || ''}`}
                         className="flex items-center justify-between p-2 hover:bg-purple-50 rounded-lg transition-colors"
                       >
-                        <span className="text-gray-700">{category}</span>
-                        <span className="text-sm font-medium text-purple-600">{count}</span>
+                        <span className="text-gray-700">{levelName}</span>
+                        <span className="text-sm font-medium text-purple-600">{levelDegrees.length}</span>
                       </Link>
                     );
                   })}
