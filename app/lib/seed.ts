@@ -1,10 +1,10 @@
-// app/lib/seed.ts - Fixed Version with all required fields and multi-program support
+// app/lib/seed.ts - Updated Version for New Schema
 
 import { db } from "./db";
 import { 
   categories, levels, degrees, programs, cities, institutes, 
-  boards, programInstitutes, programCities, admissions, admissionPrograms,
-  adminRoles, adminUsers
+  boards, programOfferings, admissions, admissionOfferings,
+  adminRoles, adminUsers, seoMetadata
 } from "./schema";
 import { eq, sql } from "drizzle-orm";
 import { hash } from "bcryptjs";
@@ -17,10 +17,10 @@ async function seed() {
        ========================= */
     
     // Pehle child tables delete karo
-    await db.delete(admissionPrograms);  // ✅ New junction table
-    await db.delete(programCities);
-    await db.delete(programInstitutes);
+    await db.delete(admissionOfferings);  // ✅ Updated
+    await db.delete(programOfferings);     // ✅ Updated (replaces programInstitutes)
     await db.delete(admissions);
+    await db.delete(seoMetadata);
     
     // Phir parent tables
     await db.delete(programs);
@@ -84,21 +84,21 @@ async function seed() {
     ]);
 
     /* =========================
-       5. DEGREES - FIXED: Added slug field
+       5. DEGREES - ✅ REMOVED categoryId
        ========================= */
     await db.insert(degrees).values([
-      { id: 1, name: "BS", slug: "bs", fullForm: "Bachelor of Science", levelId: 3, categoryId: 4, displayOrder: 1, status: true },
-      { id: 2, name: "BE", slug: "be", fullForm: "Bachelor of Engineering", levelId: 3, categoryId: 1, displayOrder: 1, status: true },
-      { id: 3, name: "BBA", slug: "bba", fullForm: "Bachelor of Business Admin", levelId: 3, categoryId: 3, displayOrder: 1, status: true },
-      { id: 4, name: "MBBS", slug: "mbbs", fullForm: "Bachelor of Medicine & Surgery", levelId: 3, categoryId: 2, displayOrder: 1, status: true },
-      { id: 5, name: "LLB", slug: "llb", fullForm: "Bachelor of Laws", levelId: 3, categoryId: 5, displayOrder: 1, status: true },
-      { id: 6, name: "B.Ed", slug: "bed", fullForm: "Bachelor of Education", levelId: 3, categoryId: 6, displayOrder: 1, status: true },
-      { id: 7, name: "BA", slug: "ba", fullForm: "Bachelor of Arts", levelId: 3, categoryId: 7, displayOrder: 1, status: true },
-      { id: 8, name: "MA", slug: "ma", fullForm: "Master of Arts", levelId: 4, categoryId: 7, displayOrder: 2, status: true },
-      { id: 9, name: "MBA", slug: "mba", fullForm: "Master of Business Admin", levelId: 4, categoryId: 3, displayOrder: 2, status: true },
-      { id: 10, name: "MSc", slug: "msc", fullForm: "Master of Science", levelId: 4, categoryId: 4, displayOrder: 2, status: true },
-      { id: 11, name: "ME", slug: "me", fullForm: "Master of Engineering", levelId: 4, categoryId: 1, displayOrder: 2, status: true },
-      { id: 12, name: "PhD", slug: "phd", fullForm: "Doctor of Philosophy", levelId: 5, categoryId: 4, displayOrder: 3, status: true },
+      { id: 1, name: "BS", slug: "bs", fullForm: "Bachelor of Science", levelId: 3, displayOrder: 1, status: true },
+      { id: 2, name: "BE", slug: "be", fullForm: "Bachelor of Engineering", levelId: 3, displayOrder: 1, status: true },
+      { id: 3, name: "BBA", slug: "bba", fullForm: "Bachelor of Business Admin", levelId: 3, displayOrder: 1, status: true },
+      { id: 4, name: "MBBS", slug: "mbbs", fullForm: "Bachelor of Medicine & Surgery", levelId: 3, displayOrder: 1, status: true },
+      { id: 5, name: "LLB", slug: "llb", fullForm: "Bachelor of Laws", levelId: 3, displayOrder: 1, status: true },
+      { id: 6, name: "B.Ed", slug: "bed", fullForm: "Bachelor of Education", levelId: 3, displayOrder: 1, status: true },
+      { id: 7, name: "BA", slug: "ba", fullForm: "Bachelor of Arts", levelId: 3, displayOrder: 1, status: true },
+      { id: 8, name: "MA", slug: "ma", fullForm: "Master of Arts", levelId: 4, displayOrder: 2, status: true },
+      { id: 9, name: "MBA", slug: "mba", fullForm: "Master of Business Admin", levelId: 4, displayOrder: 2, status: true },
+      { id: 10, name: "MSc", slug: "msc", fullForm: "Master of Science", levelId: 4, displayOrder: 2, status: true },
+      { id: 11, name: "ME", slug: "me", fullForm: "Master of Engineering", levelId: 4, displayOrder: 2, status: true },
+      { id: 12, name: "PhD", slug: "phd", fullForm: "Doctor of Philosophy", levelId: 5, displayOrder: 3, status: true },
     ]);
 
     /* =========================
@@ -167,79 +167,76 @@ async function seed() {
     ]);
 
     /* =========================
-       9. PROGRAMS
+       9. PROGRAMS - ✅ REMOVED degreeId, ADDED categoryId
        ========================= */
     
     let programId = 1;
     const programValues = [
-      // Engineering Programs
-      { degreeId: 2, name: "Civil Engineering", slug: "civil-engineering", isFeatured: true },
-      { degreeId: 2, name: "Mechanical Engineering", slug: "mechanical-engineering", isFeatured: true },
-      { degreeId: 2, name: "Electrical Engineering", slug: "electrical-engineering", isFeatured: true },
-      { degreeId: 2, name: "Software Engineering", slug: "software-engineering", isFeatured: true },
-      { degreeId: 2, name: "Chemical Engineering", slug: "chemical-engineering", isFeatured: false },
-      { degreeId: 2, name: "Computer Engineering", slug: "computer-engineering", isFeatured: false },
-      { degreeId: 11, name: "Engineering Management", slug: "engineering-management", isFeatured: false },
-      { degreeId: 11, name: "Structural Engineering", slug: "structural-engineering", isFeatured: false },
+      // Engineering Programs (categoryId: 1)
+      { categoryId: 1, name: "Civil Engineering", slug: "civil-engineering", isFeatured: true, shortDescription: "Study of civil infrastructure" },
+      { categoryId: 1, name: "Mechanical Engineering", slug: "mechanical-engineering", isFeatured: true, shortDescription: "Study of mechanical systems" },
+      { categoryId: 1, name: "Electrical Engineering", slug: "electrical-engineering", isFeatured: true, shortDescription: "Study of electrical systems" },
+      { categoryId: 1, name: "Software Engineering", slug: "software-engineering", isFeatured: true, shortDescription: "Study of software development" },
+      { categoryId: 1, name: "Chemical Engineering", slug: "chemical-engineering", isFeatured: false, shortDescription: "Study of chemical processes" },
+      { categoryId: 1, name: "Computer Engineering", slug: "computer-engineering", isFeatured: false, shortDescription: "Study of computer hardware" },
 
-      // Medical Programs
-      { degreeId: 4, name: "MBBS", slug: "mbbs", isFeatured: true },
-      { degreeId: 4, name: "BDS", slug: "bds", isFeatured: true },
-      { degreeId: 4, name: "Pharm-D", slug: "pharm-d", isFeatured: false },
-      { degreeId: 1, name: "BS Nursing", slug: "bs-nursing", isFeatured: false },
-      { degreeId: 1, name: "BS Medical Technology", slug: "bs-medical-tech", isFeatured: false },
-      { degreeId: 10, name: "MS Public Health", slug: "ms-public-health", isFeatured: false },
+      // Medical Programs (categoryId: 2)
+      { categoryId: 2, name: "MBBS", slug: "mbbs", isFeatured: true, shortDescription: "Bachelor of Medicine and Surgery" },
+      { categoryId: 2, name: "BDS", slug: "bds", isFeatured: true, shortDescription: "Bachelor of Dental Surgery" },
+      { categoryId: 2, name: "Pharm-D", slug: "pharm-d", isFeatured: false, shortDescription: "Doctor of Pharmacy" },
+      { categoryId: 2, name: "BS Nursing", slug: "bs-nursing", isFeatured: false, shortDescription: "Bachelor of Nursing" },
 
-      // Business Programs
-      { degreeId: 3, name: "BBA", slug: "bba", isFeatured: true },
-      { degreeId: 9, name: "MBA", slug: "mba", isFeatured: true },
-      { degreeId: 1, name: "BS Accounting", slug: "bs-accounting", isFeatured: false },
-      { degreeId: 1, name: "BS Economics", slug: "bs-economics", isFeatured: false },
-      { degreeId: 10, name: "MS Finance", slug: "ms-finance", isFeatured: false },
+      // Business Programs (categoryId: 3)
+      { categoryId: 3, name: "BBA", slug: "bba", isFeatured: true, shortDescription: "Bachelor of Business Administration" },
+      { categoryId: 3, name: "MBA", slug: "mba", isFeatured: true, shortDescription: "Master of Business Administration" },
+      { categoryId: 3, name: "BS Accounting", slug: "bs-accounting", isFeatured: false, shortDescription: "Bachelor of Accounting" },
+      { categoryId: 3, name: "BS Economics", slug: "bs-economics", isFeatured: false, shortDescription: "Bachelor of Economics" },
 
-      // IT Programs
-      { degreeId: 1, name: "BS Computer Science", slug: "bs-computer-science", isFeatured: true },
-      { degreeId: 1, name: "BS Information Technology", slug: "bs-information-technology", isFeatured: true },
-      { degreeId: 10, name: "MS Data Science", slug: "ms-data-science", isFeatured: true },
-      { degreeId: 10, name: "MS Artificial Intelligence", slug: "ms-ai", isFeatured: true },
-      { degreeId: 1, name: "BS Cyber Security", slug: "bs-cyber-security", isFeatured: false },
-      { degreeId: 12, name: "PhD Computer Science", slug: "phd-cs", isFeatured: false },
+      // IT Programs (categoryId: 4)
+      { categoryId: 4, name: "BS Computer Science", slug: "bs-computer-science", isFeatured: true, shortDescription: "Bachelor of Computer Science" },
+      { categoryId: 4, name: "BS Information Technology", slug: "bs-information-technology", isFeatured: true, shortDescription: "Bachelor of Information Technology" },
+      { categoryId: 4, name: "MS Data Science", slug: "ms-data-science", isFeatured: true, shortDescription: "Master of Data Science" },
+      { categoryId: 4, name: "MS Artificial Intelligence", slug: "ms-ai", isFeatured: true, shortDescription: "Master of AI" },
+      { categoryId: 4, name: "BS Cyber Security", slug: "bs-cyber-security", isFeatured: false, shortDescription: "Bachelor of Cyber Security" },
+      { categoryId: 4, name: "PhD Computer Science", slug: "phd-cs", isFeatured: false, shortDescription: "PhD in Computer Science" },
 
-      // Law Programs
-      { degreeId: 5, name: "LLB (5-Year)", slug: "llb-5-year", isFeatured: true },
-      { degreeId: 5, name: "LLB (3-Year)", slug: "llb-3-year", isFeatured: false },
-      { degreeId: 8, name: "LLM", slug: "llm", isFeatured: false },
+      // Law Programs (categoryId: 5)
+      { categoryId: 5, name: "LLB (5-Year)", slug: "llb-5-year", isFeatured: true, shortDescription: "Bachelor of Laws 5-Year" },
+      { categoryId: 5, name: "LLB (3-Year)", slug: "llb-3-year", isFeatured: false, shortDescription: "Bachelor of Laws 3-Year" },
+      { categoryId: 5, name: "LLM", slug: "llm", isFeatured: false, shortDescription: "Master of Laws" },
 
-      // Education Programs
-      { degreeId: 6, name: "B.Ed", slug: "bed", isFeatured: true },
-      { degreeId: 8, name: "M.Ed", slug: "med", isFeatured: true },
-      { degreeId: 1, name: "BS Education", slug: "bs-education", isFeatured: false },
+      // Education Programs (categoryId: 6)
+      { categoryId: 6, name: "B.Ed", slug: "bed", isFeatured: true, shortDescription: "Bachelor of Education" },
+      { categoryId: 6, name: "M.Ed", slug: "med", isFeatured: true, shortDescription: "Master of Education" },
+      { categoryId: 6, name: "BS Education", slug: "bs-education", isFeatured: false, shortDescription: "Bachelor of Education" },
 
-      // Arts Programs
-      { degreeId: 7, name: "BA", slug: "ba", isFeatured: true },
-      { degreeId: 8, name: "MA English", slug: "ma-english", isFeatured: true },
-      { degreeId: 8, name: "MA History", slug: "ma-history", isFeatured: false },
-      { degreeId: 1, name: "BS Psychology", slug: "bs-psychology", isFeatured: true },
-      { degreeId: 1, name: "BS Sociology", slug: "bs-sociology", isFeatured: false },
-      { degreeId: 1, name: "BS Mass Communication", slug: "bs-mass-comm", isFeatured: false },
+      // Arts Programs (categoryId: 7)
+      { categoryId: 7, name: "BA", slug: "ba", isFeatured: true, shortDescription: "Bachelor of Arts" },
+      { categoryId: 7, name: "MA English", slug: "ma-english", isFeatured: true, shortDescription: "Master of English" },
+      { categoryId: 7, name: "MA History", slug: "ma-history", isFeatured: false, shortDescription: "Master of History" },
+      { categoryId: 7, name: "BS Psychology", slug: "bs-psychology", isFeatured: true, shortDescription: "Bachelor of Psychology" },
+      { categoryId: 7, name: "BS Sociology", slug: "bs-sociology", isFeatured: false, shortDescription: "Bachelor of Sociology" },
+      { categoryId: 7, name: "BS Mass Communication", slug: "bs-mass-comm", isFeatured: false, shortDescription: "Bachelor of Mass Communication" },
     ];
 
     for (const prog of programValues) {
       await db.insert(programs).values({
         id: programId++,
-        degreeId: prog.degreeId,
+        categoryId: prog.categoryId,
         name: prog.name,
         slug: prog.slug,
+        shortDescription: prog.shortDescription,
         isFeatured: prog.isFeatured,
         status: true
       });
     }
 
     /* =========================
-       10. PROGRAM-INSTITUTE RELATIONS
+       10. PROGRAM OFFERINGS (replaces programInstitutes) - WITH degreeId
        ========================= */
     const allPrograms = await db.select().from(programs);
     const allInstitutes = await db.select().from(institutes);
+    const allDegrees = await db.select().from(degrees);
 
     let relationCount = 0;
     for (const program of allPrograms) {
@@ -247,49 +244,21 @@ async function seed() {
       const selectedInstitutes = shuffled.slice(0, Math.floor(Math.random() * 3) + 3);
       
       for (const institute of selectedInstitutes) {
-        await db.insert(programInstitutes).values({
+        // Select a random degree for this offering
+        const randomDegree = allDegrees[Math.floor(Math.random() * allDegrees.length)];
+        
+        await db.insert(programOfferings).values({
           programId: program.id,
           instituteId: institute.id,
+          degreeId: randomDegree.id,
           status: true
         }).catch(() => {});
         relationCount++;
       }
     }
-  
 
     /* =========================
-       11. PROGRAM-CITY RELATIONS
-       ========================= */
-    const allCities = await db.select().from(cities);
-    const popularCities = allCities.filter(c => c.isPopular);
-    const otherCities = allCities.filter(c => !c.isPopular);
-
-    let cityRelationCount = 0;
-    for (const program of allPrograms) {
-      // Link to all popular cities
-      for (const city of popularCities) {
-        await db.insert(programCities).values({
-          programId: program.id,
-          cityId: city.id
-        }).catch(() => {});
-        cityRelationCount++;
-      }
-      
-      // Link to 2 random other cities
-      const shuffled = [...otherCities].sort(() => 0.5 - Math.random());
-      const selectedCities = shuffled.slice(0, 2);
-      
-      for (const city of selectedCities) {
-        await db.insert(programCities).values({
-          programId: program.id,
-          cityId: city.id
-        }).catch(() => {});
-        cityRelationCount++;
-      }
-    }
-
-    /* =========================
-       12. ADMISSIONS - ✅ FIXED: No programId, only name/slug/instituteId
+       11. ADMISSIONS
        ========================= */
     const currentYear = new Date().getFullYear();
     let admissionCount = 0;
@@ -313,7 +282,7 @@ async function seed() {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
       
-      // Insert admission without programId
+      // Insert admission
       const [admission] = await db.insert(admissions).values({
         instituteId: randomInstitute.id,
         name: `${instituteName} ${session} Admissions ${currentYear}`,
@@ -334,33 +303,31 @@ async function seed() {
     }
 
     /* =========================
-       13. ADMISSION-PROGRAM RELATIONS - ✅ NEW: Link admissions to multiple programs
+       12. ADMISSION OFFERINGS (replaces admissionPrograms) - Link admissions to offerings
        ========================= */
-    let admissionProgramCount = 0;
+    const allOfferings = await db.select().from(programOfferings);
+    let admissionOfferingCount = 0;
     
-    // For each admission, link it to 1-4 random programs
+    // For each admission, link it to 1-4 random offerings
     for (const admissionId of admissionIds) {
-      // Random number of programs (1 to 4)
-      const numPrograms = Math.floor(Math.random() * 4) + 1;
+      const numOfferings = Math.floor(Math.random() * 4) + 1;
       
-      // Shuffle programs and take random ones
-      const shuffled = [...allPrograms].sort(() => 0.5 - Math.random());
-      const selectedPrograms = shuffled.slice(0, numPrograms);
+      const shuffled = [...allOfferings].sort(() => 0.5 - Math.random());
+      const selectedOfferings = shuffled.slice(0, numOfferings);
       
-      for (const program of selectedPrograms) {
-        await db.insert(admissionPrograms).values({
+      for (const offering of selectedOfferings) {
+        await db.insert(admissionOfferings).values({
           admissionId: admissionId,
-          programId: program.id,
+          offeringId: offering.id,
+          status: true,
         }).catch((err) => {
-          // Ignore duplicate errors
           if (!err.message?.includes('duplicate')) {
-            console.error("Failed to insert admission-program relation:", err);
+            console.error("Failed to insert admission-offering relation:", err);
           }
         });
-        admissionProgramCount++;
+        admissionOfferingCount++;
       }
     }
-  
 
     /* =========================
        📊 SUMMARY
@@ -369,10 +336,12 @@ async function seed() {
     const finalPrograms = await db.select().from(programs);
     const finalInstitutes = await db.select().from(institutes);
     const finalCities = await db.select().from(cities);
-    const finalRelations = await db.select().from(programInstitutes);
-    const finalCityRelations = await db.select().from(programCities);
+    const finalOfferings = await db.select().from(programOfferings);
     const finalAdmissions = await db.select().from(admissions);
-    const finalAdmissionPrograms = await db.select().from(admissionPrograms);
+    const finalAdmissionOfferings = await db.select().from(admissionOfferings);
+
+    console.log("✅ Seed completed successfully!");
+    console.log(`📊 Summary: ${finalCategories.length} categories, ${finalPrograms.length} programs, ${finalInstitutes.length} institutes, ${finalOfferings.length} offerings, ${finalAdmissions.length} admissions, ${finalAdmissionOfferings.length} admission-offerings`);
 
   } catch (error) {
     console.error("❌ Error during seed:", error);
