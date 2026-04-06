@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
-import { admissions, admissionPrograms, programs, institutes, cities } from "@/app/lib/schema";
+import { admissions, admissionOfferings, programOfferings, programs, institutes, cities } from "@/app/lib/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
@@ -59,21 +59,32 @@ export async function GET(request: NextRequest) {
       .where(whereClause)
       .orderBy(desc(admissions.year), desc(admissions.createdAt));
 
-    // Now fetch programs for each admission
+    // ✅ UPDATED: Now fetch offerings for each admission through admissionOfferings
     const admissionsWithPrograms = await Promise.all(
       admissionsList.map(async (ad) => {
         let programList: { id: number; name: string; slug: string }[] = [];
         
         try {
-          programList = await db
-            .select({
-              id: programs.id,
-              name: programs.name,
-              slug: programs.slug,
-            })
-            .from(admissionPrograms)
-            .innerJoin(programs, eq(admissionPrograms.programId, programs.id))
-            .where(eq(admissionPrograms.admissionId, ad.id));
+          // First get offeringIds for this admission
+          const offeringLinks = await db
+            .select({ offeringId: admissionOfferings.offeringId })
+            .from(admissionOfferings)
+            .where(eq(admissionOfferings.admissionId, ad.id));
+
+          const offeringIds = offeringLinks.map(o => o.offeringId);
+          
+          if (offeringIds.length > 0) {
+            // Then get programs through programOfferings
+            programList = await db
+              .select({
+                id: programs.id,
+                name: programs.name,
+                slug: programs.slug,
+              })
+              .from(programOfferings)
+              .innerJoin(programs, eq(programOfferings.programId, programs.id))
+              .where(sql`${programOfferings.id} IN (${offeringIds.join(',')})`);
+          }
         } catch (err) {
           console.error(`Error fetching programs for admission ${ad.id}:`, err);
         }
