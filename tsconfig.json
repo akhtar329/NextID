@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022", // ✅ Fix: ES2017 → ES2022
+    "target": "ES2022",
     "lib": [
       "dom",
       "dom.iterable",
@@ -12,19 +12,18 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "ESNext",
-    "moduleResolution": "bundler", // ✅ Fix: "node" → "bundler"
+    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "react-jsx", // ✅ Fix: "react-jsx" → "preserve" (Next.js standard)
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
       {
         "name": "next"
       }
     ],
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
+
     "paths": {
       "@/*": [
         "./*"
