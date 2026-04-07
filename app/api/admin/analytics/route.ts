@@ -2,32 +2,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
-import { eq, desc, sql, and, between } from 'drizzle-orm';
+import { desc, sql, and, between } from 'drizzle-orm';
+
+// Define types
+interface DailyStatsType {
+  date: string;
+  pageViews: number;
+  visitors: number;
+}
+
+interface VisitorLocationType {
+  lat: string | null;
+  lng: string | null;
+  weight: number;
+  city: string | null;
+  country: string | null;
+  lastVisit: string | null;
+}
+
+interface RecentViewType {
+  id: number;
+  pagePath: string;
+  deviceType: string;
+  country: string | null;
+  city: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  viewedAt: Date;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const period = searchParams.get('period') || 'week'; // today, week, month
+    const period = searchParams.get('period') || 'week';
     
-    // Date range calculate karo
-    const today = new Date();
+    // Date range calculate
+    const now = new Date();
     let startDate: Date;
     
     switch (period) {
       case 'today':
-        startDate = new Date(today.setHours(0, 0, 0, 0));
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         break;
       case 'week':
-        startDate = new Date(today.setDate(today.getDate() - 7));
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'month':
-        startDate = new Date(today.setMonth(today.getMonth() - 1));
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        startDate.setHours(0, 0, 0, 0);
         break;
       default:
-        startDate = new Date(today.setDate(today.getDate() - 7));
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        startDate.setHours(0, 0, 0, 0);
     }
     
     const endDate = new Date();
+    
+    // Log for debugging
+    console.log(`📊 Analytics: period=${period}, from=${startDate.toISOString()} to=${endDate.toISOString()}`);
     
     // 1. Overview stats
     const [totalPageViewsResult] = await db
@@ -85,7 +121,7 @@ export async function GET(request: NextRequest) {
       .orderBy(sql`count(*) desc`)
       .limit(5);
     
-    // 5. ✅ NEW - City breakdown (Pakistan cities only)
+    // 5. City breakdown
     const cityBreakdown = await db
       .select({
         city: pageViews.city,
@@ -110,6 +146,8 @@ export async function GET(request: NextRequest) {
         deviceType: pageViews.deviceType,
         country: pageViews.country,
         city: pageViews.city,
+        latitude: pageViews.latitude,
+        longitude: pageViews.longitude,
         viewedAt: pageViews.viewedAt,
       })
       .from(pageViews)
@@ -117,17 +155,72 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(pageViews.viewedAt))
       .limit(10);
     
-    // 7. Daily stats for chart
-    const dailyStatsData = await db
-      .select({
-        date: dailyStats.date,
-        pageViews: dailyStats.totalPageViews,
-        visitors: dailyStats.totalVisitors,
-        cityBreakdown: dailyStats.cityBreakdown, // ✅ NEW - city data bhi le lo
-      })
-      .from(dailyStats)
-      .where(sql`${dailyStats.date} >= ${startDate.toISOString().split('T')[0]}`)
-      .orderBy(dailyStats.date);
+    // 7. Daily stats for chart - using page_views directly if dailyStats is empty
+    let dailyStatsData: DailyStatsType[] = [];
+    try {
+      // First try to get from dailyStats table
+      const result = await db
+        .select({
+          date: dailyStats.date,
+          pageViews: dailyStats.totalPageViews,
+          visitors: dailyStats.totalVisitors,
+        })
+        .from(dailyStats)
+        .where(sql`${dailyStats.date} >= ${startDate.toISOString().split('T')[0]}`)
+        .orderBy(dailyStats.date);
+      
+      if (result && result.length > 0) {
+        dailyStatsData = result as DailyStatsType[];
+      } else {
+        // Fallback: Calculate from page_views directly
+        const fallbackResult = await db
+          .select({
+            date: sql<string>`DATE(${pageViews.viewedAt})`,
+            pageViews: sql<number>`COUNT(*)`,
+            visitors: sql<number>`COUNT(DISTINCT ${pageViews.visitorId})`,
+          })
+          .from(pageViews)
+          .where(between(pageViews.viewedAt, startDate, endDate))
+          .groupBy(sql`DATE(${pageViews.viewedAt})`)
+          .orderBy(sql`DATE(${pageViews.viewedAt})`);
+        
+        dailyStatsData = fallbackResult as unknown as DailyStatsType[];
+      }
+    } catch (err) {
+      console.log('Error fetching daily stats, using fallback:', err);
+      // Final fallback: empty array
+      dailyStatsData = [];
+    }
+    
+    // 8. Visitor locations for Google Maps
+    let visitorLocations: VisitorLocationType[] = [];
+    try {
+      const result = await db
+        .select({
+          lat: pageViews.latitude,
+          lng: pageViews.longitude,
+          weight: sql<number>`COUNT(*)`,
+          city: pageViews.city,
+          country: pageViews.country,
+          lastVisit: sql<string>`MAX(${pageViews.viewedAt})`,
+        })
+        .from(pageViews)
+        .where(
+          and(
+            between(pageViews.viewedAt, startDate, endDate),
+            sql`${pageViews.latitude} IS NOT NULL`,
+            sql`${pageViews.longitude} IS NOT NULL`
+          )
+        )
+        .groupBy(pageViews.latitude, pageViews.longitude, pageViews.city, pageViews.country)
+        .orderBy(sql`COUNT(*) DESC`)
+        .limit(100);
+      
+      visitorLocations = result as VisitorLocationType[];
+      console.log(`📍 Found ${visitorLocations.length} visitor locations`);
+    } catch (err) {
+      console.log('Error fetching visitor locations:', err);
+    }
     
     // Format device breakdown
     const deviceStats = deviceBreakdown.reduce((acc, item) => {
@@ -141,7 +234,7 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, number>);
     
-    // ✅ NEW - Format city breakdown
+    // Format city breakdown
     const cityStats = cityBreakdown.reduce((acc, item) => {
       if (item.city && item.city !== 'Unknown') {
         acc[item.city] = Number(item.count);
@@ -149,21 +242,26 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, number>);
     
+    const responseData = {
+      overview: {
+        totalPageViews: Number(totalPageViewsResult?.count) || 0,
+        uniqueVisitors: Number(uniqueVisitorsResult?.count) || 0,
+        activeVisitors: Number(activeVisitorsResult?.count) || 0,
+      },
+      pageBreakdown,
+      deviceBreakdown: deviceStats,
+      countryBreakdown: countryStats,
+      cityBreakdown: cityStats,
+      recentViews: recentViews as RecentViewType[],
+      dailyStats: dailyStatsData,
+      visitorLocations,
+    };
+    
+    console.log(`📊 Analytics response: ${responseData.overview.totalPageViews} views, ${responseData.overview.uniqueVisitors} visitors`);
+    
     return NextResponse.json({
       success: true,
-      data: {
-        overview: {
-          totalPageViews: Number(totalPageViewsResult?.count) || 0,
-          uniqueVisitors: Number(uniqueVisitorsResult?.count) || 0,
-          activeVisitors: Number(activeVisitorsResult?.count) || 0,
-        },
-        pageBreakdown,
-        deviceBreakdown: deviceStats,
-        countryBreakdown: countryStats,
-        cityBreakdown: cityStats, // ✅ NEW
-        recentViews,
-        dailyStats: dailyStatsData,
-      },
+      data: responseData,
     });
     
   } catch (error) {

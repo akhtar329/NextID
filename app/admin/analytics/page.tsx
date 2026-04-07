@@ -20,7 +20,6 @@ import {
 import { Line, Bar, Pie } from 'react-chartjs-2';
 import { GoogleMap, HeatmapLayer, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
 
-// ✅ Register Filler plugin
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -122,6 +121,8 @@ export default function AnalyticsDashboard() {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries: ['visualization'],
+    version: 'weekly',
   });
 
   const fetchAnalytics = async () => {
@@ -158,7 +159,6 @@ export default function AnalyticsDashboard() {
     }
   }, [isLoaded, data?.visitorLocations]);
 
-  // Chart configurations
   const pageViewsChart = {
     labels: data?.dailyStats?.map(d => {
       const date = new Date(d.date);
@@ -235,6 +235,9 @@ export default function AnalyticsDashboard() {
 
   const formatNumber = (num: number | string) => Number(num).toLocaleString();
 
+  // Sort locations by weight for top cities list
+  const sortedLocations = data?.visitorLocations ? [...data.visitorLocations].sort((a, b) => b.weight - a.weight) : [];
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       {/* Header */}
@@ -299,7 +302,6 @@ export default function AnalyticsDashboard() {
 
       {/* Charts Section */}
       <div className="space-y-6 mb-8">
-        {/* Daily Traffic Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Daily Traffic Overview</h2>
           <div className="h-80">
@@ -308,19 +310,13 @@ export default function AnalyticsDashboard() {
               options={{ 
                 responsive: true, 
                 maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'top' as const,
-                  },
-                },
+                plugins: { legend: { position: 'top' as const } },
               }} 
             />
           </div>
         </div>
 
-        {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Device Breakdown */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Devices</h2>
             <div className="h-64">
@@ -332,7 +328,6 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Top Countries */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Countries</h2>
             <div className="h-64">
@@ -344,7 +339,6 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Top Pages */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h2>
             <div className="space-y-3">
@@ -368,7 +362,6 @@ export default function AnalyticsDashboard() {
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
           <h2 className="text-lg font-semibold text-gray-900">Recent Visitors</h2>
         </div>
-        
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -378,14 +371,12 @@ export default function AnalyticsDashboard() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
-               </tr>
+              </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {data?.recentViews?.map((view) => (
                 <tr key={view.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">
-                    {formatDate(view.viewedAt)}
-                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">{formatDate(view.viewedAt)}</td>
                   <td className="px-6 py-4">
                     <Link href={view.pagePath} target="_blank" className="text-sm text-blue-600 hover:underline">
                       {view.pagePath}
@@ -396,68 +387,32 @@ export default function AnalyticsDashboard() {
                   <td className="px-6 py-4 text-sm text-gray-700">{view.city && view.city !== 'Unknown' ? view.city : '-'}</td>
                 </tr>
               ))}
-              
               {(!data?.recentViews || data.recentViews.length === 0) && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    No visitor data available for this period
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No visitor data available</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Google Maps Section - LAST */}
+      {/* Google Maps Section with Enhanced Overlay */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <span className="text-2xl">🌍</span>
             Visitor Geographic Distribution
           </h2>
-          
           <div className="flex gap-2">
-            <button
-              onClick={() => setMapType('heatmap')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                mapType === 'heatmap' 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              🔥 Heat Map
-            </button>
-            <button
-              onClick={() => setMapType('markers')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                mapType === 'markers' 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              📍 Markers
-            </button>
+            <button onClick={() => setMapType('heatmap')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mapType === 'heatmap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>🔥 Heat Map</button>
+            <button onClick={() => setMapType('markers')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mapType === 'markers' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>📍 Markers</button>
           </div>
         </div>
 
         <div className="p-6">
           {isLoaded ? (
             <div className="relative">
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={mapCenter}
-                zoom={mapZoom}
-                options={mapOptions}
-                onClick={() => setSelectedLocation(null)}
-              >
-                {mapType === 'heatmap' && heatmapData.length > 0 && (
-                  <HeatmapLayer
-                    data={heatmapData}
-                    options={{ radius: 25, opacity: 0.6 }}
-                  />
-                )}
-
+              <GoogleMap mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions} onClick={() => setSelectedLocation(null)}>
+                {mapType === 'heatmap' && heatmapData.length > 0 && <HeatmapLayer data={heatmapData} options={{ radius: 25, opacity: 0.6 }} />}
                 {mapType === 'markers' && data?.visitorLocations?.map((loc, index) => (
                   <Marker
                     key={index}
@@ -474,36 +429,24 @@ export default function AnalyticsDashboard() {
                       setMapCenter({ lat: loc.lat, lng: loc.lng });
                       setMapZoom(12);
                     }}
-                    icon={{
-                      url: `https://maps.google.com/mapfiles/ms/icons/${
-                        loc.weight > 20 ? 'red' : loc.weight > 10 ? 'orange' : 'green'
-                      }-dot.png`,
-                    }}
+                    title={loc.city}
+                    icon={{ url: `https://maps.google.com/mapfiles/ms/icons/${loc.weight > 20 ? 'red' : loc.weight > 10 ? 'orange' : 'green'}-dot.png` }}
                   />
                 ))}
-
                 {selectedLocation && (
-                  <InfoWindow
-                    position={selectedLocation.position}
-                    onCloseClick={() => setSelectedLocation(null)}
-                  >
-                    <div className="p-3 max-w-xs">
-                      <h3 className="font-bold text-gray-900 text-lg">
-                        {selectedLocation.city}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">{selectedLocation.country}</p>
-                      
-                      <div className="bg-gray-50 rounded-lg p-2 mb-2">
-                        <p className="text-xs text-gray-500">Total Visits</p>
-                        <p className="text-xl font-bold text-blue-600">{selectedLocation.visitors}</p>
+                  <InfoWindow position={selectedLocation.position} onCloseClick={() => setSelectedLocation(null)}>
+                    <div className="p-4 max-w-xs">
+                      <h3 className="font-bold text-gray-900 text-xl">{selectedLocation.city}</h3>
+                      <p className="text-sm text-gray-600 mb-3">{selectedLocation.country}</p>
+                      <div className="bg-blue-50 rounded-lg p-3 mb-3">
+                        <p className="text-xs text-gray-500">Total Visitors</p>
+                        <p className="text-2xl font-bold text-blue-600">{selectedLocation.visitors}</p>
                       </div>
-
                       <p className="text-xs text-gray-500 mb-1">Last Visit</p>
-                      <p className="text-sm text-gray-700">{formatDate(selectedLocation.lastVisit)}</p>
-
+                      <p className="text-sm text-gray-700 mb-3">{formatDate(selectedLocation.lastVisit)}</p>
                       {selectedLocation.recentVisitors.length > 0 && (
                         <>
-                          <p className="text-xs text-gray-500 mt-3 mb-1">Recent Activity</p>
+                          <p className="text-xs text-gray-500 mb-1">Recent Activity</p>
                           <div className="space-y-1 max-h-32 overflow-y-auto">
                             {selectedLocation.recentVisitors.slice(0, 3).map((v, i) => (
                               <div key={i} className="text-xs border-b pb-1">
@@ -519,39 +462,40 @@ export default function AnalyticsDashboard() {
                 )}
               </GoogleMap>
 
-              {/* Stats Overlay */}
+              {/* Enhanced Stats Overlay with City List */}
               {data?.visitorLocations && data.visitorLocations.length > 0 && (
-                <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-gray-200">
-                  <p className="text-xs text-gray-500">Active Locations</p>
+                <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-200 min-w-[200px]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <p className="text-xs font-medium text-gray-500">LIVE LOCATIONS</p>
+                  </div>
                   <p className="text-2xl font-bold text-blue-600">{data.visitorLocations.length}</p>
-                  <p className="text-xs text-gray-400">cities worldwide</p>
+                  <p className="text-xs text-gray-400 mb-3">active cities worldwide</p>
+                  <div className="border-t border-gray-100 pt-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-2">📍 Top Cities</p>
+                    <div className="space-y-1.5">
+                      {sortedLocations.slice(0, 5).map((loc, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs">
+                          <span className="text-gray-700 truncate max-w-[100px]">{loc.city || 'Unknown'}</span>
+                          <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{loc.weight}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           ) : (
             <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-gray-600">Loading Google Maps...</p>
-              </div>
+              <div className="text-center"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div><p className="text-gray-600">Loading Google Maps...</p></div>
             </div>
           )}
 
-          {/* Legend */}
           {data?.visitorLocations && data.visitorLocations.length > 0 && (
             <div className="mt-4 flex items-center justify-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500"></span>
-                <span className="text-gray-600">&lt; 10 visits</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-                <span className="text-gray-600">10-20 visits</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-500"></span>
-                <span className="text-gray-600">&gt; 20 visits</span>
-              </div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-gray-600">&lt; 10 visits</span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500"></span><span className="text-gray-600">10-20 visits</span></div>
+              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="text-gray-600">&gt; 20 visits</span></div>
             </div>
           )}
         </div>
