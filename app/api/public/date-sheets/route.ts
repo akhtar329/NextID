@@ -1,72 +1,44 @@
-// app/api/public/date-sheets/[slug]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+// app/api/public/date-sheets/route.ts
+import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { dateSheets, boards, institutes } from "@/app/lib/schema";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+// ✅ NO params - This is for listing all date sheets
+export async function GET() {
   try {
-    const { slug } = await params;
-    
-    // ✅ Fetch date sheet by slug
-    const [dateSheet] = await db
+    const allDateSheets = await db
       .select({
         id: dateSheets.id,
         title: dateSheets.title,
         slug: dateSheets.slug,
         examType: dateSheets.examType,
-        examDate: dateSheets.examDate,
         year: dateSheets.year,
-        boardId: dateSheets.boardId,
-        instituteId: dateSheets.instituteId,
-        status: dateSheets.status,
         viewCount: dateSheets.viewCount,
         isPopular: dateSheets.isPopular,
-        officialLink: dateSheets.officialLink,
-        downloadLink: dateSheets.downloadLink,
-        pdfFile: dateSheets.pdfFile,
-        featuredImage: dateSheets.featuredImage,
         createdAt: dateSheets.createdAt,
         board: {
           name: boards.name,
-          slug: boards.slug,
         },
         institute: {
           name: institutes.name,
-          slug: institutes.slug,
         },
       })
       .from(dateSheets)
       .leftJoin(boards, eq(dateSheets.boardId, boards.id))
       .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
-      .where(eq(dateSheets.slug, slug))
-      .limit(1);
-    
-    if (!dateSheet) {
-      return NextResponse.json(
-        { error: "Date sheet not found" },
-        { status: 404 }
-      );
-    }
-    
-    // ✅ Increment view count
-    await db
-      .update(dateSheets)
-      .set({ viewCount: (dateSheet.viewCount || 0) + 1 })
-      .where(eq(dateSheets.id, dateSheet.id));
-    
+      .where(eq(dateSheets.status, true))
+      .orderBy(desc(dateSheets.isPopular), desc(dateSheets.year), desc(dateSheets.createdAt));
+
     return NextResponse.json({
-      ...dateSheet,
-      viewCount: (dateSheet.viewCount || 0) + 1
+      success: true,
+      data: allDateSheets,
+      total: allDateSheets.length,
     });
-    
   } catch (error) {
-    console.error("Error fetching date sheet:", error);
+    console.error("Error fetching date sheets:", error);
     return NextResponse.json(
-      { error: "Failed to fetch date sheet" },
+      { success: false, error: "Failed to fetch date sheets" },
       { status: 500 }
     );
   }

@@ -4,13 +4,13 @@ import { db } from "@/app/lib/db";
 import { dateSheets, boards, institutes, cities } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
-// ✅ Fix: params is a Promise, must be awaited
+// ✅ HAS params - This is for getting a single date sheet by slug
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    // ✅ Await params first
+    // ✅ Await params to get slug
     const { slug } = await params;
     
     console.log("Fetching date sheet for slug:", slug);
@@ -52,19 +52,17 @@ export async function GET(
       .limit(1);
 
     if (!dateSheet) {
-      console.log("Date sheet not found for slug:", slug);
       return NextResponse.json(
         { error: "Date sheet not found" },
         { status: 404 }
       );
     }
 
-    // Get city info if institute exists
+    // Get city info
     let city = null;
     if (dateSheet.institute?.cityId) {
       const [cityData] = await db
         .select({
-          id: cities.id,
           name: cities.name,
           slug: cities.slug,
           province: cities.province,
@@ -90,7 +88,7 @@ export async function GET(
   } catch (error) {
     console.error("Error fetching date sheet:", error);
     return NextResponse.json(
-      { error: "Failed to fetch date sheet", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Failed to fetch date sheet" },
       { status: 500 }
     );
   }
