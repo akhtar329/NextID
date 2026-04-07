@@ -1,5 +1,4 @@
 // app/admin/analytics/page.tsx
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -17,8 +16,8 @@ import {
   ArcElement,
   Filler,
 } from 'chart.js';
-import { Line, Bar, Pie } from 'react-chartjs-2';
-import { GoogleMap, HeatmapLayer, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
+import { Line, Pie } from 'react-chartjs-2';
+import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
 
 ChartJS.register(
   CategoryScale,
@@ -32,6 +31,9 @@ ChartJS.register(
   ArcElement,
   Filler,
 );
+
+// ✅ Simple array - no type annotation needed
+const GOOGLE_MAPS_LIBRARIES = ['visualization'];
 
 interface AnalyticsData {
   overview: {
@@ -108,7 +110,6 @@ export default function AnalyticsDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapZoom, setMapZoom] = useState(5);
-  const [mapType, setMapType] = useState<'markers' | 'heatmap'>('heatmap');
   const [selectedLocation, setSelectedLocation] = useState<{
     position: { lat: number; lng: number };
     city: string;
@@ -118,10 +119,10 @@ export default function AnalyticsDashboard() {
     recentVisitors: any[];
   } | null>(null);
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['visualization'],
+
     version: 'weekly',
   });
 
@@ -147,17 +148,15 @@ export default function AnalyticsDashboard() {
     return () => clearInterval(interval);
   }, [period]);
 
-  const heatmapData = useMemo(() => {
-    if (!isLoaded || !data?.visitorLocations || data.visitorLocations.length === 0) return [];
-    try {
-      return data.visitorLocations.map(loc => ({
-        location: new google.maps.LatLng(loc.lat, loc.lng),
-        weight: loc.weight,
-      }));
-    } catch (error) {
-      return [];
-    }
-  }, [isLoaded, data?.visitorLocations]);
+  // ✅ Validate and filter markers data
+  const markersData = useMemo(() => {
+    if (!data?.visitorLocations) return [];
+    return data.visitorLocations.filter(loc => {
+      const lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(String(loc.lat));
+      const lng = typeof loc.lng === 'number' ? loc.lng : parseFloat(String(loc.lng));
+      return !isNaN(lat) && !isNaN(lng);
+    });
+  }, [data?.visitorLocations]);
 
   const pageViewsChart = {
     labels: data?.dailyStats?.map(d => {
@@ -395,46 +394,62 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Google Maps Section with Enhanced Overlay */}
+      {/* Google Maps Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <span className="text-2xl">🌍</span>
             Visitor Geographic Distribution
           </h2>
-          <div className="flex gap-2">
-            <button onClick={() => setMapType('heatmap')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mapType === 'heatmap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>🔥 Heat Map</button>
-            <button onClick={() => setMapType('markers')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mapType === 'markers' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>📍 Markers</button>
-          </div>
         </div>
 
         <div className="p-6">
           {isLoaded ? (
             <div className="relative">
-              <GoogleMap mapContainerStyle={mapContainerStyle} center={mapCenter} zoom={mapZoom} options={mapOptions} onClick={() => setSelectedLocation(null)}>
-                {mapType === 'heatmap' && heatmapData.length > 0 && <HeatmapLayer data={heatmapData} options={{ radius: 25, opacity: 0.6 }} />}
-                {mapType === 'markers' && data?.visitorLocations?.map((loc, index) => (
-                  <Marker
-                    key={index}
-                    position={{ lat: loc.lat, lng: loc.lng }}
-                    onClick={() => {
-                      setSelectedLocation({
-                        position: { lat: loc.lat, lng: loc.lng },
-                        city: loc.city,
-                        country: loc.country,
-                        visitors: loc.weight,
-                        lastVisit: loc.lastVisit,
-                        recentVisitors: loc.visitors || [],
-                      });
-                      setMapCenter({ lat: loc.lat, lng: loc.lng });
-                      setMapZoom(12);
-                    }}
-                    title={loc.city}
-                    icon={{ url: `https://maps.google.com/mapfiles/ms/icons/${loc.weight > 20 ? 'red' : loc.weight > 10 ? 'orange' : 'green'}-dot.png` }}
-                  />
-                ))}
+              <GoogleMap
+                mapContainerStyle={mapContainerStyle}
+                center={mapCenter}
+                zoom={mapZoom}
+                options={mapOptions}
+                onClick={() => setSelectedLocation(null)}
+              >
+                {markersData.map((loc, index) => {
+                  // ✅ Safely convert coordinates to numbers
+                  const lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(String(loc.lat));
+                  const lng = typeof loc.lng === 'number' ? loc.lng : parseFloat(String(loc.lng));
+                  
+                  // ✅ Skip if invalid coordinates
+                  if (isNaN(lat) || isNaN(lng)) return null;
+                  
+                  return (
+                    <Marker
+                      key={index}
+                      position={{ lat, lng }}
+                      onClick={() => {
+                        setSelectedLocation({
+                          position: { lat, lng },
+                          city: loc.city,
+                          country: loc.country,
+                          visitors: loc.weight,
+                          lastVisit: loc.lastVisit,
+                          recentVisitors: loc.visitors || [],
+                        });
+                        setMapCenter({ lat, lng });
+                        setMapZoom(12);
+                      }}
+                      title={loc.city}
+                      icon={{
+                        url: `https://maps.google.com/mapfiles/ms/icons/${loc.weight > 20 ? 'red' : loc.weight > 10 ? 'orange' : 'green'}-dot.png`,
+                      }}
+                    />
+                  );
+                })}
+                
                 {selectedLocation && (
-                  <InfoWindow position={selectedLocation.position} onCloseClick={() => setSelectedLocation(null)}>
+                  <InfoWindow
+                    position={selectedLocation.position}
+                    onCloseClick={() => setSelectedLocation(null)}
+                  >
                     <div className="p-4 max-w-xs">
                       <h3 className="font-bold text-gray-900 text-xl">{selectedLocation.city}</h3>
                       <p className="text-sm text-gray-600 mb-3">{selectedLocation.country}</p>
@@ -462,14 +477,14 @@ export default function AnalyticsDashboard() {
                 )}
               </GoogleMap>
 
-              {/* Enhanced Stats Overlay with City List */}
-              {data?.visitorLocations && data.visitorLocations.length > 0 && (
+              {/* Stats Overlay with City List */}
+              {markersData.length > 0 && (
                 <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-200 min-w-[200px]">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                     <p className="text-xs font-medium text-gray-500">LIVE LOCATIONS</p>
                   </div>
-                  <p className="text-2xl font-bold text-blue-600">{data.visitorLocations.length}</p>
+                  <p className="text-2xl font-bold text-blue-600">{markersData.length}</p>
                   <p className="text-xs text-gray-400 mb-3">active cities worldwide</p>
                   <div className="border-t border-gray-100 pt-2">
                     <p className="text-xs font-semibold text-gray-600 mb-2">📍 Top Cities</p>
@@ -487,11 +502,17 @@ export default function AnalyticsDashboard() {
             </div>
           ) : (
             <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-              <div className="text-center"><div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div><p className="text-gray-600">Loading Google Maps...</p></div>
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-gray-600">Loading Google Maps...</p>
+                {loadError && (
+                  <p className="text-red-500 text-sm mt-2">Failed to load Google Maps. Please check API key.</p>
+                )}
+              </div>
             </div>
           )}
 
-          {data?.visitorLocations && data.visitorLocations.length > 0 && (
+          {markersData.length > 0 && (
             <div className="mt-4 flex items-center justify-center gap-6 text-sm">
               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-gray-600">&lt; 10 visits</span></div>
               <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500"></span><span className="text-gray-600">10-20 visits</span></div>
