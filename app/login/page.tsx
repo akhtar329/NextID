@@ -1,8 +1,8 @@
+// app/login/page.tsx
 "use client";
 
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -23,21 +23,28 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (res?.error) {
-      toast.error("Invalid email or password");
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast.success("Welcome back 👋");
+        router.push("/admin/dashboard");
+        router.refresh();
+      } else {
+        toast.error(data.error || "Invalid email or password");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    toast.success("Welcome back 👋");
-    router.push("/admin/dashboard");
-    router.refresh();
   };
 
   return (
@@ -51,9 +58,12 @@ export default function LoginPage() {
           <div className="text-center mb-6">
             {/* Logo */}
             <img
-              src="../public/../images/logo.png" // Add your logo file here
+              src="/images/logo.png" // Fixed path (remove ../public/)
               alt="NextID Logo"
               className="mx-auto h-12 w-auto mb-3"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'; // Hide if logo doesn't exist
+              }}
             />
             <h1 className="text-3xl font-bold text-gray-800">Admin Panel</h1>
             <p className="text-gray-500 text-sm mt-1">Login to continue</p>

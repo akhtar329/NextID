@@ -5,6 +5,9 @@ import { visitorSessions } from '@/app/lib/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
+  // ✅ Add this at the very top - NO AUTHENTICATION REQUIRED
+  // This is a public endpoint for tracking visitor sessions
+  
   try {
     const data = await request.json();
     const { visitorId, sessionId, entryPage, pageViews, startedAt, lastActive } = data;
@@ -15,6 +18,18 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields: visitorId and sessionId are required' },
         { status: 400 }
       );
+    }
+    
+    // Optional: Basic spam protection
+    const userAgent = request.headers.get('user-agent') || '';
+    const isBot = /bot|crawl|spider|scraper|facebookexternalhit|whatsapp|slack|discord/i.test(userAgent);
+    
+    if (isBot) {
+      // Don't store bot sessions but return success
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Bot session ignored' 
+      });
     }
     
     // Check if session already exists
@@ -56,8 +71,9 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('❌ Session update error:', error);
+    // Don't expose internal errors to client
     return NextResponse.json(
-      { error: 'Failed to update session', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to update session' },
       { status: 500 }
     );
   }

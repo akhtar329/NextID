@@ -369,24 +369,43 @@ export const resultOfferings = pgTable("result_offerings", {
 });
 
 /* =========================
-📅 DATE SHEETS (Final - with slug and pdfFile)
+📅 DATE SHEETS
 ========================= */
+
 export const dateSheets = pgTable("date_sheets", {
   id: serial("id").primaryKey(),
+  
+  // ========== BASIC INFO ==========
   title: varchar("title", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
-  boardId: integer("board_id").references(() => boards.id),
-  instituteId: integer("institute_id").references(() => institutes.id),
+  year: integer("year").notNull(),
   examType: varchar("exam_type", { length: 100 }),
   examDate: timestamp("exam_date"),
-  year: integer("year").notNull(),
-  officialLink: varchar("official_link", { length: 255 }),
-  downloadLink: varchar("download_link", { length: 255 }),
-  featuredImage: varchar("featured_image", { length: 500 }),
+  
+  // ========== RELATIONS ==========
+  boardId: integer("board_id").references(() => boards.id, { onDelete: "set null" }),
+  instituteId: integer("institute_id").references(() => institutes.id, { onDelete: "set null" }),
+  
+  // ========== CONTENT (300-500 words for SEO) ==========
+  description: text("description"),  // ✅ SEO ke liye 300-500 words
+  
+  // ========== DOWNLOADS ==========
+  officialLink: varchar("official_link", { length: 500 }),
+  downloadLink: varchar("download_link", { length: 500 }),
   pdfFile: varchar("pdf_file", { length: 500 }),
+  
+  // ========== MEDIA ==========
+  featuredImage: varchar("featured_image", { length: 500 }),
+  
+  // ========== FLAGS ==========
   isPopular: boolean("is_popular").default(false),
-  viewCount: integer("view_count").default(0),
   status: boolean("status").default(true),
+  
+  // ========== STATS ==========
+  viewCount: integer("view_count").default(0),
+  
+  // ========== TIMESTAMPS ==========
+  publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

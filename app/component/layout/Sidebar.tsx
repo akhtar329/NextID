@@ -16,10 +16,12 @@ import {
   Cog,
   Shield,
   FolderTree,
-  BarChart3,      // ✅ Analytics icon
-  TrendingUp,     // ✅ For active visitors badge
-  Newspaper,      // ✅ For News
-  Award,          // ✅ For Results
+  BarChart3,
+  TrendingUp,
+  Newspaper,
+  Award,
+  Calendar,        // ✅ Added for Date Sheets
+  CalendarDays,    // ✅ Alternative icon
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -70,11 +72,11 @@ export default function SuperAdminSidebar() {
     if (path) router.push(path);
   };
 
-  // ✅ Updated menuItems with Analytics
+  // ✅ Updated menuItems with Date Sheets
   const menuItems: MenuItem[] = [
     { label: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/admin/dashboard" },
     
-    // ✅ NEW - Analytics Menu Item
+    // Analytics Menu Item
     { 
       label: "Analytics", 
       icon: <BarChart3 size={20} />, 
@@ -107,6 +109,10 @@ export default function SuperAdminSidebar() {
 
     { label: "Cities", icon: <MapPin size={20} />, path: "/admin/cities" },
     { label: "Admissions", icon: <CalendarCheck size={20} />, path: "/admin/admissions" },
+    
+    // ✅ NEW - Date Sheets Menu Item
+    { label: "Date Sheets", icon: <CalendarDays size={20} />, path: "/admin/date-sheets" },
+    
     { label: "Results", icon: <Award size={20} />, path: "/admin/results" },
     { label: "News", icon: <Newspaper size={20} />, path: "/admin/news" },
 

@@ -1,46 +1,116 @@
 import { relations } from "drizzle-orm/relations";
-import { cities, boards, degrees, programs, news, institutes, dateSheets, programCities, programInstitutes, admissions, levels, categories, results, admissionPrograms, adminRoles, adminUsers, notifications, resultPrograms, userPermissions, permissions, sessions, pageViews } from "./schema";
+import { boards, dateSheets, institutes, adminUsers, blogPosts, programs, categories, careerPaths, cities, admissions, adminRoles, news, programComparisons, programCurriculum, programFaqs, programPrerequisites, notifications, programOfferings, degrees, pageViews, programReviews, scholarships, sessions, programSkills, results, admissionOfferings, levels, resultOfferings, userPermissions, permissions } from "./schema";
+
+export const dateSheetsRelations = relations(dateSheets, ({one}) => ({
+	board: one(boards, {
+		fields: [dateSheets.boardId],
+		references: [boards.id]
+	}),
+	institute: one(institutes, {
+		fields: [dateSheets.instituteId],
+		references: [institutes.id]
+	}),
+}));
 
 export const boardsRelations = relations(boards, ({one, many}) => ({
+	dateSheets: many(dateSheets),
 	city: one(cities, {
 		fields: [boards.cityId],
 		references: [cities.id]
 	}),
 	news: many(news),
-	dateSheets: many(dateSheets),
 	results: many(results),
+}));
+
+export const institutesRelations = relations(institutes, ({one, many}) => ({
+	dateSheets: many(dateSheets),
+	admissions: many(admissions),
+	news: many(news),
+	city: one(cities, {
+		fields: [institutes.cityId],
+		references: [cities.id]
+	}),
+	programOfferings: many(programOfferings),
+	scholarships: many(scholarships),
+	results: many(results),
+}));
+
+export const blogPostsRelations = relations(blogPosts, ({one}) => ({
+	adminUser: one(adminUsers, {
+		fields: [blogPosts.authorId],
+		references: [adminUsers.id]
+	}),
+	program: one(programs, {
+		fields: [blogPosts.programId],
+		references: [programs.id]
+	}),
+	category: one(categories, {
+		fields: [blogPosts.categoryId],
+		references: [categories.id]
+	}),
+}));
+
+export const adminUsersRelations = relations(adminUsers, ({one, many}) => ({
+	blogPosts: many(blogPosts),
+	adminRole: one(adminRoles, {
+		fields: [adminUsers.roleId],
+		references: [adminRoles.id]
+	}),
+	notifications: many(notifications),
+	pageViews: many(pageViews),
+	sessions: many(sessions),
+	userPermissions: many(userPermissions),
+}));
+
+export const programsRelations = relations(programs, ({one, many}) => ({
+	blogPosts: many(blogPosts),
+	careerPaths: many(careerPaths),
+	news: many(news),
+	programComparisons_program1Id: many(programComparisons, {
+		relationName: "programComparisons_program1Id_programs_id"
+	}),
+	programComparisons_program2Id: many(programComparisons, {
+		relationName: "programComparisons_program2Id_programs_id"
+	}),
+	programCurricula: many(programCurriculum),
+	programFaqs: many(programFaqs),
+	programPrerequisites: many(programPrerequisites),
+	programOfferings: many(programOfferings),
+	programSkills: many(programSkills),
+	category: one(categories, {
+		fields: [programs.categoryId],
+		references: [categories.id]
+	}),
+}));
+
+export const categoriesRelations = relations(categories, ({many}) => ({
+	blogPosts: many(blogPosts),
+	programs: many(programs),
+}));
+
+export const careerPathsRelations = relations(careerPaths, ({one}) => ({
+	program: one(programs, {
+		fields: [careerPaths.programId],
+		references: [programs.id]
+	}),
 }));
 
 export const citiesRelations = relations(cities, ({many}) => ({
 	boards: many(boards),
 	news: many(news),
 	institutes: many(institutes),
-	programCities: many(programCities),
 }));
 
-export const programsRelations = relations(programs, ({one, many}) => ({
-	degree: one(degrees, {
-		fields: [programs.degreeId],
-		references: [degrees.id]
+export const admissionsRelations = relations(admissions, ({one, many}) => ({
+	institute: one(institutes, {
+		fields: [admissions.instituteId],
+		references: [institutes.id]
 	}),
-	news: many(news),
-	programCities: many(programCities),
-	programInstitutes: many(programInstitutes),
-	results: many(results),
-	admissionPrograms: many(admissionPrograms),
-	resultPrograms: many(resultPrograms),
+	admissionOfferings: many(admissionOfferings),
 }));
 
-export const degreesRelations = relations(degrees, ({one, many}) => ({
-	programs: many(programs),
-	level: one(levels, {
-		fields: [degrees.levelId],
-		references: [levels.id]
-	}),
-	category: one(categories, {
-		fields: [degrees.categoryId],
-		references: [categories.id]
-	}),
+export const adminRolesRelations = relations(adminRoles, ({many}) => ({
+	adminUsers: many(adminUsers),
 }));
 
 export const newsRelations = relations(news, ({one}) => ({
@@ -62,118 +132,38 @@ export const newsRelations = relations(news, ({one}) => ({
 	}),
 }));
 
-export const institutesRelations = relations(institutes, ({one, many}) => ({
-	news: many(news),
-	city: one(cities, {
-		fields: [institutes.cityId],
-		references: [cities.id]
+export const programComparisonsRelations = relations(programComparisons, ({one}) => ({
+	program_program1Id: one(programs, {
+		fields: [programComparisons.program1Id],
+		references: [programs.id],
+		relationName: "programComparisons_program1Id_programs_id"
 	}),
-	dateSheets: many(dateSheets),
-	programInstitutes: many(programInstitutes),
-	admissions: many(admissions),
-	results_universityId: many(results, {
-		relationName: "results_universityId_institutes_id"
-	}),
-	results_instituteId: many(results, {
-		relationName: "results_instituteId_institutes_id"
+	program_program2Id: one(programs, {
+		fields: [programComparisons.program2Id],
+		references: [programs.id],
+		relationName: "programComparisons_program2Id_programs_id"
 	}),
 }));
 
-export const dateSheetsRelations = relations(dateSheets, ({one}) => ({
-	board: one(boards, {
-		fields: [dateSheets.boardId],
-		references: [boards.id]
-	}),
-	institute: one(institutes, {
-		fields: [dateSheets.universityId],
-		references: [institutes.id]
-	}),
-}));
-
-export const programCitiesRelations = relations(programCities, ({one}) => ({
+export const programCurriculumRelations = relations(programCurriculum, ({one}) => ({
 	program: one(programs, {
-		fields: [programCities.programId],
-		references: [programs.id]
-	}),
-	city: one(cities, {
-		fields: [programCities.cityId],
-		references: [cities.id]
-	}),
-}));
-
-export const programInstitutesRelations = relations(programInstitutes, ({one}) => ({
-	program: one(programs, {
-		fields: [programInstitutes.programId],
-		references: [programs.id]
-	}),
-	institute: one(institutes, {
-		fields: [programInstitutes.instituteId],
-		references: [institutes.id]
-	}),
-}));
-
-export const admissionsRelations = relations(admissions, ({one, many}) => ({
-	institute: one(institutes, {
-		fields: [admissions.instituteId],
-		references: [institutes.id]
-	}),
-	admissionPrograms: many(admissionPrograms),
-}));
-
-export const levelsRelations = relations(levels, ({many}) => ({
-	degrees: many(degrees),
-}));
-
-export const categoriesRelations = relations(categories, ({many}) => ({
-	degrees: many(degrees),
-}));
-
-export const resultsRelations = relations(results, ({one, many}) => ({
-	board: one(boards, {
-		fields: [results.boardId],
-		references: [boards.id]
-	}),
-	institute_universityId: one(institutes, {
-		fields: [results.universityId],
-		references: [institutes.id],
-		relationName: "results_universityId_institutes_id"
-	}),
-	program: one(programs, {
-		fields: [results.programId],
-		references: [programs.id]
-	}),
-	institute_instituteId: one(institutes, {
-		fields: [results.instituteId],
-		references: [institutes.id],
-		relationName: "results_instituteId_institutes_id"
-	}),
-	resultPrograms: many(resultPrograms),
-}));
-
-export const admissionProgramsRelations = relations(admissionPrograms, ({one}) => ({
-	admission: one(admissions, {
-		fields: [admissionPrograms.admissionId],
-		references: [admissions.id]
-	}),
-	program: one(programs, {
-		fields: [admissionPrograms.programId],
+		fields: [programCurriculum.programId],
 		references: [programs.id]
 	}),
 }));
 
-export const adminUsersRelations = relations(adminUsers, ({one, many}) => ({
-	adminRole: one(adminRoles, {
-		fields: [adminUsers.roleId],
-		references: [adminRoles.id]
+export const programFaqsRelations = relations(programFaqs, ({one}) => ({
+	program: one(programs, {
+		fields: [programFaqs.programId],
+		references: [programs.id]
 	}),
-	notifications: many(notifications),
-	userPermissions: many(userPermissions),
-	sessions: many(sessions),
-	pageViews: many(pageViews),
 }));
 
-export const adminRolesRelations = relations(adminRoles, ({many}) => ({
-	adminUsers: many(adminUsers),
+export const programPrerequisitesRelations = relations(programPrerequisites, ({one}) => ({
+	program: one(programs, {
+		fields: [programPrerequisites.programId],
+		references: [programs.id]
+	}),
 }));
 
 export const notificationsRelations = relations(notifications, ({one}) => ({
@@ -183,14 +173,102 @@ export const notificationsRelations = relations(notifications, ({one}) => ({
 	}),
 }));
 
-export const resultProgramsRelations = relations(resultPrograms, ({one}) => ({
+export const programOfferingsRelations = relations(programOfferings, ({one, many}) => ({
+	program: one(programs, {
+		fields: [programOfferings.programId],
+		references: [programs.id]
+	}),
+	degree: one(degrees, {
+		fields: [programOfferings.degreeId],
+		references: [degrees.id]
+	}),
+	institute: one(institutes, {
+		fields: [programOfferings.instituteId],
+		references: [institutes.id]
+	}),
+	programReviews: many(programReviews),
+	admissionOfferings: many(admissionOfferings),
+	resultOfferings: many(resultOfferings),
+}));
+
+export const degreesRelations = relations(degrees, ({one, many}) => ({
+	programOfferings: many(programOfferings),
+	level: one(levels, {
+		fields: [degrees.levelId],
+		references: [levels.id]
+	}),
+}));
+
+export const pageViewsRelations = relations(pageViews, ({one}) => ({
+	adminUser: one(adminUsers, {
+		fields: [pageViews.userId],
+		references: [adminUsers.id]
+	}),
+}));
+
+export const programReviewsRelations = relations(programReviews, ({one}) => ({
+	programOffering: one(programOfferings, {
+		fields: [programReviews.offeringId],
+		references: [programOfferings.id]
+	}),
+}));
+
+export const scholarshipsRelations = relations(scholarships, ({one}) => ({
+	institute: one(institutes, {
+		fields: [scholarships.instituteId],
+		references: [institutes.id]
+	}),
+}));
+
+export const sessionsRelations = relations(sessions, ({one}) => ({
+	adminUser: one(adminUsers, {
+		fields: [sessions.userId],
+		references: [adminUsers.id]
+	}),
+}));
+
+export const programSkillsRelations = relations(programSkills, ({one}) => ({
+	program: one(programs, {
+		fields: [programSkills.programId],
+		references: [programs.id]
+	}),
+}));
+
+export const resultsRelations = relations(results, ({one, many}) => ({
+	institute: one(institutes, {
+		fields: [results.instituteId],
+		references: [institutes.id]
+	}),
+	board: one(boards, {
+		fields: [results.boardId],
+		references: [boards.id]
+	}),
+	resultOfferings: many(resultOfferings),
+}));
+
+export const admissionOfferingsRelations = relations(admissionOfferings, ({one}) => ({
+	admission: one(admissions, {
+		fields: [admissionOfferings.admissionId],
+		references: [admissions.id]
+	}),
+	programOffering: one(programOfferings, {
+		fields: [admissionOfferings.offeringId],
+		references: [programOfferings.id]
+	}),
+}));
+
+export const levelsRelations = relations(levels, ({many}) => ({
+	degrees: many(degrees),
+}));
+
+export const resultOfferingsRelations = relations(resultOfferings, ({one}) => ({
 	result: one(results, {
-		fields: [resultPrograms.resultId],
+		fields: [resultOfferings.resultId],
 		references: [results.id]
 	}),
-	program: one(programs, {
-		fields: [resultPrograms.programId],
-		references: [programs.id]
+	programOffering: one(programOfferings, {
+		fields: [resultOfferings.offeringId],
+		references: [programOfferings.id]
 	}),
 }));
 
@@ -207,18 +285,4 @@ export const userPermissionsRelations = relations(userPermissions, ({one}) => ({
 
 export const permissionsRelations = relations(permissions, ({many}) => ({
 	userPermissions: many(userPermissions),
-}));
-
-export const sessionsRelations = relations(sessions, ({one}) => ({
-	adminUser: one(adminUsers, {
-		fields: [sessions.userId],
-		references: [adminUsers.id]
-	}),
-}));
-
-export const pageViewsRelations = relations(pageViews, ({one}) => ({
-	adminUser: one(adminUsers, {
-		fields: [pageViews.userId],
-		references: [adminUsers.id]
-	}),
 }));

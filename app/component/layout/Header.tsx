@@ -17,14 +17,14 @@ interface MenuItem {
 interface Category {
   id: number;
   name: string;
-  slug: string;        // 👈 Har category ka apna slug
+  slug: string;
   displayOrder?: number;
 }
 
 interface Program {
   id: number;
   name: string;
-  slug: string;        // 👈 Har program ka apna slug
+  slug: string;
   degreeName: string | null;
   isFeatured: boolean | null;
 }
@@ -32,7 +32,7 @@ interface Program {
 interface Institute {
   id: number;
   name: string;
-  slug: string;        // 👈 Har university/institute ka apna slug
+  slug: string;
   cityName: string | null;
   isFeatured: boolean | null;
 }
@@ -40,7 +40,7 @@ interface Institute {
 interface City {
   id: number;
   name: string;
-  slug: string;        // 👈 Har city ka apna slug
+  slug: string;
   province: string | null;
   isPopular: boolean | null;
 }
@@ -48,7 +48,7 @@ interface City {
 interface Board {
   id: number;
   name: string;
-  slug: string;        // 👈 Har board ka apna slug
+  slug: string;
   cityName: string | null;
 }
 
@@ -61,7 +61,7 @@ interface MenuData {
   activeCategory: string;
 }
 
-// ✅ Main Navigation Items
+// ✅ Main Navigation Items - ONLY ADD DATE SHEETS, REST SAME
 const mainNavItems: MenuItem[] = [
   { id: 'home', title: 'Home', href: '/', type: 'link', icon: '🏠' },
   { id: 'admissions', title: 'Admissions', href: '/admissions', type: 'mega', icon: '📝' },
@@ -69,6 +69,7 @@ const mainNavItems: MenuItem[] = [
   { id: 'programs', title: 'Programs', href: '/programs', type: 'mega', icon: '📚' },
   { id: 'universities', title: 'Universities', href: '/universities', type: 'mega', icon: '🎓' },
   { id: 'boards', title: 'Boards', href: '/boards', type: 'mega', icon: '📋' },
+  { id: 'date-sheets', title: 'Date Sheets', href: '/date-sheets', type: 'link', icon: '📅' }, // ✅ NEW
   { id: 'news', title: 'News', href: '/news', type: 'link', icon: '📰' },
   { id: 'cities', title: 'Cities', href: '/cities', type: 'link', icon: '🏙️' },
 ];
@@ -95,27 +96,7 @@ const getProgramsByCategory = (programs: Program[], categorySlug: string): Progr
   });
 };
 
-// ✅ SEO-Friendly URL Generator - Har item ka apna slug use karega
-const getSEOUrl = (menuId: string, type: string, slug: string): string => {
-  switch(menuId) {
-    case 'admissions':
-      return `/admissions/${slug}`;           // /admissions/mbbs-admissions-2026
-    case 'results':
-      return `/results/${slug}`;               // /results/fbise-9th-class-result
-    case 'universities':
-      return `/universities/${slug}`;          // /universities/university-of-lahore
-    case 'programs':
-      return `/programs/${slug}`;              // /programs/bs-computer-science
-    case 'boards':
-      return `/boards/${slug}`;                // /boards/fbise
-    case 'cities':
-      return `/cities/${slug}`;                 // /cities/lahore
-    default:
-      return `/${menuId}/${slug}`;
-  }
-};
-
-// ✅ Mega Menu Component - FIXED (Sirf header ke neeche)
+// ✅ Mega Menu Component - NO CHANGES, SAME AS BEFORE
 const MegaMenu = ({ 
   menuId,
   isOpen, 
@@ -183,12 +164,12 @@ const MegaMenu = ({
 
   const currentCategory = menuData.categories.find(c => c.slug === activeCategory);
   
-  // ✅ BOARDS Mega Menu
+  // BOARDS Mega Menu
   if (menuId === 'boards') {
     return (
       <div 
         ref={menuRef}
-        className="absolute left-0 right-0 top-16 z-40 bg-white shadow-2xl"
+        className="absolute left-0 right-0 top-full z-50 bg-white shadow-2xl"
         style={{
           boxShadow: '0 20px 60px -15px rgba(0,0,0,0.3)',
           borderBottomLeftRadius: '24px',
@@ -206,19 +187,17 @@ const MegaMenu = ({
               </div>
             ) : (
               <div>
-                {/* Boards Header */}
                 <div className="mb-6 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
                   <h2 className="text-2xl font-bold mb-2">Education Boards of Pakistan</h2>
                   <p className="text-orange-100">Results, date sheets, and announcements</p>
                 </div>
                 
-                {/* Boards Grid - Har board ka apna slug use karega */}
                 <div className="grid grid-cols-4 gap-4">
                   {menuData.boards && menuData.boards.length > 0 ? (
                     menuData.boards.slice(0, 8).map((board) => (
                       <Link
                         key={board.id}
-                        href={`/boards/${board.slug}`}  // 👈 Board ka apna slug
+                        href={`/boards/${board.slug}`}
                         className="bg-white p-4 rounded-xl border border-gray-200 hover:shadow-lg transition-all hover:border-orange-300 group"
                       >
                         <div className="text-3xl mb-2">📋</div>
@@ -237,7 +216,6 @@ const MegaMenu = ({
                   )}
                 </div>
                 
-                {/* Quick Links for Boards */}
                 <div className="mt-8 grid grid-cols-3 gap-4">
                   <Link
                     href="/boards?type=results"
@@ -247,7 +225,7 @@ const MegaMenu = ({
                     <div className="font-medium text-orange-700">Latest Results</div>
                   </Link>
                   <Link
-                    href="/boards?type=date-sheets"
+                    href="/date-sheets"
                     className="bg-orange-50 p-4 rounded-xl text-center hover:bg-orange-100 transition-colors"
                   >
                     <div className="text-2xl mb-1">📅</div>
@@ -269,7 +247,7 @@ const MegaMenu = ({
     );
   }
 
-  // ✅ Regular Mega Menu (Admissions, Results, Programs, Universities)
+  // Regular Mega Menu
   const categoryPrograms = getProgramsByCategory(menuData.programs, activeCategory);
   const categoryUniversities = menuData.universities || [];
   const categoryCities = menuData.cities || [];
@@ -277,7 +255,7 @@ const MegaMenu = ({
   return (
     <div 
       ref={menuRef}
-      className="absolute left-0 right-0 top-16 z-40 bg-white shadow-2xl"
+      className="absolute left-0 right-0 top-full z-50 bg-white shadow-2xl"
       style={{
         boxShadow: '0 20px 60px -15px rgba(0,0,0,0.3)',
         borderBottomLeftRadius: '24px',
@@ -291,9 +269,7 @@ const MegaMenu = ({
         <div className="container mx-auto px-6 py-6">
           {loading ? (
             <div className="flex justify-center items-center h-48">
-              <div className="relative">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
-              </div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
             </div>
           ) : (
             <div className="flex gap-6">
@@ -359,7 +335,6 @@ const MegaMenu = ({
               <div className="w-3/4">
                 {currentCategory && (
                   <div className="animate-fadeIn">
-                    {/* Category Header */}
                     <div className="mb-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-xl p-4 text-white relative overflow-hidden">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-8 -mt-8"></div>
                       <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-8 -mb-8"></div>
@@ -383,10 +358,8 @@ const MegaMenu = ({
                       </div>
                     </div>
 
-                    {/* 3 Columns Grid */}
                     <div className="grid grid-cols-3 gap-4">
-                      
-                      {/* PROGRAMS COLUMN - Har program ka apna slug */}
+                      {/* PROGRAMS COLUMN */}
                       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all">
                         <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
                           <h3 className="font-bold text-white flex items-center">
@@ -397,25 +370,21 @@ const MegaMenu = ({
                         <div className="p-4 min-h-[250px]">
                           {categoryPrograms.length > 0 ? (
                             <ul className="space-y-2">
-                              {categoryPrograms.slice(0, 8).map((program) => {
-                                const url = `/programs/${program.slug}`;  // 👈 Program ka apna slug
-                                
-                                return (
-                                  <li key={program.id}>
-                                    <Link
-                                      href={url}
-                                      className="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 transition-all group/item"
-                                    >
-                                      <span className="text-sm text-gray-700 group-hover/item:text-blue-700 font-medium">
-                                        {program.name}
-                                      </span>
-                                      <span className="text-blue-600 opacity-0 group-hover/item:opacity-100 transition-opacity text-xs">
-                                        View →
-                                      </span>
-                                    </Link>
-                                  </li>
-                                );
-                              })}
+                              {categoryPrograms.slice(0, 8).map((program) => (
+                                <li key={program.id}>
+                                  <Link
+                                    href={`/programs/${program.slug}`}
+                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 transition-all group/item"
+                                  >
+                                    <span className="text-sm text-gray-700 group-hover/item:text-blue-700 font-medium">
+                                      {program.name}
+                                    </span>
+                                    <span className="text-blue-600 opacity-0 group-hover/item:opacity-100 transition-opacity text-xs">
+                                      View →
+                                    </span>
+                                  </Link>
+                                </li>
+                              ))}
                             </ul>
                           ) : (
                             <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
@@ -425,7 +394,7 @@ const MegaMenu = ({
                         </div>
                       </div>
 
-                      {/* UNIVERSITIES COLUMN - Har university ka apna slug */}
+                      {/* UNIVERSITIES COLUMN */}
                       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all">
                         <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3">
                           <h3 className="font-bold text-white flex items-center">
@@ -436,30 +405,26 @@ const MegaMenu = ({
                         <div className="p-4 min-h-[250px]">
                           {categoryUniversities.length > 0 ? (
                             <ul className="space-y-2">
-                              {categoryUniversities.slice(0, 8).map((uni) => {
-                                const url = `/universities/${uni.slug}`;  // 👈 University ka apna slug
-                                
-                                return (
-                                  <li key={uni.id}>
-                                    <Link
-                                      href={url}
-                                      className="flex items-center justify-between p-2 rounded-lg hover:bg-green-50 transition-all group/item"
-                                    >
-                                      <div>
-                                        <span className="text-sm text-gray-700 group-hover/item:text-green-700 font-medium">
-                                          {uni.name}
-                                        </span>
-                                        {uni.cityName && (
-                                          <span className="text-xs text-gray-400 ml-1">({uni.cityName})</span>
-                                        )}
-                                      </div>
-                                      <span className="text-green-600 opacity-0 group-hover/item:opacity-100 transition-opacity text-xs">
-                                        View →
+                              {categoryUniversities.slice(0, 8).map((uni) => (
+                                <li key={uni.id}>
+                                  <Link
+                                    href={`/universities/${uni.slug}`}
+                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-green-50 transition-all group/item"
+                                  >
+                                    <div>
+                                      <span className="text-sm text-gray-700 group-hover/item:text-green-700 font-medium">
+                                        {uni.name}
                                       </span>
-                                    </Link>
-                                  </li>
-                                );
-                              })}
+                                      {uni.cityName && (
+                                        <span className="text-xs text-gray-400 ml-1">({uni.cityName})</span>
+                                      )}
+                                    </div>
+                                    <span className="text-green-600 opacity-0 group-hover/item:opacity-100 transition-opacity text-xs">
+                                      View →
+                                    </span>
+                                  </Link>
+                                </li>
+                              ))}
                             </ul>
                           ) : (
                             <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
@@ -469,7 +434,7 @@ const MegaMenu = ({
                         </div>
                       </div>
 
-                      {/* CITIES COLUMN - Har city ka apna slug */}
+                      {/* CITIES COLUMN */}
                       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl transition-all">
                         <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-4 py-3">
                           <h3 className="font-bold text-white flex items-center">
@@ -480,27 +445,23 @@ const MegaMenu = ({
                         <div className="p-4 min-h-[250px]">
                           {categoryCities.length > 0 ? (
                             <ul className="space-y-2">
-                              {categoryCities.slice(0, 8).map((city) => {
-                                const url = `/cities/${city.slug}`;  // 👈 City ka apna slug
-                                
-                                return (
-                                  <li key={city.id}>
-                                    <Link
-                                      href={url}
-                                      className="flex items-center justify-between p-2 rounded-lg hover:bg-purple-50 transition-all group/item"
-                                    >
-                                      <span className="text-sm text-gray-700 group-hover/item:text-purple-700 font-medium">
-                                        {city.name}
+                              {categoryCities.slice(0, 8).map((city) => (
+                                <li key={city.id}>
+                                  <Link
+                                    href={`/cities/${city.slug}`}
+                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-purple-50 transition-all group/item"
+                                  >
+                                    <span className="text-sm text-gray-700 group-hover/item:text-purple-700 font-medium">
+                                      {city.name}
+                                    </span>
+                                    {city.isPopular && (
+                                      <span className="text-xs bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded-full">
+                                        Popular
                                       </span>
-                                      {city.isPopular && (
-                                        <span className="text-xs bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded-full">
-                                          Popular
-                                        </span>
-                                      )}
-                                    </Link>
-                                  </li>
-                                );
-                              })}
+                                    )}
+                                  </Link>
+                                </li>
+                              ))}
                             </ul>
                           ) : (
                             <div className="flex items-center justify-center h-[200px] text-gray-400 text-sm">
@@ -521,7 +482,7 @@ const MegaMenu = ({
   );
 };
 
-// Mobile Menu Component
+// Mobile Menu Component - SAME AS BEFORE
 const MobileMenu = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -590,7 +551,7 @@ const MobileMenu = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   );
 };
 
-// ✅ Main Header Component
+// ✅ Main Header Component - PROFESSIONAL VERSION
 export default function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
@@ -598,7 +559,6 @@ export default function Header() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [activeCategory, setActiveCategory] = useState<Record<string, string>>({});
   const [isScrolled, setIsScrolled] = useState(false);
-  const headerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   
   const dataCache = useRef<Record<string, MenuData>>({});
@@ -628,7 +588,6 @@ export default function Header() {
     setLoading(prev => ({ ...prev, [menuId]: true }));
     
     try {
-      // API call - Yeh API tree ke mutabiq public/menu endpoint
       const url = categorySlug 
         ? `/api/public/menu?menuId=${menuId}&category=${categorySlug}`
         : `/api/public/menu?menuId=${menuId}`;
@@ -698,85 +657,81 @@ export default function Header() {
 
   return (
     <>
-      <div className="relative" ref={headerRef}>
-        <header 
-          className={`sticky top-0 z-50 w-full bg-white/95 backdrop-blur-sm transition-all duration-300 ${
-            isScrolled ? 'shadow-lg' : 'border-b border-gray-100'
-          }`}
-        >
-          <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between h-16">
-              {/* Logo */}
-              <Link 
-                href="/" 
-                className="flex items-center space-x-3 group"
-              >
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all group-hover:scale-110">
-                  <span className="text-white font-bold text-lg">N</span>
-                </div>
-                <div className="hidden sm:block">
-                  <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    NextID<span className="text-blue-600">.pk</span>
-                  </div>
-                  <div className="text-xs text-gray-500 tracking-wide">EDUCATION PORTAL</div>
-                </div>
-              </Link>
-
-              {/* Desktop Navigation */}
-              <nav className="hidden lg:flex items-center space-x-1">
-                {mainNavItems.map((item) => (
-                  <div 
-                    key={item.id}
-                    className="relative h-16 flex items-center"
-                    onMouseEnter={() => handleMouseEnter(item.id)}
-                    onMouseLeave={handleMouseLeave}
-                  >
-                    <Link
-                      href={item.href}
-                      className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                        hoveredMenu === item.id 
-                          ? 'text-blue-700 bg-blue-50 shadow-md' 
-                          : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="mr-2 text-lg">{item.icon}</span>
-                      {item.title}
-                      {item.type === 'mega' && (
-                        <svg 
-                          className={`w-4 h-4 ml-1 transition-transform duration-200 ${
-                            hoveredMenu === item.id ? 'rotate-180' : ''
-                          }`}
-                          fill="none" 
-                          stroke="currentColor" 
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      )}
-                    </Link>
-                  </div>
-                ))}
-              </nav>
-
-              {/* Desktop Actions - Empty */}
-              <div className="hidden lg:flex items-center space-x-4">
-                {/* Empty */}
+      <header 
+        className={`sticky top-0 z-50 w-full bg-white/95 backdrop-blur-sm transition-all duration-300 ${
+          isScrolled ? 'shadow-lg' : 'border-b border-gray-100'
+        }`}
+      >
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo */}
+            <Link 
+              href="/" 
+              className="flex items-center space-x-3 group flex-shrink-0"
+            >
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all group-hover:scale-110">
+                <span className="text-white font-bold text-lg">N</span>
               </div>
+              <div className="hidden sm:block">
+                <div className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  NextID<span className="text-blue-600">.pk</span>
+                </div>
+                <div className="text-xs text-gray-500 tracking-wide">EDUCATION PORTAL</div>
+              </div>
+            </Link>
 
-              {/* Mobile Menu Button */}
-              <button
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                onClick={() => setIsMobileMenuOpen(true)}
-              >
-                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
+            {/* Desktop Navigation - CENTERED */}
+            <nav className="hidden lg:flex items-center justify-center flex-1 space-x-1">
+              {mainNavItems.map((item) => (
+                <div 
+                  key={item.id}
+                  className="relative"
+                  onMouseEnter={() => item.type === 'mega' && handleMouseEnter(item.id)}
+                  onMouseLeave={item.type === 'mega' ? handleMouseLeave : undefined}
+                >
+                  <Link
+                    href={item.href}
+                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                      hoveredMenu === item.id 
+                        ? 'text-blue-700 bg-blue-50 shadow-sm' 
+                        : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="mr-1.5 text-base">{item.icon}</span>
+                    {item.title}
+                    {item.type === 'mega' && (
+                      <svg 
+                        className={`w-3.5 h-3.5 ml-1 transition-transform duration-200 ${
+                          hoveredMenu === item.id ? 'rotate-180' : ''
+                        }`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    )}
+                  </Link>
+                </div>
+              ))}
+            </nav>
+
+            {/* Right Side - Empty spacer for balance */}
+            <div className="hidden lg:block w-10"></div>
+
+            {/* Mobile Menu Button */}
+            <button
+              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
           </div>
-        </header>
+        </div>
 
-        {/* ✅ FIXED: Mega Menu - Sirf header ke neeche */}
+        {/* Mega Menu Dropdowns */}
         {hoveredMenu && mainNavItems.find(item => item.id === hoveredMenu)?.type === 'mega' && (
           <MegaMenu
             menuId={hoveredMenu}
@@ -788,7 +743,7 @@ export default function Header() {
             onCategoryChange={(categorySlug) => handleCategoryChange(hoveredMenu, categorySlug)}
           />
         )}
-      </div>
+      </header>
 
       {/* Mobile Menu */}
       <MobileMenu 

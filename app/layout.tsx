@@ -1,7 +1,6 @@
 // app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
@@ -22,24 +21,22 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`} suppressHydrationWarning>
-        <Providers>
-          {children}
-          
-          {/* 👇 Your custom analytics tracker - for detailed location & session data */}
-          <ClientAnalyticsTracker />
-          
-          {/* 👇 Vercel Analytics - Auto tracks page views */}
-          <Analytics />
-          
-          <Toaster 
-            position="top-right"
-            richColors
-            closeButton
-            expand={false}
-            className="transform-gpu"
-            duration={3000}
-          />
-        </Providers>
+        {children}
+        
+        {/* 👇 Your custom analytics tracker - for detailed location & session data */}
+        <ClientAnalyticsTracker />
+        
+        {/* 👇 Vercel Analytics - Auto tracks page views */}
+        <Analytics />
+        
+        <Toaster 
+          position="top-right"
+          richColors
+          closeButton
+          expand={false}
+          className="transform-gpu"
+          duration={3000}
+        />
 
         {/* Google Analytics */}
         <Script

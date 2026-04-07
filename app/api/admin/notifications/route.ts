@@ -1,95 +1,65 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { notifications } from "@/app/lib/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+// app/api/admin/notifications/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/app/lib/db';
+import { notifications } from '@/app/lib/schema';
+import { eq, and } from 'drizzle-orm';
+import jwt from 'jsonwebtoken';
 
+// GET - Fetch notifications
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const token = request.cookies.get('authToken')?.value;
     
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    if (!token) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get("limit") || "20");
-
-    const userId = parseInt(session.user.id);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number };
+    const userId = decoded.id;
 
     const userNotifications = await db
-      .select({
-        id: notifications.id,
-        type: notifications.type,
-        title: notifications.title,
-        message: notifications.message,
-        time: notifications.createdAt,
-        read: notifications.read,
-        link: notifications.link,
-      })
+      .select()
       .from(notifications)
       .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit);
+      .orderBy(notifications.createdAt);
 
-    return NextResponse.json({
-      success: true,
-      notifications: userNotifications,
-    });
-
+    return NextResponse.json({ success: true, notifications: userNotifications });
   } catch (error) {
-    console.error("Error fetching notifications:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch notifications" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to fetch' }, { status: 500 });
   }
 }
 
-// Mark notification as read
+// POST - Mark as read or clear all
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
+    const token = request.cookies.get('authToken')?.value;
+    if (!token) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number };
+    const userId = decoded.id;
     const body = await request.json();
-    const { notificationId } = body;
+    const { notificationId, action } = body;
 
-    const userId = parseInt(session.user.id);
+    // Clear all notifications
+    if (action === 'clearAll') {
+      await db.delete(notifications).where(eq(notifications.userId, userId));
+      return NextResponse.json({ success: true, message: 'All cleared' });
+    }
 
-    await db
-      .update(notifications)
-      .set({ 
-        read: true,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(notifications.id, notificationId),
-          eq(notifications.userId, userId)
-        )
-      );
+    // Mark single notification as read
+    if (notificationId) {
+      await db
+        .update(notifications)
+        .set({ read: true, updatedAt: new Date() })
+        .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
+      
+      return NextResponse.json({ success: true, message: 'Marked as read' });
+    }
 
-    return NextResponse.json({
-      success: true,
-      message: "Notification marked as read",
-    });
-
+    return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error("Error updating notification:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to update notification" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to process' }, { status: 500 });
   }
 }

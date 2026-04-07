@@ -1,4 +1,4 @@
-// Simple authentication utilities
+
 // app/lib/auth.ts
 import nodemailer from 'nodemailer';
 

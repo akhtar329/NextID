@@ -1,23 +1,36 @@
+// app/api/admin/notifications/read-all/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { notifications } from "@/app/lib/schema";
 import { eq, and } from "drizzle-orm";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import jwt from "jsonwebtoken";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    // ✅ Get token from cookie (custom auth)
+    const token = request.cookies.get("authToken")?.value;
     
-    if (!session?.user?.id) {
+    if (!token) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: "Unauthorized - No token provided" },
         { status: 401 }
       );
     }
 
-    const userId = parseInt(session.user.id);
+    // ✅ Verify JWT token
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+    } catch (jwtError) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized - Invalid token" },
+        { status: 401 }
+      );
+    }
 
+    const userId = decoded.id; // Get userId from token
+
+    // Mark all unread notifications as read
     await db
       .update(notifications)
       .set({ 
