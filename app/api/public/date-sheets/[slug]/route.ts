@@ -4,11 +4,13 @@ import { db } from "@/app/lib/db";
 import { dateSheets, boards, institutes, cities } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
 
+// ✅ Fix: params is a Promise, must be awaited
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    // ✅ Await params first
     const { slug } = await params;
     
     console.log("Fetching date sheet for slug:", slug);
@@ -29,14 +31,13 @@ export async function GET(
         downloadLink: dateSheets.downloadLink,
         pdfFile: dateSheets.pdfFile,
         featuredImage: dateSheets.featuredImage,
+        description: dateSheets.description,
         createdAt: dateSheets.createdAt,
         board: {
-          id: boards.id,
           name: boards.name,
           slug: boards.slug,
         },
         institute: {
-          id: institutes.id,
           name: institutes.name,
           slug: institutes.slug,
           logo: institutes.logo,
