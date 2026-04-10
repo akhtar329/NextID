@@ -550,53 +550,74 @@ export const seoMetadata = pgTable("seo_metadata", {
 /* =========================
 📊 PAGE VIEWS (with referrerDomain for tracking)
 ========================= */
-export const pageViews = pgTable("page_views", {
-  id: serial("id").primaryKey(),
-  visitorId: varchar("visitor_id", { length: 100 }).notNull(),
-  sessionId: varchar("session_id", { length: 100 }).notNull(),
-  referrerDomain: varchar("referrer_domain", { length: 100 }),
-  pagePath: varchar("page_path", { length: 255 }).notNull(),
-  pageTitle: varchar("page_title", { length: 255 }),
-  deviceType: varchar("device_type", { length: 50 }),
-  browser: varchar("browser", { length: 50 }),
-  os: varchar("os", { length: 50 }),
-  country: varchar("country", { length: 100 }),
-  countryCode: varchar("country_code", { length: 10 }),
-  city: varchar("city", { length: 100 }),
-  region: varchar("region", { length: 100 }),
-  latitude: varchar("latitude", { length: 50 }),
-  longitude: varchar("longitude", { length: 50 }),
-  timezone: varchar("timezone", { length: 100 }),
-  loadTime: integer("load_time"),
-  apiLatency: integer("api_latency"),
-  referrer: varchar("referrer", { length: 500 }),
-  userId: integer("user_id").references(() => adminUsers.id),
-  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
+export const pageViews = pgTable(
+  "page_views", 
+  {
+    id: serial("id").primaryKey(),
+    visitorId: varchar("visitor_id", { length: 100 }).notNull(),
+    sessionId: varchar("session_id", { length: 100 }).notNull(),
+    referrerDomain: varchar("referrer_domain", { length: 100 }),
+    pagePath: varchar("page_path", { length: 255 }).notNull(),
+    pageTitle: varchar("page_title", { length: 255 }),
+    deviceType: varchar("device_type", { length: 50 }),
+    browser: varchar("browser", { length: 50 }),
+    os: varchar("os", { length: 50 }),
+    country: varchar("country", { length: 100 }),
+    countryCode: varchar("country_code", { length: 10 }),
+    city: varchar("city", { length: 100 }),
+    region: varchar("region", { length: 100 }),
+    latitude: varchar("latitude", { length: 50 }),
+    longitude: varchar("longitude", { length: 50 }),
+    timezone: varchar("timezone", { length: 100 }),
+    loadTime: integer("load_time"),
+    apiLatency: integer("api_latency"),
+    referrer: varchar("referrer", { length: 500 }),
+    userId: integer("user_id").references(() => adminUsers.id),
+    viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    // ✅ Indexes for better query performance
+    idx_page_views_visitor: index("idx_page_views_visitor").on(table.visitorId),
+    idx_page_views_session: index("idx_page_views_session").on(table.sessionId),
+    idx_page_views_viewed_at: index("idx_page_views_viewed_at").on(table.viewedAt),
+    // ✅ Additional useful indexes
+    idx_page_views_page_path: index("idx_page_views_page_path").on(table.pagePath),
+    idx_page_views_country: index("idx_page_views_country").on(table.country),
+    idx_page_views_city: index("idx_page_views_city").on(table.city),
+    idx_page_views_device_type: index("idx_page_views_device_type").on(table.deviceType),
+  })
+);
 /* =========================
 👥 VISITOR SESSIONS
 ========================= */
-export const visitorSessions = pgTable("visitor_sessions", {
-  id: serial("id").primaryKey(),
-  visitorId: varchar("visitor_id", { length: 100 }).notNull(),
-  sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
-  entryPage: varchar("entry_page", { length: 255 }),
-  exitPage: varchar("exit_page", { length: 255 }),
-  pageViews: integer("page_views").default(1),
-  country: varchar("country", { length: 100 }),
-  city: varchar("city", { length: 100 }),
-  latitude: varchar("latitude", { length: 50 }),
-  longitude: varchar("longitude", { length: 50 }),
-  deviceType: varchar("device_type", { length: 50 }),
-  browser: varchar("browser", { length: 50 }),
-  os: varchar("os", { length: 50 }),
-  startedAt: timestamp("started_at").defaultNow(),
-  lastActive: timestamp("last_active").defaultNow(),
-  endedAt: timestamp("ended_at"),
-  duration: integer("duration").default(0),
-});
+export const visitorSessions = pgTable(
+  "visitor_sessions",
+  {
+    id: serial("id").primaryKey(),
+    visitorId: varchar("visitor_id", { length: 100 }).notNull(),
+    sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
+    entryPage: varchar("entry_page", { length: 255 }),
+    exitPage: varchar("exit_page", { length: 255 }),
+    pageViews: integer("page_views").default(1),
+    country: varchar("country", { length: 100 }),
+    city: varchar("city", { length: 100 }),
+    latitude: varchar("latitude", { length: 50 }),
+    longitude: varchar("longitude", { length: 50 }),
+    deviceType: varchar("device_type", { length: 50 }),
+    browser: varchar("browser", { length: 50 }),
+    os: varchar("os", { length: 50 }),
+    startedAt: timestamp("started_at").defaultNow(),
+    lastActive: timestamp("last_active").defaultNow(),
+    endedAt: timestamp("ended_at"),
+    duration: integer("duration").default(0),
+  },
+  (table) => ({
+    idx_session_visitor: index("idx_session_visitor").on(table.visitorId),
+    idx_session_last_active: index("idx_session_last_active").on(table.lastActive),
+    idx_session_started_at: index("idx_session_started_at").on(table.startedAt),
+  })
+);
 
 /* =========================
 📈 DAILY STATS

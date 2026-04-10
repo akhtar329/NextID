@@ -5,7 +5,8 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
-import ClientAnalyticsTracker from '@/app/component/ClientAnalyticsTracker/ClientAnalyticsTracker';
+import { VisitorTracker } from '@/app/component/analytics/VisitorTracker';
+import { ThemeProvider } from '@/app/component/ThemeProvider/ThemeProvider';
 
 import { generateSEO } from "../app/lib/seo";
 
@@ -19,43 +20,45 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`} suppressHydrationWarning>
-        {children}
-        
-        {/* 👇 Your custom analytics tracker - for detailed location & session data */}
-        <ClientAnalyticsTracker />
-        
-        {/* 👇 Vercel Analytics - Auto tracks page views */}
-        <Analytics />
-        
-        <Toaster 
-          position="top-right"
-          richColors
-          closeButton
-          expand={false}
-          className="transform-gpu"
-          duration={3000}
-        />
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.className} antialiased`}>
+        <ThemeProvider>
+          {children}
+          
+          {/* ✅ Only ONE tracker - VisitorTracker handles location & sessions */}
+          <VisitorTracker />
+          
+          {/* ✅ Vercel Analytics - Optional, can keep or remove */}
+          <Analytics />
+          
+          <Toaster 
+            position="top-right"
+            richColors
+            closeButton
+            expand={false}
+            className="transform-gpu"
+            duration={3000}
+          />
 
-        {/* Google Analytics */}
-        <Script
-          strategy="afterInteractive"
-          src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
-        />
-        <Script
-          id="google-analytics"
-          strategy="afterInteractive"
-        >
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-2VNFCBN0SG', {
-              page_path: window.location.pathname,
-            });
-          `}
-        </Script>
+          {/* Google Analytics (gtag) */}
+          <Script
+            strategy="afterInteractive"
+            src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
+          />
+          <Script
+            id="google-analytics"
+            strategy="afterInteractive"
+          >
+            {`
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-2VNFCBN0SG', {
+                page_path: window.location.pathname,
+              });
+            `}
+          </Script>
+        </ThemeProvider>
       </body>
     </html>
   );

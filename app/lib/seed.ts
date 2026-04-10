@@ -340,9 +340,6 @@ async function seed() {
     const finalAdmissions = await db.select().from(admissions);
     const finalAdmissionOfferings = await db.select().from(admissionOfferings);
 
-    console.log("✅ Seed completed successfully!");
-    console.log(`📊 Summary: ${finalCategories.length} categories, ${finalPrograms.length} programs, ${finalInstitutes.length} institutes, ${finalOfferings.length} offerings, ${finalAdmissions.length} admissions, ${finalAdmissionOfferings.length} admission-offerings`);
-
   } catch (error) {
     console.error("❌ Error during seed:", error);
     throw error;

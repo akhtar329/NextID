@@ -1,112 +1,144 @@
-// app/api/admin/program-offerings/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/app/lib/db';
+import { programOfferings, programs, institutes } from '@/app/lib/schema';
+import { eq, and, sql } from 'drizzle-orm';
 
-import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { programOfferings } from "@/app/lib/schema";
-import { eq, and } from "drizzle-orm";
-
-// GET - Get all relations (for testing)
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const all = await db
+    const { searchParams } = new URL(request.url);
+    const instituteId = searchParams.get('instituteId');
+    const programId = searchParams.get('programId');
+    
+    // Start building the query
+    let query = db
       .select({
         id: programOfferings.id,
         programId: programOfferings.programId,
         instituteId: programOfferings.instituteId,
-        degreeId: programOfferings.degreeId,
         status: programOfferings.status,
         createdAt: programOfferings.createdAt,
         updatedAt: programOfferings.updatedAt,
+        // Include program details if needed
+        programName: programs.name,
+        programSlug: programs.slug,
+        // Institute details
+        instituteName: institutes.name,
       })
-      .from(programOfferings);
+      .from(programOfferings)
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
+      .leftJoin(institutes, eq(programOfferings.instituteId, institutes.id));
     
-    return NextResponse.json({ 
-      success: true, 
-      data: all,
-      count: all.length 
+    // Apply filters
+    if (instituteId) {
+      query = query.where(eq(programOfferings.instituteId, parseInt(instituteId)));
+    }
+    
+    if (programId) {
+      query = query.where(eq(programOfferings.programId, parseInt(programId)));
+    }
+    
+    const offerings = await query;
+    
+    // Transform the data to match what the frontend expects
+    const transformedOfferings = offerings.map(offering => ({
+      id: offering.id,
+      programId: offering.programId,
+      programName: offering.programName,
+      degreeName: offering.programName, // Use program name as degree name if degreeName doesn't exist
+      instituteId: offering.instituteId,
+      instituteName: offering.instituteName,
+      status: offering.status,
+      createdAt: offering.createdAt,
+      updatedAt: offering.updatedAt,
+    }));
+    
+    return NextResponse.json({
+      success: true,
+      offerings: transformedOfferings,
+      count: transformedOfferings.length
     });
+    
   } catch (error) {
-    console.error("❌ Error in GET:", error);
+    console.error('❌ Error fetching program offerings:', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: "Failed to fetch data",
-        details: error instanceof Error ? error.message : "Unknown error"
+        error: 'Failed to fetch program offerings',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );
   }
 }
 
-// POST - Bulk assign
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
-    const instituteId = body.instituteId;
-    const programIds = body.programIds || [];
-    const degreeId = body.degreeId || 31; // Default degree ID (Bachelor of Commerce)
     
-    if (!instituteId) {
-      return NextResponse.json(
-        { success: false, error: "Institute ID is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(programIds)) {
-      console.log("❌ Program IDs must be an array");
-      return NextResponse.json(
-        { success: false, error: "Program IDs must be an array" },
-        { status: 400 }
-      );
-    }
-
-    try {
-      // Delete all existing assignments for this institute
-      await db
-        .delete(programOfferings)
-        .where(eq(programOfferings.instituteId, instituteId));
-
-      // Insert new assignments
-      if (programIds.length > 0) {
-        const values = programIds.map((programId: number) => ({
-          programId: programId,
-          instituteId: instituteId,
-          degreeId: degreeId,
-          status: true,
-        }));
-
-        await db.insert(programOfferings).values(values);
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Programs assigned successfully",
-        count: programIds.length
-      });
-      
-    } catch (dbError) {
-      console.error("❌ Database error:", dbError);
-      
+    // Validate required fields based on your schema
+    if (!body.programId || !body.instituteId) {
       return NextResponse.json(
         { 
-          success: false, 
-          error: "Database error - table might not exist",
-          details: dbError instanceof Error ? dbError.message : "Unknown error"
+          success: false,
+          error: 'programId and instituteId are required' 
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
-
-  } catch (error) {
-    console.error("❌ Error in POST:", error);
     
+    // Check if offering already exists
+    const existing = await db
+      .select()
+      .from(programOfferings)
+      .where(
+        and(
+          eq(programOfferings.programId, body.programId),
+          eq(programOfferings.instituteId, body.instituteId)
+        )
+      )
+      .limit(1);
+    
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Program offering already exists for this institute' 
+        },
+        { status: 400 }
+      );
+    }
+    
+    // Create new offering - adjust fields based on your schema
+    const insertData: any = {
+      programId: body.programId,
+      instituteId: body.instituteId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    // Add optional fields if they exist in your schema
+    if (body.status !== undefined) {
+      insertData.status = body.status;
+    }
+    
+    const [newOffering] = await db
+      .insert(programOfferings)
+      .values(insertData)
+      .returning();
+    
+    return NextResponse.json({
+      success: true,
+      offering: newOffering,
+      message: 'Program offering created successfully'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating program offering:', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: "Failed to assign programs",
-        details: error instanceof Error ? error.message : "Unknown error"
+        error: 'Failed to create program offering',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

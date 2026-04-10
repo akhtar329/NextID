@@ -1,12 +1,9 @@
-// app/api/admin/admissions/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { admissions, admissionOfferings, programOfferings, programs, institutes, cities } from "@/app/lib/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
-  
   try {
     const { searchParams } = new URL(request.url);
     const year = searchParams.get("year");
@@ -59,13 +56,13 @@ export async function GET(request: NextRequest) {
       .where(whereClause)
       .orderBy(desc(admissions.year), desc(admissions.createdAt));
 
-    // ✅ UPDATED: Now fetch offerings for each admission through admissionOfferings
+    // ✅ FIXED: Fetch programs for each admission using proper SQL
     const admissionsWithPrograms = await Promise.all(
       admissionsList.map(async (ad) => {
         let programList: { id: number; name: string; slug: string }[] = [];
         
         try {
-          // First get offeringIds for this admission
+          // Get offeringIds for this admission
           const offeringLinks = await db
             .select({ offeringId: admissionOfferings.offeringId })
             .from(admissionOfferings)
@@ -74,7 +71,7 @@ export async function GET(request: NextRequest) {
           const offeringIds = offeringLinks.map(o => o.offeringId);
           
           if (offeringIds.length > 0) {
-            // Then get programs through programOfferings
+            // ✅ FIXED: Use inArray instead of SQL injection prone string concatenation
             programList = await db
               .select({
                 id: programs.id,
@@ -83,13 +80,13 @@ export async function GET(request: NextRequest) {
               })
               .from(programOfferings)
               .innerJoin(programs, eq(programOfferings.programId, programs.id))
-              .where(sql`${programOfferings.id} IN (${offeringIds.join(',')})`);
+              .where(inArray(programOfferings.id, offeringIds));
           }
         } catch (err) {
           console.error(`Error fetching programs for admission ${ad.id}:`, err);
         }
 
-        // Filter by programId if needed (client-side)
+        // Filter by programId if needed
         if (programId && programList.length > 0) {
           programList = programList.filter(p => p.id === parseInt(programId));
         }
@@ -112,6 +109,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       admissions: finalAdmissions,
+      total: finalAdmissions.length,
     });
 
   } catch (error) {

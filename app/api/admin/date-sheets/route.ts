@@ -58,8 +58,6 @@ export async function GET(req: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    console.log("Received payload:", body);
 
     const { 
       title, 
@@ -122,8 +120,6 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       })
       .returning();
-
-    console.log("Created date sheet:", newDateSheet);
 
     return NextResponse.json(newDateSheet, { status: 201 });
     

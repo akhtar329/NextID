@@ -18,6 +18,7 @@ import {
 } from 'chart.js';
 import { Line, Pie } from 'react-chartjs-2';
 import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
+import { Moon, Sun } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -32,7 +33,6 @@ ChartJS.register(
   Filler,
 );
 
-// ✅ Simple array - no type annotation needed
 const GOOGLE_MAPS_LIBRARIES = ['visualization'];
 
 interface AnalyticsData {
@@ -89,19 +89,50 @@ const defaultCenter = {
   lng: 69.3451,
 };
 
-const mapOptions = {
+const getMapOptions = (isDarkMode: boolean) => ({
   mapTypeControl: true,
   streetViewControl: true,
   fullscreenControl: true,
   zoomControl: true,
-  styles: [
+  styles: isDarkMode ? [
+    {
+      featureType: 'poi',
+      elementType: 'labels',
+      stylers: [{ visibility: 'off' }],
+    },
+    {
+      featureType: 'all',
+      elementType: 'geometry',
+      stylers: [{ color: '#242f3e' }],
+    },
+    {
+      featureType: 'all',
+      elementType: 'labels.text.fill',
+      stylers: [{ color: '#746855' }],
+    },
+    {
+      featureType: 'all',
+      elementType: 'labels.text.stroke',
+      stylers: [{ color: '#242f3e' }],
+    },
+    {
+      featureType: 'administrative.locality',
+      elementType: 'labels.text.fill',
+      stylers: [{ color: '#d59563' }],
+    },
+    {
+      featureType: 'water',
+      elementType: 'geometry',
+      stylers: [{ color: '#17263c' }],
+    },
+  ] : [
     {
       featureType: 'poi',
       elementType: 'labels',
       stylers: [{ visibility: 'off' }],
     },
   ],
-};
+});
 
 export default function AnalyticsDashboard() {
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week');
@@ -110,6 +141,7 @@ export default function AnalyticsDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapZoom, setMapZoom] = useState(5);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<{
     position: { lat: number; lng: number };
     city: string;
@@ -119,10 +151,33 @@ export default function AnalyticsDashboard() {
     recentVisitors: any[];
   } | null>(null);
 
+  // Load theme preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const isDark = savedTheme === 'dark';
+    setIsDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    if (newDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
+
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-
     version: 'weekly',
   });
 
@@ -148,7 +203,6 @@ export default function AnalyticsDashboard() {
     return () => clearInterval(interval);
   }, [period]);
 
-  // ✅ Validate and filter markers data
   const markersData = useMemo(() => {
     if (!data?.visitorLocations) return [];
     return data.visitorLocations.filter(loc => {
@@ -158,6 +212,30 @@ export default function AnalyticsDashboard() {
     });
   }, [data?.visitorLocations]);
 
+  const handleCityClick = (city: string) => {
+    const cityData = data?.visitorLocations.find(loc => loc.city === city);
+    if (cityData) {
+      const lat = typeof cityData.lat === 'number' ? cityData.lat : parseFloat(String(cityData.lat));
+      const lng = typeof cityData.lng === 'number' ? cityData.lng : parseFloat(String(cityData.lng));
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+        setSelectedLocation({
+          position: { lat, lng },
+          city: cityData.city,
+          country: cityData.country,
+          visitors: cityData.weight,
+          lastVisit: cityData.lastVisit,
+          recentVisitors: cityData.visitors || [],
+        });
+        setMapCenter({ lat, lng });
+        setMapZoom(12);
+      }
+    }
+  };
+
+  // Chart text color based on theme
+  const chartTextColor = isDarkMode ? '#e5e7eb' : '#374151';
+  
   const pageViewsChart = {
     labels: data?.dailyStats?.map(d => {
       const date = new Date(d.date);
@@ -223,37 +301,54 @@ export default function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading analytics dashboard...</p>
+          <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading analytics dashboard...</p>
         </div>
       </div>
     );
   }
 
   const formatNumber = (num: number | string) => Number(num).toLocaleString();
-
-  // Sort locations by weight for top cities list
   const sortedLocations = data?.visitorLocations ? [...data.visitorLocations].sort((a, b) => b.weight - a.weight) : [];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} p-8 transition-colors duration-300`}>
       {/* Header */}
       <div className="mb-8">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Analytics Dashboard
+            </h1>
+            <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
               Real-time visitor insights and geographic distribution
             </p>
           </div>
           
           <div className="flex gap-3">
+            {/* ✅ Dark/Light Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className={`p-2 rounded-lg border transition-colors ${
+                isDarkMode 
+                  ? 'border-gray-600 text-yellow-500 hover:bg-gray-800' 
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value as any)}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className={`px-4 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white' 
+                  : 'bg-white border-gray-300 text-gray-900'
+              }`}
             >
               <option value="today">Today</option>
               <option value="week">Last 7 Days</option>
@@ -272,24 +367,40 @@ export default function AnalyticsDashboard() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Active Visitors</p>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <p className={`text-sm font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Active Visitors
+            </p>
             <p className="text-3xl font-bold text-blue-600 mt-2">{data?.overview?.activeVisitors || 0}</p>
-            <p className="text-xs text-gray-400 mt-1">Last 5 minutes</p>
+            <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>Last 5 minutes</p>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Page Views</p>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <p className={`text-sm font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Page Views
+            </p>
             <p className="text-3xl font-bold text-green-600 mt-2">{formatNumber(data?.overview?.totalPageViews || 0)}</p>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Unique Visitors</p>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <p className={`text-sm font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Unique Visitors
+            </p>
             <p className="text-3xl font-bold text-purple-600 mt-2">{formatNumber(data?.overview?.uniqueVisitors || 0)}</p>
           </div>
           
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Pages/Visit</p>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <p className={`text-sm font-medium uppercase tracking-wider ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Pages/Visit
+            </p>
             <p className="text-3xl font-bold text-orange-600 mt-2">
               {data?.overview?.uniqueVisitors && data?.overview?.totalPageViews
                 ? (data.overview.totalPageViews / data.overview.uniqueVisitors).toFixed(2) 
@@ -301,93 +412,159 @@ export default function AnalyticsDashboard() {
 
       {/* Charts Section */}
       <div className="space-y-6 mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Daily Traffic Overview</h2>
+        <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+          isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Daily Traffic Overview
+          </h2>
           <div className="h-80">
             <Line 
               data={pageViewsChart} 
               options={{ 
                 responsive: true, 
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'top' as const } },
+                plugins: { 
+                  legend: { 
+                    position: 'top' as const,
+                    labels: { color: chartTextColor }
+                  },
+                },
+                scales: {
+                  x: { ticks: { color: chartTextColor } },
+                  y: { ticks: { color: chartTextColor } }
+                }
               }} 
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Devices</h2>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Devices
+            </h2>
             <div className="h-64">
               {data?.deviceBreakdown && Object.keys(data.deviceBreakdown).length > 0 ? (
                 <Pie data={deviceChart} options={{ responsive: true, maintainAspectRatio: false }} />
               ) : (
-                <div className="h-full flex items-center justify-center text-gray-400">No data</div>
+                <div className={`h-full flex items-center justify-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No data
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Countries</h2>
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Top Countries
+            </h2>
             <div className="h-64">
               {data?.countryBreakdown && Object.keys(data.countryBreakdown).length > 0 ? (
                 <Pie data={countryChart} options={{ responsive: true, maintainAspectRatio: false }} />
               ) : (
-                <div className="h-full flex items-center justify-center text-gray-400">No data</div>
+                <div className={`h-full flex items-center justify-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No data
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h2>
-            <div className="space-y-3">
-              {data?.pageBreakdown?.slice(0, 5).map((page, idx) => (
+          <div className={`rounded-xl shadow-sm border p-6 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+          }`}>
+            <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              Top Pages
+            </h2>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {data?.pageBreakdown?.slice(0, 10).map((page, idx) => (
                 <div key={idx} className="flex items-center justify-between">
-                  <Link href={page.pagePath} target="_blank" className="text-sm text-blue-600 hover:underline truncate max-w-[150px]">
+                  <Link href={page.pagePath} target="_blank" className={`text-sm hover:underline truncate max-w-[180px] ${
+                    isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                  }`}>
                     {page.pagePath}
                   </Link>
-                  <span className="text-sm font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                  <span className={`text-sm font-medium px-2 py-1 rounded ${
+                    isDarkMode ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-50 text-blue-700'
+                  }`}>
                     {formatNumber(page.views)}
                   </span>
                 </div>
               ))}
+              {(!data?.pageBreakdown || data.pageBreakdown.length === 0) && (
+                <div className={`text-center py-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  No page data available
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* Recent Visitors Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Visitors</h2>
+      <div className={`rounded-xl shadow-sm border overflow-hidden mb-8 transition-colors ${
+        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+      }`}>
+        <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+          <h2 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Recent Visitors
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className={isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date & Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Date & Time
+                </th>
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Page
+                </th>
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Device
+                </th>
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Location
+                </th>
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  City
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className={`divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
               {data?.recentViews?.map((view) => (
-                <tr key={view.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">{formatDate(view.viewedAt)}</td>
+                <tr key={view.id} className={`transition-colors ${isDarkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'}`}>
+                  <td className={`px-6 py-4 text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {formatDate(view.viewedAt)}
+                  </td>
                   <td className="px-6 py-4">
-                    <Link href={view.pagePath} target="_blank" className="text-sm text-blue-600 hover:underline">
+                    <Link href={view.pagePath} target="_blank" className={`text-sm hover:underline ${
+                      isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                    }`}>
                       {view.pagePath}
                     </Link>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700 capitalize">{view.deviceType}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{view.country || 'Unknown'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{view.city && view.city !== 'Unknown' ? view.city : '-'}</td>
+                  <td className={`px-6 py-4 text-sm capitalize ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {view.deviceType || 'Unknown'}
+                  </td>
+                  <td className={`px-6 py-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {view.country || 'Unknown'}
+                  </td>
+                  <td className={`px-6 py-4 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {view.city && view.city !== 'Unknown' ? view.city : '-'}
+                  </td>
                 </tr>
               ))}
               {(!data?.recentViews || data.recentViews.length === 0) && (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No visitor data available</td></tr>
+                <tr>
+                  <td colSpan={5} className={`px-6 py-12 text-center ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                    No visitor data available
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -395,12 +572,17 @@ export default function AnalyticsDashboard() {
       </div>
 
       {/* Google Maps Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+      <div className={`rounded-xl shadow-sm border overflow-hidden transition-colors ${
+        isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+      }`}>
+        <div className={`px-6 py-4 border-b ${isDarkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+          <h2 className={`text-lg font-semibold flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
             <span className="text-2xl">🌍</span>
             Visitor Geographic Distribution
           </h2>
+          <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Click on any city in the list to zoom to its location
+          </p>
         </div>
 
         <div className="p-6">
@@ -410,15 +592,12 @@ export default function AnalyticsDashboard() {
                 mapContainerStyle={mapContainerStyle}
                 center={mapCenter}
                 zoom={mapZoom}
-                options={mapOptions}
+                options={getMapOptions(isDarkMode)}
                 onClick={() => setSelectedLocation(null)}
               >
                 {markersData.map((loc, index) => {
-                  // ✅ Safely convert coordinates to numbers
                   const lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(String(loc.lat));
                   const lng = typeof loc.lng === 'number' ? loc.lng : parseFloat(String(loc.lng));
-                  
-                  // ✅ Skip if invalid coordinates
                   if (isNaN(lat) || isNaN(lng)) return null;
                   
                   return (
@@ -459,40 +638,59 @@ export default function AnalyticsDashboard() {
                       </div>
                       <p className="text-xs text-gray-500 mb-1">Last Visit</p>
                       <p className="text-sm text-gray-700 mb-3">{formatDate(selectedLocation.lastVisit)}</p>
-                      {selectedLocation.recentVisitors.length > 0 && (
-                        <>
-                          <p className="text-xs text-gray-500 mb-1">Recent Activity</p>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {selectedLocation.recentVisitors.slice(0, 3).map((v, i) => (
-                              <div key={i} className="text-xs border-b pb-1">
-                                <p className="text-gray-800 truncate">{v.page}</p>
-                                <p className="text-gray-500">{formatShortDate(v.time)}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
                     </div>
                   </InfoWindow>
                 )}
               </GoogleMap>
 
-              {/* Stats Overlay with City List */}
+              {/* Stats Overlay */}
               {markersData.length > 0 && (
-                <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-200 min-w-[200px]">
+                <div className={`absolute bottom-4 left-4 backdrop-blur-sm rounded-xl p-4 shadow-lg border min-w-[220px] max-h-[400px] overflow-y-auto ${
+                  isDarkMode 
+                    ? 'bg-gray-900/95 border-gray-700' 
+                    : 'bg-white/95 border-gray-200'
+                }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <p className="text-xs font-medium text-gray-500">LIVE LOCATIONS</p>
+                    <p className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      LIVE LOCATIONS
+                    </p>
                   </div>
-                  <p className="text-2xl font-bold text-blue-600">{markersData.length}</p>
-                  <p className="text-xs text-gray-400 mb-3">active cities worldwide</p>
-                  <div className="border-t border-gray-100 pt-2">
-                    <p className="text-xs font-semibold text-gray-600 mb-2">📍 Top Cities</p>
-                    <div className="space-y-1.5">
-                      {sortedLocations.slice(0, 5).map((loc, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-xs">
-                          <span className="text-gray-700 truncate max-w-[100px]">{loc.city || 'Unknown'}</span>
-                          <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{loc.weight}</span>
+                  <p className={`text-2xl font-bold ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                    {markersData.length}
+                  </p>
+                  <p className={`text-xs mb-3 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    active cities worldwide
+                  </p>
+                  <div className={`border-t pt-2 ${isDarkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+                    <p className={`text-xs font-semibold mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      📍 Top Cities (Click to view)
+                    </p>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {sortedLocations.slice(0, 15).map((loc, idx) => (
+                        <div 
+                          key={idx} 
+                          onClick={() => handleCityClick(loc.city)}
+                          className={`flex justify-between items-center text-xs cursor-pointer p-1.5 rounded transition-colors group ${
+                            isDarkMode 
+                              ? 'hover:bg-gray-800' 
+                              : 'hover:bg-blue-50'
+                          }`}
+                        >
+                          <span className={`truncate max-w-[130px] font-medium ${
+                            isDarkMode 
+                              ? 'text-gray-300 group-hover:text-blue-400' 
+                              : 'text-gray-700 group-hover:text-blue-600'
+                          }`}>
+                            {loc.city || 'Unknown'}
+                          </span>
+                          <span className={`font-semibold px-2 py-0.5 rounded-full ${
+                            isDarkMode 
+                              ? 'text-blue-400 bg-blue-900/50 group-hover:bg-blue-800/50' 
+                              : 'text-blue-600 bg-blue-50 group-hover:bg-blue-100'
+                          }`}>
+                            {loc.weight}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -501,10 +699,10 @@ export default function AnalyticsDashboard() {
               )}
             </div>
           ) : (
-            <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+            <div className={`h-96 rounded-lg flex items-center justify-center ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
               <div className="text-center">
                 <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-gray-600">Loading Google Maps...</p>
+                <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Loading Google Maps...</p>
                 {loadError && (
                   <p className="text-red-500 text-sm mt-2">Failed to load Google Maps. Please check API key.</p>
                 )}
@@ -513,10 +711,21 @@ export default function AnalyticsDashboard() {
           )}
 
           {markersData.length > 0 && (
-            <div className="mt-4 flex items-center justify-center gap-6 text-sm">
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-gray-600">&lt; 10 visits</span></div>
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500"></span><span className="text-gray-600">10-20 visits</span></div>
-              <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="text-gray-600">&gt; 20 visits</span></div>
+            <div className={`mt-4 flex items-center justify-center gap-6 text-sm ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                <span>&lt; 10 visits</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                <span>10-20 visits</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                <span>&gt; 20 visits</span>
+              </div>
             </div>
           )}
         </div>

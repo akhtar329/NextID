@@ -1,20 +1,21 @@
-// app/api/admin/admissions/create/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { admissions, admissionOfferings, programOfferings, seoMetadata } from '@/app/lib/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
     // Validation
-    if (!body.name || !body.slug || !body.offeringIds || !body.instituteId || !body.year || !body.status) {
+    const requiredFields = ['name', 'slug', 'offeringIds', 'instituteId', 'year', 'status'];
+    const missingFields = requiredFields.filter(field => !body[field]);
+    
+    if (missingFields.length > 0) {
       return NextResponse.json(
         { 
           error: 'Missing required fields', 
-          details: 'Name, slug, offeringIds (array), instituteId, year, and status are required' 
+          details: `${missingFields.join(', ')} are required` 
         },
         { status: 400 }
       );
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     
     if (offeringIds.length === 0) {
       return NextResponse.json(
-        { error: 'At least one offering is required' },
+        { error: 'At least one program offering is required' },
         { status: 400 }
       );
     }
@@ -44,15 +45,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify that all offeringIds exist
+    // ✅ FIXED: Type the parameter properly
     const validOfferings = await db
-      .select({ id: programOfferings.id })
+      .select({ 
+        id: programOfferings.id,
+        instituteId: programOfferings.instituteId 
+      })
       .from(programOfferings)
-      .where(eq(programOfferings.id, offeringIds));
+      .where(inArray(programOfferings.id, offeringIds));
 
     if (validOfferings.length !== offeringIds.length) {
+      const foundIds = validOfferings.map((o: { id: number }) => o.id);
+      const missingIds = offeringIds.filter((id: number) => !foundIds.includes(id));
       return NextResponse.json(
-        { error: 'Invalid offering IDs', details: 'One or more offering IDs do not exist' },
+        { 
+          error: 'Invalid offering IDs', 
+          details: `Offering IDs ${missingIds.join(', ')} do not exist` 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify all offerings belong to the selected institute
+    const invalidInstituteOfferings = validOfferings.filter(
+      (offering: { id: number; instituteId: number }) => offering.instituteId !== body.instituteId
+    );
+    
+    if (invalidInstituteOfferings.length > 0) {
+      const invalidIds = invalidInstituteOfferings.map((o: { id: number }) => o.id);
+      return NextResponse.json(
+        { 
+          error: 'Offering does not belong to institute', 
+          details: `Offerings ${invalidIds.join(', ')} do not belong to institute ${body.instituteId}` 
+        },
         { status: 400 }
       );
     }
@@ -74,32 +99,29 @@ export async function POST(request: NextRequest) {
           meritInfo: body.meritInfo || null,
           note: body.note || null,
           officialLink: body.officialLink || null,
-          featuredImage: body.featuredImage || null,
-          galleryImages: body.galleryImages && body.galleryImages.length > 0 ? body.galleryImages : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
         .returning();
 
       // 2. Insert into junction table for each offering
-      const junctionRecords = await Promise.all(
-        offeringIds.map(async (offeringId: number) => {
-          const [record] = await tx
-            .insert(admissionOfferings)
-            .values({
-              admissionId: newAdmission.id,
-              offeringId: Number(offeringId),
-              status: true,
-              createdAt: new Date(),
-            })
-            .returning();
-          return record;
-        })
-      );
+      const junctionRecords = [];
+      for (const offeringId of offeringIds) {
+        const [record] = await tx
+          .insert(admissionOfferings)
+          .values({
+            admissionId: newAdmission.id,
+            offeringId: Number(offeringId),
+            status: true,
+            createdAt: new Date(),
+          })
+          .returning();
+        junctionRecords.push(record);
+      }
 
       // 3. Insert SEO metadata
       let seoRecord = null;
-      const hasSeoData = body.metaTitle || body.metaDescription || body.canonicalUrl;
+      const hasSeoData = body.metaTitle || body.metaDescription || body.canonicalUrl || body.ogTitle || body.ogDescription;
       
       if (hasSeoData) {
         const [newSeo] = await tx
@@ -114,7 +136,7 @@ export async function POST(request: NextRequest) {
             robots: body.robots || 'index, follow',
             ogTitle: body.ogTitle || body.metaTitle || null,
             ogDescription: body.ogDescription || body.metaDescription || null,
-            ogImage: body.ogImage || body.featuredImage || null,
+            ogImage: body.ogImage || null,
             createdAt: new Date(),
             updatedAt: new Date(),
           })
@@ -127,10 +149,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      admission: result.newAdmission,
+      admission: {
+        id: result.newAdmission.id,
+        name: result.newAdmission.name,
+        slug: result.newAdmission.slug,
+        year: result.newAdmission.year,
+        status: result.newAdmission.status,
+      },
       offeringCount: result.junctionRecords.length,
       seo: result.seoRecord ? 'created' : 'skipped',
-      message: `Admission created successfully with ${result.junctionRecords.length} offering(s)`
+      message: `Admission created successfully with ${result.junctionRecords.length} program offering(s)`
     });
 
   } catch (error: any) {
@@ -151,16 +179,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { 
             error: 'Duplicate offering', 
-            details: 'This offering is already linked to this admission.' 
-          },
-          { status: 400 }
-        );
-      }
-      if (error.message?.includes('seo_metadata_entity_type_entity_id_unique')) {
-        return NextResponse.json(
-          { 
-            error: 'Duplicate SEO record', 
-            details: 'SEO metadata already exists for this admission.' 
+            details: 'This program offering is already linked to this admission.' 
           },
           { status: 400 }
         );
@@ -172,14 +191,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { 
           error: 'Invalid reference', 
-          details: 'One or more offering IDs or institute ID do not exist.' 
+          details: 'Institute ID or offering ID does not exist in the database.' 
         },
         { status: 400 }
       );
     }
 
+    // Handle other errors
     return NextResponse.json(
-      { error: 'Failed to create admission', details: error.message },
+      { 
+        error: 'Failed to create admission', 
+        details: error.message,
+        code: error.code 
+      },
       { status: 500 }
     );
   }

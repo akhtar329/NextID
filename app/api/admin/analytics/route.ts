@@ -61,10 +61,6 @@ export async function GET(request: NextRequest) {
     }
     
     const endDate = new Date();
-    
-    // Log for debugging
-    console.log(`📊 Analytics: period=${period}, from=${startDate.toISOString()} to=${endDate.toISOString()}`);
-    
     // 1. Overview stats
     const [totalPageViewsResult] = await db
       .select({ count: sql<number>`count(*)` })
@@ -187,7 +183,6 @@ export async function GET(request: NextRequest) {
         dailyStatsData = fallbackResult as unknown as DailyStatsType[];
       }
     } catch (err) {
-      console.log('Error fetching daily stats, using fallback:', err);
       // Final fallback: empty array
       dailyStatsData = [];
     }
@@ -217,9 +212,9 @@ export async function GET(request: NextRequest) {
         .limit(100);
       
       visitorLocations = result as VisitorLocationType[];
-      console.log(`📍 Found ${visitorLocations.length} visitor locations`);
+ 
     } catch (err) {
-      console.log('Error fetching visitor locations:', err);
+  
     }
     
     // Format device breakdown
@@ -256,8 +251,6 @@ export async function GET(request: NextRequest) {
       dailyStats: dailyStatsData,
       visitorLocations,
     };
-    
-    console.log(`📊 Analytics response: ${responseData.overview.totalPageViews} views, ${responseData.overview.uniqueVisitors} visitors`);
     
     return NextResponse.json({
       success: true,

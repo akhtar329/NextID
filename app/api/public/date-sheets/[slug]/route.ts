@@ -13,8 +13,6 @@ export async function GET(
     // ✅ Await params to get slug
     const { slug } = await params;
     
-    console.log("Fetching date sheet for slug:", slug);
-    
     const [dateSheet] = await db
       .select({
         id: dateSheets.id,

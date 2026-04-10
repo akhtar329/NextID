@@ -1,5 +1,3 @@
-// app/admin/admissions/page.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -67,9 +65,40 @@ export default function AdmissionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [yearFilter, setYearFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+
+  // Listen for theme changes from topbar
+  useEffect(() => {
+    // Check initial theme
+    const checkTheme = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setIsDarkMode(isDark);
+    };
+    
+    checkTheme();
+    
+    // Create observer to watch for class changes on html element
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          checkTheme();
+        }
+      });
+    });
+    
+    observer.observe(document.documentElement, { attributes: true });
+    
+    // Also listen for storage events (in case theme changes in another tab)
+    window.addEventListener('storage', checkTheme);
+    
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', checkTheme);
+    };
+  }, []);
 
   const fetchAdmissions = async () => {
     setLoading(true);
@@ -271,7 +300,7 @@ export default function AdmissionsPage() {
     ad.year.toString().includes(search)
   );
 
-  const years = [...new Set(admissions.map(ad => ad.year))].sort((a, b) => b - a);
+  const years = [...new Set(admissions.map(ad => ad.year).filter(Boolean))].sort((a, b) => b - a);
 
   const columns: {
     header: string;
@@ -284,7 +313,11 @@ export default function AdmissionsPage() {
       render: (value: string, row: FlatAdmission) => (
         <button
           onClick={() => router.push(`/admin/admissions/${row.id}`)}
-          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+          className={`font-medium text-left transition-colors ${
+            isDarkMode 
+              ? 'text-blue-400 hover:text-blue-300' 
+              : 'text-blue-600 hover:text-blue-800 hover:underline'
+          }`}
         >
           {value}
         </button>
@@ -295,11 +328,11 @@ export default function AdmissionsPage() {
       accessor: "programNames",
       render: (value: string, row: FlatAdmission) => (
         <div>
-          <div className="text-sm text-gray-700 max-w-xs truncate" title={value}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} max-w-xs truncate`} title={value}>
             {value}
           </div>
           {row.programCount > 1 && (
-            <div className="text-xs text-blue-600 mt-1">
+            <div className={`text-xs mt-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
               {row.programCount} programs
             </div>
           )}
@@ -312,7 +345,11 @@ export default function AdmissionsPage() {
       render: (value: string, row: FlatAdmission) => (
         <button
           onClick={() => router.push(`/admin/institutes/${row.instituteId}`)}
-          className="text-gray-700 hover:text-blue-600 hover:underline text-sm"
+          className={`text-sm transition-colors ${
+            isDarkMode 
+              ? 'text-gray-300 hover:text-blue-400' 
+              : 'text-gray-700 hover:text-blue-600 hover:underline'
+          }`}
         >
           {value}
         </button>
@@ -322,14 +359,16 @@ export default function AdmissionsPage() {
       header: "Session",
       accessor: "session",
       render: (value: string | null) => (
-        <span className="text-sm text-gray-600">{value || '—'}</span>
+        <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          {value || '—'}
+        </span>
       )
     },
     {
       header: "Closing Date",
       accessor: "expectedCloseDate",
       render: (value: string | null, row: FlatAdmission) => {
-        if (!value) return <span className="text-gray-400 text-sm">—</span>;
+        if (!value) return <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>—</span>;
         
         const date = new Date(value);
         const formattedDate = date.toLocaleDateString('en-PK', {
@@ -340,15 +379,21 @@ export default function AdmissionsPage() {
         
         return (
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{formattedDate}</span>
+            <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+              {formattedDate}
+            </span>
             {row.daysLeft && (
               <span className={`text-xs mt-0.5 ${
-                row.isExpired ? 'text-red-600' : 
-                row.daysLeft <= 7 ? 'text-red-600 font-semibold' : 
-                row.daysLeft <= 15 ? 'text-yellow-600' : 
-                row.daysLeft <= 30 ? 'text-green-600' :
-                'text-blue-600'
-              }`}>
+                row.isExpired 
+                  ? isDarkMode ? 'text-red-400' : 'text-red-600'
+                  : row.daysLeft <= 7 
+                    ? isDarkMode ? 'text-red-400' : 'text-red-600'
+                    : row.daysLeft <= 15 
+                      ? isDarkMode ? 'text-yellow-400' : 'text-yellow-600'
+                      : row.daysLeft <= 30 
+                        ? isDarkMode ? 'text-green-400' : 'text-green-600'
+                        : isDarkMode ? 'text-blue-400' : 'text-blue-600'
+              } font-semibold`}>
                 {row.isExpired 
                   ? `⚠️ Expired (${row.daysLeft} days ago)`
                   : `📅 ${row.daysLeft} days left`
@@ -364,9 +409,15 @@ export default function AdmissionsPage() {
       accessor: "status",
       render: (value: string, row: FlatAdmission) => {
         const colors = {
-          Expected: "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-300",
-          Open: "bg-green-100 text-green-700 ring-1 ring-green-300",
-          Closed: "bg-red-100 text-red-700 ring-1 ring-red-300"
+          Expected: isDarkMode 
+            ? "bg-yellow-900/30 text-yellow-300 ring-yellow-700"
+            : "bg-yellow-100 text-yellow-700 ring-yellow-300",
+          Open: isDarkMode
+            ? "bg-green-900/30 text-green-300 ring-green-700"
+            : "bg-green-100 text-green-700 ring-green-300",
+          Closed: isDarkMode
+            ? "bg-red-900/30 text-red-300 ring-red-700"
+            : "bg-red-100 text-red-700 ring-red-300"
         };
         
         const isExpiredOpen = value === 'Open' && row.isExpired;
@@ -376,7 +427,11 @@ export default function AdmissionsPage() {
         return (
           <div className="relative">
             {updatingStatus === row.id ? (
-              <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400 ring-1 ring-gray-200">
+              <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                isDarkMode 
+                  ? 'bg-gray-800 text-gray-400 ring-gray-700'
+                  : 'bg-gray-100 text-gray-400 ring-gray-200'
+              }`}>
                 <span className="flex items-center gap-1">
                   <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -403,19 +458,31 @@ export default function AdmissionsPage() {
                 </select>
                 
                 {isExpiredOpen && (
-                  <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded-full text-center animate-pulse">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full text-center animate-pulse ${
+                    isDarkMode 
+                      ? 'text-red-400 bg-red-950'
+                      : 'text-red-600 bg-red-50'
+                  }`}>
                     ⚠️ Needs Closure!
                   </span>
                 )}
                 
                 {needsToOpen && (
-                  <span className="text-[10px] text-orange-600 font-semibold bg-orange-50 px-2 py-0.5 rounded-full text-center animate-pulse">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full text-center animate-pulse ${
+                    isDarkMode
+                      ? 'text-orange-400 bg-orange-950'
+                      : 'text-orange-600 bg-orange-50'
+                  }`}>
                     🔓 Needs to Open (Should be {row.autoStatus})
                   </span>
                 )}
                 
                 {shouldBeStatus && !needsToOpen && !isExpiredOpen && (
-                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full text-center">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full text-center ${
+                    isDarkMode
+                      ? 'text-blue-400 bg-blue-950'
+                      : 'text-blue-600 bg-blue-50'
+                  }`}>
                     💡 Suggest: {row.autoStatus}
                   </span>
                 )}
@@ -432,7 +499,11 @@ export default function AdmissionsPage() {
         <div className="flex gap-2">
           <button
             onClick={() => router.push(`/admin/admissions/${row.id}/edit`)}
-            className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 transition-colors ring-1 ring-blue-200"
+            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+              isDarkMode
+                ? 'text-blue-400 bg-blue-950 hover:bg-blue-900 ring-blue-800'
+                : 'text-blue-600 bg-blue-50 hover:bg-blue-100 ring-blue-200'
+            }`}
           >
             Edit
           </button>
@@ -440,10 +511,14 @@ export default function AdmissionsPage() {
             onClick={() => deleteAdmission(row.id, row.name)}
             disabled={deleteLoading === row.id}
             className={`
-              px-3 py-1.5 text-xs font-medium rounded-full transition-colors ring-1
+              px-3 py-1.5 text-xs font-medium rounded-full transition-colors
               ${deleteLoading === row.id
-                ? "bg-gray-100 text-gray-400 ring-gray-200 cursor-not-allowed"
-                : "bg-red-50 text-red-600 hover:bg-red-100 ring-red-200"
+                ? isDarkMode
+                  ? "bg-gray-800 text-gray-500 ring-gray-700 cursor-not-allowed"
+                  : "bg-gray-100 text-gray-400 ring-gray-200 cursor-not-allowed"
+                : isDarkMode
+                  ? "bg-red-950 text-red-400 hover:bg-red-900 ring-red-800"
+                  : "bg-red-50 text-red-600 hover:bg-red-100 ring-red-200"
               }
             `}
           >
@@ -459,21 +534,27 @@ export default function AdmissionsPage() {
 
   if (loading && admissions.length === 0) {
     return (
-      <div className="p-6">
+      <div className={`p-6 min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
         <div className="flex justify-center items-center h-64">
-          <div className="text-gray-500">Loading admissions...</div>
+          <div className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
+            Loading admissions...
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className={`p-6 min-h-screen transition-colors duration-200 ${
+      isDarkMode ? 'bg-gray-900' : 'bg-gray-50'
+    }`}>
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-semibold">Admissions</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Admissions
+          </h1>
+          <p className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
             Manage program admissions
           </p>
         </div>
@@ -482,39 +563,67 @@ export default function AdmissionsPage() {
         </PrimaryButton>
       </div>
 
-{/* Stats Card */}
-{!loading && admissions.length > 0 && (
-  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="text-sm text-gray-500">Total Admissions</div>
-      <div className="text-2xl font-semibold mt-1">{totalAdmissions}</div>
-    </div>
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="text-sm text-gray-500">Expected</div>
-      <div className="text-2xl font-semibold mt-1 text-yellow-600">
-        {admissions.filter(a => a.status === 'Expected').length}
-      </div>
-    </div>
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="text-sm text-gray-500">Open</div>
-      <div className="text-2xl font-semibold mt-1 text-green-600">
-        {admissions.filter(a => a.status === 'Open').length}
-      </div>
-    </div>
-    <div className="bg-white rounded-lg shadow-sm border p-4">
-      <div className="text-sm text-gray-500">Closed</div>
-      <div className="text-2xl font-semibold mt-1 text-red-600">
-        {admissions.filter(a => a.status === 'Closed').length}
-      </div>
-    </div>
-    <div className="bg-orange-50 rounded-lg shadow-sm border border-orange-200 p-4">
-      <div className="text-sm text-orange-700 font-medium">⚠️ Needs Attention</div>
-      <div className="text-2xl font-semibold mt-1 text-orange-600">
-        {needsAttentionCount}
-      </div>
-    </div>
-  </div>
-)}
+      {/* Stats Card */}
+      {!loading && admissions.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <div className={`rounded-lg shadow-sm border p-4 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+          }`}>
+            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Total Admissions
+            </div>
+            <div className={`text-2xl font-semibold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              {totalAdmissions}
+            </div>
+          </div>
+          <div className={`rounded-lg shadow-sm border p-4 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+          }`}>
+            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Expected
+            </div>
+            <div className="text-2xl font-semibold mt-1 text-yellow-600 dark:text-yellow-400">
+              {admissions.filter(a => a.status === 'Expected').length}
+            </div>
+          </div>
+          <div className={`rounded-lg shadow-sm border p-4 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+          }`}>
+            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Open
+            </div>
+            <div className="text-2xl font-semibold mt-1 text-green-600 dark:text-green-400">
+              {admissions.filter(a => a.status === 'Open').length}
+            </div>
+          </div>
+          <div className={`rounded-lg shadow-sm border p-4 transition-colors ${
+            isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+          }`}>
+            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Closed
+            </div>
+            <div className="text-2xl font-semibold mt-1 text-red-600 dark:text-red-400">
+              {admissions.filter(a => a.status === 'Closed').length}
+            </div>
+          </div>
+          <div className={`rounded-lg shadow-sm border p-4 transition-colors ${
+            isDarkMode 
+              ? 'bg-orange-950 border-orange-800' 
+              : 'bg-orange-50 border-orange-200'
+          }`}>
+            <div className={`text-sm font-medium ${
+              isDarkMode ? 'text-orange-300' : 'text-orange-700'
+            }`}>
+              ⚠️ Needs Attention
+            </div>
+            <div className={`text-2xl font-semibold mt-1 ${
+              isDarkMode ? 'text-orange-400' : 'text-orange-600'
+            }`}>
+              {needsAttentionCount}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -529,7 +638,11 @@ export default function AdmissionsPage() {
         <select
           value={yearFilter}
           onChange={(e) => setYearFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={`px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-400'
+              : 'bg-white border-gray-300 text-gray-900'
+          }`}
         >
           <option value="">All Years</option>
           {years.map(year => (
@@ -540,7 +653,11 @@ export default function AdmissionsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={`px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-400'
+              : 'bg-white border-gray-300 text-gray-900'
+          }`}
         >
           <option value="">All Status</option>
           <option value="Expected">Expected</option>
@@ -550,16 +667,22 @@ export default function AdmissionsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className={`mb-4 border px-4 py-3 rounded ${
+          isDarkMode 
+            ? 'bg-red-950 border-red-800 text-red-400'
+            : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
           {error}
         </div>
       )}
 
       {/* Table */}
       {filteredData.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
+        <div className={`rounded-lg shadow p-12 text-center transition-colors ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white'
+        }`}>
           <div className="text-4xl mb-2">📋</div>
-          <div className="text-gray-500">
+          <div className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
             {search || yearFilter || statusFilter 
               ? "No admissions match your filters" 
               : "No admissions found. Create your first admission!"}
@@ -567,16 +690,24 @@ export default function AdmissionsPage() {
           {!search && !yearFilter && !statusFilter && (
             <button
               onClick={() => router.push("/admin/admissions/create")}
-              className="mt-4 text-blue-600 hover:text-blue-800 text-sm"
+              className={`mt-4 text-sm ${
+                isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'
+              }`}
             >
               + Add your first admission
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className={`rounded-lg shadow overflow-hidden transition-colors ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white'
+        }`}>
           <Table columns={columns} data={filteredData} />
-          <div className="p-4 border-t text-sm text-gray-500">
+          <div className={`p-4 border-t text-sm ${
+            isDarkMode 
+              ? 'border-gray-700 text-gray-400' 
+              : 'border-gray-200 text-gray-500'
+          }`}>
             Showing {filteredData.length} of {flattenedData.length} admissions
           </div>
         </div>

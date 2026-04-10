@@ -1,4 +1,4 @@
-// app/admin/news/[id]/edit/page.tsx (Fixed Version)
+// app/admin/news/[id]/edit/page.tsx (Updated - Dark Mode button removed, SEO auto-sync with limits)
 
 "use client";
 
@@ -6,7 +6,6 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
 import Input from "@/app/component/ui/Input";
 import Select from "@/app/component/ui/select";
 import RichTextEditor from "@/app/component/ui/RichTextEditor";
@@ -29,11 +28,47 @@ type NewsItem = {
   status: boolean;
   publishedAt: string | null;
   expiresAt: string | null;
-  views: number;
+  viewCount: number;
   createdAt: string;
+  seo?: {
+    metaTitle: string | null;
+    metaDescription: string | null;
+    metaKeywords: string | null;
+    canonicalUrl: string | null;
+    ogTitle: string | null;
+    ogDescription: string | null;
+    ogImage: string | null;
+    twitterCard: string;
+    twitterTitle: string | null;
+    twitterDescription: string | null;
+    twitterImage: string | null;
+  };
 };
 
 type Option = { value: number; label: string };
+
+// ✅ SEO Metadata Interface
+interface SeoMetadata {
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  canonicalUrl: string;
+  ogTitle: string;
+  ogDescription: string;
+  ogImage: string;
+  twitterCard: string;
+  twitterTitle: string;
+  twitterDescription: string;
+  twitterImage: string;
+}
+
+// ✅ Google standards ke mutabiq character limits
+const META_TITLE_MAX = 60;
+const META_DESC_MAX = 160;
+const OG_TITLE_MAX = 60;
+const OG_DESC_MAX = 200;
+const TWITTER_TITLE_MAX = 70;
+const TWITTER_DESC_MAX = 200;
 
 export default function EditNewsPage() {
   const router = useRouter();
@@ -58,9 +93,34 @@ export default function EditNewsPage() {
   const [isFeatured, setIsFeatured] = useState(false);
   const [isBreaking, setIsBreaking] = useState(false);
   const [status, setStatus] = useState(true);
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [views, setViews] = useState(0);
+  const [viewCount, setViewCount] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
+  const [showSeoPanel, setShowSeoPanel] = useState(false);
+
+  // ✅ SEO Metadata States
+  const [seo, setSeo] = useState<SeoMetadata>({
+    metaTitle: "",
+    metaDescription: "",
+    metaKeywords: "",
+    canonicalUrl: "",
+    ogTitle: "",
+    ogDescription: "",
+    ogImage: "",
+    twitterCard: "summary_large_image",
+    twitterTitle: "",
+    twitterDescription: "",
+    twitterImage: "",
+  });
+
+  // ✅ Track if SEO fields were manually edited
+  const [seoManuallyEdited, setSeoManuallyEdited] = useState({
+    metaTitle: false,
+    metaDescription: false,
+    ogTitle: false,
+    ogDescription: false,
+    twitterTitle: false,
+    twitterDescription: false,
+  });
 
   // Data lists
   const [programs, setPrograms] = useState<Option[]>([]);
@@ -134,7 +194,34 @@ export default function EditNewsPage() {
         setIsFeatured(news.isFeatured);
         setIsBreaking(news.isBreaking);
         setStatus(news.status);
-        setViews(news.views || 0);
+        setViewCount(news.viewCount || 0);
+        
+        // ✅ Load SEO metadata
+        if (news.seo) {
+          setSeo({
+            metaTitle: news.seo.metaTitle || "",
+            metaDescription: news.seo.metaDescription || "",
+            metaKeywords: news.seo.metaKeywords || "",
+            canonicalUrl: news.seo.canonicalUrl || "",
+            ogTitle: news.seo.ogTitle || "",
+            ogDescription: news.seo.ogDescription || "",
+            ogImage: news.seo.ogImage || "",
+            twitterCard: news.seo.twitterCard || "summary_large_image",
+            twitterTitle: news.seo.twitterTitle || "",
+            twitterDescription: news.seo.twitterDescription || "",
+            twitterImage: news.seo.twitterImage || "",
+          });
+          
+          // Mark as manually edited if values exist
+          setSeoManuallyEdited({
+            metaTitle: !!news.seo.metaTitle,
+            metaDescription: !!news.seo.metaDescription,
+            ogTitle: !!news.seo.ogTitle,
+            ogDescription: !!news.seo.ogDescription,
+            twitterTitle: !!news.seo.twitterTitle,
+            twitterDescription: !!news.seo.twitterDescription,
+          });
+        }
       } catch (err) {
         console.error(err);
         setError(err instanceof Error ? err.message : "Failed to fetch news");
@@ -146,26 +233,131 @@ export default function EditNewsPage() {
     fetchNews();
   }, [newsId]);
 
-  // Auto-generate slug
+  // ✅ Auto-generate SEO title from news title (if not manually edited)
   useEffect(() => {
-    if (!slugEdited && title) {
-      const generated = title
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "");
-      setSlug(generated);
+    if (title && !seoManuallyEdited.metaTitle) {
+      const truncatedTitle = title.length > META_TITLE_MAX 
+        ? title.substring(0, META_TITLE_MAX - 3) + "..." 
+        : title;
+      setSeo(prev => ({ ...prev, metaTitle: truncatedTitle }));
     }
-  }, [title, slugEdited]);
+    if (title && !seoManuallyEdited.ogTitle) {
+      const truncatedTitle = title.length > OG_TITLE_MAX 
+        ? title.substring(0, OG_TITLE_MAX - 3) + "..." 
+        : title;
+      setSeo(prev => ({ ...prev, ogTitle: truncatedTitle }));
+    }
+    if (title && !seoManuallyEdited.twitterTitle) {
+      const truncatedTitle = title.length > TWITTER_TITLE_MAX 
+        ? title.substring(0, TWITTER_TITLE_MAX - 3) + "..." 
+        : title;
+      setSeo(prev => ({ ...prev, twitterTitle: truncatedTitle }));
+    }
+  }, [title, seoManuallyEdited]);
 
-  const handleSlugChange = (val: string) => {
-    setSlug(val);
-    setSlugEdited(true);
-  };
+  // ✅ Auto-generate meta description from excerpt (if not manually edited)
+  useEffect(() => {
+    const sourceText = excerpt || content.replace(/<[^>]*>/g, '').substring(0, 200);
+    if (sourceText && !seoManuallyEdited.metaDescription) {
+      const truncatedDesc = sourceText.length > META_DESC_MAX 
+        ? sourceText.substring(0, META_DESC_MAX - 3) + "..." 
+        : sourceText;
+      setSeo(prev => ({ ...prev, metaDescription: truncatedDesc }));
+    }
+    if (sourceText && !seoManuallyEdited.ogDescription) {
+      const truncatedDesc = sourceText.length > OG_DESC_MAX 
+        ? sourceText.substring(0, OG_DESC_MAX - 3) + "..." 
+        : sourceText;
+      setSeo(prev => ({ ...prev, ogDescription: truncatedDesc }));
+    }
+    if (sourceText && !seoManuallyEdited.twitterDescription) {
+      const truncatedDesc = sourceText.length > TWITTER_DESC_MAX 
+        ? sourceText.substring(0, TWITTER_DESC_MAX - 3) + "..." 
+        : sourceText;
+      setSeo(prev => ({ ...prev, twitterDescription: truncatedDesc }));
+    }
+  }, [excerpt, content, seoManuallyEdited]);
 
+  // ✅ Auto-generate canonical URL from slug
+  useEffect(() => {
+    if (slug && !seo.canonicalUrl) {
+      setSeo(prev => ({ ...prev, canonicalUrl: `https://www.nextid.pk/news/${slug}` }));
+    }
+  }, [slug]);
+
+  // ✅ Auto-set og:image from featured image
+  useEffect(() => {
+    if (imageUrl && !seo.ogImage) {
+      setSeo(prev => ({ ...prev, ogImage: imageUrl }));
+    }
+    if (imageUrl && !seo.twitterImage) {
+      setSeo(prev => ({ ...prev, twitterImage: imageUrl }));
+    }
+  }, [imageUrl]);
+
+  // ✅ Handle image URL change (block base64)
   const handleImageUrlChange = (url: string) => {
+    if (url.startsWith('data:image')) {
+      toast.error("Base64 images are not supported. Please use a valid image URL.");
+      return;
+    }
     setImageUrl(url);
     setImagePreview(url);
+  };
+
+  // ✅ Handle SEO field changes with limits
+  const handleMetaTitleChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, metaTitle: true }));
+    if (val.length <= META_TITLE_MAX) {
+      setSeo(prev => ({ ...prev, metaTitle: val }));
+    } else {
+      toast.warning(`Meta title cannot exceed ${META_TITLE_MAX} characters`);
+    }
+  };
+
+  const handleMetaDescriptionChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, metaDescription: true }));
+    if (val.length <= META_DESC_MAX) {
+      setSeo(prev => ({ ...prev, metaDescription: val }));
+    } else {
+      toast.warning(`Meta description cannot exceed ${META_DESC_MAX} characters`);
+    }
+  };
+
+  const handleOgTitleChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, ogTitle: true }));
+    if (val.length <= OG_TITLE_MAX) {
+      setSeo(prev => ({ ...prev, ogTitle: val }));
+    } else {
+      toast.warning(`OG title cannot exceed ${OG_TITLE_MAX} characters`);
+    }
+  };
+
+  const handleOgDescriptionChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, ogDescription: true }));
+    if (val.length <= OG_DESC_MAX) {
+      setSeo(prev => ({ ...prev, ogDescription: val }));
+    } else {
+      toast.warning(`OG description cannot exceed ${OG_DESC_MAX} characters`);
+    }
+  };
+
+  const handleTwitterTitleChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, twitterTitle: true }));
+    if (val.length <= TWITTER_TITLE_MAX) {
+      setSeo(prev => ({ ...prev, twitterTitle: val }));
+    } else {
+      toast.warning(`Twitter title cannot exceed ${TWITTER_TITLE_MAX} characters`);
+    }
+  };
+
+  const handleTwitterDescriptionChange = (val: string) => {
+    setSeoManuallyEdited(prev => ({ ...prev, twitterDescription: true }));
+    if (val.length <= TWITTER_DESC_MAX) {
+      setSeo(prev => ({ ...prev, twitterDescription: val }));
+    } else {
+      toast.warning(`Twitter description cannot exceed ${TWITTER_DESC_MAX} characters`);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -179,6 +371,13 @@ export default function EditNewsPage() {
       return;
     }
 
+    // ✅ Check for base64 image
+    if (imageUrl && imageUrl.startsWith('data:image')) {
+      setError("Base64 images are not supported. Please use a valid image URL.");
+      setLoading(false);
+      return;
+    }
+
     const toastId = `update-news-${newsId}`;
     toast.loading("Updating news...", { id: toastId });
 
@@ -188,7 +387,6 @@ export default function EditNewsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
-          slug,
           content,
           excerpt,
           imageUrl,
@@ -203,6 +401,19 @@ export default function EditNewsPage() {
           isFeatured,
           isBreaking,
           status,
+          seo: {
+            metaTitle: seo.metaTitle || null,
+            metaDescription: seo.metaDescription || null,
+            metaKeywords: seo.metaKeywords || null,
+            canonicalUrl: seo.canonicalUrl || null,
+            ogTitle: seo.ogTitle || null,
+            ogDescription: seo.ogDescription || null,
+            ogImage: seo.ogImage || null,
+            twitterCard: seo.twitterCard,
+            twitterTitle: seo.twitterTitle || null,
+            twitterDescription: seo.twitterDescription || null,
+            twitterImage: seo.twitterImage || null,
+          },
         }),
       });
       const data = await res.json();
@@ -231,7 +442,7 @@ export default function EditNewsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
+      {/* Header - Dark mode button removed (now in topbar) */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center text-sm text-gray-500 mb-2">
@@ -251,12 +462,25 @@ export default function EditNewsPage() {
             )}
           </h1>
         </div>
-        <Link
-          href="/admin/news"
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          ← Back to News
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowSeoPanel(!showSeoPanel)}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            SEO Settings
+          </button>
+          
+          <Link
+            href="/admin/news"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            ← Back to News
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -265,12 +489,11 @@ export default function EditNewsPage() {
         </div>
       )}
 
-      {/* 👇 FORM TAG ADDED - WordPress-like Layout */}
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content Area - Left 2/3 */}
+          {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Title & Slug Section */}
+            {/* Title & Slug Section - Slug READ-ONLY */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="space-y-4">
                 <div>
@@ -287,28 +510,19 @@ export default function EditNewsPage() {
                   />
                 </div>
                 
+                {/* Slug - READ ONLY */}
                 <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
                   <span className="text-gray-500 text-sm">Permalink:</span>
                   <span className="text-blue-600 text-sm">https://www.nextid.pk/news/</span>
-                  <input
-                    type="text"
-                    value={slug}
-                    onChange={(e) => handleSlugChange(e.target.value)}
-                    className="flex-1 px-2 py-1 bg-white border rounded text-sm font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setSlugEdited(false)}
-                    className="text-xs text-gray-500 hover:text-blue-600"
-                    title="Reset to auto-generated slug"
-                  >
-                    ↻
-                  </button>
+                  <span className="flex-1 px-2 py-1 bg-white border rounded text-sm font-mono text-gray-600">
+                    {slug}
+                  </span>
+                  <span className="text-xs text-gray-400">(Slug cannot be changed)</span>
                 </div>
               </div>
             </div>
 
-            {/* Content Editor - WordPress Style Tabs */}
+            {/* Content Editor */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="flex border-b">
                 <button
@@ -337,17 +551,12 @@ export default function EditNewsPage() {
 
               <div className="p-6">
                 {editorTab === "write" ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Content *
-                    </label>
-                    <RichTextEditor
-                      value={content}
-                      onChange={setContent}
-                      placeholder="Write your news content here..."
-                      minHeight={400}
-                    />
-                  </div>
+                  <RichTextEditor
+                    value={content}
+                    onChange={setContent}
+                    placeholder="Write your news content here..."
+                    minHeight={400}
+                  />
                 ) : (
                   <div className="prose max-w-none">
                     <h2 className="text-2xl font-bold mb-4">{title}</h2>
@@ -366,7 +575,7 @@ export default function EditNewsPage() {
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Excerpt
-                <span className="text-xs text-gray-500 ml-2">(optional summary)</span>
+                <span className="text-xs text-gray-500 ml-2">(used for meta description if not manually set)</span>
               </label>
               <textarea
                 value={excerpt}
@@ -375,10 +584,177 @@ export default function EditNewsPage() {
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <p className="text-xs text-gray-400 mt-1">{excerpt.length}/200 characters recommended</p>
             </div>
+
+            {/* SEO Panel (Collapsible) */}
+            {showSeoPanel && (
+              <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b">
+                  <h3 className="font-medium">SEO Metadata</h3>
+                  <p className="text-xs text-gray-500 mt-1">Auto-syncs with title & excerpt. Edit manually to override.</p>
+                </div>
+                <div className="p-4 space-y-4">
+                  {/* Meta Title */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Meta Title
+                      <span className="text-xs text-gray-500 ml-2">(50-60 characters recommended)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={seo.metaTitle}
+                      onChange={(e) => handleMetaTitleChange(e.target.value)}
+                      placeholder="SEO Title (auto-syncs with news title)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-xs text-gray-400">
+                        {seo.metaTitle.length}/{META_TITLE_MAX} characters
+                      </p>
+                      {seo.metaTitle.length > META_TITLE_MAX && (
+                        <p className="text-xs text-red-500">Exceeds Google's recommended limit!</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Meta Description
+                      <span className="text-xs text-gray-500 ml-2">(150-160 characters recommended)</span>
+                    </label>
+                    <textarea
+                      value={seo.metaDescription}
+                      onChange={(e) => handleMetaDescriptionChange(e.target.value)}
+                      placeholder="Brief description for search engines (auto-syncs with excerpt)"
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-xs text-gray-400">
+                        {seo.metaDescription.length}/{META_DESC_MAX} characters
+                      </p>
+                      {seo.metaDescription.length > META_DESC_MAX && (
+                        <p className="text-xs text-red-500">Exceeds Google's recommended limit!</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta Keywords */}
+                  <Input
+                    label="Meta Keywords"
+                    value={seo.metaKeywords}
+                    onChange={(val) => setSeo(prev => ({ ...prev, metaKeywords: val }))}
+                    placeholder="keyword1, keyword2, keyword3"
+                  />
+                  
+                  {/* Canonical URL */}
+                  <Input
+                    label="Canonical URL"
+                    value={seo.canonicalUrl}
+                    onChange={(val) => setSeo(prev => ({ ...prev, canonicalUrl: val }))}
+                    placeholder="https://www.nextid.pk/news/slug"
+                  />
+                  
+                  {/* Open Graph Section */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium text-sm text-gray-700 mb-3">Open Graph (Facebook/WhatsApp/LinkedIn)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          OG Title
+                          <span className="text-xs text-gray-500 ml-2">(max {OG_TITLE_MAX} chars)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={seo.ogTitle}
+                          onChange={(e) => handleOgTitleChange(e.target.value)}
+                          placeholder="Social media title"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">{seo.ogTitle.length}/{OG_TITLE_MAX}</p>
+                      </div>
+                      <Input
+                        label="OG Image URL"
+                        value={seo.ogImage}
+                        onChange={(val) => setSeo(prev => ({ ...prev, ogImage: val }))}
+                        placeholder="https://example.com/og-image.jpg"
+                      />
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        OG Description
+                        <span className="text-xs text-gray-500 ml-2">(max {OG_DESC_MAX} chars)</span>
+                      </label>
+                      <textarea
+                        value={seo.ogDescription}
+                        onChange={(e) => handleOgDescriptionChange(e.target.value)}
+                        placeholder="Description for social media sharing"
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">{seo.ogDescription.length}/{OG_DESC_MAX}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Twitter Card Section */}
+                  <div className="border-t pt-4">
+                    <h4 className="font-medium text-sm text-gray-700 mb-3">Twitter Card</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Select
+                        label="Twitter Card Type"
+                        value={seo.twitterCard}
+                        onChange={(val) => setSeo(prev => ({ ...prev, twitterCard: val as string }))}
+                        options={[
+                          { value: "summary", label: "Summary" },
+                          { value: "summary_large_image", label: "Summary with Large Image" },
+                          { value: "app", label: "App" },
+                          { value: "player", label: "Player" },
+                        ]}
+                      />
+                      <Input
+                        label="Twitter Image URL"
+                        value={seo.twitterImage}
+                        onChange={(val) => setSeo(prev => ({ ...prev, twitterImage: val }))}
+                        placeholder="https://example.com/twitter-image.jpg"
+                      />
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Twitter Title
+                        <span className="text-xs text-gray-500 ml-2">(max {TWITTER_TITLE_MAX} chars)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={seo.twitterTitle}
+                        onChange={(e) => handleTwitterTitleChange(e.target.value)}
+                        placeholder="Twitter card title"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">{seo.twitterTitle.length}/{TWITTER_TITLE_MAX}</p>
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Twitter Description
+                        <span className="text-xs text-gray-500 ml-2">(max {TWITTER_DESC_MAX} chars)</span>
+                      </label>
+                      <textarea
+                        value={seo.twitterDescription}
+                        onChange={(e) => handleTwitterDescriptionChange(e.target.value)}
+                        placeholder="Description for Twitter"
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">{seo.twitterDescription.length}/{TWITTER_DESC_MAX}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Sidebar - Right 1/3 - WordPress Style */}
+          {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             {/* Publish Box */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
@@ -391,19 +767,10 @@ export default function EditNewsPage() {
                   <select
                     value={status ? "active" : "inactive"}
                     onChange={(e) => setStatus(e.target.value === "active")}
-                    className="px-2 py-1 border rounded text-sm"
+                    className="px-2 py-1 border rounded text-sm bg-white"
                   >
                     <option value="active">Published</option>
                     <option value="inactive">Draft</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Visibility:</span>
-                  <select className="px-2 py-1 border rounded text-sm">
-                    <option>Public</option>
-                    <option>Private</option>
-                    <option>Password Protected</option>
                   </select>
                 </div>
 
@@ -427,30 +794,21 @@ export default function EditNewsPage() {
                   />
                 </div>
 
-                <div className="pt-2 space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview(!showPreview)}
-                    className="w-full px-3 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50"
-                  >
-                    👁️ Preview Changes
-                  </button>
-                  {/* 👇 FIXED: Regular button instead of PrimaryButton */}
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
-                  >
-                    {loading ? "Updating..." : "Update News"}
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
+                >
+                  {loading ? "Updating..." : "Update News"}
+                </button>
               </div>
             </div>
 
-            {/* Featured Image Box - WordPress Style */}
+            {/* Featured Image Box */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b">
                 <h3 className="font-medium">Featured Image</h3>
+                <p className="text-xs text-gray-500 mt-1">✅ Image URL only (No base64)</p>
               </div>
               <div className="p-4">
                 {imagePreview ? (
@@ -469,7 +827,6 @@ export default function EditNewsPage() {
                           setImagePreview(null);
                         }}
                         className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
-                        title="Remove image"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -483,11 +840,11 @@ export default function EditNewsPage() {
                     <svg className="w-12 h-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <p className="mt-2 text-sm text-gray-500">No image selected</p>
+                    <p className="mt-2 text-sm text-gray-500">Enter image URL below</p>
                   </div>
                 )}
                 <div className="mt-3">
-                  <label className="block text-xs text-gray-600 mb-1">Image URL</label>
+                  <label className="block text-xs text-gray-600 mb-1">Image URL (https://...)</label>
                   <input
                     type="url"
                     value={imageUrl}
@@ -495,11 +852,12 @@ export default function EditNewsPage() {
                     placeholder="https://example.com/image.jpg"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  <p className="text-xs text-gray-400 mt-1">⚠️ Base64 images not allowed. Use direct image URL.</p>
                 </div>
               </div>
             </div>
 
-            {/* Categories/Entities Box */}
+            {/* Related Entities */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b">
                 <h3 className="font-medium">Related Entities</h3>
@@ -532,36 +890,51 @@ export default function EditNewsPage() {
               </div>
             </div>
 
-            {/* Source & Author Box */}
+            {/* Source & Author */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b">
                 <h3 className="font-medium">Source & Author</h3>
               </div>
               <div className="p-4 space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Source
-                  </label>
+                <Input
+                  label="Source"
+                  value={source}
+                  onChange={setSource}
+                  placeholder="e.g. Dawn News"
+                />
+                <Input
+                  label="Author"
+                  value={author}
+                  onChange={setAuthor}
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+            </div>
+
+            {/* News Flags */}
+            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b">
+                <h3 className="font-medium">News Flags</h3>
+              </div>
+              <div className="p-4 space-y-2">
+                <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                   <input
-                    type="text"
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    placeholder="e.g. Dawn News"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    type="checkbox"
+                    checked={isFeatured}
+                    onChange={(e) => setIsFeatured(e.target.checked)}
+                    className="h-4 w-4 text-orange-600 rounded"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Author
-                  </label>
+                  <span className="text-sm text-gray-700">⭐ Featured News (Shows in Sidebar)</span>
+                </label>
+                <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                   <input
-                    type="text"
-                    value={author}
-                    onChange={(e) => setAuthor(e.target.value)}
-                    placeholder="e.g. John Doe"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    type="checkbox"
+                    checked={isBreaking}
+                    onChange={(e) => setIsBreaking(e.target.checked)}
+                    className="h-4 w-4 text-red-600 rounded"
                   />
-                </div>
+                  <span className="text-sm text-gray-700">🔴 Breaking News (Shows in Banner)</span>
+                </label>
               </div>
             </div>
 
@@ -573,11 +946,7 @@ export default function EditNewsPage() {
               <div className="p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Views:</span>
-                  <span className="font-medium">{views}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Created:</span>
-                  <span className="font-medium">{new Date().toLocaleDateString()}</span>
+                  <span className="font-medium">{viewCount}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Last Modified:</span>

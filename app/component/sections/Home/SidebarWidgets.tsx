@@ -114,9 +114,7 @@ export default function SidebarWidgets() {
         setLoadingPrograms(true);
         const res = await fetch('/api/public/programs?limit=5&withUniversityCount=true');
         const data = await res.json();
-        console.log('Programs API response:', data); // Debug log
         const programsData = extractData(data);
-        console.log('Extracted programs data:', programsData); // Debug log
         setPrograms(programsData.slice(0, 5));
         setHasPrograms(programsData.length > 0);
       } catch (error) {
