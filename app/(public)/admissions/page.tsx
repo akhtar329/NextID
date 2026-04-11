@@ -166,10 +166,10 @@ export async function generateMetadata(): Promise<Metadata> {
     entityId: 1,
     path: '/admissions',
 
-    title: 'All Admissions 2026 in Pakistan – Matric, Inter, BS, MS & Apply Online | NextID.pk',
-
+title: 'Admissions 2026 in Pakistan – Matric, Inter, BS, MBA, Medical, Engineering | Last Date & Apply Online | NextID.pk',
     description:
-      'Explore all 2026 admissions in Pakistan for Matric, Inter, BS, MS & professional programs. Check last dates, fees, entry test info & apply online now.',
+    
+  'Explore latest admissions 2026 in Pakistan for Matric, Inter, BS, MBA, Medical and Engineering programs. Check last dates, entry test details, fee structure and apply online.',
 
     image: '/images/og-admissions.jpg',
 
@@ -641,8 +641,12 @@ export default async function AdmissionsPage({
             </div>
             
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              {showClosed ? 'Closed Admissions' : 'Admissions 2026'} <span className="text-yellow-300">Pakistan</span>
-            </h1>
+  {filters.level
+    ? `${filters.level.toUpperCase()} Admissions 2026 in Pakistan`
+    : showClosed
+    ? 'Closed Admissions in Pakistan'
+    : 'Admissions 2026 in Pakistan – All Programs'}
+</h1>
             
             <p className="text-xl text-blue-100 mb-10 max-w-3xl mx-auto leading-relaxed">
               {showClosed 
@@ -1089,6 +1093,12 @@ export default async function AdmissionsPage({
                   scholarship opportunities.`}
               </p>
             </div>
+
+            <div className="mt-4 flex flex-wrap gap-3 text-sm">
+  <Link href="/admissions?level=bs" className="text-blue-600 hover:underline">BS Admissions</Link>
+  <Link href="/admissions?level=mba" className="text-blue-600 hover:underline">MBA Admissions</Link>
+  <Link href="/admissions?level=medical" className="text-blue-600 hover:underline">Medical Admissions</Link>
+</div>
 
             {/* City-wise Admission Stats */}
             <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4">
