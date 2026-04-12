@@ -1,8 +1,7 @@
-// app/api/admin/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
-import { desc, sql, and, between } from 'drizzle-orm';
+import { desc, sql, and, between, eq } from 'drizzle-orm';
 
 // Define types
 interface DailyStatsType {
@@ -34,13 +33,20 @@ interface RecentViewType {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const period = searchParams.get('period') || 'week';
+    let period = searchParams.get('period') || '24h';
+    const countryFilter = searchParams.get('country');
+    const cityFilter = searchParams.get('city');
     
     // Date range calculate
     const now = new Date();
     let startDate: Date;
+    let endDate = new Date();
     
     switch (period) {
+      case '24h':
+        startDate = new Date(now);
+        startDate.setHours(startDate.getHours() - 24);
+        break;
       case 'today':
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         break;
@@ -56,31 +62,54 @@ export async function GET(request: NextRequest) {
         break;
       default:
         startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setHours(startDate.getHours() - 24);
+        period = '24h';
     }
     
-    const endDate = new Date();
+    // ✅ FIX: Build where conditions with proper typing
+    let conditions: any = between(pageViews.viewedAt, startDate, endDate);
+    
+    if (countryFilter && countryFilter !== 'all') {
+      conditions = and(conditions, eq(pageViews.country, countryFilter));
+    }
+    
+    if (cityFilter && cityFilter !== 'all') {
+      conditions = and(conditions, eq(pageViews.city, cityFilter));
+    }
+    
     // 1. Overview stats
     const [totalPageViewsResult] = await db
       .select({ count: sql<number>`count(*)` })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate));
+      .where(conditions);
     
     const [uniqueVisitorsResult] = await db
       .select({ count: sql<number>`count(distinct ${pageViews.visitorId})` })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate));
+      .where(conditions);
     
-    const [activeVisitorsResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(visitorSessions)
-      .where(
-        and(
-          sql`${visitorSessions.lastActive} > ${new Date(Date.now() - 5 * 60 * 1000)}`,
-          sql`${visitorSessions.endedAt} IS NULL`
-        )
-      );
+    // Active visitors (always last 5 minutes, no period filter)
+    let activeVisitorsCount = 0;
+    try {
+      const activeVisitorsRaw = await db.execute(sql`
+        SELECT COUNT(DISTINCT visitor_id) as active_count
+        FROM page_views 
+        WHERE viewed_at > NOW() - INTERVAL '5 minutes'
+      `);
+      
+      activeVisitorsCount = Number(activeVisitorsRaw.rows[0]?.active_count || 0);
+      
+      if (activeVisitorsCount === 0) {
+        const sessionsRaw = await db.execute(sql`
+          SELECT COUNT(DISTINCT visitor_id) as active_count
+          FROM visitor_sessions 
+          WHERE last_active > NOW() - INTERVAL '5 minutes'
+        `);
+        activeVisitorsCount = Number(sessionsRaw.rows[0]?.active_count || 0);
+      }
+    } catch (err) {
+      console.error('Error calculating active visitors:', err);
+    }
     
     // 2. Page wise breakdown
     const pageBreakdown = await db
@@ -90,7 +119,7 @@ export async function GET(request: NextRequest) {
         uniqueVisitors: sql<number>`count(distinct ${pageViews.visitorId})`,
       })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate))
+      .where(conditions)
       .groupBy(pageViews.pagePath)
       .orderBy(sql`count(*) desc`)
       .limit(10);
@@ -102,7 +131,7 @@ export async function GET(request: NextRequest) {
         count: sql<number>`count(*)`,
       })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate))
+      .where(conditions)
       .groupBy(pageViews.deviceType);
     
     // 4. Country breakdown
@@ -112,24 +141,24 @@ export async function GET(request: NextRequest) {
         count: sql<number>`count(*)`,
       })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate))
+      .where(conditions)
       .groupBy(pageViews.country)
       .orderBy(sql`count(*) desc`)
       .limit(5);
     
     // 5. City breakdown
+    let cityConditions: any = conditions;
+    if (!cityFilter) {
+      cityConditions = and(conditions, sql`${pageViews.country} = 'Pakistan'`);
+    }
+    
     const cityBreakdown = await db
       .select({
         city: pageViews.city,
         count: sql<number>`count(*)`,
       })
       .from(pageViews)
-      .where(
-        and(
-          between(pageViews.viewedAt, startDate, endDate),
-          sql`${pageViews.country} = 'Pakistan'`
-        )
-      )
+      .where(cityConditions)
       .groupBy(pageViews.city)
       .orderBy(sql`count(*) desc`)
       .limit(10);
@@ -147,47 +176,30 @@ export async function GET(request: NextRequest) {
         viewedAt: pageViews.viewedAt,
       })
       .from(pageViews)
-      .where(between(pageViews.viewedAt, startDate, endDate))
+      .where(conditions)
       .orderBy(desc(pageViews.viewedAt))
       .limit(10);
     
-    // 7. Daily stats for chart - using page_views directly if dailyStats is empty
+    // 7. Daily stats for chart
     let dailyStatsData: DailyStatsType[] = [];
     try {
-      // First try to get from dailyStats table
-      const result = await db
+      const fallbackResult = await db
         .select({
-          date: dailyStats.date,
-          pageViews: dailyStats.totalPageViews,
-          visitors: dailyStats.totalVisitors,
+          date: sql<string>`DATE(${pageViews.viewedAt})`,
+          pageViews: sql<number>`COUNT(*)`,
+          visitors: sql<number>`COUNT(DISTINCT ${pageViews.visitorId})`,
         })
-        .from(dailyStats)
-        .where(sql`${dailyStats.date} >= ${startDate.toISOString().split('T')[0]}`)
-        .orderBy(dailyStats.date);
+        .from(pageViews)
+        .where(conditions)
+        .groupBy(sql`DATE(${pageViews.viewedAt})`)
+        .orderBy(sql`DATE(${pageViews.viewedAt})`);
       
-      if (result && result.length > 0) {
-        dailyStatsData = result as DailyStatsType[];
-      } else {
-        // Fallback: Calculate from page_views directly
-        const fallbackResult = await db
-          .select({
-            date: sql<string>`DATE(${pageViews.viewedAt})`,
-            pageViews: sql<number>`COUNT(*)`,
-            visitors: sql<number>`COUNT(DISTINCT ${pageViews.visitorId})`,
-          })
-          .from(pageViews)
-          .where(between(pageViews.viewedAt, startDate, endDate))
-          .groupBy(sql`DATE(${pageViews.viewedAt})`)
-          .orderBy(sql`DATE(${pageViews.viewedAt})`);
-        
-        dailyStatsData = fallbackResult as unknown as DailyStatsType[];
-      }
+      dailyStatsData = fallbackResult as unknown as DailyStatsType[];
     } catch (err) {
-      // Final fallback: empty array
       dailyStatsData = [];
     }
     
-    // 8. Visitor locations for Google Maps
+    // 8. Visitor locations for Google Maps (with period filter)
     let visitorLocations: VisitorLocationType[] = [];
     try {
       const result = await db
@@ -202,7 +214,7 @@ export async function GET(request: NextRequest) {
         .from(pageViews)
         .where(
           and(
-            between(pageViews.viewedAt, startDate, endDate),
+            conditions,
             sql`${pageViews.latitude} IS NOT NULL`,
             sql`${pageViews.longitude} IS NOT NULL`
           )
@@ -212,9 +224,8 @@ export async function GET(request: NextRequest) {
         .limit(100);
       
       visitorLocations = result as VisitorLocationType[];
- 
     } catch (err) {
-  
+      // Silent fail
     }
     
     // Format device breakdown
@@ -241,7 +252,7 @@ export async function GET(request: NextRequest) {
       overview: {
         totalPageViews: Number(totalPageViewsResult?.count) || 0,
         uniqueVisitors: Number(uniqueVisitorsResult?.count) || 0,
-        activeVisitors: Number(activeVisitorsResult?.count) || 0,
+        activeVisitors: activeVisitorsCount,
       },
       pageBreakdown,
       deviceBreakdown: deviceStats,
@@ -250,6 +261,11 @@ export async function GET(request: NextRequest) {
       recentViews: recentViews as RecentViewType[],
       dailyStats: dailyStatsData,
       visitorLocations,
+      filters: {
+        period,
+        country: countryFilter || null,
+        city: cityFilter || null,
+      },
     };
     
     return NextResponse.json({

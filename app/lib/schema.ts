@@ -784,6 +784,7 @@ export const redirects = pgTable("redirects", {
   lastHit: timestamp("last_hit"),
   status: boolean("status").default(true),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 /* =========================

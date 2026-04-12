@@ -1,4 +1,3 @@
-// app/admin/analytics/page.tsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -18,7 +17,7 @@ import {
 } from 'chart.js';
 import { Line, Pie } from 'react-chartjs-2';
 import { GoogleMap, Marker, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, X } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -76,6 +75,11 @@ interface AnalyticsData {
       page: string;
     }[];
   }[];
+  filters?: {
+    period: string;
+    country: string | null;
+    city: string | null;
+  };
 }
 
 const mapContainerStyle = {
@@ -135,7 +139,9 @@ const getMapOptions = (isDarkMode: boolean) => ({
 });
 
 export default function AnalyticsDashboard() {
-  const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week');
+  const [period, setPeriod] = useState<'24h' | 'week' | 'month'>('week');
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -149,6 +155,12 @@ export default function AnalyticsDashboard() {
     visitors: number;
     lastVisit: string;
     recentVisitors: any[];
+  } | null>(null);
+  const [cityDetailsModal, setCityDetailsModal] = useState<{
+    open: boolean;
+    city: string;
+    country: string;
+    visitors: any[];
   } | null>(null);
 
   // Load theme preference
@@ -184,7 +196,14 @@ export default function AnalyticsDashboard() {
   const fetchAnalytics = async () => {
     try {
       setRefreshing(true);
-      const res = await fetch(`/api/admin/analytics?period=${period}`);
+      let url = `/api/admin/analytics?period=${period}`;
+      if (countryFilter) {
+        url += `&country=${encodeURIComponent(countryFilter)}`;
+      }
+      if (cityFilter) {
+        url += `&city=${encodeURIComponent(cityFilter)}`;
+      }
+      const res = await fetch(url);
       const result = await res.json();
       if (result.success) {
         setData(result.data);
@@ -201,7 +220,35 @@ export default function AnalyticsDashboard() {
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, 60000);
     return () => clearInterval(interval);
-  }, [period]);
+  }, [period, countryFilter, cityFilter]);
+
+  const clearFilters = () => {
+    setCountryFilter(null);
+    setCityFilter(null);
+    setPeriod('week');
+  };
+
+  const handleCountryClick = (country: string) => {
+    setCountryFilter(country);
+    setCityFilter(null);
+  };
+
+  const handleCityClickForDetails = async (city: string, country: string) => {
+    try {
+      const res = await fetch(`/api/admin/analytics/city?city=${encodeURIComponent(city)}&period=${period}`);
+      const result = await res.json();
+      if (result.success) {
+        setCityDetailsModal({
+          open: true,
+          city: city,
+          country: country,
+          visitors: result.data,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching city details:', error);
+    }
+  };
 
   const markersData = useMemo(() => {
     if (!data?.visitorLocations) return [];
@@ -233,7 +280,6 @@ export default function AnalyticsDashboard() {
     }
   };
 
-  // Chart text color based on theme
   const chartTextColor = isDarkMode ? '#e5e7eb' : '#374151';
   
   const pageViewsChart = {
@@ -291,14 +337,6 @@ export default function AnalyticsDashboard() {
     });
   };
 
-  const formatShortDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-PK', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
   if (loading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -317,7 +355,7 @@ export default function AnalyticsDashboard() {
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} p-8 transition-colors duration-300`}>
       {/* Header */}
       <div className="mb-8">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-4">
           <div>
             <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               Analytics Dashboard
@@ -325,10 +363,35 @@ export default function AnalyticsDashboard() {
             <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
               Real-time visitor insights and geographic distribution
             </p>
+            {(countryFilter || cityFilter) && (
+              <div className="flex gap-2 mt-2">
+                {countryFilter && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs">
+                    Country: {countryFilter}
+                    <button onClick={() => setCountryFilter(null)} className="hover:text-blue-600">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+                {cityFilter && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-md text-xs">
+                    City: {cityFilter}
+                    <button onClick={() => setCityFilter(null)} className="hover:text-green-600">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+                <button
+                  onClick={clearFilters}
+                  className="px-2 py-1 bg-gray-500 text-white rounded-md text-xs hover:bg-gray-600"
+                >
+                  Clear All
+                </button>
+              </div>
+            )}
           </div>
           
           <div className="flex gap-3">
-            {/* ✅ Dark/Light Mode Toggle */}
             <button
               onClick={toggleDarkMode}
               className={`p-2 rounded-lg border transition-colors ${
@@ -343,14 +406,18 @@ export default function AnalyticsDashboard() {
             
             <select
               value={period}
-              onChange={(e) => setPeriod(e.target.value as any)}
+              onChange={(e) => {
+                setPeriod(e.target.value as any);
+                setCountryFilter(null);
+                setCityFilter(null);
+              }}
               className={`px-4 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                 isDarkMode 
                   ? 'bg-gray-800 border-gray-700 text-white' 
                   : 'bg-white border-gray-300 text-gray-900'
               }`}
             >
-              <option value="today">Today</option>
+              <option value="24h">Last 24 Hours</option>
               <option value="week">Last 7 Days</option>
               <option value="month">Last 30 Days</option>
             </select>
@@ -463,13 +530,23 @@ export default function AnalyticsDashboard() {
             <h2 className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               Top Countries
             </h2>
-            <div className="h-64">
-              {data?.countryBreakdown && Object.keys(data.countryBreakdown).length > 0 ? (
-                <Pie data={countryChart} options={{ responsive: true, maintainAspectRatio: false }} />
-              ) : (
-                <div className={`h-full flex items-center justify-center ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                  No data
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {data?.countryBreakdown && Object.entries(data.countryBreakdown).slice(0, 5).map(([country, count]) => (
+                <div 
+                  key={country}
+                  onClick={() => handleCountryClick(country)}
+                  className={`flex items-center justify-between cursor-pointer p-2 rounded transition-colors ${
+                    countryFilter === country
+                      ? 'bg-blue-100 dark:bg-blue-900/50'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <span className="text-sm font-medium">{country}</span>
+                  <span className="text-sm text-gray-500">{formatNumber(count)}</span>
                 </div>
+              ))}
+              {(!data?.countryBreakdown || Object.keys(data.countryBreakdown).length === 0) && (
+                <div className="text-center py-8 text-gray-400">No data</div>
               )}
             </div>
           </div>
@@ -638,6 +715,12 @@ export default function AnalyticsDashboard() {
                       </div>
                       <p className="text-xs text-gray-500 mb-1">Last Visit</p>
                       <p className="text-sm text-gray-700 mb-3">{formatDate(selectedLocation.lastVisit)}</p>
+                      <button
+                        onClick={() => handleCityClickForDetails(selectedLocation.city, selectedLocation.country)}
+                        className="w-full px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                      >
+                        View All Visitors from {selectedLocation.city}
+                      </button>
                     </div>
                   </InfoWindow>
                 )}
@@ -730,6 +813,63 @@ export default function AnalyticsDashboard() {
           )}
         </div>
       </div>
+
+      {/* City Details Modal */}
+      {cityDetailsModal?.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`max-w-2xl w-full rounded-xl shadow-xl ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white'
+          }`}>
+            <div className={`flex justify-between items-center p-6 border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+              <div>
+                <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {cityDetailsModal.city}
+                </h2>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {cityDetailsModal.country}
+                </p>
+              </div>
+              <button
+                onClick={() => setCityDetailsModal(null)}
+                className={`p-2 rounded-lg ${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {cityDetailsModal.visitors?.length > 0 ? (
+                <div className="space-y-3">
+                  {cityDetailsModal.visitors.map((visitor: any, idx: number) => (
+                    <div key={idx} className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <Link href={visitor.pagePath} target="_blank" className={`text-sm font-medium hover:underline ${
+                            isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                          }`}>
+                            {visitor.pagePath}
+                          </Link>
+                          <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {formatDate(visitor.viewedAt)}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          isDarkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'
+                        }`}>
+                          {visitor.deviceType || 'Unknown'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  No visitors found for this city in the selected period
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

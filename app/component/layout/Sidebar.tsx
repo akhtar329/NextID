@@ -1,4 +1,3 @@
-// app/component/layout/Sidebar.tsx
 "use client";
 
 import { ReactNode } from "react";
@@ -24,6 +23,7 @@ import {
   Megaphone,
   MessageSquare,
   HelpCircle,
+  Route,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -50,6 +50,7 @@ const navItems: NavItem[] = [
   { name: "Boards", href: "/admin/boards", icon: <Award size={20} /> },
   { name: "Cities", href: "/admin/cities", icon: <MapPin size={20} /> },
   { name: "Scholarships", href: "/admin/scholarships", icon: <Award size={20} /> },
+  { name: "Redirects", href: "/admin/redirects", icon: <Route size={20} /> },
   { name: "Users", href: "/admin/users", icon: <Users size={20} /> },
   { name: "Settings", href: "/admin/settings", icon: <Settings size={20} /> },
 ];

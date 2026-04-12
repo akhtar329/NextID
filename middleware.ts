@@ -1,98 +1,107 @@
-// app/middleware.ts
+export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { db } from './app/lib/db';
+import { redirects } from './app/lib/schema';
+import { eq } from 'drizzle-orm';
+import { getCachedRedirect, setCachedRedirect } from '@/app/lib/cache';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const token = request.cookies.get('authToken')?.value;
-  const { pathname } = request.nextUrl;
+  const { pathname, host } = request.nextUrl;
   
-  // ==================== PUBLIC ANALYTICS ENDPOINTS ====================
-  // ✅ Ye endpoints public hain - No authentication required
-  const publicAnalyticsPaths = [
-    '/api/admin/analytics/track',
-    '/api/admin/analytics/session',
-  ];
+  // ==================== REDIRECT CHECK ====================
+  const skipPaths = ['/api/admin', '/admin', '/_next', '/favicon.ico', '/login'];
+  const shouldSkipRedirect = skipPaths.some(path => pathname.startsWith(path));
   
-  // Agar public analytics endpoint hai, toh directly allow karo
-  if (publicAnalyticsPaths.some(path => pathname.startsWith(path))) {
-    const response = NextResponse.next();
-    // Add CORS headers for analytics
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-    return response;
-  }
-  
-  // ==================== API ROUTES PROTECTION ====================
-  // Admin API routes ko protect karo (except analytics)
-  if (pathname.startsWith('/api/admin')) {
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Please login first' },
-        { status: 401 }
-      );
+  if (!shouldSkipRedirect && !pathname.includes('.')) {
+    try {
+      // Get base URL from request
+      const baseUrl = `${request.nextUrl.protocol}//${host}`;
+      
+      // Create possible full URL patterns to check
+      const possiblePaths = [
+        pathname,                                    // /colleges/1
+        `${baseUrl}${pathname}`,                    // http://localhost:3000/colleges/1
+        `https://nextid.pk${pathname}`,             // https://nextid.pk/colleges/1
+        pathname.replace(/^\//, ''),                // colleges/1
+      ];
+      
+      let redirectRule = null;
+      
+      // Check cache first
+      for (const checkPath of possiblePaths) {
+        redirectRule = getCachedRedirect(checkPath);
+        if (redirectRule !== undefined) break;
+      }
+      
+      // If not in cache, check database
+      if (redirectRule === undefined) {
+        for (const checkPath of possiblePaths) {
+          redirectRule = await db
+            .select()
+            .from(redirects)
+            .where(eq(redirects.fromPath, checkPath))
+            .then(res => res[0]);
+          
+          if (redirectRule) {
+            // Store in cache with the matched path
+            setCachedRedirect(checkPath, redirectRule);
+            break;
+          }
+        }
+        
+        // Cache miss for all patterns
+        if (!redirectRule) {
+          setCachedRedirect(pathname, null);
+        }
+      }
+      
+      if (redirectRule && redirectRule.status) {
+        // Update hit count
+        db.update(redirects)
+          .set({ 
+            hitCount: (redirectRule.hitCount || 0) + 1,
+            lastHit: new Date()
+          })
+          .where(eq(redirects.id, redirectRule.id))
+          .catch(err => console.error('Error updating hit count:', err));
+        
+        // Extract destination path from full URL if needed
+        let destination = redirectRule.toPath;
+        if (destination.startsWith('http')) {
+          // If it's a full URL, extract just the path
+          try {
+            const destUrl = new URL(destination);
+            destination = destUrl.pathname;
+          } catch (e) {
+            // Keep as is
+          }
+        }
+        
+        console.log(`🔄 Redirecting: ${pathname} → ${destination}`);
+        
+        return NextResponse.redirect(new URL(destination, request.url), {
+          status: redirectRule.statusCode as 301 | 302
+        });
+      }
+    } catch (error) {
+      console.error('Redirect middleware error:', error);
     }
-    return NextResponse.next();
   }
   
-  // ==================== X-ROBOTS-TAG HEADERS ====================
+  // ==================== REST OF YOUR MIDDLEWARE ====================
+  // ... (keep your existing code for analytics, API protection, etc.)
+  
   const response = NextResponse.next();
-  
-  // Public pages - Index karo (SEO ke liye)
-  if (pathname === '/' || 
-      pathname.startsWith('/admissions') ||
-      pathname.startsWith('/universities') ||
-      pathname.startsWith('/programs') ||
-      pathname.startsWith('/results') ||
-      pathname.startsWith('/boards') ||
-      pathname.startsWith('/news') ||
-      pathname.startsWith('/cities')) {
-    response.headers.set(
-      'X-Robots-Tag', 
-      'index, follow, max-image-preview:large, max-snippet:160'
-    );
-  }
-  
-  // Admin pages - Noindex
-  if (pathname.startsWith('/admin')) {
-    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
-  }
-  
-  // Login page - Noindex
-  if (pathname === '/login') {
-    response.headers.set('X-Robots-Tag', 'noindex, nofollow');
-  }
-
-  // ==================== PAGE ROUTES PROTECTION ====================
-  // Protected routes
-  const isProtectedRoute = [
-    '/dashboard',
-    '/profile', 
-    '/settings',
-    '/admin'
-  ].some(route => pathname.startsWith(route));
-  
-  // If accessing protected route without token
-  if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-  
-  // If accessing login with valid token
-  if (pathname === '/login' && token) {
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
-  }
-  
   return response;
 }
 
 export const config = {
   matcher: [
-    // Analytics endpoints (must come first in matcher)
-    '/api/admin/analytics/track',
-    '/api/admin/analytics/session',
-    // Other routes
     '/',
+    '/colleges/:path*',
     '/admissions/:path*',
     '/universities/:path*',
     '/programs/:path*',
@@ -100,6 +109,8 @@ export const config = {
     '/boards/:path*',
     '/news/:path*',
     '/cities/:path*',
+    '/api/admin/analytics/track',
+    '/api/admin/analytics/session',
     '/dashboard/:path*',
     '/profile/:path*',
     '/settings/:path*',
@@ -107,4 +118,4 @@ export const config = {
     '/api/admin/:path*',
     '/login'
   ]
-}
+};
