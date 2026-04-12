@@ -1,4 +1,3 @@
-// app/component/analytics/VisitorTracker.tsx
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -7,6 +6,8 @@ import { usePathname } from 'next/navigation';
 export function VisitorTracker() {
   const pathname = usePathname();
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTrackedPageRef = useRef<string>('');
+  const lastTrackedTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (pathname?.startsWith('/admin')) return;
@@ -23,7 +24,23 @@ export function VisitorTracker() {
       if (!sessionId) {
         sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         sessionStorage.setItem('session_id', sessionId);
+        console.log('🆕 New session created:', sessionId);
+      } else {
+        console.log('♻️ Existing session:', sessionId);
       }
+
+      // ✅ Client-side duplicate check (prevents rapid refresh counts)
+      const now = Date.now();
+      const isSamePage = lastTrackedPageRef.current === pathname;
+      const isWithin30Seconds = (now - lastTrackedTimeRef.current) < 30000;
+      
+      if (isSamePage && isWithin30Seconds) {
+        console.log('⏭️ Skipping duplicate track (same page within 30 seconds):', pathname);
+        return;
+      }
+      
+      lastTrackedPageRef.current = pathname || '/';
+      lastTrackedTimeRef.current = now;
 
       // Device info
       const userAgent = navigator.userAgent;
@@ -44,33 +61,84 @@ export function VisitorTracker() {
       else if (userAgent.indexOf('Android') > -1) os = 'Android';
       else if (userAgent.indexOf('iOS') > -1 || userAgent.indexOf('iPhone') > -1) os = 'iOS';
 
-      // Get location
+      // ========== DOUBLE SYSTEM: GPS + IP FALLBACK ==========
       let country = null, city = null, latitude = null, longitude = null;
 
-      if ('geolocation' in navigator) {
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 5000
+      const locationFetched = sessionStorage.getItem('location_fetched');
+      if (!locationFetched) {
+        
+        // TRY 1: GPS LOCATION (Exact)
+        let gpsSuccess = false;
+        if ('geolocation' in navigator) {
+          try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 5000
+              });
             });
-          });
-          latitude = position.coords.latitude;
-          longitude = position.coords.longitude;
-          
-          // Get city name from coordinates
-          const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
-          if (geoRes.ok) {
-            const geoData = await geoRes.json();
-            city = geoData.city || geoData.locality;
-            country = geoData.countryName;
+            
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
+            gpsSuccess = true;
+            
+            // Get city name from coordinates
+            const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+            if (geoRes.ok) {
+              const geoData = await geoRes.json();
+              city = geoData.city || geoData.locality;
+              country = geoData.countryName;
+            }
+            console.log('📍 GPS location found:', city, country);
+          } catch (gpsError) {
+            console.log('❌ GPS failed or denied, trying IP fallback...');
           }
-        } catch (e) {
-
         }
+        
+        // TRY 2: IP FALLBACK (City level - No permission needed)
+        if (!gpsSuccess) {
+          try {
+            const ipRes = await fetch('https://ipapi.co/json/');
+            if (ipRes.ok) {
+              const ipData = await ipRes.json();
+              city = ipData.city;
+              country = ipData.country_name;
+              latitude = ipData.latitude;
+              longitude = ipData.longitude;
+              console.log('📍 IP fallback location:', city, country);
+            } else {
+              // Try alternative API
+              const altRes = await fetch('https://freeipapi.com/api/json/');
+              if (altRes.ok) {
+                const altData = await altRes.json();
+                city = altData.city;
+                country = altData.country;
+                latitude = altData.latitude;
+                longitude = altData.longitude;
+                console.log('📍 Alternative IP location:', city, country);
+              }
+            }
+          } catch (ipError) {
+            console.log('❌ IP fallback failed');
+          }
+        }
+        
+        // Store in sessionStorage to avoid repeated calls
+        sessionStorage.setItem('location_fetched', 'true');
+        if (city) sessionStorage.setItem('visitor_city', city);
+        if (country) sessionStorage.setItem('visitor_country', country);
+        if (latitude) sessionStorage.setItem('visitor_lat', String(latitude));
+        if (longitude) sessionStorage.setItem('visitor_lng', String(longitude));
+        
+      } else {
+        // Use stored location
+        city = sessionStorage.getItem('visitor_city');
+        country = sessionStorage.getItem('visitor_country');
+        latitude = sessionStorage.getItem('visitor_lat') ? parseFloat(sessionStorage.getItem('visitor_lat')!) : null;
+        longitude = sessionStorage.getItem('visitor_lng') ? parseFloat(sessionStorage.getItem('visitor_lng')!) : null;
       }
 
-      // ✅ Track page view (updates last_active)
+      // ✅ Track page view
       try {
         const response = await fetch('/api/admin/analytics/track', {
           method: 'POST',
@@ -91,7 +159,7 @@ export function VisitorTracker() {
           }),
         });
         const result = await response.json();
-       
+        console.log('📊 Track result:', result.isDuplicate ? 'Duplicate (not counted)' : 'New view counted');
       } catch (e) {
         console.error('Track error:', e);
       }
@@ -115,10 +183,11 @@ export function VisitorTracker() {
           });
           const result = await response.json();
           if (result.success) {
+            // Heartbeat successful
           }
         }
       } catch (e) {
-
+        // Silent fail
       }
     };
 
@@ -163,3 +232,6 @@ export function VisitorTracker() {
 
   return null;
 }
+
+// ✅ Required for TypeScript module
+export {};

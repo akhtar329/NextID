@@ -99,12 +99,12 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
   if (!hasData && !loading) return null;
 
   return (
-    <section className="bg-white">
+    <section className="bg-gradient-to-br from-slate-50 via-white to-blue-50/20">
       <h1 className="sr-only">
         Latest Admissions 2026 in Pakistan | Universities, Results & Date Sheets updates – NextID.pk
       </h1>
 
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* ============================================ */}
@@ -114,7 +114,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           <div className="lg:col-span-2">
             {breakingMain ? (
               <Link href={`/news/${breakingMain.slug}`} className="block group">
-                <article className="relative overflow-hidden rounded-xl h-[350px] md:h-[450px] shadow-md">
+                <article className="relative overflow-hidden rounded-2xl h-[350px] md:h-[450px] shadow-2xl hover:shadow-3xl transition-all duration-500">
                   
                   {/* Background Image */}
                   <div className="absolute inset-0">
@@ -130,62 +130,62 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                         />
                       </div>
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-red-600 via-red-700 to-red-800"></div>
+                      <div className="w-full h-full bg-gradient-to-br from-red-600 via-red-700 to-red-900"></div>
                     )}
                   </div>
 
-                  {/* ✅ RED GRADIENT SHADE - 25% from left side */}
-                  {/* Solid red on left edge, fading to transparent at 25% width */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-red-800/95 via-red-700/60 to-transparent"></div>
+                  {/* ✅ RED GRADIENT SHADE - Enhanced with better gradient */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-900/98 via-red-800/75 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
                   
-                  {/* Content Container - Limited to 25-30% width (within red shade) */}
-                  <div className="relative h-full flex flex-col justify-center z-10 w-[70%] sm:w-[60%] md:w-[50%] lg:w-[30%] px-5 md:px-6">
+                  {/* Content Container */}
+                  <div className="relative h-full flex flex-col justify-center z-10 w-[70%] sm:w-[60%] md:w-[50%] lg:w-[30%] px-6 md:px-8">
                     
-                    {/* Breaking Badge */}
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <div className="flex items-center gap-1.5 bg-red-600 px-3 py-1.5 rounded-full">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
-                        <span className="font-bold text-xs uppercase tracking-wider">Breaking</span>
+                    {/* Breaking Badge - Enhanced */}
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <div className="flex items-center gap-2 bg-red-600 px-4 py-2 rounded-full shadow-lg backdrop-blur-sm">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        <span className="font-bold text-xs uppercase tracking-wider text-white">Breaking</span>
                       </div>
-                      <span className="text-xs text-white/80 bg-black/30 px-2 py-1 rounded-full">
+                      <span className="text-xs text-white/90 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full font-medium">
                         {getTimeAgo(breakingMain.publishedAt)}
                       </span>
                     </div>
 
-                    {/* Title */}
-                    <h2 className="text-xl md:text-2xl lg:text-3xl font-bold mb-3 line-clamp-3 leading-tight text-white">
+                    {/* Title - Enhanced Typography */}
+                    <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold mb-4 line-clamp-3 leading-tight text-white drop-shadow-lg">
                       {breakingMain.title}
                     </h2>
 
-                    {/* Short Details from Content */}
+                    {/* Short Details - Enhanced */}
                     {(breakingMain.content || breakingMain.excerpt) && (
-                      <p className="text-xs md:text-sm text-white/90 line-clamp-2 max-w-lg mb-4">
+                      <p className="text-sm md:text-base text-white/95 line-clamp-2 max-w-lg mb-5 leading-relaxed drop-shadow-md">
                         {getContentPreview(breakingMain.content || breakingMain.excerpt, 90)}
                       </p>
                     )}
 
-                    {/* Views + Post Date */}
-                    <div className="flex items-center gap-4 text-white/70 text-xs">
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {/* Views + Post Date - Enhanced with Icons */}
+                    <div className="flex items-center gap-4 text-white/80 text-xs mb-6">
+                      <span className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
                         {formatViews(breakingMain.viewCount)}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <span className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                         {getTimeAgo(breakingMain.publishedAt)}
                       </span>
                     </div>
 
-                    {/* Read More Link */}
-                    <div className="mt-5">
-                      <span className="inline-flex items-center gap-1 text-white font-medium text-sm border-b border-white/50 pb-0.5 group-hover:gap-2 transition-all">
+                    {/* Read More Link - Enhanced */}
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-2 text-white font-semibold text-sm border-b-2 border-white/60 pb-1 group-hover:gap-3 group-hover:border-white transition-all">
                         Read full story
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                         </svg>
                       </span>
@@ -194,8 +194,8 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                 </article>
               </Link>
             ) : (
-              <div className="bg-gray-100 rounded-xl h-[300px] md:h-[450px] flex items-center justify-center">
-                <p className="text-gray-500">No breaking news available</p>
+              <div className="bg-gradient-to-br from-gray-100 to-gray-50 rounded-2xl h-[300px] md:h-[450px] flex items-center justify-center shadow-lg">
+                <p className="text-gray-400 font-medium">No breaking news available</p>
               </div>
             )}
           </div>
@@ -204,21 +204,23 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           {/* RIGHT COLUMN - FEATURED NEWS */}
           {/* ============================================ */}
           <aside className="lg:col-span-1">
-            <div className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-              <div className="border-b border-gray-100 px-4 py-3 bg-gray-50">
-                <h2 className="font-bold text-gray-800 text-base flex items-center gap-2">
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xl">
+              <div className="border-b border-gray-200 px-5 py-4 bg-gradient-to-r from-orange-500 to-red-500">
+                <h2 className="font-bold text-white text-base flex items-center gap-2">
+                  
                   Featured News
                 </h2>
               </div>
               
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-gray-100">
                 {loading ? (
                   [...Array(4)].map((_, i) => (
-                    <div key={i} className="p-3 animate-pulse flex gap-3">
-                      <div className="w-16 h-16 bg-gray-200 rounded-lg"></div>
+                    <div key={i} className="p-4 animate-pulse flex gap-3">
+                      <div className="w-20 h-20 bg-gray-200 rounded-xl"></div>
                       <div className="flex-1">
                         <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                        <div className="h-3 bg-gray-100 rounded w-full"></div>
+                        <div className="h-3 bg-gray-100 rounded w-full mb-2"></div>
+                        <div className="h-3 bg-gray-100 rounded w-2/3"></div>
                       </div>
                     </div>
                   ))
@@ -227,43 +229,44 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                     <Link 
                       key={news.id}
                       href={`/news/${news.slug}`}
-                      className="block p-3 hover:bg-gray-50 transition-colors group"
+                      className="block p-4 hover:bg-gradient-to-r hover:from-orange-50 hover:to-red-50 transition-all duration-300 group"
                     >
                       <div className="flex gap-3">
-                        <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
+                        <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-gray-100 shadow-md">
                           {news.imageUrl ? (
                             <Image
                               src={news.imageUrl}
                               alt={news.title}
-                              width={64}
-                              height={64}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              width={80}
+                              height={80}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                             />
                           ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center">
-                              <span className="text-xl">📰</span>
+                            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center">
+                              <span className="text-2xl">📰</span>
                             </div>
                           )}
                         </div>
                         
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 group-hover:text-orange-600 transition-colors mb-1">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-gray-900 text-sm line-clamp-2 group-hover:text-orange-600 transition-colors mb-1.5 leading-snug">
                             {news.title}
                           </h3>
                           {(news.content || news.excerpt) && (
-                            <p className="text-xs text-gray-500 line-clamp-2 mb-1">
+                            <p className="text-xs text-gray-600 line-clamp-2 mb-2 leading-relaxed">
                               {getContentPreview(news.content || news.excerpt, 70)}
                             </p>
                           )}
-                          <div className="flex items-center gap-2 text-gray-400 text-[10px]">
+                          <div className="flex items-center gap-3 text-gray-400 text-[10px]">
                             <span className="flex items-center gap-1">
-                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               {getTimeAgo(news.publishedAt)}
                             </span>
+                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                             <span className="flex items-center gap-1">
-                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3 h-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
@@ -275,7 +278,10 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                     </Link>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-gray-400 text-sm">
+                  <div className="p-10 text-center text-gray-400 text-sm">
+                    <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                    </svg>
                     <p>No featured news available</p>
                   </div>
                 )}
@@ -288,58 +294,62 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
         {/* OTHER BREAKING NEWS - 3 Cards */}
         {/* ============================================ */}
         {breakingOthers.length > 0 && (
-          <div className="mt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-1 h-5 bg-red-500 rounded-full"></div>
-              <h2 className="text-base md:text-lg font-bold text-gray-800">More Breaking News</h2>
+          <div className="mt-8">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-orange-600 text-white px-5 py-2.5 rounded-lg shadow-lg">
+                
+                <h2 className="text-base font-bold">Breaking News</h2>
+              </div>
+              <div className="flex-1 h-0.5 bg-gradient-to-r from-red-600/30 to-transparent rounded-full"></div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {breakingOthers.map((news) => (
                 <Link
                   key={news.id}
                   href={`/news/${news.slug}`}
-                  className="group block bg-white rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100"
+                  className="group block bg-white rounded-xl overflow-hidden hover:shadow-2xl transition-all duration-300 border border-gray-200 hover:border-red-300"
                 >
-                  <div className="flex gap-3 p-3">
-                    <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
+                  <div className="flex gap-4 p-4">
+                    <div className="flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden bg-gray-100 shadow-md">
                       {news.imageUrl ? (
                         <Image
                           src={news.imageUrl}
                           alt={news.title}
-                          width={80}
-                          height={80}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          sizes="80px"
+                          width={96}
+                          height={96}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          sizes="96px"
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-red-100 to-red-200 flex items-center justify-center">
-                          <span className="text-2xl">📰</span>
+                        <div className="w-full h-full bg-gradient-to-br from-red-400 to-orange-500 flex items-center justify-center">
+                          <span className="text-3xl">📰</span>
                         </div>
                       )}
                     </div>
                     
-                    <div className="flex-1">
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">NEW</span>
                       </div>
-                      <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 group-hover:text-red-600 transition-colors mb-1">
+                      <h3 className="font-bold text-gray-900 text-sm line-clamp-2 group-hover:text-red-600 transition-colors mb-2 leading-snug">
                         {news.title}
                       </h3>
                       {(news.content || news.excerpt) && (
-                        <p className="text-xs text-gray-500 line-clamp-2 mb-2">
+                        <p className="text-xs text-gray-600 line-clamp-2 mb-2 leading-relaxed">
                           {getContentPreview(news.content || news.excerpt, 60)}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 text-gray-400 text-[10px]">
+                      <div className="flex items-center gap-3 text-gray-400 text-[10px]">
                         <span className="flex items-center gap-1">
-                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           {getTimeAgo(news.publishedAt)}
                         </span>
+                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                         <span className="flex items-center gap-1">
-                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
