@@ -109,7 +109,7 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           
           {/* ============================================ */}
           {/* LEFT COLUMN - MAIN BREAKING NEWS BANNER */}
-          {/* WITH RED SHADE ON 25% LEFT SIDE */}
+          {/* WITH RED SHADE ON 25% LEFT SIDE - FULL WIDTH TEXT */}
           {/* ============================================ */}
           <div className="lg:col-span-2">
             {breakingMain ? (
@@ -134,14 +134,14 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                     )}
                   </div>
 
-                  {/* ✅ RED GRADIENT SHADE - Enhanced with better gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-red-900/98 via-red-800/75 to-transparent"></div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                  {/* ✅ RED GRADIENT SHADE - Left side only for background */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-900/90 via-red-800/50 to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
                   
-                  {/* Content Container */}
-                  <div className="relative h-full flex flex-col justify-center z-10 w-[70%] sm:w-[60%] md:w-[50%] lg:w-[30%] px-6 md:px-8">
+                  {/* ✅ FULL WIDTH Content Container - Text puri width mein */}
+                  <div className="relative h-full flex flex-col justify-end z-10 w-full px-6 md:px-10 pb-8 md:pb-12">
                     
-                    {/* Breaking Badge - Enhanced */}
+                    {/* Breaking Badge */}
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
                       <div className="flex items-center gap-2 bg-red-600 px-4 py-2 rounded-full shadow-lg backdrop-blur-sm">
                         <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
@@ -152,20 +152,20 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                       </span>
                     </div>
 
-                    {/* Title - Enhanced Typography */}
-                    <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold mb-4 line-clamp-3 leading-tight text-white drop-shadow-lg">
+                    {/* ✅ Title - Full width */}
+                    <h2 className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold mb-3 line-clamp-2 leading-tight text-white drop-shadow-lg max-w-3xl">
                       {breakingMain.title}
                     </h2>
 
-                    {/* Short Details - Enhanced */}
+                    {/* ✅ Short Details - Full width */}
                     {(breakingMain.content || breakingMain.excerpt) && (
-                      <p className="text-sm md:text-base text-white/95 line-clamp-2 max-w-lg mb-5 leading-relaxed drop-shadow-md">
-                        {getContentPreview(breakingMain.content || breakingMain.excerpt, 90)}
+                      <p className="text-sm md:text-base text-white/95 line-clamp-2 mb-4 leading-relaxed drop-shadow-md max-w-3xl">
+                        {getContentPreview(breakingMain.content || breakingMain.excerpt, 120)}
                       </p>
                     )}
 
-                    {/* Views + Post Date - Enhanced with Icons */}
-                    <div className="flex items-center gap-4 text-white/80 text-xs mb-6">
+                    {/* Views + Post Date */}
+                    <div className="flex items-center gap-4 text-white/80 text-xs mb-5">
                       <span className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-lg">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -181,8 +181,8 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
                       </span>
                     </div>
 
-                    {/* Read More Link - Enhanced */}
-                    <div className="mt-2">
+                    {/* Read More Link */}
+                    <div className="mt-1">
                       <span className="inline-flex items-center gap-2 text-white font-semibold text-sm border-b-2 border-white/60 pb-1 group-hover:gap-3 group-hover:border-white transition-all">
                         Read full story
                         <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -200,14 +200,11 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
             )}
           </div>
 
-          {/* ============================================ */}
           {/* RIGHT COLUMN - FEATURED NEWS */}
-          {/* ============================================ */}
           <aside className="lg:col-span-1">
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-xl">
               <div className="border-b border-gray-200 px-5 py-4 bg-gradient-to-r from-orange-500 to-red-500">
                 <h2 className="font-bold text-white text-base flex items-center gap-2">
-                  
                   Featured News
                 </h2>
               </div>
@@ -290,14 +287,11 @@ export default function HeroSection({ category = 'home', currentPath = '/' }: Pr
           </aside>
         </div>
 
-        {/* ============================================ */}
         {/* OTHER BREAKING NEWS - 3 Cards */}
-        {/* ============================================ */}
         {breakingOthers.length > 0 && (
           <div className="mt-8">
             <div className="flex items-center gap-3 mb-5">
               <div className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-orange-600 text-white px-5 py-2.5 rounded-lg shadow-lg">
-                
                 <h2 className="text-base font-bold">Breaking News</h2>
               </div>
               <div className="flex-1 h-0.5 bg-gradient-to-r from-red-600/30 to-transparent rounded-full"></div>
