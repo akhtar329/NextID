@@ -1,4 +1,3 @@
-// app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
@@ -10,12 +9,11 @@ import { ThemeProvider } from '@/app/component/ThemeProvider/ThemeProvider';
 
 const inter = Inter({ subsets: ["latin"] });
 
-// ✅ Correct way - AdSense meta in metadata
 export const metadata: Metadata = {
   title: 'NextID - Education Platform Pakistan',
   description: 'Latest education news, admissions, exams, and results in Pakistan',
   verification: {
-    google: 'ca-pub-1795193201036290', // ✅ AdSense verification
+    google: 'ca-pub-1795193201036290',
     other: {
       'google-adsense-account': ['ca-pub-1795193201036290'],
     },
@@ -60,12 +58,10 @@ export default function RootLayout({
               gtag('config', 'G-2VNFCBN0SG');
             `}
           </Script>
-
-          {/* ✅ Google AdSense Script - Required for ads */}
           <Script
-            strategy="afterInteractive"
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
-            crossOrigin="anonymous"
+            strategy="lazyOnload"
+            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
+            data-ad-client="ca-pub-1795193201036290"
           />
         </ThemeProvider>
       </body>
