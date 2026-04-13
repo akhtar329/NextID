@@ -7,17 +7,20 @@ import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { VisitorTracker } from '@/app/component/analytics/VisitorTracker';
 import { ThemeProvider } from '@/app/component/ThemeProvider/ThemeProvider';
-import { generateSEO } from "../app/lib/seo";
-
-// ✅ Merge default SEO with AdSense meta
-export const metadata: Metadata = {
-  ...generateSEO(),
-  verification: {
-    google: "ca-pub-1795193201036290", // AdSense verification
-  },
-};
 
 const inter = Inter({ subsets: ["latin"] });
+
+// ✅ Correct way - AdSense meta in metadata
+export const metadata: Metadata = {
+  title: 'NextID - Education Platform Pakistan',
+  description: 'Latest education news, admissions, exams, and results in Pakistan',
+  verification: {
+    google: 'ca-pub-1795193201036290', // ✅ AdSense verification
+    other: {
+      'google-adsense-account': ['ca-pub-1795193201036290'],
+    },
+  },
+};
 
 export default function RootLayout({
   children,
@@ -26,16 +29,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head />
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           {children}
-          
-          {/* ✅ Only ONE tracker - VisitorTracker handles location & sessions */}
           <VisitorTracker />
-          
-          {/* ✅ Vercel Analytics - Optional, can keep or remove */}
           <Analytics />
-          
           <Toaster 
             position="top-right"
             richColors
@@ -45,7 +44,7 @@ export default function RootLayout({
             duration={3000}
           />
 
-          {/* ✅ Google Analytics (gtag) */}
+          {/* Google Analytics */}
           <Script
             strategy="afterInteractive"
             src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
@@ -58,14 +57,11 @@ export default function RootLayout({
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
-              gtag('config', 'G-2VNFCBN0SG', {
-                page_path: window.location.pathname,
-                send_page_view: true
-              });
+              gtag('config', 'G-2VNFCBN0SG');
             `}
           </Script>
 
-          {/* ✅ Google AdSense Script */}
+          {/* ✅ Google AdSense Script - Required for ads */}
           <Script
             strategy="afterInteractive"
             src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
