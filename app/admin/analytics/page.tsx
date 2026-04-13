@@ -863,7 +863,7 @@ export default function AnalyticsDashboard() {
                 </div>
               ) : (
                 <p className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  No visitors found for this city in the selected period
+                  No visitors found for this city in the selected period.
                 </p>
               )}
             </div>
