@@ -3,8 +3,6 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
-import { Analytics } from "@vercel/analytics/next";
-import { VisitorTracker } from '@/app/component/analytics/VisitorTracker';
 import { ThemeProvider } from '@/app/component/ThemeProvider/ThemeProvider';
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,47 +20,28 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    
     <html lang="en" suppressHydrationWarning>
-      <head />
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           {children}
-          <VisitorTracker />
-          <Analytics />
-          <Toaster 
+
+          <Toaster
             position="top-right"
             richColors
             closeButton
             expand={false}
-            className="transform-gpu"
             duration={3000}
           />
 
-          {/* Google Analytics */}
+          {/* AdSense ONLY (keep) */}
           <Script
             strategy="afterInteractive"
-            src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
-          />
-          <Script
-            id="google-analytics"
-            strategy="afterInteractive"
-          >
-            {`
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-2VNFCBN0SG');
-            `}
-          </Script>
-          <Script
-            strategy="lazyOnload"
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
-            data-ad-client="ca-pub-1795193201036290"
+            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
+            crossOrigin="anonymous"
           />
         </ThemeProvider>
       </body>
