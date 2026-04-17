@@ -1,6 +1,3 @@
-
-// app/api/public/categories/route.ts
-
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { categories } from "@/app/lib/schema";
@@ -8,15 +5,32 @@ import { eq, asc } from "drizzle-orm";
 
 export async function GET() {
   try {
+    // ================== MAIN QUERY ==================
     const allCategories = await db
-      .select()
+      .select({
+        id: categories.id,
+        name: categories.name,
+        slug: categories.slug,
+        status: categories.status,
+        displayOrder: categories.displayOrder
+      })
       .from(categories)
       .where(eq(categories.status, true))
-      .orderBy(asc(categories.displayOrder)); // ✅ use asc() function
+      .orderBy(asc(categories.displayOrder));
 
-    return NextResponse.json(allCategories);
+    return NextResponse.json({
+      success: true,
+      data: allCategories
+    });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed to fetch categories" }, { status: 500 });
+    console.error("Categories API error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to fetch categories"
+      },
+      { status: 500 }
+    );
   }
 }

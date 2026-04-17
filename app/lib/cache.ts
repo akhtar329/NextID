@@ -1,54 +1,81 @@
-// Simple in-memory cache without external dependencies
-const cache = new Map<string, { data: any; expiresAt: number }>();
+type CacheEntry<T = any> = {
+  data: T;
+  expiresAt: number;
+  lastAccessed: number;
+};
 
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+const cache = new Map<string, CacheEntry<any>>();
 
-// Get redirect from cache
-export function getCachedRedirect(fromPath: string) {
-  const cached = cache.get(fromPath);
-  if (!cached) return undefined;
-  
-  // Check if expired
-  if (Date.now() > cached.expiresAt) {
-    cache.delete(fromPath);
+const DEFAULT_TTL = 60 * 60 * 1000; // 1 hour
+const MAX_SIZE = 5000;
+
+// ================= GET =================
+export function getCachedRedirect<T = any>(key: string): T | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
     return undefined;
   }
-  
-  return cached.data;
+
+  entry.lastAccessed = Date.now();
+  return entry.data;
 }
 
-// Set redirect in cache
-export function setCachedRedirect(fromPath: string, redirect: any) {
-  cache.set(fromPath, {
-    data: redirect,
-    expiresAt: Date.now() + CACHE_TTL
+// ================= SET =================
+export function setCachedRedirect<T = any>(
+  key: string,
+  data: T,
+  ttl: number = DEFAULT_TTL
+) {
+  if (cache.size >= MAX_SIZE) {
+    let oldestKey: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [k, v] of cache.entries()) {
+      if (v.lastAccessed < oldestTime) {
+        oldestTime = v.lastAccessed;
+        oldestKey = k;
+      }
+    }
+
+    if (oldestKey) cache.delete(oldestKey);
+  }
+
+  cache.set(key, {
+    data,
+    expiresAt: Date.now() + ttl,
+    lastAccessed: Date.now(),
   });
 }
 
-// Clear entire cache
+// ================= DELETE =================
+export function removeCachedRedirect(key: string) {
+  cache.delete(key);
+}
+
+// ================= CLEAR =================
 export function clearRedirectCache() {
   cache.clear();
 }
 
-// Remove specific redirect from cache
-export function removeCachedRedirect(fromPath: string) {
-  cache.delete(fromPath);
-}
-
-// Get cache stats (for debugging)
+// ================= STATS =================
 export function getCacheStats() {
   return {
     size: cache.size,
-    itemCount: cache.size,
+    maxSize: MAX_SIZE,
+    memoryMode: "in-memory (per server instance)",
   };
 }
 
-// Optional: Clean expired entries periodically
+// ================= CLEANUP =================
 setInterval(() => {
   const now = Date.now();
+
   for (const [key, value] of cache.entries()) {
     if (now > value.expiresAt) {
       cache.delete(key);
     }
   }
-}, 60 * 1000); // Clean every minute
+}, 60 * 1000);
