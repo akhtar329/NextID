@@ -40,7 +40,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Dashboard", href: "/admin", icon: <LayoutDashboard size={20} /> },
-  { name: "Analytics", href: "/admin/analytics", icon: <BarChart3 size={20} /> },
   { name: "News", href: "/admin/news", icon: <Newspaper size={20} /> },
   { name: "Admissions", href: "/admin/admissions", icon: <GraduationCap size={20} /> },
   { name: "Results", href: "/admin/results", icon: <FileText size={20} /> },

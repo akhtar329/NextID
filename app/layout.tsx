@@ -3,17 +3,19 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
-import { ThemeProvider } from '@/app/component/ThemeProvider/ThemeProvider';
+import { ThemeProvider } from "@/app/component/ThemeProvider/ThemeProvider";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'NextID - Education Platform Pakistan',
-  description: 'Latest education news, admissions, exams, and results in Pakistan',
+  title: "NextID - Education Platform Pakistan",
+  description:
+    "Latest education news, admissions, exams, and results in Pakistan",
   verification: {
-    google: 'ca-pub-1795193201036290',
+    google: "ca-pub-1795193201036290",
     other: {
-      'google-adsense-account': ['ca-pub-1795193201036290'],
+      "google-adsense-account": ["ca-pub-1795193201036290"],
     },
   },
 };
@@ -28,7 +30,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           {children}
-
+          <SpeedInsights />
           <Toaster
             position="top-right"
             richColors
@@ -39,6 +41,7 @@ export default function RootLayout({
 
           {/* AdSense ONLY (keep) */}
           <Script
+            id="adsense-script"
             strategy="afterInteractive"
             src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
             crossOrigin="anonymous"
