@@ -1,41 +1,58 @@
+// app/(public)/page.tsx
+
 import { Metadata } from "next";
-import Link from "next/link";
-import Script from "next/script";
 import dynamic from "next/dynamic";
 import HeroSection from "@/app/component/sections/Home/HeroSection";
-import OnScrollLoad from "@/app/component/OnScrollLoad/OnScrollLoad";
 import { generateSEOClient } from "@/app/lib/seo";
 
-// ==================== DYNAMIC IMPORTS ====================
-const AdmissionSection = dynamic(() =>
-  import("@/app/component/sections/Home/AdmissionSection")
-);
-
-const ResultsSection = dynamic(() =>
-  import("@/app/component/sections/Home/ResultsSection")
-);
-
-const CoursesSection = dynamic(() =>
-  import("@/app/component/sections/Home/CoursesSection")
-);
-
-const UniversitiesSection = dynamic(() =>
-  import("@/app/component/sections/Home/UniversitiesSection")
-);
-
-const SidebarWidgets = dynamic(() =>
-  import("@/app/component/sections/Home/SidebarWidgets")
-);
-
-// ==================== METADATA ====================
+// ==================== SEO ====================
 export const metadata: Metadata = generateSEOClient({
   path: "/",
   title:
-    "Find Admissions, Check Results & Download Date Sheets 2026 | Pakistan | NextID",
+    "Pakistan Education News 2026 – Check Admissions, Results & Date Sheets | NextID",
   description:
-    "Complete education information portal. Find 2026 admissions, board results, date sheets, merit lists & scholarships. All in one place.",
+    "Get the latest Pakistan Education News 2026 in one place. Check university admissions, board results, and date sheets quickly | NextID",
   image: "/og-image.jpg",
 });
+
+// ==================== LAZY LOAD (IMPORTANT) ====================
+const AdmissionSection = dynamic(
+  () => import("@/app/component/sections/Home/AdmissionSection"),
+  { loading: () => <SectionLoader /> }
+);
+
+const ResultsSection = dynamic(
+  () => import("@/app/component/sections/Home/ResultsSection"),
+  { loading: () => <SectionLoader /> }
+);
+
+const CoursesSection = dynamic(
+  () => import("@/app/component/sections/Home/CoursesSection"),
+  { loading: () => <SectionLoader /> }
+);
+
+const UniversitiesSection = dynamic(
+  () => import("@/app/component/sections/Home/UniversitiesSection"),
+  { loading: () => <SectionLoader /> }
+);
+
+const SidebarWidgets = dynamic(
+  () => import("@/app/component/sections/Home/SidebarWidgets"),
+  { loading: () => <SidebarLoader /> }
+);
+
+// ==================== LOADERS ====================
+function SectionLoader() {
+  return (
+    <div className="h-[400px] bg-gray-100 animate-pulse rounded-xl" />
+  );
+}
+
+function SidebarLoader() {
+  return (
+    <div className="h-[600px] bg-gray-100 animate-pulse rounded-xl" />
+  );
+}
 
 // ==================== SCHEMA ====================
 const websiteSchema = {
@@ -50,88 +67,69 @@ const organizationSchema = {
   "@type": "EducationalOrganization",
   name: "NextID.pk",
   url: "https://www.nextid.pk",
-  logo: "https://www.nextid.pk/logo.png",
 };
 
+// ==================== PAGE ====================
 export default function HomePage() {
   return (
     <>
-      {/* ✅ JSON-LD (non-blocking) */}
-      <Script
+      {/* Schema */}
+      <script
         type="application/ld+json"
-        strategy="beforeInteractive"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
       />
-      <Script
+      <script
         type="application/ld+json"
-        strategy="beforeInteractive"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
       />
 
       <div className="min-h-screen bg-gray-50">
-        
-        {/* HERO (LCP) */}
+
+        {/* ✅ HERO = FIRST LOAD (IMPORTANT FOR LCP) */}
         <HeroSection />
 
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex flex-col lg:flex-row gap-8">
 
-            {/* MAIN CONTENT */}
-            <main className="lg:w-8/12">
+            {/* ================= MAIN ================= */}
+            <main className="lg:w-8/12 space-y-12">
 
-              {/* ✅ FIRST SECTION (NO DELAY) */}
-              <section className="mb-12">
+              <section>
                 <AdmissionSection />
               </section>
 
-              {/* ✅ SCROLL LOAD START */}
+              <section>
+                <ResultsSection />
+              </section>
 
-              <OnScrollLoad>
-                <section className="mb-12">
-                  <ResultsSection />
-                </section>
-              </OnScrollLoad>
+              <section>
+                <CoursesSection />
+              </section>
 
-              <OnScrollLoad>
-                <section className="mb-12">
-                  <CoursesSection />
-                </section>
-              </OnScrollLoad>
-
-              <OnScrollLoad>
-                <section className="mb-12">
-                  <UniversitiesSection />
-                </section>
-              </OnScrollLoad>
+              <section>
+                <UniversitiesSection />
+              </section>
 
             </main>
 
-            {/* SIDEBAR */}
-            <aside className="lg:w-4/12 space-y-8 lg:sticky lg:top-6">
-              <OnScrollLoad>
-                <SidebarWidgets />
-              </OnScrollLoad>
+            {/* ================= SIDEBAR ================= */}
+            <aside className="lg:w-4/12 lg:sticky lg:top-6 space-y-8">
+              <SidebarWidgets />
             </aside>
 
           </div>
         </div>
 
-        {/* ✅ LIGHT SEO CONTENT (reduced DOM load) */}
-        <section className="bg-white py-10 border-t border-gray-200 mt-6">
-          <div className="max-w-5xl mx-auto px-4 text-center">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Pakistan Education Portal – Admissions, Results & Updates
+        {/* ================= SEO CONTENT ================= */}
+        <section className="bg-white py-12 border-t border-gray-200 mt-8">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <h2 className="text-2xl font-bold mb-4">
+              Pakistan Education Portal 2026
             </h2>
-
-            <p className="text-gray-600 text-sm leading-relaxed">
-              NextID.pk provides latest updates on admissions, results, date sheets,
-              universities, and scholarships across Pakistan. Stay updated with real-time
-              educational news and opportunities.
+            <p className="text-gray-600">
+              Find admissions, results, date sheets, merit lists and
+              scholarships across Pakistan. All in one place.
             </p>
-
-            <div className="mt-6 text-xs text-gray-400">
-              © {new Date().getFullYear()} NextID.pk
-            </div>
           </div>
         </section>
 
