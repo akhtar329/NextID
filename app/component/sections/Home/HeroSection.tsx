@@ -24,10 +24,9 @@ interface Props {
 // Server-side data fetching (FIXED LCP ISSUE)
 async function getNews(): Promise<NewsItem[]> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/api/public/news?limit=10`,
-      { cache: "no-store" }
-    );
+    const res = await fetch(`/api/public/news?limit=10`, {
+      next: { revalidate: 60 },
+    });
 
     const data = await res.json();
     return data.success ? data.data : [];
@@ -82,7 +81,13 @@ export default async function HeroSection({
 }: Props) {
   const newsData = await getNews();
 
-  if (!newsData.length) return null;
+if (!newsData.length) {
+  return (
+    <section className="h-[400px] flex items-center justify-center bg-gray-50">
+      <p className="text-gray-400">Loading latest news...</p>
+    </section>
+  );
+}
 
   // Breaking main
   const breakingMain = newsData
