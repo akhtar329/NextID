@@ -40,7 +40,7 @@ export default function Header() {
                 NextID.pk
               </div>
               <div className="text-xs text-gray-500">
-                EDUCATION PORTAL
+                Pakistan Education News 2026
               </div>
             </div>
           </Link>
