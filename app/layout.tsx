@@ -3,7 +3,6 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
-import { ThemeProvider } from "@/app/component/ThemeProvider/ThemeProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -12,12 +11,6 @@ export const metadata: Metadata = {
   title: "NextID - Education Platform Pakistan",
   description:
     "Latest education news, admissions, exams, and results in Pakistan",
-  verification: {
-    google: "ca-pub-1795193201036290",
-    other: {
-      "google-adsense-account": ["ca-pub-1795193201036290"],
-    },
-  },
 };
 
 export default function RootLayout({
@@ -26,27 +19,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={`${inter.className} antialiased`}>
-        <ThemeProvider>
-          {children}
-          <SpeedInsights />
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            expand={false}
-            duration={3000}
-          />
 
-          {/* AdSense ONLY (keep) */}
-          <Script
-            id="adsense-script"
-            strategy="afterInteractive"
-            src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
-            crossOrigin="anonymous"
-          />
-        </ThemeProvider>
+        {/* MAIN CONTENT FIRST (IMPORTANT FOR LCP) */}
+        {children}
+
+        {/* Toast (keep light) */}
+        <Toaster position="top-right" richColors />
+
+        {/* SpeedInsights (DELAYED - NOT blocking) */}
+        <div style={{ display: "none" }}>
+          <SpeedInsights />
+        </div>
+
+        {/* 🚨 ADSENSE DELAYED (BIG FIX) */}
+        <Script
+          id="adsense-script"
+          strategy="lazyOnload"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1795193201036290"
+          crossOrigin="anonymous"
+        />
+
       </body>
     </html>
   );

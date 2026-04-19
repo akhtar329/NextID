@@ -3,6 +3,9 @@ import Header from '@/app/component/layout/Header';
 import Footer from '@/app/component/layout/Footer';
 import type { Metadata } from 'next';
 
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
   description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
@@ -57,6 +60,8 @@ export default function PublicLayout({
         {children}
       </main>
       <Footer />
+      <Analytics />
+      <SpeedInsights />
     </>
   );
 }

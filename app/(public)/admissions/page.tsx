@@ -1,3 +1,6 @@
+
+//app/
+
 import { Metadata } from "next";
 import React from "react";
 import Link from "next/link";
