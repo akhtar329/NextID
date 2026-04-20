@@ -1,7 +1,8 @@
 // app/component/sections/Home/SidebarWidgets.tsx
-// ✅ Server Component - All imports fixed
+// ✅ Server Component - All imports at top
 
 import Link from 'next/link';
+import { useState } from 'react'; // ✅ Moved to top
 import { db } from '@/app/lib/db';
 import { 
   cities, 
@@ -9,12 +10,12 @@ import {
   programs, 
   institutes, 
   categories,
-  results,           // ✅ Added
-  dateSheets,        // ✅ Added
-  programOfferings,  // ✅ Added
-  admissions         // ✅ Added
+  results,
+  dateSheets,
+  programOfferings,
+  admissions
 } from '@/app/lib/schema';
-import { eq, desc, sql } from 'drizzle-orm'; // ✅ Removed unused 'count'
+import { eq, desc, sql } from 'drizzle-orm';
 
 // Types
 interface CityWithCount {
@@ -327,9 +328,7 @@ async function UniversitiesWidget() {
   );
 }
 
-// Newsletter Widget (Client Component for form)
-import { useState } from 'react';
-
+// Newsletter Widget (Client Component)
 function NewsletterWidget() {
   'use client';
   
