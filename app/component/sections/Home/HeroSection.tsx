@@ -2,6 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { db } from '@/app/lib/db';
+import { news } from '@/app/lib/schema';
+import { desc } from 'drizzle-orm'; // Removed unused 'eq'
 
 interface NewsItem {
   id: number;
@@ -11,39 +14,35 @@ interface NewsItem {
   content: string | null;
   isBreaking: boolean;
   isFeatured: boolean;
-  publishedAt: string;
+  publishedAt: Date | null; // Changed from string to Date | null to match database
   imageUrl?: string | null;
   viewCount?: number;
 }
 
-// Server-side data fetching (FIXED LCP ISSUE)
+// Direct database query instead of API call
 async function getNews(): Promise<NewsItem[]> {
   try {
-    const res = await fetch(`/api/public/news?limit=10`, {
-      next: { revalidate: 60 },
-    });
-
-    const data = await res.json();
-    return data.success ? data.data : [];
+    const newsData = await db
+      .select()
+      .from(news)
+      .orderBy(desc(news.publishedAt))
+      .limit(10);
+    
+    // No type conversion needed now that types match
+    return newsData as NewsItem[];
   } catch (error) {
-    console.error("Error fetching news:", error);
+    console.error("Error fetching news from database:", error);
     return [];
   }
 }
 
-// Utility functions (kept lightweight)
-function getContentPreview(content: string | null, maxLength: number = 80): string | null {
-  if (!content) return null;
-  const plainText = content.replace(/<[^>]*>/g, "");
-  return plainText.length <= maxLength
-    ? plainText
-    : plainText.substring(0, maxLength) + "...";
-}
+// Updated utility function to handle Date object
+function getTimeAgo(dateValue: Date | string | null): string {
+  if (!dateValue) return "Recently";
 
-function getTimeAgo(dateString: string): string {
-  if (!dateString) return "Recently";
-
-  const date = new Date(dateString);
+  // Convert to Date if it's a string
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+  
   const now = new Date();
 
   if (isNaN(date.getTime())) return "Recently";
@@ -63,6 +62,14 @@ function getTimeAgo(dateString: string): string {
   });
 }
 
+function getContentPreview(content: string | null, maxLength: number = 80): string | null {
+  if (!content) return null;
+  const plainText = content.replace(/<[^>]*>/g, "");
+  return plainText.length <= maxLength
+    ? plainText
+    : plainText.substring(0, maxLength) + "...";
+}
+
 function formatViews(views?: number): string {
   if (!views) return "0 views";
   if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
@@ -70,13 +77,16 @@ function formatViews(views?: number): string {
   return `${views} views`;
 }
 
-export default async function HeroSection() { // No props parameter
+export default async function HeroSection() {
   const newsData = await getNews();
 
   if (!newsData.length) {
     return (
       <section className="h-[400px] flex items-center justify-center bg-gray-50">
-        <p className="text-gray-400">Loading latest news...</p>
+        <div className="text-center">
+          <p className="text-gray-400 mb-2">No news available at the moment</p>
+          <p className="text-sm text-gray-300">Check back later for updates</p>
+        </div>
       </section>
     );
   }
@@ -85,9 +95,11 @@ export default async function HeroSection() { // No props parameter
   const breakingMain = newsData
     .filter((n) => n.isBreaking)
     .sort(
-      (a, b) =>
-        new Date(b.publishedAt).getTime() -
-        new Date(a.publishedAt).getTime()
+      (a, b) => {
+        const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+        const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+        return dateB - dateA;
+      }
     )[0];
 
   // Others
@@ -162,7 +174,11 @@ export default async function HeroSection() { // No props parameter
                   </div>
                 </article>
               </Link>
-            ) : null}
+            ) : (
+              <div className="bg-gray-100 rounded-2xl h-[350px] md:h-[450px] flex items-center justify-center">
+                <p className="text-gray-400">No breaking news available</p>
+              </div>
+            )}
           </div>
 
           {/* RIGHT - FEATURED */}
@@ -172,20 +188,26 @@ export default async function HeroSection() { // No props parameter
             </div>
 
             <div className="divide-y">
-              {featuredNews.map((news) => (
-                <Link
-                  key={news.id}
-                  href={`/news/${news.slug}`}
-                  className="block p-3 hover:bg-gray-50"
-                >
-                  <h3 className="text-sm font-semibold line-clamp-2">
-                    {news.title}
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {getTimeAgo(news.publishedAt)}
-                  </p>
-                </Link>
-              ))}
+              {featuredNews.length > 0 ? (
+                featuredNews.map((news) => (
+                  <Link
+                    key={news.id}
+                    href={`/news/${news.slug}`}
+                    className="block p-3 hover:bg-gray-50"
+                  >
+                    <h3 className="text-sm font-semibold line-clamp-2">
+                      {news.title}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {getTimeAgo(news.publishedAt)}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <div className="p-4 text-center text-gray-400 text-sm">
+                  No featured news
+                </div>
+              )}
             </div>
           </aside>
         </div>
