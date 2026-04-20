@@ -106,7 +106,7 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
     if (!result) return null;
 
     // Get program details - no longer directly linked, so return null
-    let program: ProgramType | null = null;
+    const program: ProgramType | null = null;
 
     // Get institute details
     let institute: InstituteType | null = null;

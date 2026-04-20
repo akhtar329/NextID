@@ -44,7 +44,7 @@ export default function ProgramsPage() {
       const programsList = data.programs || data.data || [];
       
       // Fetch degrees to get degree names
-      let degreeMap = new Map();
+      const degreeMap = new Map();
       try {
         const degreesRes = await fetch("/api/admin/degrees");
         if (degreesRes.ok) {

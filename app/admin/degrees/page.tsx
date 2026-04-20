@@ -42,8 +42,8 @@ export default function DegreesPage() {
       const degreesList = data.degrees || data.data || [];
       
       // Fetch levels and categories to get names
-      let levelMap = new Map();
-      let categoryMap = new Map();
+      const levelMap = new Map();
+      const categoryMap = new Map();
       
       try {
         // Fetch levels

@@ -16,11 +16,6 @@ interface NewsItem {
   viewCount?: number;
 }
 
-interface Props {
-  category?: string;
-  currentPath?: string;
-}
-
 // Server-side data fetching (FIXED LCP ISSUE)
 async function getNews(): Promise<NewsItem[]> {
   try {
@@ -37,7 +32,7 @@ async function getNews(): Promise<NewsItem[]> {
 }
 
 // Utility functions (kept lightweight)
-function getContentPreview(content: string | null, maxLength: number = 80) {
+function getContentPreview(content: string | null, maxLength: number = 80): string | null {
   if (!content) return null;
   const plainText = content.replace(/<[^>]*>/g, "");
   return plainText.length <= maxLength
@@ -45,7 +40,7 @@ function getContentPreview(content: string | null, maxLength: number = 80) {
     : plainText.substring(0, maxLength) + "...";
 }
 
-function getTimeAgo(dateString: string) {
+function getTimeAgo(dateString: string): string {
   if (!dateString) return "Recently";
 
   const date = new Date(dateString);
@@ -68,26 +63,23 @@ function getTimeAgo(dateString: string) {
   });
 }
 
-function formatViews(views?: number) {
+function formatViews(views?: number): string {
   if (!views) return "0 views";
   if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
   if (views >= 1000) return `${(views / 1000).toFixed(1)}K views`;
   return `${views} views`;
 }
 
-export default async function HeroSection({
-  category = "home",
-  currentPath = "/",
-}: Props) {
+export default async function HeroSection() { // No props parameter
   const newsData = await getNews();
 
-if (!newsData.length) {
-  return (
-    <section className="h-[400px] flex items-center justify-center bg-gray-50">
-      <p className="text-gray-400">Loading latest news...</p>
-    </section>
-  );
-}
+  if (!newsData.length) {
+    return (
+      <section className="h-[400px] flex items-center justify-center bg-gray-50">
+        <p className="text-gray-400">Loading latest news...</p>
+      </section>
+    );
+  }
 
   // Breaking main
   const breakingMain = newsData

@@ -3,9 +3,10 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import { ReactElement } from 'react';
 import { db } from '@/app/lib/db';
 import { results, boards, institutes, cities } from '@/app/lib/schema';
-import { eq, desc, and, or, like, sql, count } from 'drizzle-orm';
+import { eq, desc, and, or, like, sql, count, SQL } from 'drizzle-orm';
 
 // ==================== METADATA ====================
 export const metadata: Metadata = {
@@ -28,7 +29,6 @@ export const metadata: Metadata = {
 };
 
 // ==================== TYPES ====================
-type ResultLevel = 'matric' | 'inter' | 'ba' | 'bsc' | 'ma' | 'msc' | 'professional' | '';
 
 interface ResultItem {
   id: number;
@@ -44,9 +44,16 @@ interface ResultItem {
   isPopular: boolean | null;
 }
 
+interface LevelConfig {
+  slug: string;
+  name: string;
+  icon: string;
+  keywords?: string[];
+}
+
 // ==================== CONSTANTS ====================
-const RESULT_TYPES = [
-  { slug: '', name: 'All Results', icon: '📋', count: 0 },
+const RESULT_TYPES: LevelConfig[] = [
+  { slug: '', name: 'All Results', icon: '📋' },
   { slug: 'matric', name: 'Matric (SSC)', icon: '📚', keywords: ['ssc', 'matric', 'secondary'] },
   { slug: 'inter', name: 'Intermediate (HSSC)', icon: '📖', keywords: ['hssc', 'inter', 'fa', 'fsc', 'ics', 'icom'] },
   { slug: 'ba', name: 'BA/BSc', icon: '🎓', keywords: ['ba', 'bsc', 'bachelor'] },
@@ -54,8 +61,13 @@ const RESULT_TYPES = [
   { slug: 'professional', name: 'Professional', icon: '💼', keywords: ['mbbs', 'bds', 'llb', 'engineering'] },
 ];
 
-// Real boards from database will be fetched
-const BOARDS = [
+interface Board {
+  slug: string;
+  name: string;
+  city: string;
+}
+
+const BOARDS: Board[] = [
   { slug: 'bise-lahore', name: 'BISE Lahore', city: 'Lahore' },
   { slug: 'bise-karachi', name: 'BISE Karachi', city: 'Karachi' },
   { slug: 'bise-rawalpindi', name: 'BISE Rawalpindi', city: 'Rawalpindi' },
@@ -69,16 +81,27 @@ const BOARDS = [
   { slug: 'akueb', name: 'AKUEB Karachi', city: 'Karachi' },
 ];
 
-// ==================== DATA FETCHING ====================
-async function getResults(filters: {
+interface Filters {
   board?: string;
   university?: string;
   year?: string;
   level?: string;
   q?: string;
-}) {
+}
+
+interface Stats {
+  totalResults: number;
+  totalBoards: number;
+  totalUniversities: number;
+  recentResults: number;
+  years: number[];
+}
+
+// ==================== DATA FETCHING ====================
+async function getResults(filters: Filters): Promise<ResultItem[]> {
   try {
-    const conditions: any[] = [];
+    // Use SQL array instead of custom interface
+    const conditions: SQL[] = [];
 
     if (filters.board) {
       conditions.push(eq(boards.slug, filters.board));
@@ -89,21 +112,21 @@ async function getResults(filters: {
     }
     
     if (filters.year) {
-      conditions.push(eq(results.year, parseInt(filters.year)));
+      conditions.push(eq(results.year, parseInt(filters.year, 10)));
     }
     
     if (filters.q) {
       const term = `%${filters.q}%`;
-      conditions.push(
-        or(
-          like(results.title, term),
-          like(boards.name, term),
-          like(institutes.name, term)
-        )
+      const orCondition = or(
+        like(results.title, term),
+        like(boards.name, term),
+        like(institutes.name, term)
       );
+      if (orCondition) {
+        conditions.push(orCondition);
+      }
     }
 
-    // ✅ FIXED: Use instituteId instead of universityId
     let data: ResultItem[] = await db
       .select({
         id: results.id,
@@ -120,7 +143,7 @@ async function getResults(filters: {
       })
       .from(results)
       .leftJoin(boards, eq(results.boardId, boards.id))
-      .leftJoin(institutes, eq(results.instituteId, institutes.id))  // ✅ Fixed: universityId → instituteId
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(results.resultDate), desc(results.year))
@@ -129,8 +152,8 @@ async function getResults(filters: {
     // Apply level filter in memory
     if (filters.level && filters.level !== '') {
       const levelConfig = RESULT_TYPES.find(t => t.slug === filters.level);
-      if (levelConfig && 'keywords' in levelConfig) {
-        const keywords = (levelConfig as any).keywords || [];
+      if (levelConfig?.keywords) {
+        const keywords = levelConfig.keywords;
         data = data.filter(r => 
           keywords.some((keyword: string) => 
             r.title.toLowerCase().includes(keyword.toLowerCase())
@@ -147,12 +170,12 @@ async function getResults(filters: {
 }
 
 // ==================== STATS ====================
-async function getStats() {
+async function getStats(): Promise<Stats> {
   try {
     const [totalResults, totalBoards, totalUniversities] = await Promise.all([
       db.select({ count: count() }).from(results),
       db.select({ count: count() }).from(boards),
-      db.select({ count: count() }).from(institutes).where(eq(institutes.type, 'university')),  // ✅ Fixed: 'University' → 'university'
+      db.select({ count: count() }).from(institutes).where(eq(institutes.type, 'university')),
     ]);
 
     const thirtyDaysAgo = new Date();
@@ -190,9 +213,21 @@ async function getStats() {
   }
 }
 
+interface BreadcrumbItem {
+  name: string;
+  url: string;
+}
+
+// Helper function to check if result is recent (pure function)
+function isResultRecent(resultDate: Date | null): boolean {
+  if (!resultDate) return false;
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return new Date(resultDate).getTime() > thirtyDaysAgo;
+}
+
 // ==================== BREADCRUMBS ====================
-function Breadcrumbs({ filters }: { filters: any }) {
-  const items = [
+function Breadcrumbs({ filters }: { filters: Filters }): ReactElement {
+  const items: BreadcrumbItem[] = [
     { name: 'Home', url: '/' },
     { name: 'Results', url: '/results' }
   ];
@@ -245,10 +280,10 @@ function FilterSidebar({
   stats, 
   buildUrl 
 }: { 
-  filters: any; 
-  stats: any; 
+  filters: Filters; 
+  stats: Stats; 
   buildUrl: (key: string, value: string) => string;
-}) {
+}): ReactElement {
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
       <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -266,7 +301,7 @@ function FilterSidebar({
             placeholder="Search results..."
             className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" aria-hidden="true">🔍</span>
           {Object.entries(filters).map(([key, value]) => 
             key !== 'q' && value ? (
               <input key={key} type="hidden" name={key} value={value as string} />
@@ -293,7 +328,7 @@ function FilterSidebar({
               }`}
             >
               <span className="flex items-center gap-2">
-                <span>{t.icon}</span>
+                <span aria-hidden="true">{t.icon}</span>
                 {t.name}
               </span>
               {filters.level === t.slug && (
@@ -377,14 +412,131 @@ function FilterSidebar({
   );
 }
 
+// ==================== RESULT CARD COMPONENT ====================
+function ResultCard({ result }: { result: ResultItem }): ReactElement {
+  const isRecent = isResultRecent(result.resultDate);
+  
+  return (
+    <article 
+      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-green-300 overflow-hidden group"
+      suppressHydrationWarning
+    >
+      <div className="p-5">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          
+          {/* Left Content */}
+          <div className="flex-1">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-xl" aria-hidden="true">
+                📄
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
+                  <Link href={`/results/${result.slug}`}>
+                    {result.title}
+                  </Link>
+                </h3>
+
+                {/* Institution Info */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 mb-2">
+                  {result.boardName !== null && (
+                    <>
+                      <Link 
+                        href={`/boards/${result.boardSlug}`}
+                        className="text-green-600 hover:underline font-medium"
+                      >
+                        {result.boardName}
+                      </Link>
+                      <span className="text-gray-300" aria-hidden="true">•</span>
+                    </>
+                  )}
+                  {result.instituteName !== null && (
+                    <>
+                      <Link 
+                        href={`/universities/${result.instituteSlug}`}
+                        className="text-green-600 hover:underline font-medium"
+                      >
+                        {result.instituteName}
+                      </Link>
+                      <span className="text-gray-300" aria-hidden="true">•</span>
+                    </>
+                  )}
+                  {result.cityName !== null && (
+                    <span className="text-gray-500">{result.cityName}</span>
+                  )}
+                </div>
+
+                {/* Meta Info */}
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  {result.resultDate !== null && (
+                    <span className="text-gray-500 flex items-center gap-1">
+                      <span aria-hidden="true">📅</span>
+                      {new Date(result.resultDate).toLocaleDateString('en-PK', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  )}
+                  <span className="text-gray-500 flex items-center gap-1">
+                    <span aria-hidden="true">📚</span>
+                    Year: {result.year}
+                  </span>
+                  
+                  {/* Badges */}
+                  <div className="flex gap-2">
+                    {result.isPopular && (
+                      <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                        Popular
+                      </span>
+                    )}
+                    {isRecent && (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                        New
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Action */}
+          <div className="flex flex-col items-end gap-2">
+            <Link
+              href={`/results/${result.slug}`}
+              className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2 group-hover:shadow-md"
+            >
+              <span>Check Result</span>
+              <span className="text-lg group-hover:translate-x-1 transition-transform" aria-hidden="true">→</span>
+            </Link>
+            <span className="text-xs text-gray-400">
+              View full details
+            </span>
+          </div>
+        </div>
+
+        {/* Result Preview Link */}
+        {result.slug && (
+          <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 font-mono">
+            /results/{result.slug}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
 // ==================== MAIN PAGE ====================
+interface PageProps {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
 export default async function ResultsPage({
   searchParams,
-}: {
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
+}: PageProps): Promise<ReactElement> {
   const params = (await searchParams) || {};
-  const filters = {
+  const filters: Filters = {
     board: typeof params.board === 'string' ? params.board : '',
     university: typeof params.university === 'string' ? params.university : '',
     year: typeof params.year === 'string' ? params.year : '',
@@ -394,7 +546,7 @@ export default async function ResultsPage({
 
   const [resultsData, stats] = await Promise.all([getResults(filters), getStats()]);
 
-  const buildUrl = (key: string, value: string) => {
+  const buildUrl = (key: string, value: string): string => {
     const urlParams = new URLSearchParams();
     if (filters.board && key !== 'board') urlParams.set('board', filters.board);
     if (filters.university && key !== 'university') urlParams.set('university', filters.university);
@@ -408,7 +560,7 @@ export default async function ResultsPage({
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Schema.org Markup - ✅ FIX: Added suppressHydrationWarning */}
+      {/* Schema.org Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -425,7 +577,7 @@ export default async function ResultsPage({
 
       {/* Hero Section with Stats */}
       <section className="bg-gradient-to-br from-green-700 via-green-800 to-emerald-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0 opacity-10" aria-hidden="true">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
           <div className="absolute bottom-0 right-0 w-96 h-96 bg-yellow-400 rounded-full mix-blend-overlay filter blur-3xl"></div>
         </div>
@@ -435,7 +587,7 @@ export default async function ResultsPage({
             {/* Breadcrumbs */}
             <div className="flex items-center justify-center gap-2 text-sm text-green-200 mb-4">
               <Link href="/" className="hover:text-white transition-colors">Home</Link>
-              <span className="text-green-300">›</span>
+              <span className="text-green-300" aria-hidden="true">›</span>
               <span className="text-white font-medium">Results</span>
             </div>
             
@@ -477,7 +629,7 @@ export default async function ResultsPage({
                   placeholder="Search by board, university or result name..."
                   className="w-full pl-12 pr-4 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg"
                 />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl">🔍</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl" aria-hidden="true">🔍</span>
                 <button
                   type="submit"
                   className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition shadow-md"
@@ -531,124 +683,10 @@ export default async function ResultsPage({
             {/* Results Cards */}
             <div className="space-y-4" suppressHydrationWarning>
               {resultsData.length > 0 ? (
-                resultsData.map((r) => {
-                  const isRecent = r.resultDate && 
-                    (new Date(r.resultDate).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000);
-                  
-                  return (
-                    <article 
-                      key={r.id} 
-                      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-green-300 overflow-hidden group"
-                      suppressHydrationWarning
-                    >
-                      <div className="p-5">
-                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                          
-                          {/* Left Content */}
-                          <div className="flex-1">
-                            <div className="flex items-start gap-3">
-                              <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-xl">
-                                📄
-                              </div>
-                              <div className="flex-1">
-                                <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
-                                  <Link href={`/results/${r.slug}`}>
-                                    {r.title}
-                                  </Link>
-                                </h3>
-
-                                {/* Institution Info */}
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 mb-2">
-                                  {r.boardName && (
-                                    <>
-                                      <Link 
-                                        href={`/boards/${r.boardSlug}`}
-                                        className="text-green-600 hover:underline font-medium"
-                                      >
-                                        {r.boardName}
-                                      </Link>
-                                      <span className="text-gray-300">•</span>
-                                    </>
-                                  )}
-                                  {r.instituteName && (
-                                    <>
-                                      <Link 
-                                        href={`/universities/${r.instituteSlug}`}
-                                        className="text-green-600 hover:underline font-medium"
-                                      >
-                                        {r.instituteName}
-                                      </Link>
-                                      <span className="text-gray-300">•</span>
-                                    </>
-                                  )}
-                                  {r.cityName && (
-                                    <span className="text-gray-500">{r.cityName}</span>
-                                  )}
-                                </div>
-
-                                {/* Meta Info */}
-                                <div className="flex flex-wrap items-center gap-3 text-xs">
-                                  {r.resultDate && (
-                                    <span className="text-gray-500 flex items-center gap-1">
-                                      <span>📅</span>
-                                      {new Date(r.resultDate).toLocaleDateString('en-PK', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric'
-                                      })}
-                                    </span>
-                                  )}
-                                  <span className="text-gray-500 flex items-center gap-1">
-                                    <span>📚</span>
-                                    Year: {r.year}
-                                  </span>
-                                  
-                                  {/* Badges */}
-                                  <div className="flex gap-2">
-                                    {r.isPopular && (
-                                      <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                                        Popular
-                                      </span>
-                                    )}
-                                    {isRecent && (
-                                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                        New
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Right Action */}
-                          <div className="flex flex-col items-end gap-2">
-                            <Link
-                              href={`/results/${r.slug}`}
-                              className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2 group-hover:shadow-md"
-                            >
-                              <span>Check Result</span>
-                              <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-                            </Link>
-                            <span className="text-xs text-gray-400">
-                              View full details
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Result Preview Link */}
-                        {r.slug && (
-                          <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 font-mono">
-                            /results/{r.slug}
-                          </div>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })
+                resultsData.map((r) => <ResultCard key={r.id} result={r} />)
               ) : (
                 <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200" suppressHydrationWarning>
-                  <div className="text-6xl mb-4">📭</div>
+                  <div className="text-6xl mb-4" aria-hidden="true">📭</div>
                   <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
                   <p className="text-gray-500 mb-6">
                     {filters.board || filters.university || filters.year || filters.level || filters.q
@@ -668,7 +706,10 @@ export default async function ResultsPage({
             {/* Load More (Pagination) - To be implemented */}
             {resultsData.length > 0 && resultsData.length >= 100 && (
               <div className="text-center mt-8">
-                <button className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                <button 
+                  type="button"
+                  className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                >
                   Load More Results
                 </button>
               </div>
@@ -705,19 +746,19 @@ export default async function ResultsPage({
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                 <Link href="/results?level=matric" className="bg-green-50 p-4 rounded-lg text-center hover:bg-green-100 transition">
-                  <div className="text-2xl mb-2">📚</div>
+                  <div className="text-2xl mb-2" aria-hidden="true">📚</div>
                   <div className="font-medium text-gray-800">Matric Results</div>
                 </Link>
                 <Link href="/results?level=inter" className="bg-green-50 p-4 rounded-lg text-center hover:bg-green-100 transition">
-                  <div className="text-2xl mb-2">📖</div>
+                  <div className="text-2xl mb-2" aria-hidden="true">📖</div>
                   <div className="font-medium text-gray-800">Inter Results</div>
                 </Link>
                 <Link href="/results?level=ba" className="bg-green-50 p-4 rounded-lg text-center hover:bg-green-100 transition">
-                  <div className="text-2xl mb-2">🎓</div>
+                  <div className="text-2xl mb-2" aria-hidden="true">🎓</div>
                   <div className="font-medium text-gray-800">BA/BSc Results</div>
                 </Link>
                 <Link href="/results?level=ma" className="bg-green-50 p-4 rounded-lg text-center hover:bg-green-100 transition">
-                  <div className="text-2xl mb-2">🎓</div>
+                  <div className="text-2xl mb-2" aria-hidden="true">🎓</div>
                   <div className="font-medium text-gray-800">MA/MSc Results</div>
                 </Link>
               </div>
@@ -744,7 +785,7 @@ export default async function ResultsPage({
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
               <h3 className="font-bold text-gray-900 mb-2">How can I check my result online?</h3>
               <p className="text-gray-600 text-sm">
-                You can check your result by entering your roll number on the respective board's website. We also provide direct links to official result portals.
+                You can check your result by entering your roll number on the respective board&apos;s website. We also provide direct links to official result portals.
               </p>
             </div>
             

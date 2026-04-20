@@ -133,7 +133,7 @@ export default function CreateAdmissionPage() {
     if (!admissionName) return "";
     
     // Remove "Admissions Open at" if present for cleaner title
-    let cleanName = admissionName.replace(/^Admissions Open at\s+/i, '');
+    const cleanName = admissionName.replace(/^Admissions Open at\s+/i, '');
     
     // Ensure it's not too long (max 60 chars)
     let metaTitle = `${cleanName} | NextID`;

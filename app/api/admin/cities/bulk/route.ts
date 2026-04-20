@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
         let finalSlug = city.slug;
         if (existing.length > 0) {
           // Generate new slug
-          let baseSlug = city.slug;
+          const baseSlug = city.slug;
           let uniqueSlug = baseSlug;
           let counter = 1;
           

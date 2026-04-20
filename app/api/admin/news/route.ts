@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const isBreaking = searchParams.get("isBreaking");
 
     // Fetch all news with related data
-    let query = db
+    const query = db
       .select({
         id: news.id,
         title: news.title,

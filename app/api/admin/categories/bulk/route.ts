@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Generate unique slug
-      let baseSlug = cat.slug || cat.name
+      const baseSlug = cat.slug || cat.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
         newCategories.push(cat);
       } else {
         // Slug exists, generate new unique slug
-        let baseSlug = cat.slug;
+        const baseSlug = cat.slug;
         let uniqueSlug = baseSlug;
         let counter = 1;
         
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
         
         if (existing.length > 0) {
           // Generate new slug
-          let baseSlug = cat.slug;
+          const baseSlug = cat.slug;
           let uniqueSlug = baseSlug;
           let counter = 1;
           

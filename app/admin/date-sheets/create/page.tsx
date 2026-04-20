@@ -100,7 +100,7 @@ export default function CreateDateSheetPage() {
   };
 
   const generateSlug = (title: string) => {
-    let slug = title
+    const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
