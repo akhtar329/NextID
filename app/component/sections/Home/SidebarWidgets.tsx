@@ -1,8 +1,7 @@
 // app/component/sections/Home/SidebarWidgets.tsx
-// ✅ Server Component - All imports at top
+// ✅ Server Component - No "use client" imports
 
 import Link from 'next/link';
-import { useState } from 'react'; // ✅ Moved to top
 import { db } from '@/app/lib/db';
 import { 
   cities, 
@@ -16,6 +15,7 @@ import {
   admissions
 } from '@/app/lib/schema';
 import { eq, desc, sql } from 'drizzle-orm';
+import NewsletterWidget from './NewsletterWidget'; // ✅ Import client component
 
 // Types
 interface CityWithCount {
@@ -165,19 +165,19 @@ async function getFeaturedUniversities(): Promise<UniversityWithCounts[]> {
 
 // Cities Widget Component
 async function CitiesWidget() {
-  const cities = await getCitiesWithUniversityCount();
+  const citiesData = await getCitiesWithUniversityCount();
   
-  if (!cities.length) return null;
+  if (!citiesData.length) return null;
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
       <div className="flex justify-between items-center mb-4 pb-2 border-b">
         <h3 className="text-lg font-bold text-gray-900">🏙️ Popular Cities</h3>
-        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Top {cities.length}</span>
+        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Top {citiesData.length}</span>
       </div>
       
       <div className="space-y-2">
-        {cities.map((city) => (
+        {citiesData.map((city) => (
           <Link
             key={city.id}
             href={`/cities/${city.slug}`}
@@ -204,9 +204,9 @@ async function CitiesWidget() {
 
 // Boards Widget Component
 async function BoardsWidget() {
-  const boards = await getBoardsWithStats();
+  const boardsData = await getBoardsWithStats();
   
-  if (!boards.length) return null;
+  if (!boardsData.length) return null;
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -216,7 +216,7 @@ async function BoardsWidget() {
       </div>
       
       <div className="space-y-3">
-        {boards.map((board) => (
+        {boardsData.map((board) => (
           <Link
             key={board.id}
             href={`/boards/${board.slug}`}
@@ -244,9 +244,9 @@ async function BoardsWidget() {
 
 // Programs Widget Component
 async function ProgramsWidget() {
-  const programs = await getTopPrograms();
+  const programsData = await getTopPrograms();
   
-  if (!programs.length) return null;
+  if (!programsData.length) return null;
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -256,7 +256,7 @@ async function ProgramsWidget() {
       </div>
       
       <div className="space-y-2">
-        {programs.map((program) => (
+        {programsData.map((program) => (
           <Link
             key={program.id}
             href={`/programs/${program.slug}`}
@@ -290,9 +290,9 @@ async function ProgramsWidget() {
 
 // Universities Widget Component
 async function UniversitiesWidget() {
-  const universities = await getFeaturedUniversities();
+  const universitiesData = await getFeaturedUniversities();
   
-  if (!universities.length) return null;
+  if (!universitiesData.length) return null;
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -302,7 +302,7 @@ async function UniversitiesWidget() {
       </div>
       
       <div className="space-y-3">
-        {universities.map((uni) => (
+        {universitiesData.map((uni) => (
           <Link
             key={uni.id}
             href={`/universities/${uni.slug}`}
@@ -328,90 +328,26 @@ async function UniversitiesWidget() {
   );
 }
 
-// Newsletter Widget (Client Component)
-function NewsletterWidget() {
-  'use client';
-  
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    
-    setStatus('loading');
-    
-    // Simulate API call - Replace with actual API endpoint
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setStatus('success');
-      setEmail('');
-      setTimeout(() => setStatus('idle'), 3000);
-    } catch {
-      setStatus('error');
-      setTimeout(() => setStatus('idle'), 3000);
-    }
-  };
-  
-  return (
-    <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-5 text-white">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-2xl">📧</span>
-        <h3 className="text-lg font-bold">Stay Updated</h3>
-      </div>
-      <p className="text-blue-100 text-sm mb-4">
-        Get admission alerts, results, and educational news
-      </p>
-      
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Your email address"
-          className="w-full px-4 py-2.5 rounded-lg bg-white/10 border border-white/20 text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm"
-          required
-          disabled={status === 'loading'}
-        />
-        
-        <button 
-          type="submit"
-          disabled={status === 'loading'}
-          className="w-full bg-white text-blue-600 font-semibold py-2.5 rounded-lg hover:bg-gray-100 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {status === 'loading' ? 'Subscribing...' : 
-           status === 'success' ? '✓ Subscribed!' : 
-           status === 'error' ? 'Failed. Try again!' : 'Subscribe Now'}
-        </button>
-      </form>
-      
-      <p className="text-xs text-blue-200 mt-3 text-center">
-        No spam. Unsubscribe anytime.
-      </p>
-    </div>
-  );
-}
-
 // Main Component
 export default async function SidebarWidgets() {
   // Fetch all data in parallel
-  const [cities, boards, programs, universities] = await Promise.all([
+  const [citiesData, boardsData, programsData, universitiesData] = await Promise.all([
     getCitiesWithUniversityCount(),
     getBoardsWithStats(),
     getTopPrograms(),
     getFeaturedUniversities(),
   ]);
   
-  const hasAnyData = cities.length > 0 || boards.length > 0 || programs.length > 0 || universities.length > 0;
+  const hasAnyData = citiesData.length > 0 || boardsData.length > 0 || programsData.length > 0 || universitiesData.length > 0;
   
   if (!hasAnyData) return null;
   
   return (
     <div className="space-y-6">
-      {cities.length > 0 && <CitiesWidget />}
-      {boards.length > 0 && <BoardsWidget />}
-      {programs.length > 0 && <ProgramsWidget />}
-      {universities.length > 0 && <UniversitiesWidget />}
+      {citiesData.length > 0 && <CitiesWidget />}
+      {boardsData.length > 0 && <BoardsWidget />}
+      {programsData.length > 0 && <ProgramsWidget />}
+      {universitiesData.length > 0 && <UniversitiesWidget />}
       <NewsletterWidget />
     </div>
   );
