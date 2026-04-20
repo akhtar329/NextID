@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { db } from '@/app/lib/db';
 import { news } from '@/app/lib/schema';
-import { desc } from 'drizzle-orm'; // Removed unused 'eq'
+import { desc } from 'drizzle-orm';
 
 interface NewsItem {
   id: number;
@@ -14,12 +14,12 @@ interface NewsItem {
   content: string | null;
   isBreaking: boolean;
   isFeatured: boolean;
-  publishedAt: Date | null; // Changed from string to Date | null to match database
+  publishedAt: Date | null;
   imageUrl?: string | null;
   viewCount?: number;
 }
 
-// Direct database query instead of API call
+// Direct database query
 async function getNews(): Promise<NewsItem[]> {
   try {
     const newsData = await db
@@ -28,7 +28,6 @@ async function getNews(): Promise<NewsItem[]> {
       .orderBy(desc(news.publishedAt))
       .limit(10);
     
-    // No type conversion needed now that types match
     return newsData as NewsItem[];
   } catch (error) {
     console.error("Error fetching news from database:", error);
@@ -36,13 +35,11 @@ async function getNews(): Promise<NewsItem[]> {
   }
 }
 
-// Updated utility function to handle Date object
+// Format date for display
 function getTimeAgo(dateValue: Date | string | null): string {
   if (!dateValue) return "Recently";
 
-  // Convert to Date if it's a string
   const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-  
   const now = new Date();
 
   if (isNaN(date.getTime())) return "Recently";
@@ -77,6 +74,95 @@ function formatViews(views?: number): string {
   return `${views} views`;
 }
 
+// Component for Breaking News Card (Small)
+function BreakingNewsCard({ news }: { news: NewsItem }) {
+  return (
+    <Link href={`/news/${news.slug}`} className="block group">
+      <div className="p-4 border rounded-lg hover:shadow-lg transition-all duration-300 hover:border-red-300 hover:bg-gradient-to-r hover:from-red-50/50 hover:to-transparent">
+        <div className="flex items-start gap-3">
+          {/* Small icon or image */}
+          {news.imageUrl ? (
+            <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden">
+              <Image
+                src={news.imageUrl}
+                alt={news.title}
+                fill
+                className="object-cover group-hover:scale-110 transition-transform duration-300"
+              />
+            </div>
+          ) : (
+            <div className="w-16 h-16 flex-shrink-0 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">🔥</span>
+            </div>
+          )}
+          
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-semibold">
+                Breaking
+              </span>
+              <span className="text-xs text-gray-400">{getTimeAgo(news.publishedAt)}</span>
+            </div>
+            <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-red-600 transition-colors">
+              {news.title}
+            </h3>
+            <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <span>👁️</span> {formatViews(news.viewCount)}
+              </span>
+              <span className="flex items-center gap-1">
+                <span>↗️</span> Read more
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// Component for Featured News Item (Sidebar)
+function FeaturedNewsItem({ news, index }: { news: NewsItem; index: number }) {
+  return (
+    <Link
+      href={`/news/${news.slug}`}
+      className="block p-3 hover:bg-gradient-to-r hover:from-orange-50/50 hover:to-transparent transition-all duration-300 group border-l-2 border-transparent hover:border-orange-500"
+    >
+      <div className="flex items-start gap-3">
+        {/* Rank number */}
+        <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-sm">
+          {index + 1}
+        </div>
+        
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold line-clamp-2 group-hover:text-orange-600 transition-colors">
+            {news.title}
+          </h3>
+          
+          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <span>🕒</span> {getTimeAgo(news.publishedAt)}
+            </span>
+            <span className="flex items-center gap-1">
+              <span>👁️</span> {formatViews(news.viewCount)}
+            </span>
+          </div>
+          
+          {/* Mini preview on hover */}
+          <div className="hidden group-hover:block mt-2 text-xs text-gray-600 line-clamp-1">
+            {getContentPreview(news.excerpt || news.content, 60)}
+          </div>
+        </div>
+        
+        {/* Arrow icon */}
+        <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-0 group-hover:translate-x-1">
+          <span className="text-orange-500">→</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 export default async function HeroSection() {
   const newsData = await getNews();
 
@@ -91,23 +177,21 @@ export default async function HeroSection() {
     );
   }
 
-  // Breaking main
+  // Breaking main (latest breaking news)
   const breakingMain = newsData
     .filter((n) => n.isBreaking)
-    .sort(
-      (a, b) => {
-        const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-        const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-        return dateB - dateA;
-      }
-    )[0];
+    .sort((a, b) => {
+      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return dateB - dateA;
+    })[0];
 
-  // Others
+  // Other breaking news (excluding the main one)
   const breakingOthers = newsData
     .filter((n) => n.isBreaking && n.id !== breakingMain?.id)
     .slice(0, 3);
 
-  // Featured
+  // Featured news
   const featuredNews = newsData
     .filter((n) => n.isFeatured && !n.isBreaking)
     .slice(0, 4);
@@ -125,9 +209,9 @@ export default async function HeroSection() {
           <div className="lg:col-span-2">
             {breakingMain ? (
               <Link href={`/news/${breakingMain.slug}`} className="block group">
-                <article className="relative overflow-hidden rounded-2xl h-[350px] md:h-[450px] shadow-2xl">
+                <article className="relative overflow-hidden rounded-2xl h-[350px] md:h-[450px] shadow-2xl hover:shadow-3xl transition-shadow duration-500">
 
-                  {/* Image */}
+                  {/* Image with zoom effect */}
                   {breakingMain.imageUrl ? (
                     <Image
                       src={breakingMain.imageUrl}
@@ -136,28 +220,29 @@ export default async function HeroSection() {
                       priority
                       fetchPriority="high"
                       sizes="(max-width: 768px) 100vw, 66vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-700"
+                      className="object-cover group-hover:scale-110 transition-transform duration-700"
                     />
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-red-900" />
                   )}
 
-                  {/* Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-red-900/80 to-transparent" />
+                  {/* Gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-900/40 to-transparent" />
 
                   {/* Content */}
                   <div className="relative z-10 h-full flex flex-col justify-end px-6 pb-10 text-white">
 
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="bg-red-600 px-3 py-1 rounded-full text-xs font-bold">
-                        Breaking
+                      <span className="bg-red-600 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+                        🔴 BREAKING
                       </span>
-                      <span className="text-xs bg-black/30 px-2 py-1 rounded">
+                      <span className="text-xs bg-black/50 backdrop-blur-sm px-2 py-1 rounded">
                         {getTimeAgo(breakingMain.publishedAt)}
                       </span>
                     </div>
 
-                    <h2 className="text-2xl md:text-3xl font-bold line-clamp-2 mb-3">
+                    <h2 className="text-2xl md:text-3xl font-bold line-clamp-2 mb-3 group-hover:text-yellow-300 transition-colors">
                       {breakingMain.title}
                     </h2>
 
@@ -168,8 +253,14 @@ export default async function HeroSection() {
                       )}
                     </p>
 
-                    <div className="text-xs opacity-80">
-                      {formatViews(breakingMain.viewCount)}
+                    {/* Stats row */}
+                    <div className="flex items-center gap-4 text-xs opacity-80">
+                      <span className="flex items-center gap-1">
+                        <span>👁️</span> {formatViews(breakingMain.viewCount)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span>↗️</span> Click to read full story
+                      </span>
                     </div>
                   </div>
                 </article>
@@ -181,54 +272,59 @@ export default async function HeroSection() {
             )}
           </div>
 
-          {/* RIGHT - FEATURED */}
-          <aside className="lg:col-span-1 bg-white rounded-2xl border shadow">
-            <div className="p-4 border-b font-bold bg-orange-500 text-white">
-              Featured News
-            </div>
-
-            <div className="divide-y">
-              {featuredNews.length > 0 ? (
-                featuredNews.map((news) => (
-                  <Link
-                    key={news.id}
-                    href={`/news/${news.slug}`}
-                    className="block p-3 hover:bg-gray-50"
-                  >
-                    <h3 className="text-sm font-semibold line-clamp-2">
-                      {news.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {getTimeAgo(news.publishedAt)}
-                    </p>
-                  </Link>
-                ))
-              ) : (
-                <div className="p-4 text-center text-gray-400 text-sm">
-                  No featured news
+          {/* RIGHT - FEATURED NEWS (with better UI) */}
+          <aside className="lg:col-span-1">
+            <div className="bg-white rounded-2xl border shadow-lg overflow-hidden sticky top-24">
+              <div className="p-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg">Featured News</h3>
+                    <p className="text-xs text-orange-100 mt-1">Most popular stories</p>
+                  </div>
+                  <div className="text-2xl">⭐</div>
                 </div>
-              )}
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {featuredNews.length > 0 ? (
+                  featuredNews.map((news, idx) => (
+                    <FeaturedNewsItem key={news.id} news={news} index={idx} />
+                  ))
+                ) : (
+                  <div className="p-6 text-center text-gray-400 text-sm">
+                    No featured news available
+                  </div>
+                )}
+              </div>
+              
+              {/* View all link */}
+              <div className="p-3 bg-gray-50 text-center border-t">
+                <Link 
+                  href="/news" 
+                  className="text-sm text-orange-600 hover:text-orange-700 font-medium inline-flex items-center gap-1 group"
+                >
+                  View All News 
+                  <span className="group-hover:translate-x-1 transition-transform">→</span>
+                </Link>
+              </div>
             </div>
           </aside>
         </div>
 
-        {/* BREAKING OTHERS */}
+        {/* BREAKING NEWS STRIP (Other breaking news) */}
         {breakingOthers.length > 0 && (
-          <div className="mt-8 grid md:grid-cols-3 gap-4">
-            {breakingOthers.map((news) => (
-              <Link
-                key={news.id}
-                href={`/news/${news.slug}`}
-                className="p-4 border rounded-lg hover:shadow"
-              >
-                <h3 className="font-semibold text-sm line-clamp-2">
-                  {news.title}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  {getTimeAgo(news.publishedAt)}
-                </p>
-              </Link>
-            ))}
+          <div className="mt-8">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-red-600 rounded-full"></div>
+              <h3 className="font-bold text-gray-800">More Breaking News</h3>
+              <span className="text-xs text-gray-400">🔥 Latest updates</span>
+            </div>
+            
+            <div className="grid md:grid-cols-3 gap-4">
+              {breakingOthers.map((news) => (
+                <BreakingNewsCard key={news.id} news={news} />
+              ))}
+            </div>
           </div>
         )}
       </div>
