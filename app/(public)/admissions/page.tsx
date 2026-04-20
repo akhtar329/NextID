@@ -1,5 +1,5 @@
 // app/(public)/admissions/page.tsx
-// ✅ Complete working version - No 'any' types
+// ✅ Complete with Sidebar - All errors fixed
 
 import { Metadata } from "next";
 import Link from "next/link";
@@ -19,7 +19,6 @@ import { generateSEO } from "@/app/lib/seo";
 // ==================== TYPES ====================
 type DrizzleCondition = SQL<unknown>;
 
-// ✅ Define proper types for admission data
 type Program = {
   id: number;
   name: string;
@@ -46,8 +45,34 @@ type Admission = {
   programs: Program[];
 };
 
+type CityWithCount = {
+  id: number;
+  name: string;
+  slug: string;
+  province: string | null;
+  isPopular: boolean | null;
+  count: number;
+};
+
 // ==================== CONSTANTS ====================
 const ITEMS_PER_PAGE = 10;
+
+const PROGRAM_TYPES: {
+  slug: string;
+  name: string;
+  icon: string;
+  description: string;
+}[] = [
+  { slug: "", name: "All Programs", icon: "📋", description: "All admission programs" },
+  { slug: "matric", name: "Matric / O-Level", icon: "📚", description: "Matric admissions" },
+  { slug: "inter", name: "Intermediate", icon: "📖", description: "Inter admissions" },
+  { slug: "bs", name: "BS Programs", icon: "🎓", description: "BS 4-year programs" },
+  { slug: "mba", name: "MBA", icon: "💼", description: "MBA admissions" },
+  { slug: "ms", name: "MS/MPhil", icon: "🔬", description: "MS admissions" },
+  { slug: "medical", name: "Medical", icon: "🩺", description: "MBBS/BDS admissions" },
+  { slug: "engineering", name: "Engineering", icon: "⚙️", description: "Engineering admissions" },
+  { slug: "law", name: "Law", icon: "⚖️", description: "LLB admissions" },
+];
 
 // ==================== HELPER FUNCTIONS ====================
 function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean): {
@@ -70,40 +95,16 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean): {
 
   if (diffMs < 0) {
     const daysPassed = Math.abs(diffDays);
-    if (daysPassed === 0) {
-      return {
-        label: `Closed ${diffHours} hours ago`,
-        color: "gray",
-        icon: "📅",
-      };
-    }
+    if (daysPassed === 0) return { label: `Closed ${diffHours} hours ago`, color: "gray", icon: "📅" };
     if (daysPassed === 1) return { label: "Closed yesterday", color: "gray", icon: "📅" };
     if (daysPassed <= 7) return { label: `Closed ${daysPassed} days ago`, color: "gray", icon: "📅" };
     return { label: `Closed on ${close.toLocaleDateString("en-PK")}`, color: "gray", icon: "📅" };
   }
 
-  if (diffHours <= 24) {
-    return {
-      label: `${diffHours} hour${diffHours !== 1 ? "s" : ""} left`,
-      color: "red",
-      icon: "⏰",
-      urgent: true,
-    };
-  }
-  if (diffDays <= 7) {
-    return {
-      label: `${diffDays} day${diffDays !== 1 ? "s" : ""} left`,
-      color: "red",
-      icon: "⚠️",
-      urgent: true,
-    };
-  }
-  if (diffDays <= 15) {
-    return { label: `${diffDays} days left`, color: "yellow", icon: "📅" };
-  }
-  if (diffDays <= 30) {
-    return { label: `${diffDays} days left`, color: "green", icon: "📅" };
-  }
+  if (diffHours <= 24) return { label: `${diffHours} hour${diffHours !== 1 ? "s" : ""} left`, color: "red", icon: "⏰", urgent: true };
+  if (diffDays <= 7) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} left`, color: "red", icon: "⚠️", urgent: true };
+  if (diffDays <= 15) return { label: `${diffDays} days left`, color: "yellow", icon: "📅" };
+  if (diffDays <= 30) return { label: `${diffDays} days left`, color: "green", icon: "📅" };
   return { label: null, color: null, hide: true, icon: "📅" };
 }
 
@@ -146,8 +147,34 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // ==================== DATA FETCHING ====================
+async function getCitiesWithAdmissionCounts(showClosed: boolean = false): Promise<CityWithCount[]> {
+  try {
+    const result = await db
+      .select({
+        id: cities.id,
+        name: cities.name,
+        slug: cities.slug,
+        province: cities.province,
+        isPopular: cities.isPopular,
+        count: sql<number>`count(distinct ${admissions.id})`.as("count"),
+      })
+      .from(cities)
+      .innerJoin(institutes, eq(institutes.cityId, cities.id))
+      .innerJoin(admissions, eq(admissions.instituteId, institutes.id))
+      .where(showClosed ? eq(admissions.status, "Closed") : eq(admissions.status, "Open"))
+      .groupBy(cities.id, cities.name, cities.slug, cities.province, cities.isPopular)
+      .orderBy(sql`count desc`);
+
+    return result;
+  } catch (error) {
+    console.error("Error getting city counts:", error);
+    return [];
+  }
+}
+
 async function getAdmissions(filters: {
   city?: string;
+  level?: string;
   q?: string;
   page?: number;
   showClosed?: boolean;
@@ -244,10 +271,31 @@ async function getAdmissions(filters: {
       })
     );
 
+    let filteredAdmissions = admissionsWithPrograms;
+
+    if (!filters.showClosed && filters.level && filters.level !== "") {
+      const levelKeywords: Record<string, string[]> = {
+        matric: ["Matric", "SSC", "Secondary"],
+        inter: ["Intermediate", "HSSC", "FA", "FSc"],
+        bs: ["BS", "Bachelor", "4-Year"],
+        mba: ["MBA", "Master of Business"],
+        ms: ["MS", "MPhil", "Master"],
+        medical: ["MBBS", "BDS", "Medical"],
+        engineering: ["Engineering", "Civil", "Mechanical"],
+        law: ["LLB", "Law"],
+      };
+      const keywords = levelKeywords[filters.level] || [];
+      filteredAdmissions = admissionsWithPrograms.filter((ad) =>
+        ad.programs.some((program) =>
+          keywords.some((keyword) => program.name.toLowerCase().includes(keyword.toLowerCase()))
+        )
+      );
+    }
+
     return {
-      admissions: admissionsWithPrograms,
-      totalCount,
-      totalPages,
+      admissions: filteredAdmissions,
+      totalCount: filteredAdmissions.length,
+      totalPages: Math.ceil(filteredAdmissions.length / ITEMS_PER_PAGE),
       currentPage,
     };
   } catch (error) {
@@ -319,9 +367,7 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
                 className="rounded-xl object-contain"
               />
             ) : (
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl">
-                🏛️
-              </div>
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl">🏛️</div>
             )}
             <div className="flex-1">
               <h3 className="text-xl font-bold text-gray-900 mb-2">
@@ -338,19 +384,11 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
               </div>
               <div className="flex flex-wrap gap-2 mb-4">
                 {displayPrograms.map((program) => (
-                  <Link
-                    key={program.id}
-                    href={`/programs/${program.slug}`}
-                    className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs hover:bg-blue-100 transition"
-                  >
+                  <Link key={program.id} href={`/programs/${program.slug}`} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs hover:bg-blue-100 transition">
                     {program.name}
                   </Link>
                 ))}
-                {remainingCount > 0 && (
-                  <span className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs">
-                    +{remainingCount} more
-                  </span>
-                )}
+                {remainingCount > 0 && <span className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs">+{remainingCount} more</span>}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className="bg-gray-50 rounded-xl p-3">
@@ -388,6 +426,58 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
   );
 }
 
+// Pagination Component
+function Pagination({ currentPage, totalPages, showClosed, filters }: { currentPage: number; totalPages: number; showClosed: boolean; filters: { city?: string; level?: string; q?: string } }) {
+  if (totalPages <= 1) return null;
+
+  const buildPageUrl = (page: number) => {
+    const params = new URLSearchParams();
+    if (filters.city) params.set("city", filters.city);
+    if (filters.level) params.set("level", filters.level);
+    if (filters.q) params.set("q", filters.q);
+    if (showClosed) params.set("closed", "true");
+    params.set("page", page.toString());
+    return `/admissions?${params.toString()}`;
+  };
+
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
+  for (let i = startPage; i <= endPage; i++) pages.push(i);
+
+  return (
+    <div className="flex justify-center mt-8">
+      <nav className="flex items-center gap-2 flex-wrap">
+        <Link href={currentPage > 1 ? buildPageUrl(currentPage - 1) : "#"} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${currentPage > 1 ? "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" : "bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none"}`}>
+          ← Previous
+        </Link>
+        {startPage > 1 && (
+          <>
+            <Link href={buildPageUrl(1)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">1</Link>
+            {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+          </>
+        )}
+        {pages.map((page) => (
+          <Link key={page} href={buildPageUrl(page)} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${page === currentPage ? "bg-blue-600 text-white" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+            {page}
+          </Link>
+        ))}
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+            <Link href={buildPageUrl(totalPages)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">{totalPages}</Link>
+          </>
+        )}
+        <Link href={currentPage < totalPages ? buildPageUrl(currentPage + 1) : "#"} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${currentPage < totalPages ? "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" : "bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none"}`}>
+          Next →
+        </Link>
+      </nav>
+    </div>
+  );
+}
+
 // ==================== MAIN PAGE ====================
 export default async function AdmissionsPage({
   searchParams,
@@ -400,27 +490,37 @@ export default async function AdmissionsPage({
 
   const filters = {
     city: typeof params.city === "string" ? params.city : "",
+    level: typeof params.level === "string" ? params.level : "",
     q: typeof params.q === "string" ? params.q : "",
     page: currentPage,
     showClosed,
   };
 
-  const [admissionsResult, stats] = await Promise.all([
+  const [admissionsResult, stats, citiesWithCounts] = await Promise.all([
     getAdmissions(filters),
     getStats(),
+    getCitiesWithAdmissionCounts(showClosed),
   ]);
 
   const currentAdmissions = admissionsResult;
 
-  if (currentAdmissions.admissions.length === 0) {
+  const buildUrl = (key: string, value: string) => {
+    const urlParams = new URLSearchParams();
+    if (filters.city && key !== "city") urlParams.set("city", filters.city);
+    if (filters.level && key !== "level") urlParams.set("level", filters.level);
+    if (filters.q && key !== "q") urlParams.set("q", filters.q);
+    if (showClosed) urlParams.set("closed", "true");
+    if (value) urlParams.set(key, value);
+    return urlParams.toString() ? `/admissions?${urlParams.toString()}` : "/admissions";
+  };
+
+  if (currentAdmissions.admissions.length === 0 && currentPage === 1) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-20">
         <div className="container mx-auto px-4 text-center">
           <div className="text-6xl mb-4">📭</div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">No Admissions Found</h1>
-          <Link href="/admissions" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-xl">
-            View Open Admissions
-          </Link>
+          <Link href="/admissions" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-xl">View Open Admissions</Link>
         </div>
       </main>
     );
@@ -478,29 +578,104 @@ export default async function AdmissionsPage({
               <form action="/admissions" method="GET" className="flex gap-2">
                 {showClosed && <input type="hidden" name="closed" value="true" />}
                 <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    name="q"
-                    defaultValue={filters.q}
-                    placeholder="Search by university..."
-                    className="w-full px-4 py-3 rounded-xl text-gray-900 border-0 focus:ring-2 focus:ring-yellow-400"
-                  />
+                  <input type="text" name="q" defaultValue={filters.q} placeholder="Search by university..." className="w-full px-4 py-3 rounded-xl text-gray-900 border-0 focus:ring-2 focus:ring-yellow-400" />
                 </div>
-                <button type="submit" className="px-6 py-3 bg-yellow-400 text-gray-900 font-semibold rounded-xl hover:bg-yellow-300 transition">
-                  Search
-                </button>
+                <button type="submit" className="px-6 py-3 bg-yellow-400 text-gray-900 font-semibold rounded-xl hover:bg-yellow-300 transition">Search</button>
               </form>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Admissions Cards */}
+      {/* Main Content with Sidebar */}
       <div className="container mx-auto px-4 py-12">
-        <div className="space-y-5">
-          {currentAdmissions.admissions.map((admission: Admission) => (
-            <AdmissionCard key={admission.id} admission={admission} showClosed={showClosed} />
-          ))}
+        <div className="flex flex-col lg:flex-row gap-8">
+          
+          {/* LEFT SIDEBAR - Filters */}
+          <aside className="lg:w-80 flex-shrink-0">
+            <div className="sticky top-24 space-y-6">
+              {/* Program Type Filter */}
+              {!showClosed && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-5 py-3">
+                    <h2 className="text-white font-semibold flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                      Filter by Program
+                    </h2>
+                  </div>
+                  <div className="p-4">
+                    <div className="space-y-1">
+                      {PROGRAM_TYPES.map((level) => (
+                        <Link
+                          key={level.slug}
+                          href={buildUrl("level", level.slug)}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${filters.level === level.slug ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-gray-50 text-gray-700"}`}
+                        >
+                          <span className="text-lg">{level.icon}</span>
+                          <span className="flex-1">{level.name}</span>
+                          {filters.level === level.slug && <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* City Filter */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                  <span>📍</span> Filter by City
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={buildUrl("city", "")} className={`px-3 py-1.5 rounded-full text-sm transition ${!filters.city ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                    All ({stats.totalAdmissions})
+                  </Link>
+                  {citiesWithCounts.slice(0, 10).map((city) => (
+                    <Link key={city.slug} href={buildUrl("city", city.slug)} className={`px-3 py-1.5 rounded-full text-sm transition ${filters.city === city.slug ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                      {city.name} <span className="text-xs opacity-75">({city.count})</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+
+              {/* Clear Filters */}
+              {(filters.city || filters.level || filters.q) && (
+                <Link href={showClosed ? "/admissions?closed=true" : "/admissions"} className="block text-center text-sm text-blue-600 hover:underline py-3 border-t">
+                  Clear all filters
+                </Link>
+              )}
+            </div>
+          </aside>
+
+          {/* RIGHT CONTENT - Admissions List */}
+          <div className="flex-1">
+            {/* Results Header */}
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-6 border border-gray-100">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">{currentAdmissions.totalCount} {showClosed ? "Closed" : "Open"} Admissions Found</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {filters.level && `Program: ${PROGRAM_TYPES.find(l => l.slug === filters.level)?.name}`}
+                    {filters.city && ` • City: ${citiesWithCounts.find(c => c.slug === filters.city)?.name}`}
+                    {filters.q && ` • Search: "${filters.q}"`}
+                    {` • Page ${currentAdmissions.currentPage} of ${currentAdmissions.totalPages}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Admissions Cards */}
+            <div className="space-y-5">
+              {currentAdmissions.admissions.map((admission: Admission) => (
+                <AdmissionCard key={admission.id} admission={admission} showClosed={showClosed} />
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <Pagination currentPage={currentAdmissions.currentPage} totalPages={currentAdmissions.totalPages} showClosed={showClosed} filters={{ city: filters.city, level: filters.level, q: filters.q }} />
+          </div>
         </div>
       </div>
     </main>
