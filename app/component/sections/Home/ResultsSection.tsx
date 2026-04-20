@@ -1,476 +1,340 @@
 // app/component/sections/Home/ResultsSection.tsx
-"use client"; 
+// ✅ Fixed Tailwind conflict - No warnings
 
-import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { results, boards, institutes } from '@/app/lib/schema';
+import { eq, desc } from 'drizzle-orm';
 
-// Types for API data
+// Types
 interface Result {
   id: number;
   slug: string;
   title: string;
   year: number;
-  resultDate: string | null;
+  resultDate: Date | null;
   programName: string | null;
   boardName: string | null;
   boardSlug: string | null;
   universityName: string | null;
   universitySlug: string | null;
   isPopular: boolean | null;
+  viewCount?: number | null;
 }
 
-export default function LatestResultsSection() {
-  const [results, setResults] = useState<Result[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState('All');
-  const [selectedYear, setSelectedYear] = useState('All');
-  const [selectedInstitution, setSelectedInstitution] = useState('All');
-  const [hasData, setHasData] = useState(false);
+// Server-side data fetching
+async function getResults(): Promise<Result[]> {
+  try {
+    const resultsData = await db
+      .select({
+        id: results.id,
+        slug: results.slug,
+        title: results.title,
+        year: results.year,
+        resultDate: results.resultDate,
+        programName: results.title,
+        boardName: boards.name,
+        boardSlug: boards.slug,
+        universityName: institutes.name,
+        universitySlug: institutes.slug,
+        isPopular: results.isPopular,
+        viewCount: results.viewCount,
+      })
+      .from(results)
+      .leftJoin(boards, eq(results.boardId, boards.id))
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))
+      .where(eq(results.status, true))
+      .orderBy(desc(results.resultDate), desc(results.year))
+      .limit(50);
 
-  // Fetch results from API
-  useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        setLoading(true);
-        
-        const response = await fetch('/api/public/results?limit=50&sort=latest');
-        const data = await response.json();
-        
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setResults(data.data);
-          setHasData(true);
-        } else {
-          setResults([]);
-          setHasData(false);
-        }
-      } catch (error) {
-        console.error('🔥 Fetch error:', error);
-        setResults([]);
-        setHasData(false);
-      } finally {
-        setLoading(false);
-      }
-    };
+    return resultsData;
+  } catch (error) {
+    console.error('Error fetching results:', error);
+    return [];
+  }
+}
 
-    fetchResults();
-  }, []);
+// Helper functions
+function formatDate(date: Date | null): string {
+  if (!date) return 'TBA';
+  try {
+    return date.toLocaleDateString('en-PK', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch {
+    return 'Invalid Date';
+  }
+}
 
-  // Get current date for calculations
+function getTimeAgo(date: Date | null): string {
+  if (!date) return '';
+  try {
+    const now = new Date();
+    const diffDays = Math.ceil((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+    return formatDate(date);
+  } catch {
+    return '';
+  }
+}
+
+function formatViews(views?: number | null): string {
+  if (!views) return '0 views';
+  if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
+  if (views >= 1000) return `${(views / 1000).toFixed(1)}K views`;
+  return `${views} views`;
+}
+
+// Result Card Component
+function ResultCard({ result, index }: { result: Result; index: number }) {
+  const institutionName = result.boardName || result.universityName || 'Unknown';
+  const institutionType = result.boardName ? 'Board' : 'University';
+  const isRecent = result.resultDate && (new Date().getTime() - new Date(result.resultDate).getTime()) < 30 * 24 * 60 * 60 * 1000;
+  
+  return (
+    <Link
+      href={`/results/${result.slug}`}
+      className="group block bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all hover:border-blue-300 overflow-hidden"
+    >
+      <div className="p-4 md:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white text-[10px] md:text-xs font-bold">
+                {index + 1}
+              </div>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] md:text-xs font-medium ${
+                institutionType === 'Board' 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-blue-100 text-blue-700'
+              }`}>
+                {institutionType}
+              </span>
+              {result.isPopular && (
+                <span className="inline-flex items-center gap-1 text-yellow-500 text-xs">
+                  <span>⭐</span>
+                  <span className="hidden sm:inline text-[10px]">Popular</span>
+                </span>
+              )}
+              {isRecent && (
+                <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-medium">
+                  New
+                </span>
+              )}
+            </div>
+            
+            <h3 className="text-sm md:text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+              {institutionName}
+            </h3>
+            
+            <p className="text-xs md:text-sm text-gray-600 mt-1 line-clamp-1">
+              {result.programName || result.title || 'Results Announced'}
+            </p>
+            
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-2 text-[10px] md:text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <span>📅</span> Year: {result.year}
+              </span>
+              {result.resultDate && (
+                <>
+                  <span className="text-gray-300">•</span>
+                  <span className="flex items-center gap-1">
+                    <span>🕒</span> {getTimeAgo(result.resultDate)}
+                  </span>
+                </>
+              )}
+              {result.viewCount && result.viewCount > 0 && (
+                <>
+                  <span className="text-gray-300 hidden sm:inline">•</span>
+                  <span className="flex items-center gap-1 hidden sm:flex">
+                    <span>👁️</span> {formatViews(result.viewCount)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex-shrink-0">
+            <div className="px-3 md:px-4 py-1.5 md:py-2 bg-blue-600 text-white text-xs md:text-sm font-medium rounded-lg group-hover:bg-blue-700 transition-colors whitespace-nowrap">
+              View Result →
+            </div>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// Stats Card Component
+function StatsCard({ 
+  label, 
+  value, 
+  color, 
+  icon 
+}: { 
+  label: string; 
+  value: number; 
+  color: string; 
+  icon: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-3 md:p-4 text-center border border-gray-200 shadow-sm">
+      <div className="text-2xl md:text-3xl font-bold" style={{ color }}>
+        {value}
+      </div>
+      <div className="text-xs md:text-sm text-gray-600 flex items-center justify-center gap-1">
+        <span>{icon}</span> {label}
+      </div>
+    </div>
+  );
+}
+
+// Main Server Component
+export default async function ResultsSection() {
+  const resultsData = await getResults();
+
+  if (!resultsData.length) {
+    return null;
+  }
+
   const currentDate = new Date();
-
-  // Calculate stats
-  const resultsStats = useMemo(() => {
-    const total = results.length;
-    const thisMonth = results.filter(r => {
-      if (!r.resultDate) return false;
-      const date = new Date(r.resultDate);
-      const now = new Date();
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-    }).length;
-    
-    const popular = results.filter(r => r.isPopular).length;
-    
-    const byType = {
-      boards: results.filter(r => r.boardName).length,
-      universities: results.filter(r => r.universityName).length
-    };
-
-    return { total, thisMonth, popular, byType };
-  }, [results]);
-
-  // Get unique values for filters
-  const uniqueTypes = useMemo(() => {
-    const types: string[] = [];
-    results.forEach(r => {
-      if (r.boardName) types.push('Board');
-      else if (r.universityName) types.push('University');
-    });
-    return ['All', ...new Set(types)];
-  }, [results]);
-
-  const uniqueYears = useMemo(() => {
-    const years = results.map(r => r.year.toString());
-    return ['All', ...new Set(years)].sort((a, b) => {
-      if (a === 'All') return -1;
-      if (b === 'All') return 1;
-      return parseInt(b) - parseInt(a);
-    });
-  }, [results]);
-
-  const uniqueInstitutions = useMemo(() => {
-    const inst = results
-      .map(r => r.boardName || r.universityName)
-      .filter((name): name is string => name !== null && name !== undefined);
-    return ['All', ...new Set(inst)];
-  }, [results]);
-
-  // Filter results
-  const filteredResults = useMemo(() => {
-    return results.filter(result => {
-      const searchLower = searchQuery.toLowerCase();
-      const resultName = result.boardName || result.universityName || '';
-      const programName = result.programName || result.title || '';
-      const resultType = result.boardName ? 'Board' : 'University';
-      
-      const matchesSearch = searchQuery === '' || 
-        resultName.toLowerCase().includes(searchLower) ||
-        programName.toLowerCase().includes(searchLower) ||
-        result.year.toString().includes(searchLower);
-      
-      const matchesType = selectedType === 'All' || resultType === selectedType;
-      const matchesYear = selectedYear === 'All' || result.year.toString() === selectedYear;
-      const matchesInstitution = selectedInstitution === 'All' || resultName === selectedInstitution;
-      
-      return matchesSearch && matchesType && matchesYear && matchesInstitution;
-    });
-  }, [results, searchQuery, selectedType, selectedYear, selectedInstitution]);
-
-  // Get latest results (last 30 days)
-  const latestResults = useMemo(() => {
-    return results.filter(r => {
+  const thisMonth = resultsData.filter(r => {
+    if (!r.resultDate) return false;
+    const date = new Date(r.resultDate);
+    return date.getMonth() === currentDate.getMonth() && 
+           date.getFullYear() === currentDate.getFullYear();
+  }).length;
+  
+  const boardResults = resultsData.filter(r => r.boardName).length;
+  const universityResults = resultsData.filter(r => r.universityName).length;
+  const popularResults = resultsData.filter(r => r.isPopular).length;
+  
+  const latestResults = resultsData
+    .filter(r => {
       if (!r.resultDate) return false;
       const date = new Date(r.resultDate);
       const diffDays = Math.ceil((currentDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
       return diffDays <= 30;
-    }).slice(0, 5);
-  }, [results, currentDate]);
-
-  // Format date
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBA';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-PK', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
-
-  // Get time ago
-  const getTimeAgo = (dateString: string | null) => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffDays = Math.ceil((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 0) return 'Today';
-      if (diffDays === 1) return 'Yesterday';
-      if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
-      return formatDate(dateString);
-    } catch {
-      return '';
-    }
-  };
-
-  // Get institution name and slug
-  const getInstitutionInfo = (result: Result) => {
-    return {
-      name: result.boardName || result.universityName || 'Unknown',
-      slug: result.boardSlug || result.universitySlug || '',
-      type: result.boardName ? 'Board' : 'University'
-    };
-  };
-
-  // ✅ AGAR DATA NAHI HAI AUR LOADING BHI NAHI TO KUCH NAHI DIKHAO
-  if (!hasData && !loading) {
-    return null;
-  }
-
-  // Loading state
-  if (loading) {
-    return (
-      <section className="py-12 bg-gray-50">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center mb-10">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Exam Results in Pakistan 2026
-            </h1>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Loading latest results...
-            </p>
-          </div>
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        </div>
-      </section>
-    );
-  }
+    })
+    .slice(0, 6);
 
   return (
-    <section className="py-12 bg-gray-50">
+    <section className="py-8 md:py-12 bg-gradient-to-br from-gray-50 to-blue-50/20">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Hidden H1 for SEO */}
-        <h2 className="sr-only">
-          Pakistan Exam Results 2026 - Board and University Results
-        </h2>
-        
-        {/* Section Heading */}
-        <div className="text-center mb-6">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
-            📊 Latest Exam Results in Pakistan
+        <div className="text-center mb-6 md:mb-8">
+          <div className="inline-block mb-3">
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1 rounded-full">
+              📊 Latest Updates
+            </span>
+          </div>
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
+            Exam Results in Pakistan
           </h2>
-          <p className="text-gray-600 max-w-2xl mx-auto text-lg">
-            Check {resultsStats.thisMonth} new results announced this month. 
-            {resultsStats.popular > 0 && ` ${resultsStats.popular} popular results available.`}
+          <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto">
+            Check {thisMonth} new results announced this month
+            {popularResults > 0 && ` • ${popularResults} popular results available`}
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
-            <div className="text-3xl font-bold text-blue-600">{resultsStats.total}</div>
-            <div className="text-sm text-gray-600">Total Results</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
-            <div className="text-3xl font-bold text-green-600">{resultsStats.byType.boards}</div>
-            <div className="text-sm text-gray-600">Board Results</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
-            <div className="text-3xl font-bold text-purple-600">{resultsStats.byType.universities}</div>
-            <div className="text-sm text-gray-600">University Results</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
-            <div className="text-3xl font-bold text-orange-600">{resultsStats.thisMonth}</div>
-            <div className="text-sm text-gray-600">This Month</div>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+          <StatsCard label="Total Results" value={resultsData.length} color="#2563EB" icon="📋" />
+          <StatsCard label="Board Results" value={boardResults} color="#16A34A" icon="🏛️" />
+          <StatsCard label="University Results" value={universityResults} color="#9333EA" icon="🎓" />
+          <StatsCard label="This Month" value={thisMonth} color="#EA580C" icon="📅" />
         </div>
 
-        {/* Latest Results Preview - Sirf tab show jab latest results hon */}
         {latestResults.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
-              🔥 Latest Results ({latestResults.length})
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {latestResults.map((result) => {
-                const { name, type } = getInstitutionInfo(result);
-                return (
-                  <Link
-                    key={result.id}
-                    href={`/results/${result.slug}`}
-                    className="bg-white rounded-xl p-5 border border-gray-200 hover:shadow-lg transition-all group hover:border-blue-400"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${
-                          type === 'Board' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {type}
-                        </span>
-                        <h4 className="font-bold text-gray-900 group-hover:text-blue-600">
-                          {name}
-                        </h4>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {result.programName || result.title || 'Results Announced'}
-                        </p>
-                      </div>
-                      {result.isPopular && (
-                        <span className="text-yellow-500 text-xl">⭐</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Year: {result.year}</span>
-                      <span className="text-green-600 font-medium">
-                        {getTimeAgo(result.resultDate)}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Search and Filters - Sirf tab show jab results hon */}
-        {results.length > 0 && (
-          <div className="bg-white rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Filter Results
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              {/* Search Input */}
-              <div className="lg:col-span-2">
-                <label htmlFor="search-results" className="block text-sm font-medium text-gray-700 mb-2">
-                  Search
-                </label>
-                <div className="relative">
-                  <input
-                    id="search-results"
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search by institution or program..."
-                    className="w-full px-4 py-3 pl-10 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    🔍
-                  </span>
-                </div>
-              </div>
-
-              {/* Type Filter */}
-              <div>
-                <label htmlFor="result-type" className="block text-sm font-medium text-gray-700 mb-2">
-                  Type
-                </label>
-                <select
-                  id="result-type"
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {uniqueTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Year Filter */}
-              <div>
-                <label htmlFor="year" className="block text-sm font-medium text-gray-700 mb-2">
-                  Year
-                </label>
-                <select
-                  id="year"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {uniqueYears.map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Institution Filter */}
-            <div className="mt-4">
-              <label htmlFor="institution" className="block text-sm font-medium text-gray-700 mb-2">
-                Institution
-              </label>
-              <select
-                id="institution"
-                value={selectedInstitution}
-                onChange={(e) => setSelectedInstitution(e.target.value)}
-                className="w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="mb-8 md:mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+                <span className="w-1.5 h-5 md:h-6 bg-blue-600 rounded-full"></span>
+                🔥 Latest Results
+              </h3>
+              <Link 
+                href="/results" 
+                className="text-xs md:text-sm text-blue-600 hover:text-blue-800 font-medium"
               >
-                {uniqueInstitutions.map(inst => (
-                  <option key={inst} value={inst}>{inst}</option>
-                ))}
-              </select>
+                View All →
+              </Link>
             </div>
-
-            {/* Clear Filters */}
-            {(searchQuery || selectedType !== 'All' || selectedYear !== 'All' || selectedInstitution !== 'All') && (
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedType('All');
-                    setSelectedYear('All');
-                    setSelectedInstitution('All');
-                  }}
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  Clear all filters
-                </button>
-              </div>
-            )}
+            
+            <div className="grid grid-cols-1 gap-3 md:gap-4">
+              {latestResults.map((result, index) => (
+                <ResultCard key={result.id} result={result} index={index} />
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Results Count - Sirf tab show jab results hon */}
-        {results.length > 0 && (
-          <div className="mb-4 text-sm text-gray-600">
-            Showing {filteredResults.length} of {results.length} results
+        {/* ✅ Fixed: Desktop Table View */}
+        <div className="hidden lg:block">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+              <span className="w-1.5 h-5 md:h-6 bg-green-600 rounded-full"></span>
+              All Results
+            </h3>
           </div>
-        )}
-
-        {/* Table - Desktop View */}
-        {filteredResults.length > 0 ? (
-          <div className="hidden lg:block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Type
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Institution
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Program / Title
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Year
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Result Date
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 border-b border-gray-200">
-                    Action
-                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">#</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Institution</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Program</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Year</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredResults.map((result) => {
-                  const { name, slug, type } = getInstitutionInfo(result);
+                {resultsData.slice(0, 10).map((result, idx) => {
+                  const institutionName = result.boardName || result.universityName || 'Unknown';
+                  const institutionType = result.boardName ? 'Board' : 'University';
                   
                   return (
                     <tr key={result.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          type === 'Board' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-blue-100 text-blue-800'
+                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                          institutionType === 'Board' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {type}
+                          {institutionType}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <Link href={`/${type === 'Board' ? 'boards' : 'universities'}/${slug}`}>
-                          <div className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline">
-                            {name}
-                          </div>
-                        </Link>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{institutionName}</div>
                         {result.isPopular && (
-                          <span className="inline-flex items-center px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full mt-1">
+                          <span className="inline-flex items-center gap-1 text-yellow-500 text-xs mt-1">
                             ⭐ Popular
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {result.programName || result.title || 'General'}
-                        </div>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {result.programName || result.title || 'General'}
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex px-2 py-1 bg-gray-100 rounded-full text-xs font-medium">
                           {result.year}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-600">
-                          {formatDate(result.resultDate)}
-                        </div>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {formatDate(result.resultDate)}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Link
                           href={`/results/${result.slug}`}
-                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                          className="inline-flex px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition"
                         >
-                          View Result
+                          View
                         </Link>
                       </td>
                     </tr>
@@ -478,63 +342,67 @@ export default function LatestResultsSection() {
                 })}
               </tbody>
             </table>
-
-            {/* Status Bar */}
-            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span className="text-gray-600">Board Results</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    <span className="text-gray-600">University Results</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                    <span className="text-gray-600">Popular</span>
-                  </span>
-                </div>
-                <span className="text-gray-500">
-                  {resultsStats.thisMonth} results this month
-                </span>
-              </div>
-            </div>
           </div>
-        ) : (
-          // No results after filtering
-          results.length > 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-              <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
-              <p className="text-gray-500 mb-6">
-                No results match your search criteria.
-              </p>
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedType('All');
-                  setSelectedYear('All');
-                  setSelectedInstitution('All');
-                }}
-                className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                Clear Filters
-              </button>
-            </div>
-          ) : null // Agar total results hi zero hain to kuch na dikhao
-        )}
+        </div>
 
-        {/* View All Link - Sirf tab show jab results hon */}
-        {results.length > 0 && (
-          <div className="text-center mt-10">
+        {/* ✅ Fixed: Mobile Card View - No Tailwind conflict */}
+        <div className="lg:hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-green-600 rounded-full"></span>
+              All Results
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {resultsData.slice(0, 10).map((result, idx) => {
+              const institutionName = result.boardName || result.universityName || 'Unknown';
+              const institutionType = result.boardName ? 'Board' : 'University';
+              
+              return (
+                <Link
+                  key={result.id}
+                  href={`/results/${result.slug}`}
+                  className="block bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-gray-400 font-medium">#{idx + 1}</span>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          institutionType === 'Board' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {institutionType}
+                        </span>
+                        {result.isPopular && <span className="text-yellow-500 text-xs">⭐</span>}
+                      </div>
+                      <h4 className="text-sm font-bold text-gray-900 line-clamp-1">{institutionName}</h4>
+                      <p className="text-xs text-gray-600 mt-1 line-clamp-1">
+                        {result.programName || result.title || 'Results Announced'}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-500">
+                        <span>Year {result.year}</span>
+                        <span>•</span>
+                        <span>{formatDate(result.resultDate)}</span>
+                      </div>
+                    </div>
+                    <div className="px-2 py-1 bg-blue-600 text-white text-xs rounded-lg whitespace-nowrap">
+                      View →
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {resultsData.length > 10 && (
+          <div className="text-center mt-8 md:mt-10">
             <Link
               href="/results"
-              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors shadow-md"
+              className="inline-flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm md:text-base font-semibold rounded-lg hover:shadow-lg transition-all group"
             >
-              Browse All {results.length} Results in Pakistan
-              <span className="ml-2">→</span>
+              <span>Browse All {resultsData.length} Results</span>
+              <span className="group-hover:translate-x-1 transition-transform">→</span>
             </Link>
           </div>
         )}

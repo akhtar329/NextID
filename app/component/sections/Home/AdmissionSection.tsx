@@ -1,13 +1,17 @@
 // app/component/sections/Home/AdmissionSection.tsx
-"use client"; 
+// ✅ Server Component - Responsive Design (Mobile Optimized)
 
-import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { admissions, institutes, cities, programOfferings, programs, degrees } from '@/app/lib/schema';
+import { eq, desc, and, sql } from 'drizzle-orm'; // ✅ Removed unused 'isNull'
 
+// Types matching your actual schema
 interface Program {
   id: number;
   name: string;
   slug: string;
+  degreeName?: string;
 }
 
 interface Admission {
@@ -17,512 +21,407 @@ interface Admission {
   year: number;
   session: string | null;
   status: string;
-  expectedCloseDate: string | null;
-  expectedOpenDate?: string | null;
-  instituteId: number;
-  instituteName: string;
-  instituteSlug: string;
-  instituteCity?: string;
-  instituteProvince?: string;
+  expectedCloseDate: Date | null;
+  expectedOpenDate: Date | null;
+  instituteId: number | null;
+  instituteName: string | null;
+  instituteSlug: string | null;
+  instituteCity: string | null;
   programs: Program[];
 }
 
-type UrgencyFilter = 'all' | 'urgent' | 'warning' | 'normal';
+// Server-side data fetching with proper relations
+async function getAdmissions(): Promise<Admission[]> {
+  try {
+    // Fetch admissions with institute and city info
+    const admissionsData = await db
+      .select({
+        id: admissions.id,
+        name: admissions.name,
+        slug: admissions.slug,
+        year: admissions.year,
+        session: admissions.session,
+        status: admissions.status,
+        expectedCloseDate: admissions.expectedCloseDate,
+        expectedOpenDate: admissions.expectedOpenDate,
+        instituteId: admissions.instituteId,
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
+        instituteCity: cities.name,
+      })
+      .from(admissions)
+      .leftJoin(institutes, eq(admissions.instituteId, institutes.id))
+      .leftJoin(cities, eq(institutes.cityId, cities.id))
+      .where(
+        and(
+          eq(admissions.status, 'Open'),
+          sql`${admissions.expectedCloseDate} > NOW() OR ${admissions.expectedCloseDate} IS NULL`
+        )
+      )
+      .orderBy(desc(admissions.year))
+      .limit(50);
 
-export default function LatestAdmissionsSection() {
-  const [admissions, setAdmissions] = useState<Admission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUniversity, setSelectedUniversity] = useState('All');
-  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>('all');
-  const [hasData, setHasData] = useState(false);
+    // Fetch programs for each admission through admissionOfferings and programOfferings
+    const admissionsWithPrograms = await Promise.all(
+      admissionsData.map(async (admission) => {
+        // Get program offerings for this admission
+        const offerings = await db
+          .select({
+            programId: programs.id,
+            programName: programs.name,
+            programSlug: programs.slug,
+            degreeName: degrees.name,
+          })
+          .from(programOfferings)
+          .innerJoin(
+            sql`admission_offerings`,
+            sql`admission_offerings.offering_id = ${programOfferings.id}`
+          )
+          .innerJoin(programs, eq(programOfferings.programId, programs.id))
+          .leftJoin(degrees, eq(programOfferings.degreeId, degrees.id))
+          .where(sql`admission_offerings.admission_id = ${admission.id}`)
+          .limit(5);
 
-  // ==================== HELPER FUNCTIONS ====================
+        const programsList = offerings.map((o) => ({
+          id: o.programId,
+          name: o.programName,
+          slug: o.programSlug,
+          degreeName: o.degreeName || undefined,
+        }));
+
+        return {
+          ...admission,
+          expectedCloseDate: admission.expectedCloseDate,
+          expectedOpenDate: admission.expectedOpenDate,
+          programs: programsList,
+        };
+      })
+    );
+
+    return admissionsWithPrograms;
+  } catch (error) {
+    console.error('Error fetching admissions:', error);
+    return [];
+  }
+}
+
+// Helper functions (pure functions - no side effects)
+function getDaysLeft(date: Date | null): number | null {
+  if (!date) return null;
+  try {
+    const deadline = new Date(date);
+    const now = new Date();
+    deadline.setHours(23, 59, 59, 999);
+    now.setHours(23, 59, 59, 999);
+    
+    const diffTime = deadline.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays > 0 ? diffDays : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(date: Date | null): string {
+  if (!date) return 'TBA';
+  try {
+    return date.toLocaleDateString('en-PK', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch {
+    return 'Invalid Date';
+  }
+}
+
+function getProgramDisplay(programs: Program[]): string {
+  if (!programs || programs.length === 0) return 'Multiple Programs';
+  if (programs.length === 1) {
+    const program = programs[0];
+    return program.degreeName ? `${program.degreeName} in ${program.name}` : program.name;
+  }
+  if (programs.length === 2) {
+    const p1 = programs[0].degreeName ? programs[0].degreeName : programs[0].name;
+    const p2 = programs[1].degreeName ? programs[1].degreeName : programs[1].name;
+    return `${p1} & ${p2}`;
+  }
+  const first = programs[0].degreeName ? programs[0].degreeName : programs[0].name;
+  return `${first} + ${programs.length - 1} more`;
+}
+
+// Admission Card Component (Pure Server Component)
+function AdmissionCard({ admission, index }: { admission: Admission; index: number }) {
+  const daysLeft = getDaysLeft(admission.expectedCloseDate);
+  const isUrgent = daysLeft !== null && daysLeft <= 3;
+  const isWarning = daysLeft !== null && daysLeft <= 7 && daysLeft > 3;
   
-  const getDaysLeft = (dateString: string | null): number | null => {
-    if (!dateString) return null;
-    try {
-      const deadline = new Date(dateString);
-      const now = new Date();
-      deadline.setHours(23, 59, 59, 999);
-      now.setHours(23, 59, 59, 999);
-      
-      const diffTime = deadline.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      return diffDays > 0 ? diffDays : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const getUrgencyLevel = (daysLeft: number | null): UrgencyFilter => {
-    if (daysLeft === null) return 'all';
-    if (daysLeft <= 3) return 'urgent';
-    if (daysLeft <= 7) return 'warning';
-    return 'normal';
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'TBA';
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-PK', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      });
-    } catch {
-      return 'Invalid Date';
-    }
-  };
-
-  const getProgramDisplay = (programs: Program[]): string => {
-    if (!programs || programs.length === 0) return 'Multiple Programs';
-    if (programs.length === 1) return programs[0].name;
-    if (programs.length === 2) return `${programs[0].name} & ${programs[1].name}`;
-    return `${programs[0].name} + ${programs.length - 1} more`;
-  };
-
-  // ==================== DATA FETCHING ====================
-  
-  useEffect(() => {
-    const fetchAdmissions = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/public/admissions?limit=50');
-        const data = await response.json();
+  return (
+    <Link
+      href={`/admissions/${admission.slug}`}
+      className={`group block rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+        isUrgent ? 'border-red-200 bg-gradient-to-r from-red-50/50 to-white hover:from-red-100' :
+        isWarning ? 'border-orange-200 bg-gradient-to-r from-orange-50/30 to-white hover:from-orange-100' :
+        'border-gray-100 bg-white hover:bg-gray-50'
+      }`}
+    >
+      <div className="p-4 md:p-6"> {/* ✅ Smaller padding on mobile */}
+        {/* Header with Badge */}
+        <div className="flex items-start justify-between mb-3 md:mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1 md:mb-2">
+              {/* Rank Badge - Smaller on mobile */}
+              <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${
+                isUrgent ? 'bg-red-500 text-white' :
+                isWarning ? 'bg-orange-500 text-white' :
+                'bg-blue-500 text-white'
+              }`}>
+                {index + 1}
+              </div>
+              <h3 className="text-base md:text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                {admission.instituteName || admission.name}
+              </h3>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <span className="text-gray-600">{admission.session || 'Fall'} {admission.year}</span>
+              <span className="text-gray-300 hidden md:inline">•</span>
+              <span className="text-gray-500 text-xs md:text-sm">{admission.instituteCity || 'Pakistan'}</span>
+            </div>
+          </div>
+          
+          {/* Days Left Badge - Smaller on mobile */}
+          {daysLeft ? (
+            <div className={`flex flex-col items-center px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl text-center ${
+              isUrgent ? 'bg-red-100 animate-pulse' :
+              isWarning ? 'bg-orange-100' :
+              'bg-green-100'
+            }`}>
+              <div className={`text-base md:text-2xl font-bold ${
+                isUrgent ? 'text-red-600' :
+                isWarning ? 'text-orange-600' :
+                'text-green-600'
+              }`}>
+                {daysLeft}
+              </div>
+              <div className="text-[10px] md:text-xs text-gray-600">days left</div>
+            </div>
+          ) : (
+            <div className="px-2 md:px-4 py-1 md:py-2 bg-gray-100 rounded-lg md:rounded-xl text-center">
+              <div className="text-[10px] md:text-xs text-gray-600">Date TBA</div>
+            </div>
+          )}
+        </div>
         
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setAdmissions(data.data);
-          setHasData(true);
-        } else {
-          setAdmissions([]);
-          setHasData(false);
-        }
-      } catch {
-        setAdmissions([]);
-        setHasData(false);
-      } finally {
-        setLoading(false);
-      }
-    };
+        {/* Programs Section - Hidden on mobile if too many */}
+        <div className="mb-3 md:mb-4">
+          <div className="flex items-center gap-1 md:gap-2 text-xs md:text-sm text-gray-600 mb-1 md:mb-2">
+            <span className="font-semibold">🎓 Programs:</span>
+            <span className="line-clamp-1">{getProgramDisplay(admission.programs || [])}</span>
+          </div>
+          
+          {admission.programs && admission.programs.length > 2 && (
+            <div className="hidden md:flex flex-wrap gap-1 mt-2">
+              {admission.programs.slice(0, 3).map((program) => (
+                <span key={program.id} className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                  {program.degreeName ? program.degreeName : program.name}
+                </span>
+              ))}
+              {admission.programs.length > 3 && (
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                  +{admission.programs.length - 3} more
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Footer with CTA - Simplified on mobile */}
+        <div className="flex items-center justify-between pt-2 md:pt-3 border-t border-gray-100">
+          {admission.expectedCloseDate && (
+            <div className="text-[10px] md:text-xs text-gray-500 hidden sm:block">
+              📅 {formatDate(admission.expectedCloseDate)}
+            </div>
+          )}
+          <div className={`flex items-center gap-1 md:gap-2 text-blue-600 font-medium text-sm md:text-base group-hover:gap-2 md:group-hover:gap-3 transition-all ${!admission.expectedCloseDate ? 'ml-auto' : ''}`}>
+            <span className="text-xs md:text-sm">Apply Now</span>
+            <span className="text-sm md:text-lg group-hover:translate-x-1 transition-transform">→</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
-    fetchAdmissions();
-  }, []);
+// ✅ Main Server Component
+export default async function LatestAdmissionsSection() {
+  const admissions = await getAdmissions();
 
-  // ==================== MEMOIZED VALUES ====================
+  if (!admissions.length) {
+    return null;
+  }
+
+  // Filter valid open admissions
+  const validOpenAdmissions = admissions.filter(ad => {
+    if (ad.status !== 'Open') return false;
+    if (!ad.expectedCloseDate) return true;
+    const daysLeft = getDaysLeft(ad.expectedCloseDate);
+    return daysLeft !== null;
+  });
+
+  // Calculate stats
+  const closingThisWeek = validOpenAdmissions.filter(ad => {
+    if (!ad.expectedCloseDate) return false;
+    const daysLeft = getDaysLeft(ad.expectedCloseDate);
+    return daysLeft !== null && daysLeft <= 7;
+  });
+
+  const urgentToday = validOpenAdmissions.filter(ad => {
+    if (!ad.expectedCloseDate) return false;
+    const daysLeft = getDaysLeft(ad.expectedCloseDate);
+    return daysLeft !== null && daysLeft <= 3;
+  });
+
+  const normalCount = validOpenAdmissions.filter(ad => {
+    if (!ad.expectedCloseDate) return false;
+    const daysLeft = getDaysLeft(ad.expectedCloseDate);
+    return daysLeft !== null && daysLeft > 7;
+  }).length;
+
+  const totalAdmissions = validOpenAdmissions.length;
   
-  const validOpenAdmissions = useMemo(() => {
-    return admissions.filter(ad => {
-      if (ad.status !== 'Open') return false;
-      if (!ad.expectedCloseDate) return true;
-      const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      return daysLeft !== null;
-    });
-  }, [admissions]);
-
-  const sortedAdmissionsByUrgency = useMemo(() => {
-    return [...validOpenAdmissions].sort((a, b) => {
-      const daysLeftA = getDaysLeft(a.expectedCloseDate);
-      const daysLeftB = getDaysLeft(b.expectedCloseDate);
-      
-      if (daysLeftA !== null && daysLeftB !== null) {
-        return daysLeftA - daysLeftB;
-      }
-      if (daysLeftA !== null && daysLeftB === null) return -1;
-      if (daysLeftA === null && daysLeftB !== null) return 1;
-      return 0;
-    });
-  }, [validOpenAdmissions]);
-
-  const closingSoonAdmissions = useMemo(() => {
-    const soon = sortedAdmissionsByUrgency.filter(ad => {
+  // Get closing soon admissions (next 30 days)
+  const closingSoon = validOpenAdmissions
+    .filter(ad => {
       if (!ad.expectedCloseDate) return false;
       const daysLeft = getDaysLeft(ad.expectedCloseDate);
       return daysLeft !== null && daysLeft <= 30;
-    });
-    
-    if (soon.length === 0 && sortedAdmissionsByUrgency.length > 0) {
-      return sortedAdmissionsByUrgency.slice(0, 5);
-    }
-    return soon.slice(0, 5);
-  }, [sortedAdmissionsByUrgency]);
+    })
+    .slice(0, 10);
 
-  const closingSoonStats = useMemo(() => {
-    const allOpen = validOpenAdmissions;
-    
-    const closingThisWeek = allOpen.filter(ad => {
-      if (!ad.expectedCloseDate) return false;
-      const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      return daysLeft !== null && daysLeft <= 7;
-    });
-
-    const urgentToday = allOpen.filter(ad => {
-      if (!ad.expectedCloseDate) return false;
-      const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      return daysLeft !== null && daysLeft <= 3;
-    });
-
-    const normal = allOpen.filter(ad => {
-      if (!ad.expectedCloseDate) return false;
-      const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      return daysLeft !== null && daysLeft > 7;
-    });
-
-    const withoutDate = allOpen.filter(ad => !ad.expectedCloseDate);
-
-    return {
-      thisWeek: closingThisWeek.length,
-      urgent: urgentToday.length,
-      normal: normal.length,
-      withoutDate: withoutDate.length,
-      total: allOpen.length
-    };
-  }, [validOpenAdmissions]);
-
-  // ==================== FILTERS ====================
-  
-  const filteredByUrgency = useMemo(() => {
-    if (urgencyFilter === 'all') return closingSoonAdmissions;
-    return closingSoonAdmissions.filter(ad => {
-      const daysLeft = getDaysLeft(ad.expectedCloseDate);
-      const level = getUrgencyLevel(daysLeft);
-      return level === urgencyFilter;
-    });
-  }, [closingSoonAdmissions, urgencyFilter]);
-
-  const uniqueUniversities = useMemo(() => {
-    const unis = filteredByUrgency
-      .map(item => item.instituteName)
-      .filter((name): name is string => name !== null && name !== undefined);
-    return ['All', ...new Set(unis)];
-  }, [filteredByUrgency]);
-
-  const filteredAdmissions = useMemo(() => {
-    return filteredByUrgency.filter(admission => {
-      const searchLower = searchQuery.toLowerCase();
-      const matchesInstitute = admission.instituteName?.toLowerCase().includes(searchLower);
-      const matchesProgram = admission.programs?.some(program => 
-        program.name.toLowerCase().includes(searchLower)
-      );
-      const matchesSearch = searchQuery === '' || matchesInstitute || matchesProgram;
-      const matchesUniversity = selectedUniversity === 'All' || 
-        admission.instituteName === selectedUniversity;
-      
-      return matchesSearch && matchesUniversity;
-    });
-  }, [filteredByUrgency, searchQuery, selectedUniversity]);
-
-  if (!hasData && !loading) return null;
-
-  if (loading) {
-    return (
-      <section className="py-12 bg-gradient-to-br from-blue-50 to-white">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center mb-10">
-            <div className="inline-block">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            </div>
-            <p className="text-gray-600 mt-4">Loading latest admissions...</p>
-          </div>
-        </div>
-      </section>
-    );
+  if (closingSoon.length === 0) {
+    return null;
   }
 
   return (
-    <section className="py-12 bg-gradient-to-br from-blue-50 via-white to-indigo-50/30">
+    <section className="py-8 md:py-12 bg-gradient-to-br from-blue-50 via-white to-indigo-50/30">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Hero Section with Stats */}
-        <div className="text-center mb-10">
-          {/* Animated Badge */}
-          <div className="inline-block mb-4">
-            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold px-4 py-1 rounded-full">
+        {/* Hero Section with Stats - Responsive */}
+        <div className="text-center mb-6 md:mb-10">
+          <div className="inline-block mb-3 md:mb-4">
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1 rounded-full">
               🎓 Limited Seats Available
             </span>
           </div>
           
-          <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+          <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
             Admissions 2026 in Pakistan
           </h2>
           
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-4">
+          {/* ✅ Responsive Stats Cards - Different on Mobile vs Desktop */}
+          
+          {/* Mobile View: Single line stats bar */}
+          <div className="block md:hidden bg-white rounded-xl shadow-sm p-3 mb-4">
+            <div className="flex items-center justify-around">
+              <div className="text-center">
+                <div className="text-xl font-bold text-blue-600">{totalAdmissions}</div>
+                <div className="text-xs text-gray-500">Total</div>
+              </div>
+              <div className="w-px h-8 bg-gray-200"></div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-red-600">{urgentToday.length}</div>
+                <div className="text-xs text-gray-500">Urgent</div>
+              </div>
+              <div className="w-px h-8 bg-gray-200"></div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-orange-600">{closingThisWeek.length - urgentToday.length}</div>
+                <div className="text-xs text-gray-500">This Week</div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Desktop View: Full stats cards */}
+          <div className="hidden md:flex flex-wrap items-center justify-center gap-4 mb-4">
             <div className="bg-red-100 rounded-full px-4 py-2">
-              <span className="text-red-600 font-bold text-2xl">⏰ {closingSoonStats.thisWeek}</span>
+              <span className="text-red-600 font-bold text-2xl">⏰ {closingThisWeek.length}</span>
               <span className="text-red-600 ml-1">Admissions Closing This Week</span>
             </div>
-            {closingSoonStats.urgent > 0 && (
+            {urgentToday.length > 0 && (
               <div className="bg-orange-100 rounded-full px-4 py-2 animate-pulse">
-                <span className="text-orange-600 font-bold">{closingSoonStats.urgent} Urgent</span>
+                <span className="text-orange-600 font-bold">{urgentToday.length} Urgent</span>
                 <span className="text-orange-600 ml-1">(≤3 days left)</span>
               </div>
             )}
           </div>
           
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Apply now for {validOpenAdmissions.length}+ open admissions across top universities in Pakistan
+          <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto">
+            Apply now for {totalAdmissions}+ open admissions across top universities in Pakistan
           </p>
         </div>
 
-        {/* Enhanced Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          <button
-            onClick={() => setUrgencyFilter('all')}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-center transition-all duration-300 ${
-              urgencyFilter === 'all' 
-                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg scale-105' 
-                : 'bg-white hover:bg-blue-50 border-2 border-blue-100 hover:border-blue-300'
-            }`}
-          >
-            <div className="relative z-10">
-              <div className="text-4xl font-bold mb-2">{validOpenAdmissions.length}</div>
-              <div className="text-sm font-medium">All Admissions</div>
-              <div className="text-xs mt-1 opacity-75">Open Now</div>
-            </div>
-            {urgencyFilter === 'all' && (
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-20"></div>
-            )}
-          </button>
+        {/* Stats Cards Row - Responsive Grid */}
+        <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* All Admissions Card */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-center text-white shadow-lg">
+            <div className="text-3xl font-bold">{totalAdmissions}</div>
+            <div className="text-sm opacity-90">Total Admissions</div>
+            <div className="text-xs opacity-75 mt-1">Open Now</div>
+          </div>
           
-          <button
-            onClick={() => setUrgencyFilter('urgent')}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-center transition-all duration-300 ${
-              urgencyFilter === 'urgent' 
-                ? 'bg-gradient-to-br from-red-600 to-red-700 text-white shadow-lg scale-105 animate-pulse' 
-                : 'bg-white hover:bg-red-50 border-2 border-red-100 hover:border-red-300'
-            }`}
-          >
-            <div className="relative z-10">
-              <div className="text-4xl font-bold mb-2">{closingSoonStats.urgent}</div>
-              <div className="text-sm font-medium">🚨 Urgent</div>
-              <div className="text-xs mt-1 opacity-75">Closing in ≤3 days</div>
-            </div>
-          </button>
+          {/* Urgent Card */}
+          <div className={`rounded-xl p-4 text-center shadow-lg ${
+            urgentToday.length > 0 
+              ? 'bg-gradient-to-br from-red-500 to-red-600 text-white animate-pulse' 
+              : 'bg-gray-100 text-gray-400'
+          }`}>
+            <div className="text-3xl font-bold">{urgentToday.length}</div>
+            <div className="text-sm opacity-90">🚨 Urgent</div>
+            <div className="text-xs opacity-75 mt-1">Closing in ≤3 days</div>
+          </div>
           
-          <button
-            onClick={() => setUrgencyFilter('warning')}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-center transition-all duration-300 ${
-              urgencyFilter === 'warning' 
-                ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white shadow-lg scale-105' 
-                : 'bg-white hover:bg-orange-50 border-2 border-orange-100 hover:border-orange-300'
-            }`}
-          >
-            <div className="relative z-10">
-              <div className="text-4xl font-bold mb-2">{closingSoonStats.thisWeek - closingSoonStats.urgent}</div>
-              <div className="text-sm font-medium">⚠️ Warning</div>
-              <div className="text-xs mt-1 opacity-75">4-7 days left</div>
-            </div>
-          </button>
+          {/* Warning Card */}
+          <div className={`rounded-xl p-4 text-center shadow-lg ${
+            (closingThisWeek.length - urgentToday.length) > 0
+              ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white'
+              : 'bg-gray-100 text-gray-400'
+          }`}>
+            <div className="text-3xl font-bold">{closingThisWeek.length - urgentToday.length}</div>
+            <div className="text-sm opacity-90">⚠️ Warning</div>
+            <div className="text-xs opacity-75 mt-1">4-7 days left</div>
+          </div>
           
-          <button
-            onClick={() => setUrgencyFilter('normal')}
-            className={`group relative overflow-hidden rounded-2xl p-5 text-center transition-all duration-300 ${
-              urgencyFilter === 'normal' 
-                ? 'bg-gradient-to-br from-green-600 to-green-700 text-white shadow-lg scale-105' 
-                : 'bg-white hover:bg-green-50 border-2 border-green-100 hover:border-green-300'
-            }`}
-          >
-            <div className="relative z-10">
-              <div className="text-4xl font-bold mb-2">{closingSoonStats.normal}</div>
-              <div className="text-sm font-medium">✅ Normal</div>
-              <div className="text-xs mt-1 opacity-75">8+ days available</div>
-            </div>
-          </button>
+          {/* Normal Card */}
+          <div className={`rounded-xl p-4 text-center shadow-lg ${
+            normalCount > 0
+              ? 'bg-gradient-to-br from-green-500 to-green-600 text-white'
+              : 'bg-gray-100 text-gray-400'
+          }`}>
+            <div className="text-3xl font-bold">{normalCount}</div>
+            <div className="text-sm opacity-90">✅ Normal</div>
+            <div className="text-xs opacity-75 mt-1">8+ days available</div>
+          </div>
         </div>
 
-        {/* Enhanced Search and Filter */}
-        {filteredByUrgency.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="🔍 Search by university or program..."
-                  className="w-full px-4 py-3 pl-10 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-              </div>
-              <div className="relative">
-                <select
-                  value={selectedUniversity}
-                  onChange={(e) => setSelectedUniversity(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
-                >
-                  {uniqueUniversities.map((uni) => (
-                    <option key={uni} value={uni}>{uni}</option>
-                  ))}
-                </select>
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">▼</span>
-              </div>
-            </div>
-            
-            {/* Active Filters Display */}
-            {(searchQuery || selectedUniversity !== 'All') && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                <span className="text-xs text-gray-500">Active filters:</span>
-                {searchQuery && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                    Search: {searchQuery}
-                    <button onClick={() => setSearchQuery('')} className="hover:text-blue-900">×</button>
-                  </span>
-                )}
-                {selectedUniversity !== 'All' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                    University: {selectedUniversity}
-                    <button onClick={() => setSelectedUniversity('All')} className="hover:text-blue-900">×</button>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Admissions Cards Grid */}
+        <div className="space-y-3 md:space-y-4">
+          {closingSoon.slice(0, 5).map((admission, index) => (
+            <AdmissionCard key={admission.id} admission={admission} index={index} />
+          ))}
+        </div>
 
-        {/* Enhanced Cards Grid */}
-        {filteredAdmissions.length > 0 ? (
-          <div className="space-y-4">
-            {filteredAdmissions.map((admission, index) => {
-              const daysLeft = getDaysLeft(admission.expectedCloseDate);
-              const isUrgent = daysLeft !== null && daysLeft <= 3;
-              const isWarning = daysLeft !== null && daysLeft <= 7 && daysLeft > 3;
-              
-              return (
-                <Link
-                  key={admission.id}
-                  href={`/admissions/${admission.slug}`}
-                  className={`group block rounded-2xl border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
-                    isUrgent ? 'border-red-200 bg-gradient-to-r from-red-50/50 to-white hover:from-red-100' :
-                    isWarning ? 'border-orange-200 bg-gradient-to-r from-orange-50/30 to-white hover:from-orange-100' :
-                    'border-gray-100 bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="p-6">
-                    {/* Header with Badge */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          {/* Rank Badge */}
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                            isUrgent ? 'bg-red-500 text-white' :
-                            isWarning ? 'bg-orange-500 text-white' :
-                            'bg-blue-500 text-white'
-                          }`}>
-                            {index + 1}
-                          </div>
-                          <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                            {admission.instituteName}
-                          </h3>
-                        </div>
-                        
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="text-gray-600">{admission.session || 'Fall'} {admission.year}</span>
-                          <span className="text-gray-300">•</span>
-                          <span className="text-gray-600">{admission.instituteCity || 'Pakistan'}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Days Left Badge */}
-                      {daysLeft ? (
-                        <div className={`flex flex-col items-center px-4 py-2 rounded-xl text-center ${
-                          isUrgent ? 'bg-red-100 animate-pulse' :
-                          isWarning ? 'bg-orange-100' :
-                          'bg-green-100'
-                        }`}>
-                          <div className={`text-2xl font-bold ${
-                            isUrgent ? 'text-red-600' :
-                            isWarning ? 'text-orange-600' :
-                            'text-green-600'
-                          }`}>
-                            {daysLeft}
-                          </div>
-                          <div className="text-xs text-gray-600">days left</div>
-                        </div>
-                      ) : (
-                        <div className="px-4 py-2 bg-gray-100 rounded-xl text-center">
-                          <div className="text-sm text-gray-600">Date TBA</div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Programs */}
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                        <span className="font-semibold">🎓 Programs:</span>
-                        <span>{getProgramDisplay(admission.programs || [])}</span>
-                      </div>
-                      
-                      {admission.programs && admission.programs.length > 2 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {admission.programs.slice(0, 3).map((program) => (
-                            <span key={program.id} className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                              {program.name}
-                            </span>
-                          ))}
-                          {admission.programs.length > 3 && (
-                            <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
-                              +{admission.programs.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Footer with CTA */}
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                      {admission.expectedCloseDate && (
-                        <div className="text-xs text-gray-500">
-                          📅 Last Date: {formatDate(admission.expectedCloseDate)}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 text-blue-600 font-medium group-hover:gap-3 transition-all">
-                        <span>Apply Now</span>
-                        <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-16 bg-white rounded-2xl border-2 border-gray-100">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">
-              {urgencyFilter === 'urgent' && 'No Urgent Admissions Right Now'}
-              {urgencyFilter === 'warning' && 'No Admissions in Warning Period'}
-              {urgencyFilter === 'normal' && 'No Admissions in Normal Period'}
-              {urgencyFilter === 'all' && 'No Upcoming Admissions Available'}
-            </h3>
-            <p className="text-gray-500 mb-6 max-w-md mx-auto">
-              {urgencyFilter !== 'all' 
-                ? 'All deadlines have been extended or passed. Check all open admissions below.'
-                : 'New admission announcements will appear here. Subscribe for updates!'}
-            </p>
-            {urgencyFilter !== 'all' && (
-              <button
-                onClick={() => setUrgencyFilter('all')}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                View All Admissions
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Enhanced View All Link */}
-        {sortedAdmissionsByUrgency.length > 5 && urgencyFilter === 'all' && (
-          <div className="text-center mt-10">
+        {/* View All Link - Responsive */}
+        {closingSoon.length > 5 && (
+          <div className="text-center mt-8 md:mt-10">
             <Link
               href="/admissions"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all group"
+              className="inline-flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm md:text-base rounded-xl hover:shadow-lg transition-all group"
             >
-              <span>Browse All {validOpenAdmissions.length}+ University Admissions</span>
-              <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
+              <span>Browse All {totalAdmissions}+ University Admissions</span>
+              <span className="text-base md:text-lg group-hover:translate-x-1 transition-transform">→</span>
             </Link>
-            <p className="text-xs text-gray-500 mt-3">
+            <p className="text-[10px] md:text-xs text-gray-500 mt-2 md:mt-3">
               Including public and private sector universities across Pakistan
             </p>
           </div>
