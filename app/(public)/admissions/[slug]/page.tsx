@@ -1,5 +1,8 @@
+// app/(public)/admissions/[slug]/page.tsx
+
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image'; // ✅ Added for optimized images
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from '@/app/lib/schema';
@@ -52,7 +55,7 @@ interface AdmissionWithPrograms {
   createdAt: Date | null;
   updatedAt: Date | null;
   featuredImage?: string | null;
-  galleryImages?: string | null;  // ✅ Fixed: added optional
+  galleryImages?: string | null;
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -153,7 +156,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       }
     }
 
-    // ✅ Fetch programs using admissionOfferings + programOfferings
+    // Fetch programs using admissionOfferings + programOfferings
     const programsResult = await db
       .select({
         id: programs.id,
@@ -183,7 +186,7 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
       institute,
       programs: programsWithDetails,
       programCount: programsWithDetails.length,
-      galleryImages: admission.galleryImages as string | null | undefined,  // ✅ Fixed type
+      galleryImages: admission.galleryImages as string | null | undefined,
     };
 
   } catch (error) {
@@ -212,13 +215,13 @@ async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
       .where(and(eq(admissions.instituteId, admission.institute.id), ne(admissions.slug, admission.slug)))
       .orderBy(desc(admissions.createdAt))
       .limit(5);
-  } catch (error) {
+  } catch {
     return [];
   }
 }
 
 // ==================== GET SEO METADATA FROM DATABASE ====================
-async function getSEOMetadata(admissionId: number) {  // ✅ Fixed: use number instead of string
+async function getSEOMetadata(admissionId: number) {
   try {
     const result = await db
       .select({
@@ -232,7 +235,7 @@ async function getSEOMetadata(admissionId: number) {  // ✅ Fixed: use number i
       .from(seoMetadata)
       .where(and(
         eq(seoMetadata.entityType, 'admission'),
-        eq(seoMetadata.entityId, admissionId)  // ✅ Fixed: number, not string
+        eq(seoMetadata.entityId, admissionId)
       ))
       .limit(1);
     
@@ -264,7 +267,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return { title: 'Admission Not Found', robots: { index: false } };
   }
 
-  // ✅ Try to get SEO metadata from database using admission ID
+  // Try to get SEO metadata from database using admission ID
   const seoData = await getSEOMetadata(admission.id);
   
   if (seoData?.metaTitle && seoData?.metaDescription) {
@@ -373,7 +376,13 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
                 <div className="flex items-start gap-4">
                   {admission.institute.logo && (
-                    <img src={admission.institute.logo} alt={admission.institute.name} className="w-16 h-16 object-contain" />
+                    <Image
+                      src={admission.institute.logo}
+                      alt={admission.institute.name}
+                      width={64}
+                      height={64}
+                      className="w-16 h-16 object-contain rounded-lg"
+                    />
                   )}
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 mb-2">{admission.institute.name}</h2>
