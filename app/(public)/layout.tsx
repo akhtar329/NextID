@@ -6,10 +6,6 @@ import type { Metadata } from 'next';
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-// ==================== NEXT.JS CACHE CONFIGURATION ====================
-export const revalidate = 86400; // ✅ Cache layout for 1 day (layouts rarely change)
-export const dynamic = 'force-static';
-
 // ==================== METADATA ====================
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
