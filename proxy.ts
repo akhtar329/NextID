@@ -31,13 +31,14 @@ function isAllowedPath(pathname: string): boolean {
   return ALLOWED_PATHS.some(path => pathname.startsWith(path));
 }
 
-export async function proxy(request: NextRequest) {
+// ✅ FIX: Use default export (not named export)
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // FIRST: Check for SEO redirects (before maintenance)
   const redirect = getRedirect(pathname);
   if (redirect) {
-    console.log(`🔄 Redirect: ${redirect.from} → ${redirect.to} (${redirect.status})`);
+    console.log(`Redirect: ${redirect.from} → ${redirect.to} (${redirect.status})`);
     const url = new URL(redirect.to, request.url);
     return NextResponse.redirect(url, { status: redirect.status });
   }
@@ -56,6 +57,7 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+// ✅ Keep config export (this is allowed)
 export const config = {
   matcher: '/((?!_next/static|_next/image|favicon.ico).*)',
 };
