@@ -2,8 +2,8 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { cities, institutes, admissions, results, news } from '@/app/lib/schema';
-import { eq, and, count, sql } from 'drizzle-orm';
+import { cities, institutes, admissions, news } from '@/app/lib/schema';
+import { eq, and, count, inArray } from 'drizzle-orm';
 
 export const revalidate = 86400;
 export const dynamic = 'force-static';
@@ -29,6 +29,11 @@ interface CityWithStats {
   resultsCount: number;
   newsCount: number;
   totalCount: number;
+}
+
+interface CountResult {
+  cityId: number;
+  count: number;
 }
 
 async function getCitiesWithStats(): Promise<CityWithStats[]> {
@@ -70,15 +75,6 @@ async function getCitiesWithStats(): Promise<CityWithStats[]> {
       .where(and(eq(admissions.status, 'open'), inArray(institutes.cityId, cityIds)))
       .groupBy(institutes.cityId);
 
-    const resultsCounts = await db
-      .select({
-        cityId: sql<number>`0`,
-        count: count(),
-      })
-      .from(results)
-      .where(eq(results.status, true))
-      .then(() => new Map<number, number>());
-
     const newsCounts = await db
       .select({
         cityId: news.cityId,
@@ -95,16 +91,11 @@ async function getCitiesWithStats(): Promise<CityWithStats[]> {
     const citiesWithStats: CityWithStats[] = allCities.map(city => {
       const institutesCount = institutesMap.get(city.id) || 0;
       const admissionsCount = admissionsMap.get(city.id) || 0;
-      
-      let resultsCount = 0;
-      for (const row of resultsCounts) {
-        if (row.cityId === city.id) {
-          resultsCount = Number(row.count);
-          break;
-        }
-      }
-      
       const newsCount = newsMap.get(city.id) || 0;
+      
+      // Calculate resultsCount - simplified since results don't have direct city mapping
+      const resultsCount = 0;
+      
       const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
       
       return {
@@ -135,7 +126,7 @@ export default async function CitiesPage() {
   const totalInstitutes = citiesList.reduce((sum, city) => sum + city.institutesCount, 0);
   const totalAdmissions = citiesList.reduce((sum, city) => sum + city.admissionsCount, 0);
   const totalResults = citiesList.reduce((sum, city) => sum + city.resultsCount, 0);
-  const totalNews = citiesList.reduce((sum, city) => sum + city.newsCount, 0);
+  // totalNews removed - not used in JSX
 
   const citiesByProvince = citiesList.reduce((acc, city) => {
     const province = city.province || 'Other';
