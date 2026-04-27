@@ -1,10 +1,12 @@
-// app/(public)/cities/page.tsx (Updated - No meta columns)
-
+// app/(public)/cities/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { cities, institutes, admissions, results, news } from '@/app/lib/schema';
 import { eq, and, count, sql } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
 
 export const metadata: Metadata = {
   title: 'Education Cities in Pakistan | Institutes, Admissions & Results | NextID.pk',
@@ -45,74 +47,82 @@ async function getCitiesWithStats(): Promise<CityWithStats[]> {
       .where(eq(cities.status, true))
       .orderBy(cities.name);
 
-    const citiesWithStats = await Promise.all(
-      allCities.map(async (city) => {
-        const institutesResult = await db
-          .select({ count: count() })
-          .from(institutes)
-          .where(
-            and(
-              eq(institutes.status, true),
-              eq(institutes.cityId, city.id)
-            )
-          );
-        
-        const admissionsResult = await db
-          .select({ count: count() })
-          .from(admissions)
-          .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-          .where(
-            and(
-              eq(institutes.cityId, city.id),
-              eq(admissions.status, 'open')
-            )
-          );
-        
-        const resultsResult = await db
-          .select({ count: count() })
-          .from(results)
-          .where(
-            and(
-              eq(results.status, true),
-              sql`${results.title} ILIKE ${`%${city.name}%`}`
-            )
-          );
-        
-        const newsResult = await db
-          .select({ count: count() })
-          .from(news)
-          .where(
-            and(
-              eq(news.status, true),
-              sql`${news.cityId} = ${city.id} OR 
-                  ${news.title} ILIKE ${`%${city.name}%`}`
-            )
-          );
-        
-        const institutesCount = Number(institutesResult[0]?.count) || 0;
-        const admissionsCount = Number(admissionsResult[0]?.count) || 0;
-        const resultsCount = Number(resultsResult[0]?.count) || 0;
-        const newsCount = Number(newsResult[0]?.count) || 0;
-        const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
-        
-        return {
-          ...city,
-          institutesCount,
-          admissionsCount,
-          resultsCount,
-          newsCount,
-          totalCount,
-        };
+    if (allCities.length === 0) return [];
+
+    const cityIds = allCities.map(c => c.id);
+
+    const institutesCounts = await db
+      .select({
+        cityId: institutes.cityId,
+        count: count(),
       })
-    );
+      .from(institutes)
+      .where(and(eq(institutes.status, true), inArray(institutes.cityId, cityIds)))
+      .groupBy(institutes.cityId);
+
+    const admissionsCounts = await db
+      .select({
+        cityId: institutes.cityId,
+        count: count(),
+      })
+      .from(admissions)
+      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+      .where(and(eq(admissions.status, 'open'), inArray(institutes.cityId, cityIds)))
+      .groupBy(institutes.cityId);
+
+    const resultsCounts = await db
+      .select({
+        cityId: sql<number>`0`,
+        count: count(),
+      })
+      .from(results)
+      .where(eq(results.status, true))
+      .then(() => new Map<number, number>());
+
+    const newsCounts = await db
+      .select({
+        cityId: news.cityId,
+        count: count(),
+      })
+      .from(news)
+      .where(and(eq(news.status, true), inArray(news.cityId, cityIds)))
+      .groupBy(news.cityId);
+
+    const institutesMap = new Map(institutesCounts.map(i => [i.cityId, Number(i.count)]));
+    const admissionsMap = new Map(admissionsCounts.map(a => [a.cityId, Number(a.count)]));
+    const newsMap = new Map(newsCounts.map(n => [n.cityId, Number(n.count)]));
+
+    const citiesWithStats: CityWithStats[] = allCities.map(city => {
+      const institutesCount = institutesMap.get(city.id) || 0;
+      const admissionsCount = admissionsMap.get(city.id) || 0;
+      
+      let resultsCount = 0;
+      for (const row of resultsCounts) {
+        if (row.cityId === city.id) {
+          resultsCount = Number(row.count);
+          break;
+        }
+      }
+      
+      const newsCount = newsMap.get(city.id) || 0;
+      const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
+      
+      return {
+        ...city,
+        institutesCount,
+        admissionsCount,
+        resultsCount,
+        newsCount,
+        totalCount,
+      };
+    });
 
     return citiesWithStats.sort((a, b) => {
       if (a.isPopular && !b.isPopular) return -1;
       if (!a.isPopular && b.isPopular) return 1;
       return b.totalCount - a.totalCount;
     });
-  } catch (error) {
-    console.error('Error fetching cities:', error);
+  } catch {
     return [];
   }
 }
@@ -142,12 +152,12 @@ export default async function CitiesPage() {
     'KPK': '⛰️',
     'Balochistan': '🏜️',
     'ICT': '🏛️',
+    'Other': '🏙️',
   };
 
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -176,7 +186,6 @@ export default async function CitiesPage() {
         </div>
       </section>
 
-      {/* Stats Cards - with proper spacing */}
       <div className="container mx-auto px-4 mt-8 mb-12">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
@@ -202,7 +211,6 @@ export default async function CitiesPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
         {citiesList.length === 0 ? (
@@ -213,7 +221,6 @@ export default async function CitiesPage() {
           </div>
         ) : (
           <>
-            {/* Cities Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {citiesList.map((city) => {
                 const emoji = city.province ? provinceEmoji[city.province] || '🏙️' : '🏙️';
@@ -282,9 +289,7 @@ export default async function CitiesPage() {
               })}
             </div>
 
-            {/* Bottom Section */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Top Cities by Category */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
@@ -358,7 +363,6 @@ export default async function CitiesPage() {
                 </div>
               </div>
 
-              {/* Province Stats */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>

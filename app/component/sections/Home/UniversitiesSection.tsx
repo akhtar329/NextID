@@ -1,12 +1,9 @@
 // app/component/sections/Home/UniversitiesSection.tsx
-// ✅ Server Component - No "use client"
-
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { institutes, cities, programOfferings } from '@/app/lib/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 
-// Types
 interface University {
   id: number;
   name: string;
@@ -20,7 +17,6 @@ interface University {
   programCount: number;
 }
 
-// Server-side data fetching
 async function getFeaturedUniversities(): Promise<University[]> {
   try {
     const universitiesData = await db
@@ -58,13 +54,11 @@ async function getFeaturedUniversities(): Promise<University[]> {
       ...uni,
       programCount: Number(uni.programCount) || 0,
     }));
-  } catch (error) {
-    console.error('Error fetching universities:', error);
+  } catch {
     return [];
   }
 }
 
-// Helper function for type colors
 function getTypeColor(type: string): string {
   const typeLower = type?.toLowerCase();
   if (typeLower === 'public') return 'bg-green-100 text-green-800';
@@ -72,14 +66,12 @@ function getTypeColor(type: string): string {
   return 'bg-blue-100 text-blue-800';
 }
 
-// University Card Component (Mobile)
 function UniversityMobileCard({ university }: { university: University }) {
   const typeColor = getTypeColor(university.type);
   
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className="space-y-4">
-        {/* University Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="text-3xl">🏛️</div>
@@ -99,7 +91,6 @@ function UniversityMobileCard({ university }: { university: University }) {
           )}
         </div>
 
-        {/* Badges */}
         <div className="flex flex-wrap gap-2">
           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${typeColor}`}>
             {university.type || 'University'}
@@ -109,14 +100,12 @@ function UniversityMobileCard({ university }: { university: University }) {
           </span>
         </div>
 
-        {/* Description */}
         {university.description && (
           <p className="text-sm text-gray-600 line-clamp-2">
             {university.description}
           </p>
         )}
 
-        {/* Action Button */}
         <Link
           href={`/universities/${university.slug}`}
           className="block w-full text-center px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -128,7 +117,6 @@ function UniversityMobileCard({ university }: { university: University }) {
   );
 }
 
-// University Row Component (Desktop Table Row)
 function UniversityTableRow({ university }: { university: University }) {
   const typeColor = getTypeColor(university.type);
   
@@ -176,7 +164,6 @@ function UniversityTableRow({ university }: { university: University }) {
   );
 }
 
-// Main Server Component
 export default async function UniversitiesSection() {
   const universities = await getFeaturedUniversities();
 
@@ -184,7 +171,6 @@ export default async function UniversitiesSection() {
     return null;
   }
 
-  // Get unique cities for stats
   const uniqueCities = [...new Set(universities.map(u => u.city).filter(Boolean))];
   const publicCount = universities.filter(u => u.type?.toLowerCase() === 'public').length;
   const privateCount = universities.filter(u => u.type?.toLowerCase() === 'private').length;
@@ -194,7 +180,6 @@ export default async function UniversitiesSection() {
     <section className="py-12 bg-gradient-to-br from-gray-50 to-blue-50/20">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Section Heading */}
         <div className="text-center mb-10">
           <div className="inline-block mb-3">
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1 rounded-full">
@@ -209,7 +194,6 @@ export default async function UniversitiesSection() {
           </p>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-xl p-4 text-center border border-gray-200 shadow-sm">
             <div className="text-2xl font-bold text-blue-600">{universities.length}</div>
@@ -229,7 +213,6 @@ export default async function UniversitiesSection() {
           </div>
         </div>
 
-        {/* Desktop Table View */}
         <div className="hidden lg:block overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -258,7 +241,6 @@ export default async function UniversitiesSection() {
             </tbody>
           </table>
 
-          {/* Table Footer */}
           {universities.length > 6 && (
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-between items-center">
               <p className="text-sm text-gray-600">
@@ -274,13 +256,11 @@ export default async function UniversitiesSection() {
           )}
         </div>
 
-        {/* Mobile Card View */}
         <div className="lg:hidden space-y-4">
           {universities.slice(0, 4).map((university) => (
             <UniversityMobileCard key={university.id} university={university} />
           ))}
           
-          {/* Mobile View All Link */}
           {universities.length > 4 && (
             <div className="text-center pt-4">
               <Link

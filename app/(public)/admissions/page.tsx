@@ -1,6 +1,4 @@
 // app/(public)/admissions/page.tsx
-// ✅ Complete with Sidebar - All errors fixed
-
 import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
@@ -13,11 +11,26 @@ import {
   institutes,
   cities,
 } from "@/app/lib/schema";
-import { eq, desc, like, and, or, sql, SQL } from "drizzle-orm";
+import { eq, desc, like, and, or, sql, count, SQL } from "drizzle-orm";
 import { generateSEO } from "@/app/lib/seo";
 
-// ==================== TYPES ====================
-type DrizzleCondition = SQL<unknown>;
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
+
+const ITEMS_PER_PAGE = 10;
+
+const PROGRAM_TYPES = [
+  { slug: "", name: "All Programs", icon: "📋", keywords: [] as string[] },
+  { slug: "matric", name: "Matric / O-Level", icon: "📚", keywords: ["Matric", "SSC", "Secondary", "O-Level"] },
+  { slug: "inter", name: "Intermediate", icon: "📖", keywords: ["Intermediate", "HSSC", "FA", "FSc", "ICS", "ICOM"] },
+  { slug: "bs", name: "BS Programs", icon: "🎓", keywords: ["BS", "Bachelor", "4-Year", "BSCS", "BBA"] },
+  { slug: "mba", name: "MBA", icon: "💼", keywords: ["MBA", "Master of Business", "Executive MBA"] },
+  { slug: "ms", name: "MS/MPhil", icon: "🔬", keywords: ["MS", "MPhil", "Master", "MSc"] },
+  { slug: "medical", name: "Medical", icon: "🩺", keywords: ["MBBS", "BDS", "Medical", "Dental"] },
+  { slug: "engineering", name: "Engineering", icon: "⚙️", keywords: ["Engineering", "Civil", "Mechanical", "Electrical"] },
+  { slug: "law", name: "Law", icon: "⚖️", keywords: ["LLB", "Law", "Legal"] },
+];
 
 type Program = {
   id: number;
@@ -54,36 +67,9 @@ type CityWithCount = {
   count: number;
 };
 
-// ==================== CONSTANTS ====================
-const ITEMS_PER_PAGE = 10;
-
-const PROGRAM_TYPES: {
-  slug: string;
-  name: string;
-  icon: string;
-  description: string;
-}[] = [
-  { slug: "", name: "All Programs", icon: "📋", description: "All admission programs" },
-  { slug: "matric", name: "Matric / O-Level", icon: "📚", description: "Matric admissions" },
-  { slug: "inter", name: "Intermediate", icon: "📖", description: "Inter admissions" },
-  { slug: "bs", name: "BS Programs", icon: "🎓", description: "BS 4-year programs" },
-  { slug: "mba", name: "MBA", icon: "💼", description: "MBA admissions" },
-  { slug: "ms", name: "MS/MPhil", icon: "🔬", description: "MS admissions" },
-  { slug: "medical", name: "Medical", icon: "🩺", description: "MBBS/BDS admissions" },
-  { slug: "engineering", name: "Engineering", icon: "⚙️", description: "Engineering admissions" },
-  { slug: "law", name: "Law", icon: "⚖️", description: "LLB admissions" },
-];
-
-// ==================== HELPER FUNCTIONS ====================
-function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean): {
-  label: string | null;
-  color: string | null;
-  icon: string;
-  hide?: boolean;
-  urgent?: boolean;
-} {
+function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean) {
   if (!closeDate) {
-    if (showClosed) return { label: "Closed", color: "gray", icon: "📅" };
+    if (showClosed) return { label: "Closed", color: "gray", icon: "📅", hide: false };
     return { label: null, color: null, hide: true, icon: "📅" };
   }
 
@@ -94,17 +80,13 @@ function getTimeLeftInfo(closeDate: Date | null, showClosed: boolean): {
   const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
 
   if (diffMs < 0) {
-    const daysPassed = Math.abs(diffDays);
-    if (daysPassed === 0) return { label: `Closed ${diffHours} hours ago`, color: "gray", icon: "📅" };
-    if (daysPassed === 1) return { label: "Closed yesterday", color: "gray", icon: "📅" };
-    if (daysPassed <= 7) return { label: `Closed ${daysPassed} days ago`, color: "gray", icon: "📅" };
-    return { label: `Closed on ${close.toLocaleDateString("en-PK")}`, color: "gray", icon: "📅" };
+    return { label: `Closed`, color: "gray", icon: "📅", hide: false };
   }
 
-  if (diffHours <= 24) return { label: `${diffHours} hour${diffHours !== 1 ? "s" : ""} left`, color: "red", icon: "⏰", urgent: true };
-  if (diffDays <= 7) return { label: `${diffDays} day${diffDays !== 1 ? "s" : ""} left`, color: "red", icon: "⚠️", urgent: true };
-  if (diffDays <= 15) return { label: `${diffDays} days left`, color: "yellow", icon: "📅" };
-  if (diffDays <= 30) return { label: `${diffDays} days left`, color: "green", icon: "📅" };
+  if (diffHours <= 24) return { label: `${diffHours}h left`, color: "red", icon: "⏰", hide: false, urgent: true };
+  if (diffDays <= 7) return { label: `${diffDays}d left`, color: "red", icon: "⚠️", hide: false, urgent: true };
+  if (diffDays <= 15) return { label: `${diffDays}d left`, color: "yellow", icon: "📅", hide: false };
+  if (diffDays <= 30) return { label: `${diffDays}d left`, color: "green", icon: "📅", hide: false };
   return { label: null, color: null, hide: true, icon: "📅" };
 }
 
@@ -118,7 +100,6 @@ function getBadgeStyles(color: string): string {
   return styles[color] || styles.gray;
 }
 
-// ==================== METADATA ====================
 export async function generateMetadata(): Promise<Metadata> {
   return generateSEO({
     entityType: "page",
@@ -137,16 +118,9 @@ export async function generateMetadata(): Promise<Metadata> {
       locale: "en_PK",
       type: "website",
     },
-    twitter: {
-      card: "summary_large_image",
-      title: "All Admissions 2026 in Pakistan – Apply Online",
-      description: "Check latest admissions in Pakistan for Matric, Inter, BS & MS programs.",
-      images: ["https://www.nextid.pk/images/og-admissions.jpg"],
-    },
   });
 }
 
-// ==================== DATA FETCHING ====================
 async function getCitiesWithAdmissionCounts(showClosed: boolean = false): Promise<CityWithCount[]> {
   try {
     const result = await db
@@ -164,11 +138,41 @@ async function getCitiesWithAdmissionCounts(showClosed: boolean = false): Promis
       .where(showClosed ? eq(admissions.status, "Closed") : eq(admissions.status, "Open"))
       .groupBy(cities.id, cities.name, cities.slug, cities.province, cities.isPopular)
       .orderBy(sql`count desc`);
-
+    
     return result;
-  } catch (error) {
-    console.error("Error getting city counts:", error);
+  } catch {
     return [];
+  }
+}
+
+async function getStats() {
+  try {
+    const [totalOpen, totalClosed, totalUniversities, totalCities, closingSoon] = await Promise.all([
+      db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Open")),
+      db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Closed")),
+      db.select({ count: count() }).from(institutes).where(eq(institutes.status, true)),
+      db.select({ count: count() }).from(cities).where(eq(cities.status, true)),
+      db.select({ count: count() }).from(admissions).where(and(
+        eq(admissions.status, "Open"),
+        sql`${admissions.expectedCloseDate} < NOW() + INTERVAL '7 days'`
+      )),
+    ]);
+
+    return {
+      totalAdmissions: Number(totalOpen[0]?.count) || 0,
+      closedAdmissions: Number(totalClosed[0]?.count) || 0,
+      totalUniversities: Number(totalUniversities[0]?.count) || 0,
+      totalCities: Number(totalCities[0]?.count) || 0,
+      closingSoon: Number(closingSoon[0]?.count) || 0,
+    };
+  } catch {
+    return {
+      totalAdmissions: 0,
+      closedAdmissions: 0,
+      totalUniversities: 0,
+      totalCities: 0,
+      closingSoon: 0,
+    };
   }
 }
 
@@ -182,16 +186,10 @@ async function getAdmissions(filters: {
   try {
     const currentPage = filters.page || 1;
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-    const conditions: DrizzleCondition[] = [];
+    const conditions: SQL[] = [];
 
     if (!filters.showClosed) {
       conditions.push(eq(admissions.status, "Open"));
-      conditions.push(
-        or(
-          sql`${admissions.expectedCloseDate} IS NULL`,
-          sql`${admissions.expectedCloseDate} >= CURRENT_DATE`
-        ) as DrizzleCondition
-      );
     } else {
       conditions.push(eq(admissions.status, "Closed"));
     }
@@ -200,13 +198,29 @@ async function getAdmissions(filters: {
       conditions.push(eq(cities.slug, filters.city));
     }
 
+    if (filters.level && filters.level !== "") {
+      const levelConfig = PROGRAM_TYPES.find(t => t.slug === filters.level);
+      if (levelConfig?.keywords && levelConfig.keywords.length > 0) {
+        const keywordConditions = levelConfig.keywords.map(keyword => 
+          like(programs.name, `%${keyword}%`)
+        );
+        const orCondition = or(...keywordConditions);
+        if (orCondition) {
+          conditions.push(orCondition);
+        }
+      }
+    }
+
     if (filters.q) {
       const words = filters.q.trim().split(/\s+/);
       const searchConditions = words.flatMap((word) => {
         const term = `%${word}%`;
         return [like(institutes.name, term), like(admissions.name, term)];
       });
-      conditions.push(or(...searchConditions) as DrizzleCondition);
+      const orCondition = or(...searchConditions);
+      if (orCondition) {
+        conditions.push(orCondition as SQL);
+      }
     }
 
     const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
@@ -216,12 +230,15 @@ async function getAdmissions(filters: {
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
       .innerJoin(cities, eq(institutes.cityId, cities.id))
+      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
       .where(whereClause);
 
     const totalCount = Number(countResult[0]?.count) || 0;
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
-    const admissionsList = await db
+    const admissionsWithProgramsRaw = await db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -238,10 +255,16 @@ async function getAdmissions(filters: {
         cityId: cities.id,
         cityName: cities.name,
         citySlug: cities.slug,
+        programId: programs.id,
+        programName: programs.name,
+        programSlug: programs.slug,
       })
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
       .innerJoin(cities, eq(institutes.cityId, cities.id))
+      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
       .where(whereClause)
       .orderBy(
         filters.showClosed
@@ -251,103 +274,56 @@ async function getAdmissions(filters: {
       .limit(ITEMS_PER_PAGE)
       .offset(offset);
 
-    if (admissionsList.length === 0) return { admissions: [], totalCount, totalPages, currentPage };
-
-    const admissionsWithPrograms = await Promise.all(
-      admissionsList.map(async (ad) => {
-        const admissionProgramsList = await db
-          .select({
-            id: programs.id,
-            name: programs.name,
-            slug: programs.slug,
-            degreeName: sql<string>`NULL`,
-          })
-          .from(admissionOfferings)
-          .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
-          .innerJoin(programs, eq(programOfferings.programId, programs.id))
-          .where(eq(admissionOfferings.admissionId, ad.id));
-
-        return { ...ad, programs: admissionProgramsList };
-      })
-    );
-
-    let filteredAdmissions = admissionsWithPrograms;
-
-    if (!filters.showClosed && filters.level && filters.level !== "") {
-      const levelKeywords: Record<string, string[]> = {
-        matric: ["Matric", "SSC", "Secondary"],
-        inter: ["Intermediate", "HSSC", "FA", "FSc"],
-        bs: ["BS", "Bachelor", "4-Year"],
-        mba: ["MBA", "Master of Business"],
-        ms: ["MS", "MPhil", "Master"],
-        medical: ["MBBS", "BDS", "Medical"],
-        engineering: ["Engineering", "Civil", "Mechanical"],
-        law: ["LLB", "Law"],
-      };
-      const keywords = levelKeywords[filters.level] || [];
-      filteredAdmissions = admissionsWithPrograms.filter((ad) =>
-        ad.programs.some((program) =>
-          keywords.some((keyword) => program.name.toLowerCase().includes(keyword.toLowerCase()))
-        )
-      );
+    const admissionsMap = new Map<number, Admission>();
+    
+    for (const row of admissionsWithProgramsRaw) {
+      if (!admissionsMap.has(row.id)) {
+        admissionsMap.set(row.id, {
+          id: row.id,
+          name: row.name,
+          slug: row.slug,
+          year: row.year,
+          session: row.session,
+          status: row.status,
+          expectedCloseDate: row.expectedCloseDate,
+          instituteId: row.instituteId,
+          instituteName: row.instituteName,
+          instituteSlug: row.instituteSlug,
+          instituteType: row.instituteType,
+          instituteLogo: row.instituteLogo,
+          cityId: row.cityId,
+          cityName: row.cityName,
+          citySlug: row.citySlug,
+          programs: [],
+        });
+      }
+      
+      if (row.programId) {
+        admissionsMap.get(row.id)!.programs.push({
+          id: row.programId,
+          name: row.programName || '',
+          slug: row.programSlug || '', 
+          degreeName: null,
+        });
+      }
     }
 
     return {
-      admissions: filteredAdmissions,
-      totalCount: filteredAdmissions.length,
-      totalPages: Math.ceil(filteredAdmissions.length / ITEMS_PER_PAGE),
+      admissions: Array.from(admissionsMap.values()),
+      totalCount,
+      totalPages,
       currentPage,
     };
-  } catch (error) {
-    console.error("Database error:", error);
-    return { admissions: [], totalCount: 0, totalPages: 0, currentPage: 1 };
-  }
-}
-
-async function getStats() {
-  try {
-    const totalAdmissions = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(admissions)
-      .where(eq(admissions.status, "Open"));
-
-    const closedAdmissions = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(admissions)
-      .where(eq(admissions.status, "Closed"));
-
-    const totalUniversities = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(institutes)
-      .where(eq(institutes.status, true));
-
-    const totalCities = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(cities)
-      .where(eq(cities.status, true));
-
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-
-    const closingSoon = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(admissions)
-      .where(and(eq(admissions.status, "Open"), sql`${admissions.expectedCloseDate} < ${thirtyDaysFromNow}`));
-
+  } catch {
     return {
-      totalAdmissions: Number(totalAdmissions[0]?.count) || 0,
-      closedAdmissions: Number(closedAdmissions[0]?.count) || 0,
-      totalUniversities: Number(totalUniversities[0]?.count) || 0,
-      totalCities: Number(totalCities[0]?.count) || 0,
-      closingSoon: Number(closingSoon[0]?.count) || 0,
+      admissions: [],
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: 1,
     };
-  } catch (error) {
-    console.error("Stats error:", error);
-    return { totalAdmissions: 0, closedAdmissions: 0, totalUniversities: 0, totalCities: 0, closingSoon: 0 };
   }
 }
 
-// Admission Card Component
 function AdmissionCard({ admission, showClosed }: { admission: Admission; showClosed: boolean }) {
   const timeInfo = getTimeLeftInfo(admission.expectedCloseDate, showClosed);
   const displayPrograms = admission.programs.slice(0, 3);
@@ -361,7 +337,7 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
             {admission.instituteLogo ? (
               <Image
                 src={admission.instituteLogo}
-                alt={admission.instituteName || "University"}
+                alt={admission.instituteName}
                 width={56}
                 height={56}
                 className="rounded-xl object-contain"
@@ -380,7 +356,7 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
                   {admission.instituteName}
                 </Link>
                 <span>•</span>
-                <span>{admission.cityName || "Pakistan"}</span>
+                <span>{admission.cityName}</span>
               </div>
               <div className="flex flex-wrap gap-2 mb-4">
                 {displayPrograms.map((program) => (
@@ -413,7 +389,7 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
         </div>
         <div className="flex flex-col items-end gap-3">
           {!timeInfo.hide && timeInfo.label && (
-            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getBadgeStyles(timeInfo.color || "gray")} ${timeInfo.urgent ? "animate-pulse" : ""}`}>
+            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getBadgeStyles(timeInfo.color || "gray")} ${(timeInfo as any).urgent ? "animate-pulse" : ""}`}>
               {timeInfo.icon} {timeInfo.label}
             </span>
           )}
@@ -426,7 +402,6 @@ function AdmissionCard({ admission, showClosed }: { admission: Admission; showCl
   );
 }
 
-// Pagination Component
 function Pagination({ currentPage, totalPages, showClosed, filters }: { currentPage: number; totalPages: number; showClosed: boolean; filters: { city?: string; level?: string; q?: string } }) {
   if (totalPages <= 1) return null;
 
@@ -478,7 +453,6 @@ function Pagination({ currentPage, totalPages, showClosed, filters }: { currentP
   );
 }
 
-// ==================== MAIN PAGE ====================
 export default async function AdmissionsPage({
   searchParams,
 }: {
@@ -502,8 +476,6 @@ export default async function AdmissionsPage({
     getCitiesWithAdmissionCounts(showClosed),
   ]);
 
-  const currentAdmissions = admissionsResult;
-
   const buildUrl = (key: string, value: string) => {
     const urlParams = new URLSearchParams();
     if (filters.city && key !== "city") urlParams.set("city", filters.city);
@@ -514,7 +486,7 @@ export default async function AdmissionsPage({
     return urlParams.toString() ? `/admissions?${urlParams.toString()}` : "/admissions";
   };
 
-  if (currentAdmissions.admissions.length === 0 && currentPage === 1) {
+  if (admissionsResult.admissions.length === 0 && currentPage === 1) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-20">
         <div className="container mx-auto px-4 text-center">
@@ -528,7 +500,6 @@ export default async function AdmissionsPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-800 py-16">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto text-center">
@@ -539,7 +510,6 @@ export default async function AdmissionsPage({
               {showClosed ? "Past admission records for reference" : "Find latest admissions with deadlines, requirements, and apply online"}
             </p>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 text-center">
                 <div className="text-2xl font-bold text-white">{stats.totalAdmissions}+</div>
@@ -563,7 +533,6 @@ export default async function AdmissionsPage({
               </div>
             </div>
 
-            {/* Toggle Buttons */}
             <div className="flex justify-center gap-4 mb-8">
               <Link href="/admissions" className={`px-6 py-2 rounded-full font-medium transition ${!showClosed ? "bg-yellow-400 text-gray-900" : "bg-white/20 text-white"}`}>
                 📢 Open Admissions ({stats.totalAdmissions})
@@ -573,7 +542,6 @@ export default async function AdmissionsPage({
               </Link>
             </div>
 
-            {/* Search Form */}
             <div className="max-w-2xl mx-auto">
               <form action="/admissions" method="GET" className="flex gap-2">
                 {showClosed && <input type="hidden" name="closed" value="true" />}
@@ -587,14 +555,11 @@ export default async function AdmissionsPage({
         </div>
       </div>
 
-      {/* Main Content with Sidebar */}
       <div className="container mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* LEFT SIDEBAR - Filters */}
           <aside className="lg:w-80 flex-shrink-0">
             <div className="sticky top-24 space-y-6">
-              {/* Program Type Filter */}
               {!showClosed && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-5 py-3">
@@ -623,7 +588,6 @@ export default async function AdmissionsPage({
                 </div>
               )}
 
-              {/* City Filter */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
                   <span>📍</span> Filter by City
@@ -640,7 +604,6 @@ export default async function AdmissionsPage({
                 </div>
               </div>
 
-              {/* Clear Filters */}
               {(filters.city || filters.level || filters.q) && (
                 <Link href={showClosed ? "/admissions?closed=true" : "/admissions"} className="block text-center text-sm text-blue-600 hover:underline py-3 border-t">
                   Clear all filters
@@ -649,32 +612,28 @@ export default async function AdmissionsPage({
             </div>
           </aside>
 
-          {/* RIGHT CONTENT - Admissions List */}
           <div className="flex-1">
-            {/* Results Header */}
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6 border border-gray-100">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">{currentAdmissions.totalCount} {showClosed ? "Closed" : "Open"} Admissions Found</h2>
+                  <h2 className="text-2xl font-bold text-gray-800">{admissionsResult.totalCount} {showClosed ? "Closed" : "Open"} Admissions Found</h2>
                   <p className="text-sm text-gray-500 mt-1">
                     {filters.level && `Program: ${PROGRAM_TYPES.find(l => l.slug === filters.level)?.name}`}
                     {filters.city && ` • City: ${citiesWithCounts.find(c => c.slug === filters.city)?.name}`}
                     {filters.q && ` • Search: "${filters.q}"`}
-                    {` • Page ${currentAdmissions.currentPage} of ${currentAdmissions.totalPages}`}
+                    {` • Page ${admissionsResult.currentPage} of ${admissionsResult.totalPages}`}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Admissions Cards */}
             <div className="space-y-5">
-              {currentAdmissions.admissions.map((admission: Admission) => (
+              {admissionsResult.admissions.map((admission: Admission) => (
                 <AdmissionCard key={admission.id} admission={admission} showClosed={showClosed} />
               ))}
             </div>
 
-            {/* Pagination */}
-            <Pagination currentPage={currentAdmissions.currentPage} totalPages={currentAdmissions.totalPages} showClosed={showClosed} filters={{ city: filters.city, level: filters.level, q: filters.q }} />
+            <Pagination currentPage={admissionsResult.currentPage} totalPages={admissionsResult.totalPages} showClosed={showClosed} filters={{ city: filters.city, level: filters.level, q: filters.q }} />
           </div>
         </div>
       </div>

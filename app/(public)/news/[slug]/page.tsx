@@ -1,11 +1,33 @@
+// app/(public)/news/[slug]/page.tsx
 import { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { news, programs, institutes, boards, cities } from '@/app/lib/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
-// ==================== TYPES ====================
+export const revalidate = 3600;
+export const dynamic = 'force-static';
+export const fetchCache = 'force-cache';
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const allNews = await db
+      .select({ slug: news.slug })
+      .from(news)
+      .where(eq(news.status, true))
+      .limit(100);
+    
+    return allNews.map((item) => ({
+      slug: item.slug,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 interface NewsDetail {
   id: number;
   title: string;
@@ -17,7 +39,7 @@ interface NewsDetail {
   author: string | null;
   isFeatured: boolean | null;
   isBreaking: boolean | null;
-  viewCount: number | null;  // ✅ Fixed: views → viewCount
+  viewCount: number | null;
   publishedAt: Date | null;
   expiresAt: Date | null;
   createdAt: Date | null;
@@ -52,7 +74,14 @@ interface RelatedNews {
   isBreaking: boolean | null;
 }
 
-// ==================== FORMAT FUNCTIONS ====================
+interface PopularNewsItem {
+  id: number;
+  title: string;
+  slug: string;
+  viewCount: number | null;
+  publishedAt: Date | null;
+}
+
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -84,7 +113,6 @@ function getReadTime(content: string | null): number {
   return Math.ceil(words / 200);
 }
 
-// ==================== GET NEWS BY SLUG ====================
 async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   try {
     const [newsItem] = await db
@@ -99,7 +127,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
         author: news.author,
         isFeatured: news.isFeatured,
         isBreaking: news.isBreaking,
-        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
+        viewCount: news.viewCount,
         publishedAt: news.publishedAt,
         expiresAt: news.expiresAt,
         createdAt: news.createdAt,
@@ -132,90 +160,78 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       .limit(1);
 
     return newsItem || null;
-  } catch (error) {
-    console.error('Error fetching news:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET RELATED NEWS ====================
-async function getRelatedNews(newsItem: NewsDetail, limit = 6): Promise<RelatedNews[]> {
+async function getRelatedAndPopularNews(newsItem: NewsDetail): Promise<{ relatedNews: RelatedNews[]; popularNews: PopularNewsItem[] }> {
   try {
-    const conditions = [];
+    let relatedCondition = sql`1=1`;
     
     if (newsItem.programId) {
-      conditions.push(eq(news.programId, newsItem.programId));
+      relatedCondition = eq(news.programId, newsItem.programId);
     } else if (newsItem.instituteId) {
-      conditions.push(eq(news.instituteId, newsItem.instituteId));
+      relatedCondition = eq(news.instituteId, newsItem.instituteId);
     } else if (newsItem.boardId) {
-      conditions.push(eq(news.boardId, newsItem.boardId));
+      relatedCondition = eq(news.boardId, newsItem.boardId);
     } else if (newsItem.cityId) {
-      conditions.push(eq(news.cityId, newsItem.cityId));
+      relatedCondition = eq(news.cityId, newsItem.cityId);
     }
     
-    if (conditions.length === 0) {
-      conditions.push(sql`1=1`);
-    }
-    
-    return await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        excerpt: news.excerpt,
-        imageUrl: news.imageUrl,
-        publishedAt: news.publishedAt,
-        isBreaking: news.isBreaking,
-      })
-      .from(news)
-      .where(
-        and(
-          ...conditions,
-          eq(news.status, true),
-          sql`${news.id} != ${newsItem.id}`
+    const [relatedNews, popularNews] = await Promise.all([
+      db
+        .select({
+          id: news.id,
+          title: news.title,
+          slug: news.slug,
+          excerpt: news.excerpt,
+          imageUrl: news.imageUrl,
+          publishedAt: news.publishedAt,
+          isBreaking: news.isBreaking,
+        })
+        .from(news)
+        .where(
+          and(
+            relatedCondition,
+            eq(news.status, true),
+            sql`${news.id} != ${newsItem.id}`
+          )
         )
-      )
-      .orderBy(desc(news.publishedAt))
-      .limit(limit);
-  } catch (error) {
-    console.error('Error fetching related news:', error);
-    return [];
+        .orderBy(desc(news.publishedAt))
+        .limit(6),
+      
+      db
+        .select({
+          id: news.id,
+          title: news.title,
+          slug: news.slug,
+          viewCount: news.viewCount,
+          publishedAt: news.publishedAt,
+        })
+        .from(news)
+        .where(eq(news.status, true))
+        .orderBy(desc(news.viewCount))
+        .limit(5)
+    ]);
+    
+    return { relatedNews, popularNews };
+  } catch {
+    return { relatedNews: [], popularNews: [] };
   }
 }
 
-// ==================== GET MOST POPULAR ====================
-async function getMostPopular(limit = 5) {
-  try {
-    return await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        viewCount: news.viewCount,  // ✅ Fixed: views → viewCount
-        publishedAt: news.publishedAt,
-      })
-      .from(news)
-      .where(eq(news.status, true))
-      .orderBy(desc(news.viewCount))  // ✅ Fixed: views → viewCount
-      .limit(limit);
-  } catch (error) {
-    return [];
-  }
-}
-
-// ==================== UPDATE VIEW COUNT ====================
-async function incrementViewCount(id: number) {
+async function incrementViewCount(id: number): Promise<void> {
   try {
     await db
       .update(news)
-      .set({ viewCount: sql`${news.viewCount} + 1` })  // ✅ Fixed: views → viewCount
+      .set({ viewCount: sql`${news.viewCount} + 1` })
       .where(eq(news.id, id));
-  } catch (error) {
-    console.error('Error incrementing view count:', error);
+  } catch {
+    // Silent fail - view count increment is non-critical
   }
 }
 
-// ==================== GENERATE METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const newsItem = await getNewsBySlug(slug);
@@ -250,9 +266,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== COMPONENTS ====================
-
-// Breadcrumbs Component
 function Breadcrumbs({ title }: { title: string }) {
   return (
     <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
@@ -265,7 +278,6 @@ function Breadcrumbs({ title }: { title: string }) {
   );
 }
 
-// Author Card Component
 function AuthorCard({ author, publishedAt, readTime }: { author: string | null; publishedAt: Date | null; readTime: number }) {
   return (
     <div className="flex items-center justify-between py-4 border-y border-gray-200 mb-6">
@@ -282,17 +294,12 @@ function AuthorCard({ author, publishedAt, readTime }: { author: string | null; 
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-1 text-xs text-gray-500">
-        <span className="text-gray-400">Views:</span>
-        <span className="font-medium text-gray-700">—</span>
-      </div>
     </div>
   );
 }
 
-// Share Buttons Component
 function ShareButtons({ title, slug }: { title: string; slug: string }) {
-  const url = `https://nextid.pk/news/${slug}`;
+  const url = `https://www.nextid.pk/news/${slug}`;
   
   const shareLinks = [
     { name: 'Twitter', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`, bg: 'bg-black hover:bg-gray-800' },
@@ -321,11 +328,9 @@ function ShareButtons({ title, slug }: { title: string; slug: string }) {
   );
 }
 
-// ==================== STYLE 4: MAGAZINE STYLE RELATED NEWS ====================
 function RelatedNewsMagazine({ relatedNews }: { relatedNews: RelatedNews[] }) {
   if (relatedNews.length === 0) return null;
   
-  // Split into 2 columns
   const midIndex = Math.ceil(relatedNews.length / 2);
   const leftColumn = relatedNews.slice(0, midIndex);
   const rightColumn = relatedNews.slice(midIndex);
@@ -344,17 +349,19 @@ function RelatedNewsMagazine({ relatedNews }: { relatedNews: RelatedNews[] }) {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-        {/* Left Column */}
         <div className="p-4 space-y-4">
           {leftColumn.map((item) => (
             <Link key={item.id} href={`/news/${item.slug}`} className="group block">
               <div className="flex gap-3">
                 {item.imageUrl ? (
-                  <img 
-                    src={item.imageUrl} 
-                    alt={item.title} 
-                    className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                  />
+                  <div className="relative w-20 h-20 flex-shrink-0">
+                    <Image 
+                      src={item.imageUrl} 
+                      alt={item.title} 
+                      fill
+                      className="object-cover rounded-lg"
+                    />
+                  </div>
                 ) : (
                   <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
                     <span className="text-2xl text-gray-400">N</span>
@@ -379,18 +386,20 @@ function RelatedNewsMagazine({ relatedNews }: { relatedNews: RelatedNews[] }) {
           ))}
         </div>
         
-        {/* Right Column */}
         {rightColumn.length > 0 && (
           <div className="p-4 space-y-4">
             {rightColumn.map((item) => (
               <Link key={item.id} href={`/news/${item.slug}`} className="group block">
                 <div className="flex gap-3">
                   {item.imageUrl ? (
-                    <img 
-                      src={item.imageUrl} 
-                      alt={item.title} 
-                      className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                    />
+                    <div className="relative w-20 h-20 flex-shrink-0">
+                      <Image 
+                        src={item.imageUrl} 
+                        alt={item.title} 
+                        fill
+                        className="object-cover rounded-lg"
+                      />
+                    </div>
                   ) : (
                     <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
                       <span className="text-2xl text-gray-400">N</span>
@@ -420,8 +429,7 @@ function RelatedNewsMagazine({ relatedNews }: { relatedNews: RelatedNews[] }) {
   );
 }
 
-// Popular News Component (Sidebar)
-function PopularNews({ popularNews }: { popularNews: any[] }) {
+function PopularNews({ popularNews }: { popularNews: PopularNewsItem[] }) {
   if (popularNews.length === 0) return null;
   
   return (
@@ -456,7 +464,6 @@ function PopularNews({ popularNews }: { popularNews: any[] }) {
   );
 }
 
-// Newsletter Signup Component
 function NewsletterSignup() {
   return (
     <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-5 text-white">
@@ -482,23 +489,27 @@ function NewsletterSignup() {
   );
 }
 
-// ==================== MAIN PAGE ====================
+async function getPageData(slug: string) {
+  const newsItem = await getNewsBySlug(slug);
+  
+  if (!newsItem) {
+    return { newsItem: null, relatedNews: [], popularNews: [] };
+  }
+  
+  incrementViewCount(newsItem.id);
+  
+  const { relatedNews, popularNews } = await getRelatedAndPopularNews(newsItem);
+  
+  return { newsItem, relatedNews, popularNews };
+}
+
 export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  
-  const newsItem = await getNewsBySlug(slug);
+  const { newsItem, relatedNews, popularNews } = await getPageData(slug);
   
   if (!newsItem) {
     notFound();
   }
-
-  // Increment view count
-  incrementViewCount(newsItem.id).catch(console.error);
-
-  const [relatedNews, popularNews] = await Promise.all([
-    getRelatedNews(newsItem).catch(() => []),
-    getMostPopular(5).catch(() => []),
-  ]);
 
   const readTime = getReadTime(newsItem.content);
   const relatedLink = newsItem.programSlug ? `/programs/${newsItem.programSlug}` :
@@ -510,7 +521,6 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section with Breaking Banner */}
       <div className={`${newsItem.isBreaking ? 'bg-gradient-to-r from-red-700 via-red-600 to-red-500' : 'bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900'} text-white relative overflow-hidden`}>
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
@@ -548,15 +558,13 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
           
-          {/* Left Sidebar - Social Share (Sticky) */}
           <aside className="lg:w-16 flex-shrink-0">
             <div className="sticky top-24 flex lg:flex-col gap-2 justify-center">
               <a
-                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(newsItem.title)}&url=${encodeURIComponent(`https://nextid.pk/news/${newsItem.slug}`)}`}
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(newsItem.title)}&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
@@ -565,7 +573,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
                 𝕏
               </a>
               <a
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://nextid.pk/news/${newsItem.slug}`)}`}
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-blue-700 hover:bg-blue-800 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
@@ -574,7 +582,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
                 f
               </a>
               <a
-                href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(`https://nextid.pk/news/${newsItem.slug}`)}`}
+                href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
@@ -585,24 +593,25 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
             </div>
           </aside>
           
-          {/* Main Content */}
           <article className="flex-1">
             
-            {/* Featured Image */}
             {newsItem.imageUrl && (
-              <div className="mb-8 rounded-xl overflow-hidden shadow-lg">
-                <img 
+              <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video">
+                <Image 
                   src={newsItem.imageUrl} 
                   alt={newsItem.title}
-                  className="w-full h-auto object-cover"
+                  fill
+                  className="object-cover"
+                  priority
                 />
                 {newsItem.source && (
-                  <p className="text-xs text-gray-500 mt-2 text-center">Source: {newsItem.source}</p>
+                  <p className="text-xs text-gray-500 mt-2 text-center absolute bottom-2 right-2 bg-black/50 px-2 py-1 rounded">
+                    Source: {newsItem.source}
+                  </p>
                 )}
               </div>
             )}
 
-            {/* Excerpt / Key Points */}
             {newsItem.excerpt && (
               <div className="bg-red-50 border-l-4 border-red-600 p-5 mb-8 rounded-r-lg">
                 <p className="text-gray-800 font-medium leading-relaxed">
@@ -611,7 +620,6 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               </div>
             )}
 
-            {/* Related Entity Link */}
             {relatedLink && relatedName && (
               <div className="bg-gray-100 rounded-lg p-4 mb-6">
                 <p className="text-gray-700 text-sm">
@@ -623,7 +631,6 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               </div>
             )}
 
-            {/* Main Article Content */}
             <div 
               className="prose prose-lg max-w-none 
                 prose-headings:text-gray-900 prose-headings:font-bold 
@@ -635,7 +642,6 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               dangerouslySetInnerHTML={{ __html: newsItem.content }}
             />
 
-            {/* Tags Section */}
             <div className="border-t border-gray-200 mt-8 pt-6">
               <div className="flex flex-wrap gap-2">
                 <span className="text-sm text-gray-500">Tags:</span>
@@ -653,28 +659,22 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               </div>
             </div>
 
-            {/* Author Bio */}
             <AuthorCard 
               author={newsItem.author} 
               publishedAt={newsItem.publishedAt} 
               readTime={readTime} 
             />
 
-            {/* Share Section */}
             <ShareButtons title={newsItem.title} slug={newsItem.slug} />
           </article>
 
-          {/* Right Sidebar */}
           <aside className="lg:w-80">
             <div className="space-y-6 sticky top-24">
               
-              {/* Popular News */}
               <PopularNews popularNews={popularNews} />
 
-              {/* Newsletter Signup */}
               <NewsletterSignup />
 
-              {/* Back to News Link */}
               <Link 
                 href="/news"
                 className="block bg-white border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition group"
@@ -685,13 +685,11 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
           </aside>
         </div>
         
-        {/* Related News Section - Full Width Below Article */}
         <div className="max-w-6xl mx-auto mt-10">
           <RelatedNewsMagazine relatedNews={relatedNews} />
         </div>
       </div>
 
-      {/* Schema Markup for Article */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -712,12 +710,12 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               "name": "NextID.pk",
               "logo": {
                 "@type": "ImageObject",
-                "url": "https://nextid.pk/logo.png"
+                "url": "https://www.nextid.pk/logo.png"
               }
             },
             "mainEntityOfPage": {
               "@type": "WebPage",
-              "@id": `https://nextid.pk/news/${newsItem.slug}`
+              "@id": `https://www.nextid.pk/news/${newsItem.slug}`
             },
             "articleSection": "Education",
             "keywords": "education news, Pakistan, admissions, results"

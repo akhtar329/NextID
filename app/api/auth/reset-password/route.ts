@@ -3,18 +3,45 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { adminUsers } from "@/app/lib/schema";
 import bcrypt from "bcryptjs";
-import { and, eq, gt } from "drizzle-orm"; // ✅ expressions come from 'drizzle-orm'
+import { and, eq, gt } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { token, newPassword } = body;
 
-    if (!token || !newPassword) {
-      return NextResponse.json({ error: "Token and new password are required." }, { status: 400 });
+    if (!token || typeof token !== 'string') {
+      return NextResponse.json(
+        { error: "Reset token is required." },
+        { status: 400 }
+      );
     }
 
-    // 1️⃣ Find user by token and check expiration
+    if (!newPassword || typeof newPassword !== 'string') {
+      return NextResponse.json(
+        { error: "New password is required." },
+        { status: 400 }
+      );
+    }
+
+    if (newPassword.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters long." },
+        { status: 400 }
+      );
+    }
+
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber) {
+      return NextResponse.json(
+        { error: "Password must contain at least one uppercase letter, one lowercase letter, and one number." },
+        { status: 400 }
+      );
+    }
+
     const [user] = await db
       .select()
       .from(adminUsers)
@@ -26,13 +53,14 @@ export async function POST(req: NextRequest) {
       );
 
     if (!user) {
-      return NextResponse.json({ error: "Invalid or expired token." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid or expired reset token. Please request a new password reset link." },
+        { status: 400 }
+      );
     }
 
-    // 2️⃣ Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // 3️⃣ Update user password and clear token/expiration
     await db
       .update(adminUsers)
       .set({
@@ -43,9 +71,19 @@ export async function POST(req: NextRequest) {
       })
       .where(eq(adminUsers.id, user.id));
 
-    return NextResponse.json({ message: "Password has been reset successfully." });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+    const response = NextResponse.json({
+      success: true,
+      message: "Password has been reset successfully. You can now login with your new password."
+    });
+
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+
+    return response;
+
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to reset password. Please try again later." },
+      { status: 500 }
+    );
   }
 }

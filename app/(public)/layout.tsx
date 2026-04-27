@@ -6,17 +6,22 @@ import type { Metadata } from 'next';
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
+// ==================== NEXT.JS CACHE CONFIGURATION ====================
+export const revalidate = 86400; // ✅ Cache layout for 1 day (layouts rarely change)
+export const dynamic = 'force-static';
+
+// ==================== METADATA ====================
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
   description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
   metadataBase: new URL("https://www.nextid.pk"),
   alternates: {
-    canonical: "https://www.nextid.pk", // ✅ Fix: full URL
+    canonical: "https://www.nextid.pk",
   },
   robots: {
     index: true,
     follow: true,
-    googleBot: {                        // ✅ Fix: googleBot add kiya
+    googleBot: {
       index: true,
       follow: true,
       "max-image-preview": "large",
@@ -30,7 +35,7 @@ export const metadata: Metadata = {
     description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
     siteName: "NextID",
     locale: "en_PK",
-    url: "https://www.nextid.pk",      // ✅ Fix: url add kiya
+    url: "https://www.nextid.pk",
     images: [
       {
         url: "/og-image.png",
@@ -48,6 +53,7 @@ export const metadata: Metadata = {
   },
 };
 
+// ==================== LAYOUT ====================
 export default function PublicLayout({
   children,
 }: {

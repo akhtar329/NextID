@@ -15,6 +15,10 @@ import {
 } from '@/app/lib/schema';
 import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
 
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
+
 interface Props {
   params: Promise<{
     slug: string;
@@ -46,7 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         canonical: `https://www.nextid.pk/categories/${cat.slug}`,
       },
     };
-  } catch (error) {
+  } catch {
     return {
       title: 'Category | NextID.pk',
     };
@@ -55,7 +59,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 async function getCategoryData(slug: string) {
   try {
-    // Get category details
     const categoryResult = await db
       .select()
       .from(categories)
@@ -68,7 +71,6 @@ async function getCategoryData(slug: string) {
 
     const category = categoryResult[0];
 
-    // ✅ UPDATED: Get programs directly by categoryId (not through degrees)
     const programsList = await db
       .select()
       .from(programs)
@@ -77,14 +79,12 @@ async function getCategoryData(slug: string) {
 
     const programIds = programsList.map(p => p.id).filter(id => id != null);
 
-    // ✅ UPDATED: Get degrees (no categoryId in new schema - fetch all)
     const degreesList = await db
       .select()
       .from(degrees)
       .where(eq(degrees.status, true))
       .orderBy(degrees.displayOrder, degrees.name);
 
-    // ✅ UPDATED: Get institutes through programOfferings
     let institutesList: any[] = [];
     if (programIds.length > 0) {
       try {
@@ -106,20 +106,17 @@ async function getCategoryData(slug: string) {
           )
           .orderBy(desc(institutes.isFeatured), institutes.name)
           .limit(20);
-      } catch (error) {
-        console.error('Error fetching institutes:', error);
+      } catch {
         institutesList = [];
       }
     }
 
-    // ✅ UPDATED: Get active admissions through admissionOfferings + programOfferings
     let admissionsList: any[] = [];
     if (programIds.length > 0) {
       try {
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
-          // First get offeringIds for these programs
           const offeringIds = await db
             .select({ id: programOfferings.id })
             .from(programOfferings)
@@ -150,20 +147,17 @@ async function getCategoryData(slug: string) {
               .limit(10);
           }
         }
-      } catch (error) {
-        console.error('Error fetching admissions:', error);
+      } catch {
         admissionsList = [];
       }
     }
 
-    // ✅ UPDATED: Get recent results (no direct programId in results - use resultOfferings)
     let resultsList: any[] = [];
     if (programIds.length > 0) {
       try {
         const validProgramIds = programIds.filter(id => id != null && id > 0);
         
         if (validProgramIds.length > 0) {
-          // First get offeringIds for these programs
           const offeringIds = await db
             .select({ id: programOfferings.id })
             .from(programOfferings)
@@ -172,8 +166,6 @@ async function getCategoryData(slug: string) {
           const offeringIdList = offeringIds.map(o => o.id);
           
           if (offeringIdList.length > 0) {
-            // Note: results are linked through resultOfferings
-            // This query needs adjustment based on your result_offerings table
             resultsList = await db
               .select({
                 id: results.id,
@@ -193,13 +185,11 @@ async function getCategoryData(slug: string) {
               .limit(10);
           }
         }
-      } catch (error) {
-        console.error('Error fetching results:', error);
+      } catch {
         resultsList = [];
       }
     }
 
-    // Get recent news about this category
     let newsList: any[] = [];
     try {
       newsList = await db
@@ -221,12 +211,10 @@ async function getCategoryData(slug: string) {
         )
         .orderBy(desc(news.isBreaking), desc(news.publishedAt))
         .limit(10);
-    } catch (error) {
-      console.error('Error fetching news:', error);
+    } catch {
       newsList = [];
     }
 
-    // Remove any potential duplicates manually
     const uniqueInstitutes = Array.from(
       new Map(institutesList.map(item => [item.id, item])).values()
     );
@@ -243,7 +231,6 @@ async function getCategoryData(slug: string) {
       new Map(newsList.map(item => [item.id, item])).values()
     );
 
-    // Get stats
     const stats = {
       totalDegrees: degreesList.length,
       totalPrograms: programsList.length,
@@ -263,13 +250,11 @@ async function getCategoryData(slug: string) {
       news: uniqueNews,
       stats,
     };
-  } catch (error) {
-    console.error('Error fetching category data:', error);
+  } catch {
     return null;
   }
 }
 
-// Default icons for categories
 const categoryIcons: Record<string, string> = {
   'Engineering': '⚙️',
   'Medical': '🏥',
@@ -305,7 +290,6 @@ export default async function CategoryDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-purple-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -336,7 +320,6 @@ export default async function CategoryDetailPage({ params }: Props) {
                   Explore {category.name.toLowerCase()} programs, degrees, institutes, admissions, and results
                 </p>
                 
-                {/* Quick Stats */}
                 <div className="flex flex-wrap gap-4">
                   <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
                     <div className="text-2xl font-bold text-white">{stats.totalDegrees}</div>
@@ -361,10 +344,8 @@ export default async function CategoryDetailPage({ params }: Props) {
         </div>
       </section>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
-        {/* Degrees Section */}
         {degrees.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center justify-between mb-6">
@@ -403,7 +384,6 @@ export default async function CategoryDetailPage({ params }: Props) {
           </section>
         )}
 
-        {/* Programs Section */}
         {programs.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center justify-between mb-6">
@@ -457,10 +437,8 @@ export default async function CategoryDetailPage({ params }: Props) {
           </section>
         )}
 
-        {/* Two Column Layout for Institutes and Admissions */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           
-          {/* Institutes Section */}
           <div className="lg:col-span-2">
             {institutes.length > 0 && (
               <section>
@@ -502,7 +480,6 @@ export default async function CategoryDetailPage({ params }: Props) {
               </section>
             )}
             
-            {/* Show message if no institutes */}
             {institutes.length === 0 && (
               <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-gray-200">
                 <div className="text-4xl mb-3">🏛️</div>
@@ -512,7 +489,6 @@ export default async function CategoryDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Admissions Section */}
           <div className="lg:col-span-1">
             {admissions.length > 0 ? (
               <section>
@@ -564,10 +540,8 @@ export default async function CategoryDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Results and News Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           
-          {/* Results Section */}
           <div>
             {results.length > 0 ? (
               <section>
@@ -618,7 +592,6 @@ export default async function CategoryDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* News Section */}
           <div>
             {news.length > 0 ? (
               <section>
@@ -677,7 +650,6 @@ export default async function CategoryDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Related Degrees Quick Links */}
         {degrees.length > 0 && (
           <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">

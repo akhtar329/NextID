@@ -1,14 +1,32 @@
 // app/(public)/admissions/[slug]/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image'; // ✅ Added for optimized images
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from '@/app/lib/schema';
 import { eq, and, ne, desc } from 'drizzle-orm';
 
-// ==================== TYPES ====================
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const allAdmissions = await db
+      .select({ slug: admissions.slug })
+      .from(admissions)
+      .where(eq(admissions.status, 'Open'))
+      .limit(200);
+    
+    return allAdmissions.map((item) => ({
+      slug: item.slug,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 interface ProgramWithDetails {
   id: number;
   name: string;
@@ -16,6 +34,7 @@ interface ProgramWithDetails {
   duration: string | null;
   feeRange: string | null;
   specificEligibility: string | null;
+  degreeName?: string | null;
 }
 
 interface CityType {
@@ -58,7 +77,17 @@ interface AdmissionWithPrograms {
   galleryImages?: string | null;
 }
 
-// ==================== HELPER FUNCTIONS ====================
+interface RelatedAdmission {
+  id: number;
+  name: string | null;
+  slug: string | null;
+  year: number | null;
+  session: string | null;
+  status: string | null;
+  instituteName: string | null;
+  instituteSlug: string | null;
+}
+
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', { 
@@ -77,10 +106,9 @@ function getDaysRemaining(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-// ==================== GET ADMISSION BY SLUG ====================
 async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms | null> {
   try {
-    const admissionResult = await db
+    const result = await db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -98,107 +126,111 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms |
         updatedAt: admissions.updatedAt,
         featuredImage: admissions.featuredImage,
         galleryImages: admissions.galleryImages,
+        instituteId_field: institutes.id,
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
+        instituteType: institutes.type,
+        instituteDescription: institutes.description,
+        instituteWebsite: institutes.website,
+        instituteLogo: institutes.logo,
+        instituteFeaturedImage: institutes.featuredImage,
+        instituteCityId: institutes.cityId,
+        cityId_field: cities.id,
+        cityName: cities.name,
+        citySlug: cities.slug,
+        cityProvince: cities.province,
+        programId: programs.id,
+        programName: programs.name,
+        programSlug: programs.slug,
+        programDuration: programOfferings.duration,
+        programFeeRange: programOfferings.feeRange,
+        programEligibility: programOfferings.specificEligibility,
       })
       .from(admissions)
-      .where(eq(admissions.slug, slug))
-      .limit(1);
-    
-    if (admissionResult.length === 0) return null;
-    
-    const admission = admissionResult[0];
-    
-    // Get institute details
-    let institute: InstituteType | null = null;
-    if (admission.instituteId) {
-      const instituteResult = await db
-        .select({
-          id: institutes.id,
-          name: institutes.name,
-          slug: institutes.slug,
-          type: institutes.type,
-          description: institutes.description,
-          website: institutes.website,
-          logo: institutes.logo,
-          featuredImage: institutes.featuredImage,
-          cityId: institutes.cityId,
-        })
-        .from(institutes)
-        .where(eq(institutes.id, admission.instituteId))
-        .limit(1);
-      
-      if (instituteResult[0]) {
-        let city: CityType | null = null;
-        if (instituteResult[0].cityId) {
-          const cityResult = await db
-            .select({
-              id: cities.id,
-              name: cities.name,
-              slug: cities.slug,
-              province: cities.province,
-            })
-            .from(cities)
-            .where(eq(cities.id, instituteResult[0].cityId))
-            .limit(1);
-          city = cityResult[0] || null;
-        }
+      .leftJoin(institutes, eq(admissions.instituteId, institutes.id))
+      .leftJoin(cities, eq(institutes.cityId, cities.id))
+      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
+      .where(eq(admissions.slug, slug));
 
-        institute = {
-          id: instituteResult[0].id,
-          name: instituteResult[0].name,
-          slug: instituteResult[0].slug,
-          type: instituteResult[0].type,
-          description: instituteResult[0].description,
-          website: instituteResult[0].website,
-          logo: instituteResult[0].logo,
-          featuredImage: instituteResult[0].featuredImage,
-          city,
+    if (result.length === 0) return null;
+
+    const firstRow = result[0];
+    let institute: InstituteType | null = null;
+    
+    if (firstRow.instituteId_field) {
+      let city: CityType | null = null;
+      if (firstRow.cityId_field) {
+        city = {
+          id: firstRow.cityId_field,
+          name: firstRow.cityName || '',
+          slug: firstRow.citySlug || '',
+          province: firstRow.cityProvince,
         };
+      }
+      
+      institute = {
+        id: firstRow.instituteId_field,
+        name: firstRow.instituteName || '',
+        slug: firstRow.instituteSlug || '',
+        type: firstRow.instituteType,
+        description: firstRow.instituteDescription,
+        website: firstRow.instituteWebsite,
+        logo: firstRow.instituteLogo,
+        featuredImage: firstRow.instituteFeaturedImage,
+        city,
+      };
+    }
+
+    const programsMap = new Map<number, ProgramWithDetails>();
+    
+    for (const row of result) {
+      if (row.programId && !programsMap.has(row.programId)) {
+        programsMap.set(row.programId, {
+          id: row.programId,
+          name: row.programName || '',
+          slug: row.programSlug || '',
+          duration: row.programDuration,
+          feeRange: row.programFeeRange,
+          specificEligibility: row.programEligibility,
+        });
       }
     }
 
-    // Fetch programs using admissionOfferings + programOfferings
-    const programsResult = await db
-      .select({
-        id: programs.id,
-        name: programs.name,
-        slug: programs.slug,
-        duration: programOfferings.duration,
-        feeRange: programOfferings.feeRange,
-        specificEligibility: programOfferings.specificEligibility,
-      })
-      .from(admissionOfferings)
-      .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
-      .innerJoin(programs, eq(programOfferings.programId, programs.id))
-      .where(eq(admissionOfferings.admissionId, admission.id));
-
-    const programsWithDetails: ProgramWithDetails[] = programsResult.map(p => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      duration: p.duration,
-      feeRange: p.feeRange,
-      specificEligibility: p.specificEligibility,
-    }));
+    const programsList = Array.from(programsMap.values());
+    let galleryImagesValue: string | null | undefined = firstRow.galleryImages as string | null | undefined;
+    if (galleryImagesValue === null) galleryImagesValue = undefined;
 
     return {
-      ...admission,
-      status: admission.status as 'Expected' | 'Open' | 'Closed',
+      id: firstRow.id,
+      name: firstRow.name,
+      slug: firstRow.slug,
+      year: firstRow.year,
+      session: firstRow.session,
+      status: firstRow.status as 'Expected' | 'Open' | 'Closed',
+      expectedOpenDate: firstRow.expectedOpenDate,
+      expectedCloseDate: firstRow.expectedCloseDate,
+      meritInfo: firstRow.meritInfo,
+      note: firstRow.note,
+      officialLink: firstRow.officialLink,
       institute,
-      programs: programsWithDetails,
-      programCount: programsWithDetails.length,
-      galleryImages: admission.galleryImages as string | null | undefined,
+      programs: programsList,
+      programCount: programsList.length,
+      createdAt: firstRow.createdAt,
+      updatedAt: firstRow.updatedAt,
+      featuredImage: firstRow.featuredImage,
+      galleryImages: galleryImagesValue,
     };
-
-  } catch (error) {
-    console.error('Error fetching admission:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET RELATED ADMISSIONS ====================
-async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
+async function getRelatedAdmissions(admission: AdmissionWithPrograms): Promise<RelatedAdmission[]> {
+  if (!admission.institute?.id) return [];
+  
   try {
-    if (!admission.institute?.id) return [];
     return await db
       .select({
         id: admissions.id,
@@ -212,7 +244,10 @@ async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
       })
       .from(admissions)
       .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(and(eq(admissions.instituteId, admission.institute.id), ne(admissions.slug, admission.slug)))
+      .where(and(
+        eq(admissions.instituteId, admission.institute.id),
+        ne(admissions.slug, admission.slug)
+      ))
       .orderBy(desc(admissions.createdAt))
       .limit(5);
   } catch {
@@ -220,7 +255,6 @@ async function getRelatedAdmissions(admission: AdmissionWithPrograms) {
   }
 }
 
-// ==================== GET SEO METADATA FROM DATABASE ====================
 async function getSEOMetadata(admissionId: number) {
   try {
     const result = await db
@@ -240,13 +274,11 @@ async function getSEOMetadata(admissionId: number) {
       .limit(1);
     
     return result[0] || null;
-  } catch (error) {
-    console.error('Error fetching SEO metadata:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== STATUS BADGE ====================
 function getStatusBadge(status: string) {
   const badges = {
     'Open': { bg: 'bg-green-100', text: 'text-green-700', label: 'Applications Open', icon: '🟢' },
@@ -256,18 +288,14 @@ function getStatusBadge(status: string) {
   return badges[status as keyof typeof badges] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status, icon: '📌' };
 }
 
-// ==================== METADATA (from database seo_metadata table) ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  
-  // First get admission to get ID for SEO metadata
   const admission = await getAdmissionBySlug(slug);
   
   if (!admission) {
     return { title: 'Admission Not Found', robots: { index: false } };
   }
 
-  // Try to get SEO metadata from database using admission ID
   const seoData = await getSEOMetadata(admission.id);
   
   if (seoData?.metaTitle && seoData?.metaDescription) {
@@ -284,7 +312,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
   
-  // Fallback: dynamic metadata
   const instituteName = admission.institute?.name || 'University';
   const year = admission.year || '2026';
   
@@ -301,24 +328,53 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== MAIN PAGE ====================
-export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+async function getPageData(slug: string) {
   const admission = await getAdmissionBySlug(slug);
+  if (!admission) return { admission: null, relatedAdmissions: [] };
   
-  if (!admission) notFound();
-
   const relatedAdmissions = await getRelatedAdmissions(admission);
+  return { admission, relatedAdmissions };
+}
+
+export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  let pageData;
+  
+  try {
+    const { slug } = await params;
+    pageData = await getPageData(slug);
+    
+    if (!pageData.admission) {
+      notFound();
+    }
+  } catch {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-12">
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load admission details</h2>
+            <p className="text-gray-600">Please try again later</p>
+            <Link
+              href="/admissions"
+              className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              View All Admissions
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const { admission, relatedAdmissions } = pageData;
   const statusBadge = getStatusBadge(admission.status);
   const daysRemaining = getDaysRemaining(admission.expectedCloseDate);
 
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl">
-            {/* Breadcrumbs */}
             <div className="text-sm text-blue-200 mb-4">
               <Link href="/" className="hover:text-white">Home</Link>
               {' / '}
@@ -327,7 +383,6 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
               <span className="text-white">{admission.institute?.name}</span>
             </div>
             
-            {/* Status Badge */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
               <span>{statusBadge.icon}</span>
               <span>{statusBadge.label}</span>
@@ -369,9 +424,7 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Main Content */}
           <div className="flex-1">
-            {/* Institute Info Card */}
             {admission.institute && (
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
                 <div className="flex items-start gap-4">
@@ -398,35 +451,55 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
               </div>
             )}
 
-            {/* Programs Section */}
             <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Available Programs</h2>
-              <div className="space-y-4">
-                {admission.programs.map((program) => (
-                  <div key={program.id} className="border-b border-gray-100 pb-4 last:border-0">
-                    <Link href={`/programs/${program.slug}`}>
-                      <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
-                        {program.name}
-                      </h3>
-                    </Link>
-                    {program.duration && (
-                      <p className="text-sm text-gray-600 mt-1">Duration: {program.duration}</p>
-                    )}
-                    {program.feeRange && (
-                      <p className="text-sm text-gray-600">Fee Range: {program.feeRange}</p>
-                    )}
-                    {program.specificEligibility && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm font-medium text-gray-700">Eligibility:</p>
-                        <p className="text-sm text-gray-600">{program.specificEligibility}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Available Programs 
+                {admission.programCount > 0 && (
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    ({admission.programCount} {admission.programCount === 1 ? 'Program' : 'Programs'})
+                  </span>
+                )}
+              </h2>
+              
+              {admission.programs.length > 0 ? (
+                <div className="space-y-4">
+                  {admission.programs.map((program, index) => (
+                    <div key={program.id || index} className="border-b border-gray-100 pb-4 last:border-0">
+                      <Link href={`/programs/${program.slug}`}>
+                        <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
+                          {program.name}
+                        </h3>
+                      </Link>
+                      {program.duration && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          <span className="font-medium">Duration:</span> {program.duration}
+                        </p>
+                      )}
+                      {program.feeRange && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Fee Range:</span> {program.feeRange}
+                        </p>
+                      )}
+                      {program.specificEligibility && (
+                        <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm font-medium text-gray-700">Eligibility:</p>
+                          <p className="text-sm text-gray-600">{program.specificEligibility}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <div className="text-4xl mb-3">📚</div>
+                  <p className="text-gray-600">Program details will be updated soon.</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    For more information, please visit the official website.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Important Information */}
             {(admission.meritInfo || admission.note || admission.officialLink) && (
               <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Important Information</h2>
@@ -452,9 +525,7 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
             )}
           </div>
 
-          {/* Sidebar */}
           <aside className="lg:w-80">
-            {/* Related Admissions */}
             {relatedAdmissions.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
                 <h3 className="font-bold text-gray-900 mb-3">Related Admissions</h3>
@@ -472,7 +543,6 @@ export default async function AdmissionDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
-      {/* Schema Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

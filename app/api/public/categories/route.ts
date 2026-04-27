@@ -5,7 +5,6 @@ import { eq, asc } from "drizzle-orm";
 
 export async function GET() {
   try {
-    // ================== MAIN QUERY ==================
     const allCategories = await db
       .select({
         id: categories.id,
@@ -18,13 +17,15 @@ export async function GET() {
       .where(eq(categories.status, true))
       .orderBy(asc(categories.displayOrder));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: allCategories
     });
-  } catch (error) {
-    console.error("Categories API error:", error);
 
+    response.headers.set('Cache-Control', `public, s-maxage=86400, stale-while-revalidate=43200`);
+
+    return response;
+  } catch {
     return NextResponse.json(
       {
         success: false,

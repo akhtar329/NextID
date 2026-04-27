@@ -1,23 +1,86 @@
 // app/(public)/search/SearchContent.tsx
+import Link from "next/link";
 
-"use client";
+type SearchItem = {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+  publishedAt?: string;
+};
 
-import { useSearchParams } from 'next/navigation';
+async function getSearchResults(query: string, page: number) {
+  try {
+    const q = encodeURIComponent(query || "");
 
-export default function SearchContent() {
-  const searchParams = useSearchParams();
-  const query = searchParams.get('q') || '';
-  const city = searchParams.get('city') || '';
-  const category = searchParams.get('category') || '';
-  
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/api/public/search?q=${q}&page=${page}`,
+      {
+        cache: "no-store",
+      }
+    );
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    return Array.isArray(data?.data) ? data.data : [];
+  } catch {
+    return [];
+  }
+}
+
+function safeNumber(value: string | undefined, fallback = 1): number {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+}
+
+export default async function SearchContent({
+  searchParams,
+}: {
+  searchParams?: {
+    q?: string;
+    page?: string;
+  };
+}) {
+  const query = searchParams?.q || "";
+  const page = safeNumber(searchParams?.page, 1);
+
+  const results = await getSearchResults(query, page);
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <h2 className="text-2xl font-bold mb-2">Search Results</h2>
-      <p className="text-gray-600 mb-6">
-        Showing results for: "{query}" {city && `in ${city}`}
-      </p>
-      
-      <p className="text-gray-500">Loading search results...</p>
+      <h1 className="text-2xl font-bold mb-4">
+        Search Results {query ? `for "${query}"` : ""}
+      </h1>
+
+      {!query && (
+        <p className="text-gray-500">
+          Please enter something to search.
+        </p>
+      )}
+
+      {query && results.length === 0 && (
+        <p className="text-gray-500">
+          No results found.
+        </p>
+      )}
+
+      <div className="space-y-4 mt-6">
+        {results.map((item: SearchItem) => (
+          <Link
+            key={item.id}
+            href={`/news/${item.slug}`}
+            className="block p-4 border rounded-lg hover:shadow transition"
+          >
+            <h2 className="font-semibold text-lg">{item.title}</h2>
+            {item.excerpt && (
+              <p className="text-sm text-gray-600 mt-1">
+                {item.excerpt}
+              </p>
+            )}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

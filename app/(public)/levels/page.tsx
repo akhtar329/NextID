@@ -1,8 +1,12 @@
+// app/(public)/levels/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { levels, degrees, programs } from '@/app/lib/schema';
-import { eq, and, count, inArray, sql } from 'drizzle-orm';
+import { eq, and, count, inArray } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
 
 export const metadata: Metadata = {
   title: 'Education Levels | Matric, Intermediate, Bachelor, Master | NextID.pk',
@@ -26,7 +30,6 @@ interface LevelWithStats {
 
 async function getLevelsWithStats(): Promise<LevelWithStats[]> {
   try {
-    // Get all levels
     const allLevels = await db
       .select({
         id: levels.id,
@@ -41,7 +44,21 @@ async function getLevelsWithStats(): Promise<LevelWithStats[]> {
       .where(eq(levels.status, true))
       .orderBy(levels.displayOrder, levels.name);
 
-    // Get total programs count (since programs no longer have degreeId)
+    if (allLevels.length === 0) {
+      return [];
+    }
+
+    const levelIds = allLevels.map(l => l.id);
+
+    const degreesCounts = await db
+      .select({
+        levelId: degrees.levelId,
+        count: count(),
+      })
+      .from(degrees)
+      .where(and(eq(degrees.status, true), inArray(degrees.levelId, levelIds)))
+      .groupBy(degrees.levelId);
+
     const totalProgramsResult = await db
       .select({ count: count() })
       .from(programs)
@@ -49,45 +66,25 @@ async function getLevelsWithStats(): Promise<LevelWithStats[]> {
     
     const totalProgramsCount = Number(totalProgramsResult[0]?.count) || 0;
 
-    // Calculate stats for each level
-    const levelsWithStats = await Promise.all(
-      allLevels.map(async (level) => {
-        // Get degrees in this level
-        const degreesList = await db
-          .select({ id: degrees.id })
-          .from(degrees)
-          .where(and(eq(degrees.levelId, level.id), eq(degrees.status, true)));
+    const degreesMap = new Map(degreesCounts.map(d => [d.levelId, Number(d.count)]));
 
-        // Get degrees count
-        const degreesCount = degreesList.length;
+    const levelsWithStats = allLevels.map((level) => ({
+      ...level,
+      degreesCount: degreesMap.get(level.id) || 0,
+      programsCount: totalProgramsCount,
+    }));
 
-        // ✅ UPDATED: Programs count (no direct degreeId in programs)
-        // Since programs don't have degreeId anymore, we'll show total programs
-        // or you can calculate through categories if needed
-        const programsCount = totalProgramsCount;
-
-        return {
-          ...level,
-          degreesCount,
-          programsCount,
-        };
-      })
-    );
-
-    // Sort by display order
     return levelsWithStats.sort((a, b) => {
       if (a.displayOrder !== b.displayOrder) {
         return (a.displayOrder || 999) - (b.displayOrder || 999);
       }
       return a.name.localeCompare(b.name);
     });
-  } catch (error) {
-    console.error('Error fetching levels:', error);
+  } catch {
     return [];
   }
 }
 
-// Icons for levels
 const levelIcons: Record<string, string> = {
   'Matric': '📘',
   'Intermediate': '📗',
@@ -99,7 +96,6 @@ const levelIcons: Record<string, string> = {
   'Post Graduate': '📚',
 };
 
-// Colors for levels
 const levelColors: Record<string, string> = {
   'Matric': 'from-green-500 to-emerald-600',
   'Intermediate': 'from-blue-500 to-cyan-600',
@@ -112,18 +108,16 @@ const levelColors: Record<string, string> = {
 };
 
 export default async function LevelsPage() {
-  const levels = await getLevelsWithStats();
+  const levelsList = await getLevelsWithStats();
 
-  // Calculate overall stats
-  const totalLevels = levels.length;
-  const totalDegrees = levels.reduce((sum, level) => sum + level.degreesCount, 0);
-  const totalPrograms = levels.reduce((sum, level) => sum + level.programsCount, 0);
+  const totalLevels = levelsList.length;
+  const totalDegrees = levelsList.reduce((sum, level) => sum + level.degreesCount, 0);
+  const totalPrograms = levelsList.reduce((sum, level) => sum + level.programsCount, 0);
   const avgProgramsPerLevel = totalLevels > 0 ? Math.round(totalPrograms / totalLevels) : 0;
 
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-green-900 to-emerald-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -152,7 +146,6 @@ export default async function LevelsPage() {
         </div>
       </section>
 
-      {/* Stats Cards */}
       <div className="container mx-auto px-4 mt-8 mb-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
@@ -193,10 +186,9 @@ export default async function LevelsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
-        {levels.length === 0 ? (
+        {levelsList.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm">
             <div className="text-6xl mb-4">📚</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No levels found</h3>
@@ -204,9 +196,8 @@ export default async function LevelsPage() {
           </div>
         ) : (
           <>
-            {/* Levels Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {levels.map((level) => {
+              {levelsList.map((level) => {
                 const icon = levelIcons[level.name] || '📘';
                 const gradientColor = levelColors[level.name] || 'from-gray-600 to-slate-600';
                 
@@ -216,7 +207,6 @@ export default async function LevelsPage() {
                     href={`/levels/${level.slug}`}
                     className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-green-400"
                   >
-                    {/* Level Header */}
                     <div className={`bg-gradient-to-r ${gradientColor} p-4 text-white`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -235,7 +225,6 @@ export default async function LevelsPage() {
                     </div>
                     
                     <div className="p-5">
-                      {/* Stats Grid */}
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         <div className="bg-purple-50 rounded-lg p-3 text-center">
                           <div className="text-2xl font-bold text-purple-700">{level.degreesCount}</div>
@@ -247,7 +236,6 @@ export default async function LevelsPage() {
                         </div>
                       </div>
                       
-                      {/* Progress Bar */}
                       <div className="mb-4">
                         <div className="flex justify-between text-xs text-gray-500 mb-1">
                           <span>Program Availability</span>
@@ -278,10 +266,8 @@ export default async function LevelsPage() {
               })}
             </div>
 
-            {/* Bottom Sections */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Level Information */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
@@ -300,12 +286,12 @@ export default async function LevelsPage() {
                   </div>
                   
                   <div className="p-4 bg-purple-50 rounded-lg">
-                    <h3 className="font-semibold text-purple-800 mb-2">Bachelor's Degree</h3>
+                    <h3 className="font-semibold text-purple-800 mb-2">Bachelor&apos;s Degree</h3>
                     <p className="text-sm text-gray-600">Undergraduate programs typically lasting 2-4 years. Includes BA, BSc, BBA, BEng, etc.</p>
                   </div>
                   
                   <div className="p-4 bg-orange-50 rounded-lg">
-                    <h3 className="font-semibold text-orange-800 mb-2">Master's Degree</h3>
+                    <h3 className="font-semibold text-orange-800 mb-2">Master&apos;s Degree</h3>
                     <p className="text-sm text-gray-600">Postgraduate programs lasting 1-2 years. Includes MA, MSc, MBA, MEng, etc.</p>
                   </div>
                   
@@ -316,7 +302,6 @@ export default async function LevelsPage() {
                 </div>
               </div>
 
-              {/* Level Statistics */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
@@ -324,45 +309,50 @@ export default async function LevelsPage() {
                 </h2>
                 
                 <div className="space-y-6">
-                  {/* Degree Distribution */}
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Degree Distribution</h3>
                     <div className="space-y-2">
-                      {levels.sort((a, b) => b.degreesCount - a.degreesCount).map((level) => (
-                        <div key={`stat-${level.id}`} className="flex items-center gap-2">
-                          <span className="text-xs w-20 truncate">{level.name}</span>
-                          <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
-                              style={{ width: `${(level.degreesCount / Math.max(...levels.map(l => l.degreesCount)) * 100)}%` }}
-                            ></div>
+                      {levelsList.sort((a, b) => b.degreesCount - a.degreesCount).map((level) => {
+                        const maxDegrees = Math.max(...levelsList.map(l => l.degreesCount));
+                        const percentage = maxDegrees > 0 ? (level.degreesCount / maxDegrees) * 100 : 0;
+                        return (
+                          <div key={`stat-${level.id}`} className="flex items-center gap-2">
+                            <span className="text-xs w-20 truncate">{level.name}</span>
+                            <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs font-medium text-gray-600">{level.degreesCount}</span>
                           </div>
-                          <span className="text-xs font-medium text-gray-600">{level.degreesCount}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Program Distribution */}
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Program Distribution</h3>
                     <div className="space-y-2">
-                      {levels.sort((a, b) => b.programsCount - a.programsCount).map((level) => (
-                        <div key={`prog-stat-${level.id}`} className="flex items-center gap-2">
-                          <span className="text-xs w-20 truncate">{level.name}</span>
-                          <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
-                              style={{ width: `${(level.programsCount / Math.max(...levels.map(l => l.programsCount)) * 100)}%` }}
-                            ></div>
+                      {levelsList.sort((a, b) => b.programsCount - a.programsCount).map((level) => {
+                        const maxPrograms = Math.max(...levelsList.map(l => l.programsCount));
+                        const percentage = maxPrograms > 0 ? (level.programsCount / maxPrograms) * 100 : 0;
+                        return (
+                          <div key={`prog-stat-${level.id}`} className="flex items-center gap-2">
+                            <span className="text-xs w-20 truncate">{level.name}</span>
+                            <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs font-medium text-gray-600">{level.programsCount}</span>
                           </div>
-                          <span className="text-xs font-medium text-gray-600">{level.programsCount}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Quick Stats */}
                   <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-green-600">{totalLevels}</div>
@@ -377,7 +367,6 @@ export default async function LevelsPage() {
               </div>
             </div>
 
-            {/* Quick Links */}
             <div className="mt-8 bg-white rounded-xl shadow-sm p-6 border border-gray-200">
               <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <span className="w-1.5 h-6 bg-yellow-600 rounded-full"></span>
@@ -385,7 +374,7 @@ export default async function LevelsPage() {
               </h2>
               
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                {levels.map((level) => (
+                {levelsList.map((level) => (
                   <Link
                     key={`quick-${level.id}`}
                     href={`/levels/${level.slug}`}

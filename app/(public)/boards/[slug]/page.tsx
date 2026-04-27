@@ -1,5 +1,4 @@
 // app/(public)/boards/[slug]/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -7,8 +6,28 @@ import { db } from '@/app/lib/db';
 import { boards, cities, results, dateSheets, news, seoMetadata } from '@/app/lib/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 
-// ==================== FORMAT DATE FUNCTION ====================
-function formatDate(date: Date | null) {
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const fetchCache = 'force-cache';
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const allBoards = await db
+      .select({ slug: boards.slug })
+      .from(boards)
+      .where(eq(boards.status, true))
+      .limit(100);
+    
+    return allBoards.map((item) => ({
+      slug: item.slug,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     day: 'numeric',
@@ -17,7 +36,7 @@ function formatDate(date: Date | null) {
   });
 }
 
-function formatShortDate(date: Date | null) {
+function formatShortDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
@@ -26,7 +45,6 @@ function formatShortDate(date: Date | null) {
   });
 }
 
-// ==================== TYPES ====================
 interface BoardDetail {
   id: number;
   name: string;
@@ -81,7 +99,13 @@ interface NewsItem {
   isBreaking: boolean | null;
 }
 
-// ==================== GET BOARD BY SLUG ====================
+interface BoardStats {
+  totalResults: number;
+  totalDateSheets: number;
+  totalNews: number;
+  recentResults: number;
+}
+
 async function getBoardBySlug(slug: string): Promise<BoardDetail | null> {
   try {
     const [board] = await db
@@ -108,7 +132,15 @@ async function getBoardBySlug(slug: string): Promise<BoardDetail | null> {
     if (!board) return null;
 
     const [seo] = await db
-      .select()
+      .select({
+        metaTitle: seoMetadata.metaTitle,
+        metaDescription: seoMetadata.metaDescription,
+        canonicalUrl: seoMetadata.canonicalUrl,
+        robots: seoMetadata.robots,
+        ogTitle: seoMetadata.ogTitle,
+        ogDescription: seoMetadata.ogDescription,
+        ogImage: seoMetadata.ogImage,
+      })
       .from(seoMetadata)
       .where(
         and(
@@ -122,16 +154,14 @@ async function getBoardBySlug(slug: string): Promise<BoardDetail | null> {
       ...board,
       seo: seo || null,
     };
-  } catch (error) {
-    console.error('Error fetching board:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET RESULTS ====================
-async function getResults(boardId: number, limit = 5): Promise<Result[]> {
-  try {
-    return await db
+async function getBoardData(boardId: number) {
+  const [resultsList, dateSheetsList, newsList, stats, years] = await Promise.all([
+    db
       .select({
         id: results.id,
         title: results.title,
@@ -144,17 +174,9 @@ async function getResults(boardId: number, limit = 5): Promise<Result[]> {
       .from(results)
       .where(eq(results.boardId, boardId))
       .orderBy(desc(results.resultDate), desc(results.year))
-      .limit(limit);
-  } catch (error) {
-    console.error('Error fetching results:', error);
-    return [];
-  }
-}
-
-// ==================== GET DATE SHEETS ====================
-async function getDateSheets(boardId: number, limit = 5): Promise<DateSheet[]> {
-  try {
-    return await db
+      .limit(5),
+    
+    db
       .select({
         id: dateSheets.id,
         title: dateSheets.title,
@@ -167,17 +189,9 @@ async function getDateSheets(boardId: number, limit = 5): Promise<DateSheet[]> {
       .from(dateSheets)
       .where(eq(dateSheets.boardId, boardId))
       .orderBy(desc(dateSheets.examDate))
-      .limit(limit);
-  } catch (error) {
-    console.error('Error fetching date sheets:', error);
-    return [];
-  }
-}
-
-// ==================== GET NEWS ====================
-async function getNews(boardId: number, limit = 5): Promise<NewsItem[]> {
-  try {
-    return await db
+      .limit(5),
+    
+    db
       .select({
         id: news.id,
         title: news.title,
@@ -189,71 +203,50 @@ async function getNews(boardId: number, limit = 5): Promise<NewsItem[]> {
       .from(news)
       .where(eq(news.boardId, boardId))
       .orderBy(desc(news.publishedAt))
-      .limit(limit);
-  } catch (error) {
-    console.error('Error fetching news:', error);
-    return [];
-  }
-}
+      .limit(5),
+    
+    (async () => {
+      const [resultsCount, dateSheetsCount, newsCount, recentResults] = await Promise.all([
+        db.select({ count: count() }).from(results).where(eq(results.boardId, boardId)),
+        db.select({ count: count() }).from(dateSheets).where(eq(dateSheets.boardId, boardId)),
+        db.select({ count: count() }).from(news).where(eq(news.boardId, boardId)),
+        db
+          .select({ count: count() })
+          .from(results)
+          .where(
+            and(
+              eq(results.boardId, boardId),
+              sql`${results.resultDate} > NOW() - INTERVAL '30 days'`
+            )
+          ),
+      ]);
 
-// ==================== GET STATS ====================
-async function getStats(boardId: number) {
-  try {
-    const [resultsCount] = await db
-      .select({ count: count() })
-      .from(results)
-      .where(eq(results.boardId, boardId));
-
-    const [dateSheetsCount] = await db
-      .select({ count: count() })
-      .from(dateSheets)
-      .where(eq(dateSheets.boardId, boardId));
-
-    const [newsCount] = await db
-      .select({ count: count() })
-      .from(news)
-      .where(eq(news.boardId, boardId));
-
-    const [recentResults] = await db
-      .select({ count: count() })
-      .from(results)
-      .where(
-        and(
-          eq(results.boardId, boardId),
-          sql`${results.resultDate} > NOW() - INTERVAL '30 days'`
-        )
-      );
-
-    return {
-      totalResults: Number(resultsCount?.count) || 0,
-      totalDateSheets: Number(dateSheetsCount?.count) || 0,
-      totalNews: Number(newsCount?.count) || 0,
-      recentResults: Number(recentResults?.count) || 0,
-    };
-  } catch (error) {
-    console.error('Error fetching stats:', error);
-    return { totalResults: 0, totalDateSheets: 0, totalNews: 0, recentResults: 0 };
-  }
-}
-
-// ==================== GET YEARS ====================
-async function getYears(boardId: number) {
-  try {
-    const years = await db
+      return {
+        totalResults: Number(resultsCount[0]?.count) || 0,
+        totalDateSheets: Number(dateSheetsCount[0]?.count) || 0,
+        totalNews: Number(newsCount[0]?.count) || 0,
+        recentResults: Number(recentResults[0]?.count) || 0,
+      };
+    })(),
+    
+    db
       .select({ year: results.year })
       .from(results)
       .where(eq(results.boardId, boardId))
       .groupBy(results.year)
-      .orderBy(desc(results.year));
+      .orderBy(desc(results.year))
+      .then(years => years.map(y => y.year)),
+  ]);
 
-    return years.map(y => y.year);
-  } catch (error) {
-    console.error('Error fetching years:', error);
-    return [];
-  }
+  return {
+    results: resultsList,
+    dateSheets: dateSheetsList,
+    news: newsList,
+    stats,
+    years,
+  };
 }
 
-// ==================== GENERATE METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const board = await getBoardBySlug(slug);
@@ -287,8 +280,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== HELPER: Format Description ====================
-function formatDescription(text: string | null) {
+function formatDescription(text: string | null): React.ReactNode {
   if (!text) return null;
   return text.split('\n\n').map((paragraph, idx) => (
     <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
@@ -297,22 +289,46 @@ function formatDescription(text: string | null) {
   ));
 }
 
-// ==================== MAIN PAGE ====================
-export default async function BoardDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  
+async function getPageData(slug: string) {
   const board = await getBoardBySlug(slug);
-  if (!board) notFound();
+  if (!board) return { board: null, results: [], dateSheets: [], newsList: [], stats: null, years: [] };
+  
+  const { results, dateSheets, news, stats, years } = await getBoardData(board.id);
+  return { board, results, dateSheets, newsList: news, stats, years };
+}
 
-  const [results, dateSheets, newsList, stats, years] = await Promise.all([
-    getResults(board.id, 5),
-    getDateSheets(board.id, 5),
-    getNews(board.id, 5),
-    getStats(board.id),
-    getYears(board.id),
-  ]);
+export default async function BoardDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  let pageData;
+  
+  try {
+    const { slug } = await params;
+    pageData = await getPageData(slug);
+    
+    if (!pageData.board) {
+      notFound();
+    }
+  } catch {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        <div className="container mx-auto px-4 py-12">
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load board details</h2>
+            <p className="text-gray-600">Please try again later</p>
+            <Link
+              href="/boards"
+              className="inline-block mt-4 px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+            >
+              View All Boards
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
-  // ✅ Only show sections if they have data
+  const { board, results, dateSheets, newsList, stats, years } = pageData;
+
   const hasResults = stats.totalResults > 0;
   const hasDateSheets = stats.totalDateSheets > 0;
   const hasNews = stats.totalNews > 0;
@@ -322,7 +338,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-red-600">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -362,7 +377,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               )}
             </div>
 
-            {/* Stats Cards - Only show if data exists */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10">
               {hasResults && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
@@ -393,14 +407,11 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Sidebar */}
           <aside className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-24 space-y-6">
-              {/* Contact Card */}
               {(board.address || board.contactPhone || board.contactEmail) && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                   <div className="px-5 py-4 bg-gray-50 border-b border-gray-200">
@@ -409,13 +420,13 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                   <div className="p-5 space-y-3">
                     {board.address && (
                       <div className="flex gap-2 text-sm">
-                        <span className="text-gray-400">📍</span>
+                        <span className="text-gray-400" aria-hidden="true">📍</span>
                         <span className="text-gray-600">{board.address}</span>
                       </div>
                     )}
                     {board.contactPhone && (
                       <div className="flex gap-2 text-sm">
-                        <span className="text-gray-400">📞</span>
+                        <span className="text-gray-400" aria-hidden="true">📞</span>
                         <a href={`tel:${board.contactPhone}`} className="text-orange-600 hover:underline">
                           {board.contactPhone}
                         </a>
@@ -423,7 +434,7 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                     )}
                     {board.contactEmail && (
                       <div className="flex gap-2 text-sm">
-                        <span className="text-gray-400">✉️</span>
+                        <span className="text-gray-400" aria-hidden="true">✉️</span>
                         <a href={`mailto:${board.contactEmail}`} className="text-orange-600 hover:underline break-all">
                           {board.contactEmail}
                         </a>
@@ -433,7 +444,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                 </div>
               )}
 
-              {/* Quick Links - Only show sections that have data */}
               {(hasResults || hasDateSheets || hasNews) && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                   <h3 className="font-semibold text-gray-900 mb-3">Quick Links</h3>
@@ -457,7 +467,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
                 </div>
               )}
 
-              {/* Years Filter - Only show if there are results */}
               {years.length > 0 && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                   <h3 className="font-semibold text-gray-900 mb-3">Browse by Year</h3>
@@ -477,10 +486,8 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
             </div>
           </aside>
 
-          {/* Main Content */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            {/* Results Section */}
             {hasResults && (
               <section id="results">
                 <div className="flex items-center justify-between mb-5">
@@ -519,7 +526,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               </section>
             )}
 
-            {/* Date Sheets Section */}
             {hasDateSheets && (
               <section id="date-sheets">
                 <div className="flex items-center justify-between mb-5">
@@ -552,11 +558,10 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               </section>
             )}
 
-            {/* News Section */}
             {hasNews && (
               <section id="news">
                 <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-2xl font-bold text-gray-900">News & Announcements</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">News &amp; Announcements</h2>
                   <Link href={`/boards/${board.slug}/news`} className="text-sm text-orange-600 hover:underline">
                     View All →
                   </Link>
@@ -595,7 +600,6 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               </section>
             )}
 
-            {/* ✅ About Section - ONLY BOARD DESCRIPTION (No city) */}
             {hasAbout && (
               <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
@@ -609,12 +613,11 @@ export default async function BoardDetailPage({ params }: { params: Promise<{ sl
               </section>
             )}
 
-            {/* Empty State */}
             {!hasAnyContent && (
               <div className="bg-white rounded-xl p-12 text-center border border-gray-200">
-                <div className="text-5xl mb-4">📚</div>
+                <div className="text-5xl mb-4" aria-hidden="true">📚</div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
-                <p className="text-gray-500">We're currently updating information for {board.name}. Please check back later.</p>
+                <p className="text-gray-500">We&apos;re currently updating information for {board.name}. Please check back later.</p>
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
+// app/component/layout/Sidebar.tsx
 "use client";
 
-import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,15 +15,10 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
   Award,
   BookOpen,
-  School,
-  BarChart3,
-  Megaphone,
-  MessageSquare,
-  HelpCircle,
-  Route,
+  Wrench,
+  RefreshCw,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -31,27 +26,20 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: ReactNode;
-  badge?: number;
-}
-
-const navItems: NavItem[] = [
-  { name: "Dashboard", href: "/admin", icon: <LayoutDashboard size={20} /> },
-  { name: "News", href: "/admin/news", icon: <Newspaper size={20} /> },
-  { name: "Admissions", href: "/admin/admissions", icon: <GraduationCap size={20} /> },
-  { name: "Results", href: "/admin/results", icon: <FileText size={20} /> },
-  { name: "Date Sheets", href: "/admin/date-sheets", icon: <Calendar size={20} /> },
-  { name: "Institutes", href: "/admin/institutes", icon: <Building2 size={20} /> },
-  { name: "Programs", href: "/admin/programs", icon: <BookOpen size={20} /> },
-  { name: "Boards", href: "/admin/boards", icon: <Award size={20} /> },
-  { name: "Cities", href: "/admin/cities", icon: <MapPin size={20} /> },
-  { name: "Scholarships", href: "/admin/scholarships", icon: <Award size={20} /> },
-  { name: "Redirects", href: "/admin/redirects", icon: <Route size={20} /> },
-  { name: "Users", href: "/admin/users", icon: <Users size={20} /> },
-  { name: "Settings", href: "/admin/settings", icon: <Settings size={20} /> },
+const navItems = [
+  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { name: "News", href: "/admin/news", icon: Newspaper },
+  { name: "Admissions", href: "/admin/admissions", icon: GraduationCap },
+  { name: "Results", href: "/admin/results", icon: FileText },
+  { name: "Date Sheets", href: "/admin/date-sheets", icon: Calendar },
+  { name: "Institutes", href: "/admin/institutes", icon: Building2 },
+  { name: "Programs", href: "/admin/programs", icon: BookOpen },
+  { name: "Boards", href: "/admin/boards", icon: Award },
+  { name: "Cities", href: "/admin/cities", icon: MapPin },
+  { name: "Users", href: "/admin/users", icon: Users },
+  { name: "Settings", href: "/admin/settings", icon: Settings },
+  { name: "Maintenance", href: "/admin/settings/maintenance", icon: Wrench },
+  { name: "SEO Redirects", href: "/admin/settings/redirects", icon: RefreshCw },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -59,82 +47,80 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const isActive = (href: string) => {
     if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/settings") {
+      return pathname === "/admin/settings" || pathname === "/admin/settings/maintenance" || pathname === "/admin/settings/redirects";
+    }
     return pathname.startsWith(href);
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Logo Section */}
-      <div className={`h-16 flex items-center ${collapsed ? 'justify-center' : 'px-6'} border-b border-gray-200 bg-white`}>
-        {!collapsed ? (
-          <Link href="/admin" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">N</span>
+    <div className={`h-full bg-white border-r flex flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-64"}`}>
+      
+      {/* Logo Section + Collapse Button */}
+      <div className={`border-b ${collapsed ? "py-3" : "p-4"}`}>
+        <div className="flex items-center justify-between">
+          <Link href="/admin" className={`flex items-center gap-2 ${collapsed ? "justify-center w-full" : ""}`}>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <span className="text-white font-bold">N</span>
             </div>
-            <span className="font-bold text-xl bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              NextID
-            </span>
-            <span className="text-xs text-gray-400 ml-1">Admin</span>
+            {!collapsed && (
+              <div className="overflow-hidden">
+                <span className="font-bold text-lg text-gray-800 block leading-tight">NextID</span>
+                <span className="text-xs text-gray-400">Admin</span>
+              </div>
+            )}
           </Link>
-        ) : (
-          <Link href="/admin">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">N</span>
-            </div>
-          </Link>
+          
+          {!collapsed && (
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all"
+              title="Collapse"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
+        </div>
+        
+        {collapsed && (
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all"
+              title="Expand"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="flex-1 py-4 overflow-y-auto">
         <div className="space-y-1 px-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
-                ${isActive(item.href) 
-                  ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }
-                ${collapsed ? "justify-center" : ""}
-              `}
-              title={collapsed ? item.name : undefined}
-            >
-              <div className={`
-                ${isActive(item.href) ? "text-blue-600" : "text-gray-500 group-hover:text-gray-700"}
-                ${collapsed ? "scale-110" : ""}
-              `}>
-                {item.icon}
-              </div>
-              {!collapsed && (
-                <span className="text-sm font-medium flex-1">{item.name}</span>
-              )}
-              {!collapsed && item.badge && (
-                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`
+                  flex items-center gap-3 px-3 py-2 rounded-lg transition-all
+                  ${collapsed ? "justify-center" : ""}
+                  ${active 
+                    ? "bg-blue-50 text-blue-700" 
+                    : "text-gray-600 hover:bg-gray-100"}
+                `}
+                title={collapsed ? item.name : undefined}
+              >
+                <Icon size={20} className="shrink-0" />
+                {!collapsed && <span className="text-sm whitespace-nowrap">{item.name}</span>}
+              </Link>
+            );
+          })}
         </div>
       </nav>
-
-      {/* Footer Section */}
-      <div className="border-t border-gray-200 p-3">
-        <button
-          onClick={onToggle}
-          className={`
-            w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all
-            ${collapsed ? "justify-center" : ""}
-          `}
-          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          {!collapsed && <span className="text-sm">Collapse Menu</span>}
-        </button>
-      </div>
     </div>
   );
 }

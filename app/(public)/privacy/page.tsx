@@ -2,6 +2,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+
 export const metadata: Metadata = {
   title: 'Privacy Policy | NextID.pk - Education Portal Pakistan',
   description: 'Learn about how NextID.pk collects, uses, and protects your personal information. Our privacy policy explains our data practices and your rights.',
@@ -20,7 +23,6 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -31,7 +33,6 @@ export default function PrivacyPage() {
         </div>
       </div>
 
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden py-16">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -48,14 +49,12 @@ export default function PrivacyPage() {
         </div>
       </section>
 
-      {/* Last Updated */}
       <section className="container mx-auto px-4 py-4">
         <div className="max-w-4xl mx-auto text-right text-sm text-gray-500">
           Last Updated: March 7, 2026
         </div>
       </section>
 
-      {/* Main Content */}
       <section className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 md:p-12">
           
@@ -63,14 +62,14 @@ export default function PrivacyPage() {
             
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Introduction</h2>
             <p className="text-gray-700 mb-6">
-              Welcome to NextID.pk ("we," "our," or "us"). We are committed to protecting your personal information 
+              Welcome to NextID.pk (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your personal information 
               and your right to privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard 
-              your information when you visit our website nextid.pk (the "Site") and use our services.
+              your information when you visit our website nextid.pk (the &quot;Site&quot;) and use our services.
             </p>
             <p className="text-gray-700 mb-8">
               Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, 
               please do not access the site. We reserve the right to make changes to this privacy policy at any time 
-              and for any reason. We will alert you about any changes by updating the "Last Updated" date of this 
+              and for any reason. We will alert you about any changes by updating the &quot;Last Updated&quot; date of this 
               privacy policy.
             </p>
 
@@ -170,7 +169,7 @@ export default function PrivacyPage() {
               any third-party sites or services. We strongly advise you to review the privacy policy of every site you visit.
             </p>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Children's Privacy</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Children&apos;s Privacy</h2>
             <p className="text-gray-700 mb-4">
               Our services are intended for users who are at least 13 years of age. We do not knowingly collect personal 
               information from children under 13. If you are a parent or guardian and you are aware that your child has 
@@ -192,7 +191,7 @@ export default function PrivacyPage() {
               <li><strong>Data portability:</strong> Request a copy of your data in a machine-readable format</li>
             </ul>
             <p className="text-gray-700 mb-6">
-              To exercise any of these rights, please contact us using the information provided in the "Contact Us" section.
+              To exercise any of these rights, please contact us using the information provided in the &quot;Contact Us&quot; section.
             </p>
 
             <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Data Retention</h2>
@@ -205,7 +204,7 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">11. Changes to This Privacy Policy</h2>
             <p className="text-gray-700 mb-4">
               We may update our privacy policy from time to time. We will notify you of any changes by posting the new 
-              privacy policy on this page and updating the "Last Updated" date at the top of this page.
+              privacy policy on this page and updating the &quot;Last Updated&quot; date at the top of this page.
             </p>
             <p className="text-gray-700 mb-6">
               You are advised to review this privacy policy periodically for any changes. Changes to this privacy policy 
@@ -221,14 +220,13 @@ export default function PrivacyPage() {
                 <strong>Email:</strong> <a href="mailto:privacy@nextid.pk" className="text-blue-600 hover:underline">privacy@nextid.pk</a>
               </p>
               <p className="text-gray-700 mb-2">
-                <strong>Address:</strong> Office #2, Street No#2, Madena Town, Ahatta, Taxila Rawalpindi, Punjab 47000  Pakistan
+                <strong>Address:</strong> Office #2, Street No#2, Madena Town, Ahatta, Taxila Rawalpindi, Punjab 47000 Pakistan
               </p>
               <p className="text-gray-700">
                 <strong>Phone:</strong> <a href="tel:+923425527329" className="text-blue-600 hover:underline">+92 342 5537329</a>
               </p>
             </div>
 
-            {/* Consent Statement */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-8">
               <h3 className="text-lg font-bold text-blue-800 mb-2">By Using Our Website</h3>
               <p className="text-blue-700">

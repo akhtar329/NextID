@@ -1,20 +1,18 @@
 // app/api/public/results/route.ts
-
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { results, boards, institutes } from "@/app/lib/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, SQL } from "drizzle-orm";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type"); // 'board' or 'university'
+    const type = searchParams.get("type");
     const year = searchParams.get("year");
-    const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 20;
+    const limit = searchParams.get("limit") ? Math.min(parseInt(searchParams.get("limit")!), 100) : 20;
     const slug = searchParams.get("slug");
 
-    // Build conditions array
-    const conditions: any[] = [eq(results.status, true)];
+    const conditions: SQL[] = [eq(results.status, true)];
 
     if (type === "board") {
       conditions.push(sql`${results.boardId} IS NOT NULL`);
@@ -56,12 +54,16 @@ export async function GET(request: Request) {
       .orderBy(desc(results.year), desc(results.resultDate))
       .limit(limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: allResults,
+      total: allResults.length,
     });
-  } catch (error) {
-    console.error("Error fetching results:", error);
+
+    response.headers.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+
+    return response;
+  } catch {
     return NextResponse.json(
       { success: false, error: "Failed to fetch results" },
       { status: 500 }

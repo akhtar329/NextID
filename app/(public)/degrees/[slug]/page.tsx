@@ -1,3 +1,4 @@
+// app/(public)/degrees/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -14,7 +15,11 @@ import {
   results,
   seoMetadata
 } from '@/app/lib/schema';
-import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, inArray, isNotNull } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
 
 interface Props {
   params: Promise<{
@@ -22,7 +27,66 @@ interface Props {
   }>;
 }
 
-// ==================== GET SEO METADATA ====================
+interface DegreeWithDetails {
+  id: number;
+  name: string;
+  slug: string;
+  fullForm: string | null;
+  levelId: number | null;
+  displayOrder: number | null;
+  status: boolean | null;
+  description: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+interface LevelDetails {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface CategoryDetails {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface ProgramDetails {
+  id: number;
+  name: string;
+  slug: string;
+  shortDescription: string | null;
+  typicalDuration: string | null;
+  isFeatured: boolean | null;
+  categoryId: number | null;
+}
+
+interface InstituteDetails {
+  id: number;
+  name: string;
+  slug: string;
+  type: string | null;
+  isFeatured: boolean | null;
+}
+
+interface AdmissionDetails {
+  id: number;
+  name: string;
+  slug: string;
+  year: number;
+  session: string | null;
+  status: string | null;
+}
+
+interface ResultDetails {
+  id: number;
+  title: string;
+  slug: string;
+  year: number;
+  resultDate: Date | null;
+}
+
 async function getSeoMetadata(entityType: string, entityId: number) {
   try {
     const [seo] = await db
@@ -36,8 +100,7 @@ async function getSeoMetadata(entityType: string, entityId: number) {
       )
       .limit(1);
     return seo || null;
-  } catch (error) {
-    console.error('Error fetching SEO metadata:', error);
+  } catch {
     return null;
   }
 }
@@ -74,7 +137,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         canonical: seo?.canonicalUrl || `https://www.nextid.pk/degrees/${degree.slug}`,
       },
     };
-  } catch (error) {
+  } catch {
     return {
       title: 'Degree | NextID.pk',
     };
@@ -83,7 +146,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 async function getDegreeData(slug: string) {
   try {
-    // Get degree details
     const degreeResult = await db
       .select()
       .from(degrees)
@@ -94,142 +156,107 @@ async function getDegreeData(slug: string) {
       return null;
     }
 
-    const degree = degreeResult[0];
+    const degree = degreeResult[0] as DegreeWithDetails;
 
-    // Get level details
-    const level =
-      degree.levelId != null
-        ? (
-            await db
-              .select()
-              .from(levels)
-              .where(eq(levels.id, degree.levelId))
-              .limit(1)
-          )[0] || null
-        : null;
+    const level = degree.levelId != null
+      ? (
+          await db
+            .select()
+            .from(levels)
+            .where(eq(levels.id, degree.levelId))
+            .limit(1)
+        )[0] as LevelDetails | undefined
+      : null;
 
-    // ✅ UPDATED: No categoryId in degrees - fetch categories separately
-    let category = null;
-    try {
-      const categoryResult = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.status, true))
-        .limit(1);
-      category = categoryResult[0] || null;
-    } catch (error) {
-      console.error('Error fetching category:', error);
-    }
+    const categoryResult = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.status, true))
+      .limit(1);
+    const category = categoryResult[0] as CategoryDetails | undefined;
 
-    // ✅ UPDATED: Get all programs (no degreeId in new schema)
-    // Programs are linked to categories, not degrees
-    let programsList: any[] = [];
-    try {
-      programsList = await db
-        .select()
-        .from(programs)
-        .where(eq(programs.status, true))
-        .orderBy(desc(programs.isFeatured), programs.name)
-        .limit(20);
-    } catch (error) {
-      console.error('Error fetching programs:', error);
-    }
+    const programsList = await db
+      .select()
+      .from(programs)
+      .where(eq(programs.status, true))
+      .orderBy(desc(programs.isFeatured), programs.name)
+      .limit(20) as ProgramDetails[];
 
     const programIds = programsList.map(p => p.id).filter(id => id != null);
 
-    // ✅ UPDATED: Get institutes through programOfferings
-    let institutesList: any[] = [];
+    let institutesList: InstituteDetails[] = [];
     if (programIds.length > 0) {
-      try {
-        institutesList = await db
-          .selectDistinct({
-            id: institutes.id,
-            name: institutes.name,
-            slug: institutes.slug,
-            type: institutes.type,
-            isFeatured: institutes.isFeatured,
-          })
-          .from(institutes)
-          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
-          .where(
-            and(
-              eq(institutes.status, true),
-              inArray(programOfferings.programId, programIds)
-            )
-          )
-          .orderBy(desc(institutes.isFeatured), institutes.name)
-          .limit(30);
-      } catch (error) {
-        console.error('Error fetching institutes:', error);
-        institutesList = [];
-      }
-    }
-
-    // ✅ UPDATED: Get active admissions through admissionOfferings + programOfferings
-    let admissionsList: any[] = [];
-    if (programIds.length > 0) {
-      try {
-        const validProgramIds = programIds.filter(id => id != null && id > 0);
-        
-        if (validProgramIds.length > 0) {
-          // First get offeringIds for these programs
-          const offeringIds = await db
-            .select({ id: programOfferings.id })
-            .from(programOfferings)
-            .where(inArray(programOfferings.programId, validProgramIds));
-          
-          const offeringIdList = offeringIds.map(o => o.id);
-          
-          if (offeringIdList.length > 0) {
-            admissionsList = await db
-              .select({
-                id: admissions.id,
-                name: admissions.name,
-                slug: admissions.slug,
-                year: admissions.year,
-                session: admissions.session,
-                status: admissions.status,
-              })
-              .from(admissions)
-              .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
-              .where(
-                and(
-                  inArray(admissionOfferings.offeringId, offeringIdList),
-                  eq(admissions.status, 'Open'),
-                  isNotNull(admissionOfferings.offeringId)
-                )
-              )
-              .orderBy(desc(admissions.createdAt))
-              .limit(10);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching admissions:', error);
-        admissionsList = [];
-      }
-    }
-
-    // ✅ UPDATED: Get recent results (no direct programId in results)
-    let resultsList: any[] = [];
-    try {
-      resultsList = await db
-        .select({
-          id: results.id,
-          title: results.title,
-          slug: results.slug,
-          year: results.year,
-          resultDate: results.resultDate,
+      institutesList = await db
+        .selectDistinct({
+          id: institutes.id,
+          name: institutes.name,
+          slug: institutes.slug,
+          type: institutes.type,
+          isFeatured: institutes.isFeatured,
         })
-        .from(results)
-        .where(eq(results.status, true))
-        .orderBy(desc(results.resultDate), desc(results.createdAt))
-        .limit(10);
-    } catch (error) {
-      console.error('Error fetching results:', error);
-      resultsList = [];
+        .from(institutes)
+        .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
+        .where(
+          and(
+            eq(institutes.status, true),
+            inArray(programOfferings.programId, programIds)
+          )
+        )
+        .orderBy(desc(institutes.isFeatured), institutes.name)
+        .limit(30) as InstituteDetails[];
     }
 
-    // Remove duplicates
+    let admissionsList: AdmissionDetails[] = [];
+    if (programIds.length > 0) {
+      const validProgramIds = programIds.filter(id => id != null && id > 0);
+      
+      if (validProgramIds.length > 0) {
+        const offeringIds = await db
+          .select({ id: programOfferings.id })
+          .from(programOfferings)
+          .where(inArray(programOfferings.programId, validProgramIds));
+        
+        const offeringIdList = offeringIds.map(o => o.id);
+        
+        if (offeringIdList.length > 0) {
+          admissionsList = await db
+            .select({
+              id: admissions.id,
+              name: admissions.name,
+              slug: admissions.slug,
+              year: admissions.year,
+              session: admissions.session,
+              status: admissions.status,
+            })
+            .from(admissions)
+            .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+            .where(
+              and(
+                inArray(admissionOfferings.offeringId, offeringIdList),
+                eq(admissions.status, 'Open'),
+                isNotNull(admissionOfferings.offeringId)
+              )
+            )
+            .orderBy(desc(admissions.createdAt))
+            .limit(10) as AdmissionDetails[];
+        }
+      }
+    }
+
+    let resultsList: ResultDetails[] = [];
+    resultsList = await db
+      .select({
+        id: results.id,
+        title: results.title,
+        slug: results.slug,
+        year: results.year,
+        resultDate: results.resultDate,
+      })
+      .from(results)
+      .where(eq(results.status, true))
+      .orderBy(desc(results.resultDate), desc(results.createdAt))
+      .limit(10) as ResultDetails[];
+
     const uniqueInstitutes = Array.from(
       new Map(institutesList.map(item => [item.id, item])).values()
     );
@@ -242,7 +269,6 @@ async function getDegreeData(slug: string) {
       new Map(resultsList.map(item => [item.id, item])).values()
     );
 
-    // Get stats
     const stats = {
       totalPrograms: programsList.length,
       totalInstitutes: uniqueInstitutes.length,
@@ -260,13 +286,11 @@ async function getDegreeData(slug: string) {
       results: uniqueResults,
       stats,
     };
-  } catch (error) {
-    console.error('Error fetching degree data:', error);
+  } catch {
     return null;
   }
 }
 
-// Icons for degrees
 const degreeIcons: Record<string, string> = {
   'BS': '🔬',
   'BA': '🎨',
@@ -290,7 +314,6 @@ const degreeIcons: Record<string, string> = {
   'PhD': '👨‍🎓',
 };
 
-// Colors for degrees
 const degreeColors: Record<string, string> = {
   'BS': 'from-blue-500 to-cyan-600',
   'BA': 'from-purple-500 to-pink-600',
@@ -323,7 +346,6 @@ export default async function DegreeDetailPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className={`bg-gradient-to-br ${gradientColor} text-white relative overflow-hidden`}>
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -381,7 +403,6 @@ export default async function DegreeDetailPage({ params }: Props) {
                   )}
                 </div>
                 
-                {/* Quick Stats */}
                 <div className="flex flex-wrap gap-4">
                   <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
                     <div className="text-2xl font-bold text-white">{stats.totalPrograms}</div>
@@ -402,10 +423,8 @@ export default async function DegreeDetailPage({ params }: Props) {
         </div>
       </section>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
-        {/* Programs Section */}
         {programs.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center justify-between mb-6">
@@ -459,10 +478,8 @@ export default async function DegreeDetailPage({ params }: Props) {
           </section>
         )}
 
-        {/* Two Column Layout for Institutes and Admissions */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           
-          {/* Institutes Section */}
           <div className="lg:col-span-2">
             {institutes.length > 0 ? (
               <section>
@@ -511,7 +528,6 @@ export default async function DegreeDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Admissions Section */}
           <div className="lg:col-span-1">
             {admissions.length > 0 ? (
               <section>
@@ -563,10 +579,8 @@ export default async function DegreeDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Results Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           
-          {/* Results */}
           <div>
             {results.length > 0 ? (
               <section>
@@ -617,7 +631,6 @@ export default async function DegreeDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Degree Information */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <span className={`w-1.5 h-6 ${gradientColor.split(' ')[0]} rounded-full`}></span>
@@ -653,7 +666,6 @@ export default async function DegreeDetailPage({ params }: Props) {
                 </div>
               </div>
 
-              {/* Quick Info */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Level</span>
@@ -680,7 +692,6 @@ export default async function DegreeDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Quick Links - Programs */}
         {programs.length > 0 && (
           <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">

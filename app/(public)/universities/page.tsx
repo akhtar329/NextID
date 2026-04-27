@@ -1,13 +1,13 @@
 // app/(public)/universities/page.tsx
-// ✅ Modified - Type filter removed, all institutes will show
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
 import { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql, count } from 'drizzle-orm';
+import { eq, desc, like, and, or, sql, count, inArray, SQL } from 'drizzle-orm';
 
-// ==================== METADATA ====================
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+
 export const metadata: Metadata = {
   title: 'Top Universities in Pakistan 2026 | Rankings, Admissions & Fees | NextID.pk',
   description: 'Find top universities in Pakistan: NUST, FAST, LUMS, Punjab University, Karachi University. Check rankings, admissions 2026, fees, programs & eligibility',
@@ -32,7 +32,6 @@ export const metadata: Metadata = {
   },
 };
 
-// ==================== TYPES ====================
 interface University {
   id: number;
   name: string;
@@ -49,7 +48,12 @@ interface University {
   ranking?: number;
 }
 
-// ==================== CONSTANTS ====================
+interface Filters {
+  city?: string;
+  type?: string;
+  q?: string;
+}
+
 const CITIES = [
   { slug: '', name: 'All Cities' },
   { slug: 'lahore', name: 'Lahore' },
@@ -63,13 +67,6 @@ const CITIES = [
   { slug: 'gujranwala', name: 'Gujranwala' },
 ];
 
-const UNIVERSITY_TYPES = [
-  { slug: '', name: 'All Types' },
-  { slug: 'public', name: 'Public Universities' },
-  { slug: 'private', name: 'Private Universities' },
-];
-
-// Mock rankings data
 const UNIVERSITY_RANKINGS: Record<string, number> = {
   'nust': 1,
   'lums': 2,
@@ -83,37 +80,28 @@ const UNIVERSITY_RANKINGS: Record<string, number> = {
   'air': 10,
 };
 
-// ==================== DATA FETCHING ====================
-async function getUniversities(filters: {
-  city?: string;
-  type?: string;
-  q?: string;
-}) {
+async function getUniversities(filters: Filters): Promise<University[]> {
   try {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
 
-    // City filter
     if (filters.city) {
       conditions.push(eq(cities.slug, filters.city));
     }
 
-    // Type filter (public/private)
     if (filters.type) {
       conditions.push(eq(institutes.type, filters.type));
     }
 
-    // Search filter
     if (filters.q) {
       const searchTerm = `%${filters.q}%`;
       conditions.push(
         or(
           like(institutes.name, searchTerm),
           like(cities.name, searchTerm)
-        )
+        ) as SQL
       );
     }
 
-    // First get all institutes with basic info
     const institutesList = await db
       .select({
         id: institutes.id,
@@ -132,40 +120,45 @@ async function getUniversities(filters: {
       .orderBy(desc(institutes.isFeatured), institutes.name)
       .limit(100);
 
-    // Get programs count for each institute through programOfferings
-    const institutesWithStats = await Promise.all(
-      institutesList.map(async (inst) => {
-        // Count programs through programOfferings
-        const [programsResult] = await db
-          .select({ count: count() })
-          .from(programOfferings)
-          .where(eq(programOfferings.instituteId, inst.id));
+    if (institutesList.length === 0) return [];
 
-        // Count open admissions
-        const [admissionsResult] = await db
-          .select({ count: count() })
-          .from(admissions)
-          .where(and(eq(admissions.instituteId, inst.id), eq(admissions.status, 'Open')));
+    const instituteIds = institutesList.map(i => i.id);
 
-        return {
-          ...inst,
-          programsCount: Number(programsResult?.count) || 0,
-          admissionsCount: Number(admissionsResult?.count) || 0,
-          established: null,
-        };
+    const programsCounts = await db
+      .select({
+        instituteId: programOfferings.instituteId,
+        count: count(),
       })
-    );
+      .from(programOfferings)
+      .where(inArray(programOfferings.instituteId, instituteIds))
+      .groupBy(programOfferings.instituteId);
 
-    // Add rankings
+    const admissionsCounts = await db
+      .select({
+        instituteId: admissions.instituteId,
+        count: count(),
+      })
+      .from(admissions)
+      .where(and(inArray(admissions.instituteId, instituteIds), eq(admissions.status, 'Open')))
+      .groupBy(admissions.instituteId);
+
+    const programsMap = new Map(programsCounts.map(p => [p.instituteId, Number(p.count)]));
+    const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
+
+    const institutesWithStats = institutesList.map((inst) => ({
+      ...inst,
+      programsCount: programsMap.get(inst.id) || 0,
+      admissionsCount: admissionsMap.get(inst.id) || 0,
+      established: null,
+    }));
+
     const universitiesWithRanking = institutesWithStats.map(uni => ({
       ...uni,
       ranking: UNIVERSITY_RANKINGS[uni.slug] || 999,
     }));
 
-    // Sort by ranking
     return universitiesWithRanking.sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
-  } catch (error) {
-    console.error('Database error:', error);
+  } catch {
     return [];
   }
 }
@@ -175,7 +168,6 @@ async function getStats() {
     const [totalInstitutes] = await db.select({ count: count() }).from(institutes);
     const [totalCities] = await db.select({ count: count() }).from(cities);
     
-    // Institutes with open admissions
     const institutesWithAdmissions = await db
       .select({ count: sql<number>`COUNT(DISTINCT ${institutes.id})` })
       .from(institutes)
@@ -188,14 +180,12 @@ async function getStats() {
       totalCities: Number(totalCities?.count) || 0,
       institutesWithAdmissions,
     };
-  } catch (error) {
-    console.error('Stats error:', error);
+  } catch {
     return { totalInstitutes: 0, totalCities: 0, institutesWithAdmissions: 0 };
   }
 }
 
-// ==================== BREADCRUMBS ====================
-function Breadcrumbs({ filters }: { filters: any }) {
+function Breadcrumbs({ filters }: { filters: Filters }) {
   const items = [
     { name: 'Home', url: '/' },
     { name: 'Universities', url: '/universities' },
@@ -204,11 +194,6 @@ function Breadcrumbs({ filters }: { filters: any }) {
   if (filters.city) {
     const city = CITIES.find(c => c.slug === filters.city);
     if (city) items.push({ name: city.name, url: `/universities?city=${filters.city}` });
-  }
-
-  if (filters.type) {
-    const type = UNIVERSITY_TYPES.find(t => t.slug === filters.type);
-    if (type) items.push({ name: type.name, url: `/universities?type=${filters.type}` });
   }
 
   return (
@@ -231,7 +216,6 @@ function Breadcrumbs({ filters }: { filters: any }) {
   );
 }
 
-// ==================== MAIN PAGE ====================
 export default async function UniversitiesPage({
   searchParams,
 }: {
@@ -239,7 +223,7 @@ export default async function UniversitiesPage({
 }) {
   const params = await searchParams || {};
   
-  const filters = {
+  const filters: Filters = {
     city: typeof params.city === 'string' ? params.city : '',
     type: typeof params.type === 'string' ? params.type : '',
     q: typeof params.q === 'string' ? params.q : '',
@@ -265,7 +249,6 @@ export default async function UniversitiesPage({
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl mx-auto text-center">
@@ -276,7 +259,6 @@ export default async function UniversitiesPage({
               NUST • FAST • LUMS • Punjab University • Karachi University • 200+ Universities
             </p>
             
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
                 <div className="text-2xl font-bold">{stats.totalInstitutes}+</div>
@@ -292,7 +274,6 @@ export default async function UniversitiesPage({
               </div>
             </div>
 
-            {/* Search Form */}
             <div className="max-w-2xl mx-auto">
               <form action="/universities" method="GET" className="flex gap-2">
                 <div className="flex-1 relative">
@@ -320,19 +301,16 @@ export default async function UniversitiesPage({
         </div>
       </section>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         
         <Breadcrumbs filters={filters} />
         
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Left Sidebar - Filters */}
           <aside className="lg:w-80 flex-shrink-0">
             <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
               <h2 className="font-bold text-lg mb-4">Filter Universities</h2>
               
-              {/* City Filter */}
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-700 mb-3">City</h3>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -358,7 +336,6 @@ export default async function UniversitiesPage({
                 </div>
               </div>
 
-              {/* Clear Filters */}
               {(filters.city || filters.type || filters.q) && (
                 <Link
                   href="/universities"
@@ -370,10 +347,8 @@ export default async function UniversitiesPage({
             </div>
           </aside>
 
-          {/* Main Content - Universities List */}
           <div className="flex-1">
             
-            {/* Results Header */}
             <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -382,7 +357,6 @@ export default async function UniversitiesPage({
                   </h2>
                   <p className="text-sm text-gray-500">
                     {filters.city && `City: ${CITIES.find(c => c.slug === filters.city)?.name}`}
-                    {filters.type && ` • Type: ${UNIVERSITY_TYPES.find(t => t.slug === filters.type)?.name}`}
                     {filters.q && ` • Search: "${filters.q}"`}
                   </p>
                 </div>
@@ -392,7 +366,6 @@ export default async function UniversitiesPage({
               </div>
             </div>
 
-            {/* Featured Universities */}
             {featuredUniversities.length > 0 && (
               <div className="mb-8">
                 <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
@@ -450,7 +423,6 @@ export default async function UniversitiesPage({
               </div>
             )}
 
-            {/* All Universities */}
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3">All Universities</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -508,7 +480,6 @@ export default async function UniversitiesPage({
               </div>
             </div>
 
-            {/* Load More */}
             {universities.length >= 100 && (
               <div className="mt-6 text-center">
                 <button className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -520,7 +491,6 @@ export default async function UniversitiesPage({
         </div>
       </div>
 
-      {/* SEO Content Section */}
       <section className="bg-white py-12 border-t border-gray-200 mt-8">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
@@ -558,7 +528,6 @@ export default async function UniversitiesPage({
         </div>
       </section>
 
-      {/* FAQ Section */}
       <section className="bg-white border-t border-gray-200 py-12">
         <div className="container mx-auto px-4">
           <h2 className="text-2xl font-bold text-gray-900 mb-8">
@@ -597,7 +566,6 @@ export default async function UniversitiesPage({
         </div>
       </section>
 
-      {/* Schema Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

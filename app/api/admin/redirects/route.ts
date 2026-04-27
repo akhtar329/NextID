@@ -1,47 +1,74 @@
-import { db } from '@/app/lib/db';
-import { redirects } from '@/app/lib/schema';
+// app/api/admin/redirects/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { redirects as initialRedirects } from '@/app/lib/redirects-config';
+import fs from 'fs';
+import path from 'path';
 
-// GET all redirects
+// In-memory storage for runtime changes
+let currentRedirects = [...initialRedirects];
+
 export async function GET() {
   try {
-    const allRedirects = await db.select().from(redirects);
-    
-    // ✅ Always return an array
-    return NextResponse.json(allRedirects || []);
-  } catch (error) {
-    console.error('Error fetching redirects:', error);
-    // ✅ Return empty array on error, not an error object
-    return NextResponse.json([], { status: 200 });
+    return NextResponse.json({
+      success: true,
+      data: currentRedirects
+    });
+  } catch {
+    return NextResponse.json({ success: true, data: [] });
   }
 }
 
-// POST create redirect
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { fromPath, toPath, statusCode } = body;
-
-    if (!fromPath || !toPath) {
+    const { redirects } = await request.json();
+    
+    if (!Array.isArray(redirects)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Invalid data format' },
         { status: 400 }
       );
     }
+    
+    // Update in-memory
+    currentRedirects = redirects;
+    
+    // Optional: Also update the TypeScript file
+    try {
+      const configPath = path.join(process.cwd(), 'app', 'lib', 'redirects-config.ts');
+      const content = `export interface RedirectRule {
+  from: string;
+  to: string;
+  status: 301 | 302;
+}
 
-    const [newRedirect] = await db.insert(redirects).values({
-      fromPath,
-      toPath,
-      statusCode: statusCode || 301,
-      status: true,
-      hitCount: 0,
-    }).returning();
+export const redirects: RedirectRule[] = ${JSON.stringify(redirects, null, 2)};
 
-    return NextResponse.json(newRedirect);
-  } catch (error) {
-    console.error('Error creating redirect:', error);
+export function getRedirect(fromPath: string): RedirectRule | undefined {
+  const exactMatch = redirects.find(r => r.from === fromPath);
+  if (exactMatch) return exactMatch;
+  
+  const patternMatch = redirects.find(r => {
+    if (r.from.includes('*')) {
+      const pattern = r.from.replace('*', '.*');
+      return new RegExp(\`^\${pattern}$\`).test(fromPath);
+    }
+    return false;
+  });
+  
+  return patternMatch;
+}`;
+      fs.writeFileSync(configPath, content);
+    } catch {
+      // Silent fail - file write error, but memory is updated
+    }
+    
+    return NextResponse.json({
+      success: true,
+      message: `${redirects.length} redirects saved successfully`
+    });
+  } catch {
     return NextResponse.json(
-      { error: 'Redirect already exists or invalid data' },
+      { error: 'Failed to save redirects' },
       { status: 500 }
     );
   }

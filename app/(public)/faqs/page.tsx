@@ -2,6 +2,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions (FAQs) | NextID.pk - Education Portal Pakistan',
   description: 'Find answers to commonly asked questions about admissions, results, programs, universities, and education in Pakistan.',
@@ -16,8 +19,21 @@ export const metadata: Metadata = {
   },
 };
 
-// FAQ Categories
-const faqCategories = [
+interface FaqCategory {
+  id: string;
+  name: string;
+  icon: string;
+  count: number;
+}
+
+interface FaqItem {
+  id: number;
+  category: string;
+  question: string;
+  answer: string;
+}
+
+const faqCategories: FaqCategory[] = [
   { id: 'admissions', name: 'Admissions', icon: '📝', count: 8 },
   { id: 'results', name: 'Results', icon: '📊', count: 6 },
   { id: 'programs', name: 'Programs', icon: '🎓', count: 5 },
@@ -26,8 +42,7 @@ const faqCategories = [
   { id: 'general', name: 'General', icon: '❓', count: 6 },
 ];
 
-// FAQ Data
-const faqs = [
+const faqs: FaqItem[] = [
   {
     id: 1,
     category: 'admissions',
@@ -110,7 +125,7 @@ const faqs = [
     id: 14,
     category: 'general',
     question: 'How can I contact NextID.pk for support?',
-    answer: 'You can reach us through:\n\n• **Email:** info@nextid.pk\n• **Phone:** +92 123 4567890\n• **WhatsApp:** +92 123 4567890\n• **Contact Form:** Visit our Contact page\n\nWe typically respond within 24 hours on business days.'
+    answer: 'You can reach us through:\n\n• **Email:** info@nextid.pk\n• **Phone:** +92 342 5537329\n• **WhatsApp:** +92 342 5537329\n• **Contact Form:** Visit our Contact page\n\nWe typically respond within 24 hours on business days.'
   },
   {
     id: 15,
@@ -120,11 +135,45 @@ const faqs = [
   }
 ];
 
+const categoryIcons: Record<string, string> = {
+  admissions: '📝',
+  results: '📊',
+  programs: '🎓',
+  universities: '🏛️',
+  boards: '📋',
+  general: '❓'
+};
+
+function renderAnswer(answer: string): React.ReactNode {
+  const lines = answer.split('\n');
+  const elements: React.ReactNode[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    
+    if (line.startsWith('•')) {
+      elements.push(<li key={i} className="ml-4 mb-1">{line.substring(1)}</li>);
+    } else if (line.match(/^\d+\./)) {
+      elements.push(<li key={i} className="ml-4 mb-1">{line}</li>);
+    } else if (line.includes('**')) {
+      elements.push(
+        <p key={i} className="mb-2" dangerouslySetInnerHTML={{ 
+          __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+        }} />
+      );
+    } else {
+      elements.push(<p key={i} className="mb-2">{line}</p>);
+    }
+  }
+  
+  return <>{elements}</>;
+}
+
 export default function FAQsPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -135,9 +184,6 @@ export default function FAQsPage() {
         </div>
       </div>
 
-      {/* Hero Section */}
-
-      {/* Hero Section with Search Inside */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden py-16">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -152,7 +198,6 @@ export default function FAQsPage() {
               programs, and education in Pakistan.
             </p>
             
-            {/* Search Bar - Inside Hero */}
             <div className="max-w-2xl mx-auto mt-4">
               <div className="bg-white rounded-xl shadow-lg p-2 flex items-center">
                 <span className="text-gray-400 text-xl pl-4">🔍</span>
@@ -174,12 +219,9 @@ export default function FAQsPage() {
         </div>
       </section>
 
-
-      {/* Main Content */}
       <section className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           
-          {/* Sidebar - Categories */}
           <aside className="lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 sticky top-24">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Categories</h2>
@@ -205,11 +247,10 @@ export default function FAQsPage() {
                 ))}
               </div>
 
-              {/* Need More Help */}
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <h3 className="font-semibold text-gray-900 mb-3">Need More Help?</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Can't find what you're looking for? Contact our support team.
+                  Can&apos;t find what you&apos;re looking for? Contact our support team.
                 </p>
                 <Link
                   href="/contact"
@@ -221,7 +262,6 @@ export default function FAQsPage() {
             </div>
           </aside>
 
-          {/* Main Content - FAQs */}
           <div className="lg:col-span-3">
             <div className="space-y-4">
               {faqs.map((faq, index) => (
@@ -230,12 +270,11 @@ export default function FAQsPage() {
                   className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition"
                   id={`faq-${faq.id}`}
                 >
-                  {/* FAQ Header - Question */}
                   <div className="p-6 cursor-pointer hover:bg-gray-50 transition flex items-start justify-between group">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <span className="text-xs font-medium px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
-                          {faqCategoryIcon(faq.category)} {faq.category}
+                          {categoryIcons[faq.category]} {faq.category}
                         </span>
                         <span className="text-xs text-gray-400">
                           Question #{index + 1}
@@ -252,23 +291,9 @@ export default function FAQsPage() {
                     </div>
                   </div>
                   
-                  {/* FAQ Content - Answer */}
                   <div className="px-6 pb-6 border-t border-gray-100 pt-4">
                     <div className="prose prose-blue max-w-none text-gray-700">
-                      {faq.answer.split('\n').map((line, i) => {
-                        if (line.startsWith('•')) {
-                          return <li key={i} className="ml-4 mb-1">{line.substring(1)}</li>;
-                        }
-                        if (line.match(/^\d+\./)) {
-                          return <li key={i} className="ml-4 mb-1">{line}</li>;
-                        }
-                        if (line.includes('**')) {
-                          return <p key={i} className="mb-2" dangerouslySetInnerHTML={{ 
-                            __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-                          }} />;
-                        }
-                        return line.trim() ? <p key={i} className="mb-2">{line}</p> : null;
-                      })}
+                      {renderAnswer(faq.answer)}
                     </div>
                     <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 text-sm">
                       <span className="text-gray-400">Was this helpful?</span>
@@ -286,11 +311,10 @@ export default function FAQsPage() {
               ))}
             </div>
 
-            {/* Still Have Questions */}
             <div className="mt-8 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-8 border border-blue-100 text-center">
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Still Have Questions?</h3>
               <p className="text-gray-600 mb-6">
-                If you couldn't find the answer you were looking for, feel free to reach out to us directly.
+                If you couldn&apos;t find the answer you were looking for, feel free to reach out to us directly.
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link
@@ -311,7 +335,6 @@ export default function FAQsPage() {
         </div>
       </section>
 
-      {/* FAQ Schema for SEO */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -331,17 +354,4 @@ export default function FAQsPage() {
       />
     </main>
   );
-}
-
-// Helper function for category icons
-function faqCategoryIcon(category: string): string {
-  const icons: Record<string, string> = {
-    admissions: '📝',
-    results: '📊',
-    programs: '🎓',
-    universities: '🏛️',
-    boards: '📋',
-    general: '❓'
-  };
-  return icons[category] || '❓';
 }

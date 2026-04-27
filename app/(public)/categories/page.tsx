@@ -1,3 +1,4 @@
+// app/(public)/categories/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
@@ -11,9 +12,12 @@ import {
   news, 
   programs, 
   degrees, 
-  levels 
 } from '@/app/lib/schema';
-import { eq, and, sql, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, sql, inArray, isNotNull, count } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const fetchCache = 'force-cache';
 
 export const metadata: Metadata = {
   title: 'Education Categories | Institutes, Admissions, Results & News | NextID.pk',
@@ -39,13 +43,8 @@ interface CategoryWithStats {
   programsCount: number;
 }
 
-// SQL helper functions
-const countAll = sql<number>`count(*)`;
-const countDistinct = (column: any) => sql<number>`count(distinct ${column})`;
-
 async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
   try {
-    // Get all categories
     const allCategories = await db
       .select({
         id: categories.id,
@@ -59,138 +58,158 @@ async function getCategoriesWithStats(): Promise<CategoryWithStats[]> {
       .where(eq(categories.status, true))
       .orderBy(categories.displayOrder, categories.name);
 
-    // Calculate stats for each category
-    const categoriesWithStats = await Promise.all(
-      allCategories.map(async (category) => {
-        // ✅ UPDATED: Get programs directly by categoryId
-        const programsInCategory = await db
-          .select({ id: programs.id })
-          .from(programs)
-          .where(and(
-            eq(programs.categoryId, category.id),
-            eq(programs.status, true)
-          ));
+    if (allCategories.length === 0) return [];
 
-        const programIds = programsInCategory.map(p => p.id);
+    const categoryIds = allCategories.map(c => c.id);
+    const validCategoryIds = categoryIds.filter((id): id is number => id !== null);
 
-        // ✅ UPDATED: Get degrees (no categoryId in new schema - fetch all degrees)
-        const degreesList = await db
-          .select({ id: degrees.id })
-          .from(degrees)
-          .where(eq(degrees.status, true));
-
-        // ✅ UPDATED: Get institutes through programOfferings
-        let institutesCount = 0;
-        if (programIds.length > 0) {
-          const institutesResult = await db
-            .select({ value: countDistinct(institutes.id) })
-            .from(institutes)
-            .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
-            .where(
-              and(
-                eq(institutes.status, true),
-                inArray(programOfferings.programId, programIds)
-              )
-            );
-          institutesCount = Number(institutesResult[0]?.value) || 0;
-        }
-
-        // ✅ UPDATED: Get admissions count through admissionOfferings + programOfferings
-        let admissionsCount = 0;
-        if (programIds.length > 0) {
-          // First get offeringIds for these programs
-          const offeringIds = await db
-            .select({ id: programOfferings.id })
-            .from(programOfferings)
-            .where(inArray(programOfferings.programId, programIds));
-          
-          const offeringIdList = offeringIds.map(o => o.id);
-          
-          if (offeringIdList.length > 0) {
-            const admissionsResult = await db
-              .select({ value: countDistinct(admissions.id) })
-              .from(admissions)
-              .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
-              .where(
-                and(
-                  eq(admissions.status, 'Open'),
-                  inArray(admissionOfferings.offeringId, offeringIdList),
-                  isNotNull(admissionOfferings.offeringId)
-                )
-              );
-            admissionsCount = Number(admissionsResult[0]?.value) || 0;
-          }
-        }
-
-        // ✅ UPDATED: Get results count (no direct programId in results)
-        let resultsCount = 0;
-        if (programIds.length > 0) {
-          // Note: results are linked through resultOfferings table
-          // This is a simplified count - adjust based on your schema
-          const resultsResult = await db
-            .select({ value: countAll })
-            .from(results)
-            .where(
-              and(
-                eq(results.status, true)
-              )
-            );
-          resultsCount = Number(resultsResult[0]?.value) || 0;
-        }
-
-        // Get news count (search by category name)
-        const newsResult = await db
-          .select({ value: countAll })
-          .from(news)
-          .where(
-            and(
-              eq(news.status, true),
-              sql`${news.title} ILIKE ${`%${category.name}%`} OR 
-                  ${news.content} ILIKE ${`%${category.name}%`} OR
-                  ${news.excerpt} ILIKE ${`%${category.name}%`}`
-            )
-          );
-
-        // ✅ UPDATED: Get degrees count (all degrees, no category filter)
-        const degreesResult = await db
-          .select({ value: countAll })
-          .from(degrees)
-          .where(eq(degrees.status, true));
-
-        // ✅ UPDATED: Get programs count (by categoryId directly)
-        const programsCount = programsInCategory.length;
-
-        const newsCount = Number(newsResult[0]?.value) || 0;
-        const degreesCount = Number(degreesResult[0]?.value) || 0;
-        const totalCount = institutesCount + admissionsCount + resultsCount + newsCount + degreesCount + programsCount;
-
-        return {
-          ...category,
-          institutesCount,
-          admissionsCount,
-          resultsCount,
-          newsCount,
-          degreesCount,
-          programsCount,
-          totalCount,
-        };
+    const programsCounts = await db
+      .select({
+        categoryId: programs.categoryId,
+        count: count(),
       })
-    );
+      .from(programs)
+      .where(and(
+        inArray(programs.categoryId, validCategoryIds),
+        eq(programs.status, true)
+      ))
+      .groupBy(programs.categoryId);
 
-    // Sort categories by display order and total count
+    const degreesTotal = await db
+      .select({ count: count() })
+      .from(degrees)
+      .where(eq(degrees.status, true))
+      .then(r => Number(r[0]?.count) || 0);
+
+    const programIdsByCategory = new Map<number, number[]>();
+    
+    const allPrograms = await db
+      .select({ id: programs.id, categoryId: programs.categoryId })
+      .from(programs)
+      .where(and(
+        inArray(programs.categoryId, validCategoryIds),
+        eq(programs.status, true)
+      ));
+
+    for (const p of allPrograms) {
+      const catId = p.categoryId;
+      if (catId !== null) {
+        if (!programIdsByCategory.has(catId)) {
+          programIdsByCategory.set(catId, []);
+        }
+        programIdsByCategory.get(catId)!.push(p.id);
+      }
+    }
+
+    const institutesCounts = new Map<number, number>();
+    for (const [categoryId, pIds] of programIdsByCategory) {
+      if (pIds.length > 0) {
+        const result = await db
+          .select({ count: count() })
+          .from(institutes)
+          .innerJoin(programOfferings, eq(institutes.id, programOfferings.instituteId))
+          .where(and(
+            eq(institutes.status, true),
+            inArray(programOfferings.programId, pIds)
+          ))
+          .then(r => Number(r[0]?.count) || 0);
+        institutesCounts.set(categoryId, result);
+      } else {
+        institutesCounts.set(categoryId, 0);
+      }
+    }
+
+    const admissionsCounts = new Map<number, number>();
+    for (const [categoryId, pIds] of programIdsByCategory) {
+      if (pIds.length > 0) {
+        const offerings = await db
+          .select({ id: programOfferings.id })
+          .from(programOfferings)
+          .where(inArray(programOfferings.programId, pIds));
+        
+        const offeringIds = offerings.map(o => o.id);
+        
+        if (offeringIds.length > 0) {
+          const result = await db
+            .select({ count: count() })
+            .from(admissions)
+            .innerJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+            .where(and(
+              eq(admissions.status, 'Open'),
+              inArray(admissionOfferings.offeringId, offeringIds),
+              isNotNull(admissionOfferings.offeringId)
+            ))
+            .then(r => Number(r[0]?.count) || 0);
+          admissionsCounts.set(categoryId, result);
+        } else {
+          admissionsCounts.set(categoryId, 0);
+        }
+      } else {
+        admissionsCounts.set(categoryId, 0);
+      }
+    }
+
+    const resultsCounts = new Map<number, number>();
+    for (const category of allCategories) {
+      const result = await db
+        .select({ count: count() })
+        .from(results)
+        .where(and(
+          eq(results.status, true),
+          sql`${results.title} ILIKE ${`%${category.name}%`}`
+        ))
+        .then(r => Number(r[0]?.count) || 0);
+      resultsCounts.set(category.id, result);
+    }
+
+    const newsCounts = new Map<number, number>();
+    for (const category of allCategories) {
+      const result = await db
+        .select({ count: count() })
+        .from(news)
+        .where(and(
+          eq(news.status, true),
+          sql`${news.title} ILIKE ${`%${category.name}%`} OR 
+              ${news.content} ILIKE ${`%${category.name}%`} OR
+              ${news.excerpt} ILIKE ${`%${category.name}%`}`
+        ))
+        .then(r => Number(r[0]?.count) || 0);
+      newsCounts.set(category.id, result);
+    }
+
+    const categoriesWithStats: CategoryWithStats[] = allCategories.map(category => {
+      const programsCount = programsCounts.find(p => p.categoryId === category.id)?.count || 0;
+      const institutesCount = institutesCounts.get(category.id) || 0;
+      const admissionsCount = admissionsCounts.get(category.id) || 0;
+      const resultsCount = resultsCounts.get(category.id) || 0;
+      const newsCount = newsCounts.get(category.id) || 0;
+      
+      const totalCount = institutesCount + admissionsCount + resultsCount + newsCount + degreesTotal + programsCount;
+
+      return {
+        ...category,
+        institutesCount,
+        admissionsCount,
+        resultsCount,
+        newsCount,
+        degreesCount: degreesTotal,
+        programsCount,
+        totalCount,
+      };
+    });
+
     return categoriesWithStats.sort((a, b) => {
       if (a.displayOrder !== b.displayOrder) {
         return (a.displayOrder || 999) - (b.displayOrder || 999);
       }
       return b.totalCount - a.totalCount;
     });
-  } catch (error) {
-    console.error('Error fetching categories:', error);
+    
+  } catch {
     return [];
   }
 }
 
-// Default icons and colors for categories
 const defaultIcons: Record<string, string> = {
   'Engineering': '⚙️',
   'Medical': '🏥',
@@ -233,10 +252,9 @@ const defaultColors: Record<string, string> = {
   'Psychology': 'from-indigo-600 to-blue-600',
 };
 
-export default async function CategoriesPage() {
+async function getPageData() {
   const categories = await getCategoriesWithStats();
-
-  // Calculate overall stats
+  
   const totalCategories = categories.length;
   const totalInstitutes = categories.reduce((sum, cat) => sum + cat.institutesCount, 0);
   const totalAdmissions = categories.reduce((sum, cat) => sum + cat.admissionsCount, 0);
@@ -244,11 +262,51 @@ export default async function CategoriesPage() {
   const totalNews = categories.reduce((sum, cat) => sum + cat.newsCount, 0);
   const totalDegrees = categories.reduce((sum, cat) => sum + cat.degreesCount, 0);
   const totalPrograms = categories.reduce((sum, cat) => sum + cat.programsCount, 0);
+  
+  return {
+    categories,
+    stats: {
+      totalCategories,
+      totalInstitutes,
+      totalAdmissions,
+      totalResults,
+      totalNews,
+      totalDegrees,
+      totalPrograms,
+    },
+  };
+}
+
+export default async function CategoriesPage() {
+  let pageData;
+  
+  try {
+    pageData = await getPageData();
+  } catch {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-12">
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load categories</h2>
+            <p className="text-gray-600">Please try again later</p>
+            <Link
+              href="/"
+              className="inline-block mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              Go to Homepage
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const { categories, stats } = pageData;
 
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-purple-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -261,7 +319,7 @@ export default async function CategoriesPage() {
               <Link href="/" className="hover:text-white transition-colors">
                 Home
               </Link>
-              <span className="text-purple-300">›</span>
+              <span className="text-purple-300" aria-hidden="true">›</span>
               <span className="text-white font-medium">Categories</span>
             </div>
             
@@ -277,52 +335,49 @@ export default async function CategoriesPage() {
         </div>
       </section>
 
-      {/* Stats Cards */}
       <div className="container mx-auto px-4 mt-8 mb-12">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-purple-600">{totalCategories}</div>
+            <div className="text-3xl font-bold text-purple-600">{stats.totalCategories}</div>
             <div className="text-sm text-gray-600">Categories</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-indigo-600">{totalDegrees}</div>
+            <div className="text-3xl font-bold text-indigo-600">{stats.totalDegrees}</div>
             <div className="text-sm text-gray-600">Degrees</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-blue-600">{totalPrograms}</div>
+            <div className="text-3xl font-bold text-blue-600">{stats.totalPrograms}</div>
             <div className="text-sm text-gray-600">Programs</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-cyan-600">{totalInstitutes}</div>
+            <div className="text-3xl font-bold text-cyan-600">{stats.totalInstitutes}</div>
             <div className="text-sm text-gray-600">Institutes</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-green-600">{totalAdmissions}</div>
+            <div className="text-3xl font-bold text-green-600">{stats.totalAdmissions}</div>
             <div className="text-sm text-gray-600">Admissions</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-orange-600">{totalResults}</div>
+            <div className="text-3xl font-bold text-orange-600">{stats.totalResults}</div>
             <div className="text-sm text-gray-600">Results</div>
           </div>
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-            <div className="text-3xl font-bold text-yellow-500">{totalNews}</div>
+            <div className="text-3xl font-bold text-yellow-500">{stats.totalNews}</div>
             <div className="text-sm text-gray-600">News</div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
         {categories.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm">
-            <div className="text-6xl mb-4">📚</div>
+            <div className="text-6xl mb-4" aria-hidden="true">📚</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No categories found</h3>
             <p className="text-gray-500">No educational categories available yet.</p>
           </div>
         ) : (
           <>
-            {/* Categories Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {categories.map((category) => {
                 const icon = defaultIcons[category.name] || '📂';
@@ -334,7 +389,6 @@ export default async function CategoriesPage() {
                     href={`/categories/${category.slug}`}
                     className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-purple-400"
                   >
-                    {/* Category Header */}
                     <div className={`bg-gradient-to-r ${gradientColor} p-4 text-white`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -350,7 +404,6 @@ export default async function CategoriesPage() {
                     </div>
                     
                     <div className="p-5">
-                      {/* Stats Grid */}
                       <div className="grid grid-cols-3 gap-2 mb-4">
                         <div className="bg-indigo-50 rounded-lg p-2 text-center">
                           <div className="text-lg font-bold text-indigo-700">{category.degreesCount}</div>
@@ -395,10 +448,8 @@ export default async function CategoriesPage() {
               })}
             </div>
 
-            {/* Bottom Sections */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Top Categories by Content */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
@@ -444,7 +495,6 @@ export default async function CategoriesPage() {
                 </div>
               </div>
 
-              {/* Recent Activity */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
@@ -490,7 +540,6 @@ export default async function CategoriesPage() {
                 </div>
               </div>
 
-              {/* Quick Links */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-orange-600 rounded-full"></span>
@@ -547,7 +596,6 @@ export default async function CategoriesPage() {
                   </Link>
                 </div>
 
-                {/* Category Tags */}
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">All Categories</h3>
                   <div className="flex flex-wrap gap-1">

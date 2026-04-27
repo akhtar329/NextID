@@ -1,8 +1,12 @@
+// app/(public)/programs/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { programs, categories, programOfferings, institutes } from '@/app/lib/schema';
-import { eq, desc, count, sql } from 'drizzle-orm';
+import { programs, categories, programOfferings } from '@/app/lib/schema';
+import { eq, desc, count, inArray } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
 
 export const metadata: Metadata = {
   title: 'Programs | BS, BSc, Engineering, Medical & More | NextID.pk',
@@ -32,7 +36,6 @@ interface ProgramWithStats {
 
 async function getProgramsWithStats(): Promise<ProgramWithStats[]> {
   try {
-    // Get all programs
     const allPrograms = await db
       .select({
         id: programs.id,
@@ -51,7 +54,7 @@ async function getProgramsWithStats(): Promise<ProgramWithStats[]> {
       return [];
     }
 
-    // Get categories for these programs
+    const programIds = allPrograms.map(p => p.id);
     const categoryIds = [...new Set(allPrograms.map(p => p.categoryId).filter((id): id is number => id !== null))];
     
     let categoryMap = new Map<number, { name: string; slug: string }>();
@@ -64,45 +67,44 @@ async function getProgramsWithStats(): Promise<ProgramWithStats[]> {
           slug: categories.slug,
         })
         .from(categories)
-        .where(sql`${categories.id} IN (${categoryIds.join(',')})`);
+        .where(inArray(categories.id, categoryIds));
       
       categoryMap = new Map(categoriesList.map(c => [c.id, { name: c.name, slug: c.slug }]));
     }
 
-    // Get institutes count for each program through programOfferings
-    const programsWithStats = await Promise.all(
-      allPrograms.map(async (program) => {
-        // Get institute count through programOfferings
-        const institutesResult = await db
-          .select({ count: count() })
-          .from(programOfferings)
-          .where(eq(programOfferings.programId, program.id));
-        
-        const institutesCount = Number(institutesResult[0]?.count) || 0;
-        
-        const category = program.categoryId ? categoryMap.get(program.categoryId) : null;
-
-        return {
-          id: program.id,
-          name: program.name,
-          slug: program.slug,
-          shortDescription: program.shortDescription,
-          isFeatured: program.isFeatured,
-          categoryName: category?.name || null,
-          categorySlug: category?.slug || null,
-          institutesCount,
-        };
+    const institutesCounts = await db
+      .select({
+        programId: programOfferings.programId,
+        count: count(),
       })
-    );
+      .from(programOfferings)
+      .where(inArray(programOfferings.programId, programIds))
+      .groupBy(programOfferings.programId);
+
+    const institutesMap = new Map(institutesCounts.map(i => [i.programId, Number(i.count)]));
+
+    const programsWithStats = allPrograms.map((program) => {
+      const category = program.categoryId ? categoryMap.get(program.categoryId) : null;
+      const institutesCount = institutesMap.get(program.id) || 0;
+
+      return {
+        id: program.id,
+        name: program.name,
+        slug: program.slug,
+        shortDescription: program.shortDescription,
+        isFeatured: program.isFeatured,
+        categoryName: category?.name || null,
+        categorySlug: category?.slug || null,
+        institutesCount,
+      };
+    });
 
     return programsWithStats;
-  } catch (error) {
-    console.error('Error fetching programs:', error);
+  } catch {
     return [];
   }
 }
 
-// Icons for different categories
 const categoryIcons: Record<string, string> = {
   'Engineering': '⚙️',
   'Medical': '🏥',
@@ -129,7 +131,6 @@ const defaultIcon = '📚';
 export default async function ProgramsPage() {
   const programsList = await getProgramsWithStats();
 
-  // Group programs by category
   const programsByCategory = programsList.reduce((acc, program) => {
     const category = program.categoryName || 'Other';
     if (!acc[category]) {
@@ -139,7 +140,6 @@ export default async function ProgramsPage() {
     return acc;
   }, {} as Record<string, ProgramWithStats[]>);
 
-  // Calculate stats
   const totalPrograms = programsList.length;
   const totalCategories = Object.keys(programsByCategory).length;
   const totalInstitutes = programsList.reduce((sum, p) => sum + p.institutesCount, 0);
@@ -148,7 +148,6 @@ export default async function ProgramsPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -177,7 +176,6 @@ export default async function ProgramsPage() {
         </div>
       </section>
 
-      {/* Stats Cards */}
       <div className="container mx-auto px-4 mt-8 mb-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
@@ -230,7 +228,6 @@ export default async function ProgramsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
         {programsList.length === 0 ? (
@@ -241,7 +238,6 @@ export default async function ProgramsPage() {
           </div>
         ) : (
           <>
-            {/* Programs by Category */}
             {Object.entries(programsByCategory).map(([categoryName, categoryPrograms]) => {
               const icon = categoryIcons[categoryName] || defaultIcon;
               
@@ -312,10 +308,8 @@ export default async function ProgramsPage() {
               );
             })}
 
-            {/* Bottom Sections */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Most Popular Programs */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-yellow-600 rounded-full"></span>
@@ -348,7 +342,6 @@ export default async function ProgramsPage() {
                 </div>
               </div>
 
-              {/* Quick Links */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
@@ -389,7 +382,6 @@ export default async function ProgramsPage() {
                   </Link>
                 </div>
 
-                {/* Category Tags */}
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Categories</h3>
                   <div className="flex flex-wrap gap-1">

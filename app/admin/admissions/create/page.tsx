@@ -970,7 +970,7 @@ export default function CreateAdmissionPage() {
                     type="url"
                     value={ogImage}
                     onChange={(e) => setOgImage(e.target.value)}
-                    placeholder="https://nextid.pk/images/og/admission-default.jpg"
+                    placeholder="https://www.nextid.pk/images/og/admission-default.jpg"
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                       isDarkMode 
                         ? 'bg-gray-700 border-gray-600 text-white' 

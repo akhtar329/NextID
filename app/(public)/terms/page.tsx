@@ -2,6 +2,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+
 export const metadata: Metadata = {
   title: 'Terms of Service | NextID.pk - Education Portal Pakistan',
   description: 'Read the terms and conditions for using NextID.pk. Understand your rights and responsibilities when accessing our education portal.',
@@ -20,7 +23,6 @@ export default function TermsPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -31,7 +33,6 @@ export default function TermsPage() {
         </div>
       </div>
 
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden py-16">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -48,20 +49,17 @@ export default function TermsPage() {
         </div>
       </section>
 
-      {/* Last Updated */}
       <section className="container mx-auto px-4 py-4">
         <div className="max-w-4xl mx-auto text-right text-sm text-gray-500">
           Last Updated: March 7, 2026 | Effective: March 7, 2026
         </div>
       </section>
 
-      {/* Main Content */}
       <section className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 md:p-12">
           
           <div className="prose prose-blue max-w-none">
             
-            {/* Agreement */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
               <p className="text-blue-800 font-medium">
                 By accessing or using NextID.pk, you agree to be bound by these Terms of Service. 
@@ -71,8 +69,8 @@ export default function TermsPage() {
 
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Acceptance of Terms</h2>
             <p className="text-gray-700 mb-4">
-              Welcome to NextID.pk ("we," "our," or "us"). These Terms of Service ("Terms") govern your use of our website 
-              located at nextid.pk (the "Site") and any related services provided by NextID.pk.
+              Welcome to NextID.pk (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). These Terms of Service (&quot;Terms&quot;) govern your use of our website 
+              located at nextid.pk (the &quot;Site&quot;) and any related services provided by NextID.pk.
             </p>
             <p className="text-gray-700 mb-6">
               By accessing or using the Site, you confirm that you have read, understood, and agree to be bound by these Terms. 
@@ -179,7 +177,7 @@ export default function TermsPage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Disclaimer of Warranties</h2>
             <p className="text-gray-700 mb-4">
               THE SITE AND ALL CONTENT, MATERIALS, INFORMATION, SOFTWARE, FACILITIES, AND SERVICES PROVIDED ON THE SITE ARE 
-              PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+              PROVIDED ON AN &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; BASIS WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.
             </p>
             <p className="text-gray-700 mb-6">
               TO THE FULLEST EXTENT PERMITTED BY LAW, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING IMPLIED 
@@ -203,7 +201,7 @@ export default function TermsPage() {
             <p className="text-gray-700 mb-6">
               You agree to defend, indemnify, and hold harmless NextID.pk and its employees, contractors, and agents from and 
               against any and all claims, damages, obligations, losses, liabilities, costs, or debt, and expenses (including 
-              but not limited to attorney's fees) arising from: (a) your use of and access to the Site; (b) your violation of 
+              but not limited to attorney&apos;s fees) arising from: (a) your use of and access to the Site; (b) your violation of 
               any term of these Terms; (c) your violation of any third-party right, including without limitation any copyright, 
               property, or privacy right; or (d) any claim that your content caused damage to a third party.
             </p>
@@ -230,7 +228,7 @@ export default function TermsPage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">13. Changes to Terms</h2>
             <p className="text-gray-700 mb-4">
               We reserve the right, at our sole discretion, to modify or replace these Terms at any time. If a revision is 
-              material, we will try to provide at least 30 days' notice prior to any new terms taking effect. What constitutes 
+              material, we will try to provide at least 30 days&apos; notice prior to any new terms taking effect. What constitutes 
               a material change will be determined at our sole discretion.
             </p>
             <p className="text-gray-700 mb-6">
@@ -247,14 +245,13 @@ export default function TermsPage() {
                 <strong>Email:</strong> <a href="mailto:legal@nextid.pk" className="text-blue-600 hover:underline">legal@nextid.pk</a>
               </p>
               <p className="text-gray-700 mb-2">
-                <strong>Address:</strong> Office #2, Street No#2, Madena Town, Ahatta, Taxila Rawalpindi, Punjab 47000  Pakistan
+                <strong>Address:</strong> Office #2, Street No#2, Madena Town, Ahatta, Taxila Rawalpindi, Punjab 47000 Pakistan
               </p>
               <p className="text-gray-700">
-                <strong>Phone:</strong> <a href="tel:++923425527329" className="text-blue-600 hover:underline">+92 342 5527329</a>
+                <strong>Phone:</strong> <a href="tel:+923425527329" className="text-blue-600 hover:underline">+92 342 5527329</a>
               </p>
             </div>
 
-            {/* Acceptance */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-6 mt-8">
               <h3 className="text-lg font-bold text-green-800 mb-2">By Using Our Website</h3>
               <p className="text-green-700">
@@ -266,7 +263,6 @@ export default function TermsPage() {
         </div>
       </section>
 
-      {/* Related Links */}
       <section className="bg-white border-t border-gray-200 py-8">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto flex flex-wrap gap-4 justify-center">

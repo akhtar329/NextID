@@ -1,8 +1,6 @@
-// app/admin/layout.tsx
 "use client";
 
 import { ReactNode, useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
 import Sidebar from "@/app/component/layout/Sidebar";
 import Topbar from "@/app/component/layout/Topbar";
 import { Toaster } from "sonner";
@@ -12,84 +10,71 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Handle hydration
   useEffect(() => {
     setMounted(true);
-    // Load sidebar state from localStorage
-    const savedState = localStorage.getItem('sidebar_collapsed');
-    if (savedState !== null) {
-      setSidebarCollapsed(savedState === 'true');
-    }
+    const saved = localStorage.getItem("sidebar_collapsed");
+    if (saved !== null) setSidebarCollapsed(saved === "true");
   }, []);
 
-  // Save sidebar state
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024 && mobileOpen) {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [mobileOpen]);
+
   const toggleSidebar = () => {
     const newState = !sidebarCollapsed;
     setSidebarCollapsed(newState);
-    localStorage.setItem('sidebar_collapsed', String(newState));
+    localStorage.setItem("sidebar_collapsed", String(newState));
+  };
+
+  const toggleMobileSidebar = () => {
+    setMobileOpen(!mobileOpen);
   };
 
   if (!mounted) {
-    return (
-      <div className="flex h-screen bg-gray-100">
-        <div className="w-64 bg-white border-r border-gray-200 animate-pulse"></div>
-        <div className="flex-1 flex flex-col">
-          <div className="h-16 bg-white border-b border-gray-200 animate-pulse"></div>
-          <div className="flex-1 p-6">
-            <div className="animate-pulse space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-              <div className="h-64 bg-gray-200 rounded"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="h-screen bg-gray-100 animate-pulse" />;
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      
       {/* Sidebar */}
-      <aside 
-        className={`${
-          sidebarCollapsed ? 'w-20' : 'w-64'
-        } transition-all duration-300 ease-in-out bg-white border-r border-gray-200 shadow-lg z-20 flex flex-col`}
+      <div
+        className={`
+          fixed lg:relative top-0 left-0 h-full z-50
+          transition-all duration-300 ease-in-out
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
       >
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Topbar */}
-        <Topbar sidebarCollapsed={sidebarCollapsed} />
-
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
-        </main>
-
-        {/* Footer */}
-        <footer className="bg-white border-t border-gray-200 py-3 px-6 text-center">
-          <p className="text-xs text-gray-500">
-            © {new Date().getFullYear()} NextID.pk Admin Panel. All rights reserved.
-          </p>
-        </footer>
       </div>
 
-      {/* Toast Notifications */}
-      <Toaster 
-        position="top-right"
-        richColors
-        closeButton
-        expand={false}
-        duration={3000}
-        className="z-50"
-      />
+      {/* Mobile Overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Topbar onMenuClick={toggleMobileSidebar} />
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          {children}
+        </main>
+      </div>
+
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

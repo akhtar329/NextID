@@ -2,107 +2,43 @@
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import Link from "next/link";
-import { db } from "@/app/lib/db";
-import { dateSheets, boards, institutes, cities, seoMetadata } from "@/app/lib/schema";
-import { eq, and } from "drizzle-orm"; // ✅ Make sure 'and' is imported
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
 
 interface DateSheetPageProps {
   params: Promise<{ slug: string }>;
 }
 
-// Get SEO metadata from database
-async function getSeoMetadata(entityId: number) {
-  try {
-    const [seo] = await db
-      .select()
-      .from(seoMetadata)
-      .where(
-        and(
-          eq(seoMetadata.entityId, entityId),
-          eq(seoMetadata.entityType, "date_sheet")
-        )
-      )
-      .limit(1);
-    return seo;
-  } catch (error) {
-    console.error("Error fetching SEO metadata:", error);
-    return null;
-  }
-}
-
-// Get date sheet with all details
 async function getDateSheet(slug: string) {
   try {
-    const [sheet] = await db
-      .select({
-        id: dateSheets.id,
-        title: dateSheets.title,
-        slug: dateSheets.slug,
-        examType: dateSheets.examType,
-        examDate: dateSheets.examDate,
-        year: dateSheets.year,
-        boardId: dateSheets.boardId,
-        instituteId: dateSheets.instituteId,
-        viewCount: dateSheets.viewCount,
-        isPopular: dateSheets.isPopular,
-        officialLink: dateSheets.officialLink,
-        downloadLink: dateSheets.downloadLink,
-        pdfFile: dateSheets.pdfFile,
-        featuredImage: dateSheets.featuredImage,
-        description: dateSheets.description,
-        createdAt: dateSheets.createdAt,
-        board: {
-          name: boards.name,
-          slug: boards.slug,
-        },
-        institute: {
-          name: institutes.name,
-          slug: institutes.slug,
-          logo: institutes.logo,
-          type: institutes.type,
-          cityId: institutes.cityId,
-        },
-      })
-      .from(dateSheets)
-      .leftJoin(boards, eq(dateSheets.boardId, boards.id))
-      .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
-      .where(eq(dateSheets.slug, slug))
-      .limit(1);
-
-    if (!sheet) return null;
-
-    // Get city info
-    let city = null;
-    if (sheet.institute?.cityId) {
-      const [cityData] = await db
-        .select({
-          name: cities.name,
-          slug: cities.slug,
-          province: cities.province,
-        })
-        .from(cities)
-        .where(eq(cities.id, sheet.institute.cityId))
-        .limit(1);
-      city = cityData;
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    
+    const apiUrl = `${baseUrl}/api/public/date-sheets?slug=${encodeURIComponent(slug)}`;
+    console.log('Fetching from:', apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      next: { revalidate: 86400 },
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!response.ok) {
+      console.log(`API returned ${response.status} for slug: ${slug}`);
+      return null;
     }
-
-    // Get SEO metadata
-    const seo = await getSeoMetadata(sheet.id);
-
-    // Increment view count
-    await db
-      .update(dateSheets)
-      .set({ viewCount: (sheet.viewCount || 0) + 1 })
-      .where(eq(dateSheets.id, sheet.id));
-
-    return { ...sheet, city, seo, viewCount: (sheet.viewCount || 0) + 1 };
+    
+    const result = await response.json();
+    console.log('API response:', result);
+    
+    return result.success ? result.data : null;
   } catch (error) {
-    console.error("Error fetching date sheet:", error);
+    console.error('Error fetching date sheet:', error);
     return null;
   }
 }
 
-// Generate Metadata for SEO
 export async function generateMetadata({ params }: DateSheetPageProps): Promise<Metadata> {
   const { slug } = await params;
   const dateSheet = await getDateSheet(slug);
@@ -115,45 +51,26 @@ export async function generateMetadata({ params }: DateSheetPageProps): Promise<
     };
   }
 
-  const boardOrInstitute = dateSheet.board?.name || dateSheet.institute?.name || "Pakistan";
+  const title = dateSheet.title;
   const examType = dateSheet.examType || "Annual";
   const year = dateSheet.year;
-  const title = dateSheet.title;
-
-  const metaTitle = dateSheet.seo?.metaTitle || `${title} - Download ${examType} Exams Schedule ${year} | NextID.pk`;
-  const metaDescription = dateSheet.seo?.metaDescription || `Download official ${title}. Complete ${examType} examinations date sheet for ${year}.`;
-  const canonicalUrl = dateSheet.seo?.canonicalUrl || `https://www.nextid.pk/date-sheets/${slug}`;
-  const ogImage = dateSheet.seo?.ogImage || dateSheet.featuredImage || "https://www.nextid.pk/images/og-date-sheet.jpg";
-
-  // ✅ Fix: Properly type twitter card
-  const twitterCardType = dateSheet.seo?.twitterCard === "summary" ? "summary" : "summary_large_image";
 
   return {
-    title: metaTitle,
-    description: metaDescription,
-    robots: dateSheet.seo?.robots || "index, follow",
+    title: `${title} - Download ${examType} Exams Schedule ${year} | NextID.pk`,
+    description: `Download official ${title}. Complete ${examType} examinations date sheet for ${year}.`,
     alternates: {
-      canonical: canonicalUrl,
+      canonical: `https://www.nextid.pk/date-sheets/${slug}`,
     },
     openGraph: {
-      title: dateSheet.seo?.ogTitle || metaTitle,
-      description: dateSheet.seo?.ogDescription || metaDescription,
-      url: canonicalUrl,
+      title: title,
+      description: `Download official ${title} for ${year}`,
+      url: `https://www.nextid.pk/date-sheets/${slug}`,
       siteName: "NextID.pk",
-      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
-      locale: "en_PK",
       type: "article",
-    },
-    twitter: {
-      card: twitterCardType,
-      title: dateSheet.seo?.twitterTitle || metaTitle,
-      description: dateSheet.seo?.twitterDescription || metaDescription,
-      images: [ogImage],
     },
   };
 }
 
-// Main Page Component
 export default async function DateSheetDetailPage({ params }: DateSheetPageProps) {
   const { slug } = await params;
   const dateSheet = await getDateSheet(slug);
@@ -168,7 +85,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
 
   return (
     <>
-      {/* JSON-LD Schema Script */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -177,13 +93,12 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
             "@type": "EducationalOrganization",
             "name": boardOrInstitute || "Educational Board",
             "url": currentUrl,
-            "description": dateSheet.seo?.metaDescription || dateSheet.description,
+            "description": dateSheet.description,
           }),
         }}
       />
       
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-        {/* Hero Section */}
         <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
           <div className="container mx-auto px-4 py-12 relative z-10">
             <div className="max-w-4xl mx-auto">
@@ -229,12 +144,10 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="container mx-auto px-4 py-12">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
             <div className="lg:col-span-2 space-y-6">
-              {/* Download Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
                   <h2 className="text-white font-semibold text-lg">📄 Download Date Sheet</h2>
@@ -265,7 +178,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               </div>
 
-              {/* Description */}
               {dateSheet.description && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100">
@@ -277,7 +189,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               )}
 
-              {/* Exam Schedule */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-xl font-bold text-gray-800">📅 Exam Schedule</h2>
@@ -307,7 +218,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
               </div>
             </div>
 
-            {/* Right Column - Sidebar */}
             <div className="space-y-6">
               {(dateSheet.board || dateSheet.institute) && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
@@ -330,7 +240,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               )}
 
-              {/* Share Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <span>📢</span> Share This Date Sheet
@@ -351,7 +260,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
         </div>
       </main>
 
-      {/* Share Script */}
       <script
         dangerouslySetInnerHTML={{
           __html: `

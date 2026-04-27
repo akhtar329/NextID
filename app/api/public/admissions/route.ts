@@ -5,64 +5,105 @@ import {
   admissionOfferings,
   programOfferings,
   programs,
-  institutes
+  institutes,
 } from "@/app/lib/schema";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
+import { z } from "zod";
 
-import { getCachedRedirect, setCachedRedirect } from "@/app/lib/cache";
+const querySchema = z.object({
+  status: z.enum(["open", "closed", "expected"]).optional(),
+  year: z.coerce.number().int().min(1900).max(2100).optional(),
+  programId: z.coerce.number().int().positive().optional(),
+  instituteId: z.coerce.number().int().positive().optional(),
+  slug: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20)
+});
 
-// ================== CACHE KEY ==================
-const buildCacheKey = (searchParams: URLSearchParams) => {
-  return `admissions:${searchParams.toString()}`;
-};
+interface ProgramType {
+  offeringId: number;
+  programId: number;
+  name: string;
+  slug: string;
+  detailedOverview: string | null;
+  commonEligibility: string | null;
+  typicalDuration: string | null;
+  typicalFeeRange: string | null;
+}
 
-export async function GET(request: Request) {
+interface AdmissionRow {
+  id: number;
+  name: string;
+  slug: string;
+  year: number;
+  session: string | null;
+  status: string;
+  expectedOpenDate: Date | null;
+  expectedCloseDate: Date | null;
+  meritInfo: string | null;
+  note: string | null;
+  officialLink: string | null;
+  instituteId: number;
+  instituteName: string;
+  instituteSlug: string;
+  instituteType: string | null;
+  instituteLogo: string | null;
+  instituteCityId: number | null;
+}
+
+interface AdmissionWithPrograms extends AdmissionRow {
+  programs: ProgramType[];
+  programCount: number;
+}
+
+interface ProgramDataRow {
+  admissionId: number;
+  offeringId: number;
+  programId: number;
+  programName: string;
+  programSlug: string;
+  detailedOverview: string | null;
+  commonEligibility: string | null;
+  typicalDuration: string | null;
+  typicalFeeRange: string | null;
+}
+
+async function fetchAdmissionsWithDetails(filters: {
+  slug?: string;
+  status?: string;
+  year?: number;
+  instituteId?: number;
+  programId?: number;
+  limit: number;
+}): Promise<AdmissionWithPrograms[]> {
+  const { slug, status, year, instituteId, programId, limit } = filters;
+
   try {
-    const { searchParams } = new URL(request.url);
-
-    const status = searchParams.get("status");
-    const year = searchParams.get("year");
-    const programId = searchParams.get("programId");
-    const instituteId = searchParams.get("instituteId");
-    const slug = searchParams.get("slug");
-
-    const limit = searchParams.get("limit")
-      ? Math.min(parseInt(searchParams.get("limit")!), 20)
-      : 20;
-
-    // ================== CACHE CHECK ==================
-    const cacheKey = buildCacheKey(searchParams);
-    const cached = getCachedRedirect(cacheKey);
-
-    if (cached) {
-      return NextResponse.json(cached);
-    }
-
-    // ================== CONDITIONS ==================
     const conditions = [];
-
+    
     if (slug) conditions.push(eq(admissions.slug, slug));
-
     if (status) {
-      const statusValue =
-        status.toLowerCase() === "open"
-          ? "Open"
-          : status.toLowerCase() === "closed"
-          ? "Closed"
-          : status.toLowerCase() === "expected"
-          ? "Expected"
-          : status;
+      const formattedStatus = status.charAt(0).toUpperCase() + status.slice(1);
+      conditions.push(eq(admissions.status, formattedStatus));
+    }
+    if (year) conditions.push(eq(admissions.year, year));
+    if (instituteId) conditions.push(eq(admissions.instituteId, instituteId));
 
-      conditions.push(eq(admissions.status, statusValue));
+    let admissionIds: number[] = [];
+    
+    if (programId) {
+      const programAdmissions = await db
+        .select({ admissionId: admissionOfferings.admissionId })
+        .from(admissionOfferings)
+        .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+        .where(eq(programOfferings.programId, programId));
+      
+      admissionIds = programAdmissions.map((p) => p.admissionId);
+      
+      if (admissionIds.length === 0) return [];
+      conditions.push(inArray(admissions.id, admissionIds));
     }
 
-    if (year) conditions.push(eq(admissions.year, parseInt(year)));
-
-    if (instituteId)
-      conditions.push(eq(admissions.instituteId, parseInt(instituteId)));
-
-    // ================== MAIN QUERY ==================
-    const admissionsList = await db
+    const query = db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -80,98 +121,156 @@ export async function GET(request: Request) {
         instituteSlug: institutes.slug,
         instituteType: institutes.type,
         instituteLogo: institutes.logo,
-        instituteCityId: institutes.cityId
+        instituteCityId: institutes.cityId,
       })
       .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(admissions.year))
-      .limit(slug ? 1 : limit);
+      .innerJoin(institutes, eq(admissions.instituteId, institutes.id));
 
-    if (slug && admissionsList.length === 0) {
+    let results: AdmissionRow[];
+    if (conditions.length > 0) {
+      const whereQuery = query.where(and(...conditions));
+      results = await whereQuery
+        .orderBy(desc(admissions.year))
+        .limit(slug ? 1 : limit) as unknown as AdmissionRow[];
+    } else {
+      results = await query
+        .orderBy(desc(admissions.year))
+        .limit(slug ? 1 : limit) as unknown as AdmissionRow[];
+    }
+
+    if (results.length === 0) return [];
+
+    const allAdmissionIds = results.map((r) => r.id);
+    
+    const programsData = await db
+      .select({
+        admissionId: admissionOfferings.admissionId,
+        offeringId: programOfferings.id,
+        programId: programs.id,
+        programName: programs.name,
+        programSlug: programs.slug,
+        detailedOverview: programs.detailedOverview,
+        commonEligibility: programs.commonEligibility,
+        typicalDuration: programs.typicalDuration,
+        typicalFeeRange: programs.typicalFeeRange,
+      })
+      .from(admissionOfferings)
+      .innerJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .innerJoin(programs, eq(programOfferings.programId, programs.id))
+      .where(inArray(admissionOfferings.admissionId, allAdmissionIds)) as unknown as ProgramDataRow[];
+
+    const programsByAdmission = new Map<number, ProgramType[]>();
+    
+    for (const prog of programsData) {
+      if (!programsByAdmission.has(prog.admissionId)) {
+        programsByAdmission.set(prog.admissionId, []);
+      }
+      programsByAdmission.get(prog.admissionId)!.push({
+        offeringId: prog.offeringId,
+        programId: prog.programId,
+        name: prog.programName,
+        slug: prog.programSlug,
+        detailedOverview: prog.detailedOverview,
+        commonEligibility: prog.commonEligibility,
+        typicalDuration: prog.typicalDuration,
+        typicalFeeRange: prog.typicalFeeRange,
+      });
+    }
+
+    return results.map((admission) => {
+      const programsList = programsByAdmission.get(admission.id) || [];
+      return {
+        ...admission,
+        programs: programsList,
+        programCount: programsList.length,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function determineCacheTTL(status?: string, slug?: string): number {
+  if (slug) return 86400;
+  
+  switch (status?.toLowerCase()) {
+    case "open":
+      return 300;
+    case "closed":
+      return 86400;
+    case "expected":
+      return 604800;
+    default:
+      return 3600;
+  }
+}
+
+export async function GET(request: Request): Promise<NextResponse> {
+  try {
+    const { searchParams } = new URL(request.url);
+    
+    const validationResult = querySchema.safeParse({
+      status: searchParams.get("status"),
+      year: searchParams.get("year"),
+      programId: searchParams.get("programId"),
+      instituteId: searchParams.get("instituteId"),
+      slug: searchParams.get("slug"),
+      limit: searchParams.get("limit")
+    });
+
+    if (!validationResult.success) {
       return NextResponse.json(
-        { success: false, error: "Admission not found" },
+        { 
+          success: false, 
+          error: "Invalid query parameters", 
+          details: validationResult.error.format()
+        },
+        { status: 400 }
+      );
+    }
+
+    const { status, year, programId, instituteId, slug, limit } = validationResult.data;
+
+    const ttl = determineCacheTTL(status, slug);
+
+    const data = await fetchAdmissionsWithDetails({
+      slug,
+      status,
+      year,
+      instituteId,
+      programId,
+      limit
+    });
+
+    if (slug && (!data || data.length === 0)) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Admission not found",
+          code: "NOT_FOUND"
+        },
         { status: 404 }
       );
     }
 
-    const admissionIds = admissionsList.map((a) => a.id);
-
-    // ================== OFFERINGS BATCH ==================
-    const offerings = admissionIds.length
-      ? await db
-          .select({
-            admissionId: admissionOfferings.admissionId,
-            offeringId: admissionOfferings.offeringId
-          })
-          .from(admissionOfferings)
-          .where(inArray(admissionOfferings.admissionId, admissionIds))
-      : [];
-
-    const admissionMap = new Map<number, number[]>();
-
-    for (const o of offerings) {
-      if (!admissionMap.has(o.admissionId)) {
-        admissionMap.set(o.admissionId, []);
-      }
-      admissionMap.get(o.admissionId)!.push(o.offeringId);
-    }
-
-    const allOfferingIds = offerings.map((o) => o.offeringId);
-
-    // ================== PROGRAMS BATCH ==================
-    const programMap = new Map<number, any>();
-
-    if (allOfferingIds.length) {
-      const programRows = await db
-        .select({
-          offeringId: programOfferings.id,
-          programId: programs.id,
-          name: programs.name,
-          slug: programs.slug,
-          detailedOverview: programs.detailedOverview,
-          commonEligibility: programs.commonEligibility,
-          typicalDuration: programs.typicalDuration,
-          typicalFeeRange: programs.typicalFeeRange
-        })
-        .from(programOfferings)
-        .innerJoin(programs, eq(programOfferings.programId, programs.id))
-        .where(inArray(programOfferings.id, allOfferingIds));
-
-      for (const row of programRows) {
-        programMap.set(row.offeringId, row);
-      }
-    }
-
-    // ================== RESPONSE BUILD ==================
-    const result = admissionsList.map((ad) => {
-      const offeringIds = admissionMap.get(ad.id) || [];
-
-      const programsList = offeringIds
-        .map((id) => programMap.get(id))
-        .filter(Boolean);
-
-      return {
-        ...ad,
-        programs: programsList,
-        programCount: programsList.length
-      };
+    const response = NextResponse.json({
+      success: true,
+      data: slug ? data[0] : data,
+      count: data.length,
+      timestamp: Date.now(),
     });
 
-    const response = {
-      success: true,
-      data: slug ? result[0] : result,
-      count: result.length
-    };
+    response.headers.set('Cache-Control', `public, s-maxage=${ttl}, stale-while-revalidate=60`);
+    
+    return response;
 
-    // ================== CACHE SET ==================
-    setCachedRedirect(cacheKey, response);
-
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error("Error fetching admissions:", error);
+  } catch {
     return NextResponse.json(
-      { success: false, error: "Failed to fetch admissions" },
+      { 
+        success: false, 
+        error: "Failed to fetch admissions data",
+        code: "UNKNOWN_ERROR"
+      },
       { status: 500 }
     );
   }

@@ -1,17 +1,14 @@
 // app/api/public/programs/route.ts
-
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { 
   programs, 
   programOfferings, 
   institutes,
-  seoMetadata 
 } from "@/app/lib/schema";
-import { eq, asc, sql, and } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 
-// Define type for the result
-type ProgramWithInstitutes = {
+interface ProgramWithInstitutes {
   id: number;
   name: string;
   slug: string;
@@ -23,8 +20,6 @@ type ProgramWithInstitutes = {
   typicalFeeRange: string | null;
   isFeatured: boolean | null;
   instituteNames: string[];
-  seoTitle: string | null;
-  seoDescription: string | null;
 }
 
 export async function GET() {
@@ -41,9 +36,6 @@ export async function GET() {
         careerOutlook: programs.careerOutlook,
         typicalFeeRange: programs.typicalFeeRange,
         isFeatured: programs.isFeatured,
-        // ✅ Get SEO from centralized seo_metadata table
-        seoTitle: seoMetadata.metaTitle,
-        seoDescription: seoMetadata.metaDescription,
         instituteNames: sql<Array<{ name: string }>>`COALESCE(
           json_agg(
             json_build_object('name', ${institutes.name})
@@ -54,18 +46,11 @@ export async function GET() {
       .from(programs)
       .leftJoin(programOfferings, eq(programs.id, programOfferings.programId))
       .leftJoin(institutes, eq(programOfferings.instituteId, institutes.id))
-      .leftJoin(seoMetadata, 
-        and(
-          eq(seoMetadata.entityType, 'program'),
-          eq(seoMetadata.entityId, programs.id)
-        )
-      )
       .where(eq(programs.status, true))
-      .groupBy(programs.id, seoMetadata.metaTitle, seoMetadata.metaDescription)
+      .groupBy(programs.id)
       .orderBy(asc(programs.id));
 
-    // Transform to simple string array
-    const transformed = result.map((program) => ({
+    const transformed: ProgramWithInstitutes[] = result.map((program) => ({
       id: program.id,
       name: program.name,
       slug: program.slug,
@@ -76,25 +61,24 @@ export async function GET() {
       careerOutlook: program.careerOutlook,
       typicalFeeRange: program.typicalFeeRange,
       isFeatured: program.isFeatured,
-      seoTitle: program.seoTitle,
-      seoDescription: program.seoDescription,
       instituteNames: (program.instituteNames || []).map((i: { name: string }) => i.name)
     }));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       programs: transformed,
       count: transformed.length
     });
 
-  } catch (error) {
-    console.error("Error fetching programs:", error);
-    
+    response.headers.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+
+    return response;
+
+  } catch {
     return NextResponse.json(
       { 
         success: false, 
-        error: error instanceof Error ? error.message : "Failed to fetch programs",
-        details: process.env.NODE_ENV === 'development' ? error : undefined
+        error: "Failed to fetch programs"
       }, 
       { status: 500 }
     );

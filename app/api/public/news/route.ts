@@ -1,19 +1,19 @@
+// app/api/public/news/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { news } from "@/app/lib/schema";
 import { eq, desc } from "drizzle-orm";
 
-function safeLimit(value: string | null) {
+function safeLimit(value: string | null): number {
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return 20;
-  if (num > 50) return 50; // prevent heavy query abuse
+  if (num > 50) return 50;
   return num;
 }
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-
     const limit = safeLimit(searchParams.get("limit"));
 
     const allNews = await db
@@ -44,16 +44,20 @@ export async function GET(request: Request) {
       .orderBy(desc(news.publishedAt))
       .limit(limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: allNews ?? [],
+      data: allNews || [],
+      total: allNews.length,
     });
-  } catch (error) {
-    console.error("Error fetching news:", error);
 
+    response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=1800');
+
+    return response;
+  } catch {
     return NextResponse.json({
       success: true,
-      data: [], // IMPORTANT: always success true to avoid UI break
+      data: [],
+      total: 0,
     });
   }
 }

@@ -1,8 +1,12 @@
+// app/(public)/degrees/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { degrees, levels, categories, programs } from '@/app/lib/schema';
-import { eq, count, inArray, desc, sql } from 'drizzle-orm';
+import { degrees, levels, programs } from '@/app/lib/schema';
+import { eq, count, inArray } from 'drizzle-orm';
+
+export const revalidate = 86400;
+export const dynamic = 'force-static';
 
 export const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
@@ -24,7 +28,7 @@ interface DegreeWithStats {
   name: string;
   slug: string;
   fullForm: string | null;
-  levelId: number | null;  // ✅ Fixed: allow null
+  levelId: number | null;
   displayOrder: number | null;
   status: boolean | null;
   createdAt: Date | null;
@@ -35,7 +39,6 @@ interface DegreeWithStats {
 
 async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
   try {
-    // Get all degrees
     const allDegrees = await db
       .select({
         id: degrees.id,
@@ -55,7 +58,6 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
       return [];
     }
 
-    // ✅ FIXED: Filter out null levelIds before using inArray
     const levelIds = [...new Set(allDegrees.map(d => d.levelId).filter((id): id is number => id !== null))];
     
     let levelMap = new Map<number, { name: string; slug: string }>();
@@ -73,7 +75,6 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
       levelMap = new Map(levelsList.map(l => [l.id, { name: l.name, slug: l.slug }]));
     }
 
-    // Get total programs count (since programs don't have degreeId anymore)
     const programsResult = await db
       .select({ count: count() })
       .from(programs)
@@ -92,15 +93,12 @@ async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
       };
     });
 
-    // Sort by name
     return degreesWithStats.sort((a, b) => a.name.localeCompare(b.name));
-  } catch (error) {
-    console.error('Error fetching degrees:', error);
+  } catch {
     return [];
   }
 }
 
-// Icons for degrees
 const degreeIcons: Record<string, string> = {
   'BS': '🔬',
   'BA': '🎨',
@@ -124,13 +122,11 @@ const degreeIcons: Record<string, string> = {
   'PhD': '👨‍🎓',
 };
 
-// Default icon
 const defaultIcon = '🎓';
 
 export default async function DegreesPage() {
   const degreesList = await getDegreesWithStats();
 
-  // Group degrees by level
   const degreesByLevel = degreesList.reduce((acc, degree) => {
     const level = degree.levelName;
     if (!acc[level]) {
@@ -140,7 +136,6 @@ export default async function DegreesPage() {
     return acc;
   }, {} as Record<string, DegreeWithStats[]>);
 
-  // Calculate stats
   const totalDegrees = degreesList.length;
   const totalLevels = Object.keys(degreesByLevel).length;
   const totalPrograms = degreesList.reduce((sum, d) => sum + d.programsCount, 0) || degreesList.length;
@@ -149,7 +144,6 @@ export default async function DegreesPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <section className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -178,7 +172,6 @@ export default async function DegreesPage() {
         </div>
       </section>
 
-      {/* Stats Cards */}
       <div className="container mx-auto px-4 mt-8 mb-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
@@ -231,7 +224,6 @@ export default async function DegreesPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         
         {degreesList.length === 0 ? (
@@ -242,7 +234,6 @@ export default async function DegreesPage() {
           </div>
         ) : (
           <>
-            {/* Degrees by Level */}
             {Object.entries(degreesByLevel).map(([levelName, levelDegrees]) => (
               <section key={`level-${levelName}`} className="mb-12">
                 <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
@@ -285,10 +276,8 @@ export default async function DegreesPage() {
               </section>
             ))}
 
-            {/* Bottom Sections */}
             <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
               
-              {/* Popular Degrees */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-yellow-600 rounded-full"></span>
@@ -319,7 +308,6 @@ export default async function DegreesPage() {
                 </div>
               </div>
 
-              {/* By Level */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-purple-600 rounded-full"></span>
@@ -343,7 +331,6 @@ export default async function DegreesPage() {
                 </div>
               </div>
 
-              {/* Quick Links */}
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
@@ -384,7 +371,6 @@ export default async function DegreesPage() {
                   </Link>
                 </div>
 
-                {/* Degree Tags */}
                 <div className="mt-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Popular Degrees</h3>
                   <div className="flex flex-wrap gap-1">

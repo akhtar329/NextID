@@ -17,11 +17,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find user in database
     const users = await db
       .select()
       .from(adminUsers)
-      .where(eq(adminUsers.email, email))
+      .where(eq(adminUsers.email, email.toLowerCase()))
       .limit(1);
 
     if (users.length === 0) {
@@ -33,7 +32,6 @@ export async function POST(request: NextRequest) {
 
     const user = users[0];
 
-    // Check if user is active
     if (user.status === false) {
       return NextResponse.json(
         { error: 'Account is disabled' },
@@ -41,7 +39,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify password
     const isValid = await compare(password, user.password);
 
     if (!isValid) {
@@ -51,7 +48,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get role name if roleId exists
     let roleName = 'admin';
     if (user.roleId) {
       const roles = await db
@@ -65,7 +61,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate JWT token
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+      // Silent fail - don't expose error details
+      return NextResponse.json(
+        { error: 'Authentication service unavailable' },
+        { status: 500 }
+      );
+    }
+
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -74,17 +78,17 @@ export async function POST(request: NextRequest) {
         roleId: user.roleId,
         role: roleName
       },
-      process.env.JWT_SECRET || 'your-secret-key-change-this',
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Update last login time
-    await db
+    // Don't await - fire and forget for faster response
+    db
       .update(adminUsers)
       .set({ lastLogin: new Date() })
-      .where(eq(adminUsers.id, user.id));
+      .where(eq(adminUsers.id, user.id))
+      .catch(() => {});
 
-    // Create response with cookie
     const response = NextResponse.json({
       success: true,
       user: {
@@ -96,21 +100,21 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Set HTTP-only cookie
     response.cookies.set('authToken', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60,
       path: '/',
     });
 
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+
     return response;
 
-  } catch (error) {
-    console.error('Login error:', error);
+  } catch {
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Authentication failed' },
       { status: 500 }
     );
   }

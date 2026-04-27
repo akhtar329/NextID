@@ -1,3 +1,4 @@
+// app/(public)/universities/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -11,20 +12,13 @@ import {
   programOfferings,
   results, 
 } from '@/app/lib/schema';
-import { eq, and, desc, count, sql, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
-// ==================== FORMAT DATE FUNCTION ====================
-function formatDate(date: Date | null) {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
 
-// ==================== FORMAT SHORT DATE ====================
-function formatShortDate(date: Date | null) {
+function formatShortDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
@@ -32,7 +26,6 @@ function formatShortDate(date: Date | null) {
   });
 }
 
-// ==================== TYPES ====================
 interface UniversityDetail {
   id: number;
   name: string;
@@ -76,7 +69,6 @@ interface Result {
   isPopular: boolean | null;
 }
 
-// ==================== GET UNIVERSITY BY SLUG ====================
 async function getUniversityBySlug(slug: string): Promise<UniversityDetail | null> {
   try {
     const [university] = await db
@@ -98,16 +90,13 @@ async function getUniversityBySlug(slug: string): Promise<UniversityDetail | nul
       .limit(1);
 
     return university || null;
-  } catch (error) {
-    console.error('Error fetching university:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET PROGRAMS WITH STATS ====================
 async function getProgramsWithStats(universityId: number): Promise<Program[]> {
   try {
-    // Get programs through programOfferings
     const programsList = await db
       .select({
         id: programs.id,
@@ -121,46 +110,47 @@ async function getProgramsWithStats(universityId: number): Promise<Program[]> {
       .where(eq(programOfferings.instituteId, universityId))
       .orderBy(programs.name);
 
-    // Get offerings for this university
+    if (programsList.length === 0) return [];
+
     const offerings = await db
       .select({ id: programOfferings.id, programId: programOfferings.programId })
       .from(programOfferings)
       .where(eq(programOfferings.instituteId, universityId));
 
     const offeringMap = new Map(offerings.map(o => [o.programId, o.id]));
+    const offeringIds = offerings.map(o => o.id);
 
-    const programsWithStats = await Promise.all(
-      programsList.map(async (prog) => {
-        const offeringId = offeringMap.get(prog.id);
-        
-        let admissionsCount = 0;
-        if (offeringId) {
-          const [admissionsResult] = await db
-            .select({ count: count() })
-            .from(admissionOfferings)
-            .where(eq(admissionOfferings.offeringId, offeringId));
-          admissionsCount = Number(admissionsResult?.count) || 0;
-        }
+    let admissionsMap = new Map<number, number>();
+    if (offeringIds.length > 0) {
+      const admissionsCounts = await db
+        .select({
+          offeringId: admissionOfferings.offeringId,
+          count: count(),
+        })
+        .from(admissionOfferings)
+        .where(inArray(admissionOfferings.offeringId, offeringIds))
+        .groupBy(admissionOfferings.offeringId);
+      
+      admissionsMap = new Map(admissionsCounts.map(a => [a.offeringId, Number(a.count)]));
+    }
 
-        return {
-          ...prog,
-          admissionsCount,
-          resultsCount: 0,
-        };
-      })
-    );
+    return programsList.map((prog) => {
+      const offeringId = offeringMap.get(prog.id);
+      const admissionsCount = offeringId ? admissionsMap.get(offeringId) || 0 : 0;
 
-    return programsWithStats;
-  } catch (error) {
-    console.error('Error fetching programs:', error);
+      return {
+        ...prog,
+        admissionsCount,
+        resultsCount: 0,
+      };
+    });
+  } catch {
     return [];
   }
 }
 
-// ==================== GET ADMISSIONS ====================
 async function getAdmissions(universityId: number, limit = 5): Promise<Admission[]> {
   try {
-    // Get offerings for this university
     const offerings = await db
       .select({ id: programOfferings.id, programId: programOfferings.programId })
       .from(programOfferings)
@@ -170,8 +160,7 @@ async function getAdmissions(universityId: number, limit = 5): Promise<Admission
     
     if (offeringIds.length === 0) return [];
 
-    // Get admissions through admissionOfferings
-    const admissionsList = await db
+    const admissionLinks = await db
       .select({
         admissionId: admissionOfferings.admissionId,
         offeringId: admissionOfferings.offeringId,
@@ -179,15 +168,11 @@ async function getAdmissions(universityId: number, limit = 5): Promise<Admission
       .from(admissionOfferings)
       .where(inArray(admissionOfferings.offeringId, offeringIds));
 
-    const admissionIds = admissionsList.map(a => a.admissionId);
+    const admissionIds = admissionLinks.map(a => a.admissionId);
     
     if (admissionIds.length === 0) return [];
 
-    // Create a map of offeringId to programId
-    const offeringToProgram = new Map(offerings.map(o => [o.id, o.programId]));
-    
-    // Get program names
-    const programMap = new Map();
+    const programMap = new Map<number, { name: string; slug: string }>();
     for (const prog of offerings) {
       const [program] = await db
         .select({ name: programs.name, slug: programs.slug })
@@ -199,7 +184,6 @@ async function getAdmissions(universityId: number, limit = 5): Promise<Admission
       }
     }
 
-    // Get admission details
     const result = await db
       .select({
         id: admissions.id,
@@ -229,13 +213,11 @@ async function getAdmissions(universityId: number, limit = 5): Promise<Admission
         expectedCloseDate: r.expectedCloseDate,
       };
     });
-  } catch (error) {
-    console.error('Error fetching admissions:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET RESULTS ====================
 async function getResults(universityId: number, limit = 5): Promise<Result[]> {
   try {
     return await db
@@ -251,22 +233,18 @@ async function getResults(universityId: number, limit = 5): Promise<Result[]> {
       .where(eq(results.instituteId, universityId))
       .orderBy(desc(results.resultDate), desc(results.year))
       .limit(limit);
-  } catch (error) {
-    console.error('Error fetching results:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET STATS ====================
 async function getStats(universityId: number) {
   try {
-    // Get programs count through programOfferings
     const [programsCount] = await db
       .select({ count: count() })
       .from(programOfferings)
       .where(eq(programOfferings.instituteId, universityId));
 
-    // Get offerings for admissions count
     const offerings = await db
       .select({ id: programOfferings.id })
       .from(programOfferings)
@@ -278,7 +256,6 @@ async function getStats(universityId: number) {
     let openAdmissions = 0;
     
     if (offeringIds.length > 0) {
-      // Get admission IDs through admissionOfferings
       const admissionLinks = await db
         .select({ admissionId: admissionOfferings.admissionId })
         .from(admissionOfferings)
@@ -312,13 +289,11 @@ async function getStats(universityId: number) {
       totalResults: Number(resultsCount?.count) || 0,
       openAdmissions,
     };
-  } catch (error) {
-    console.error('Error fetching stats:', error);
+  } catch {
     return { totalPrograms: 0, totalAdmissions: 0, totalResults: 0, openAdmissions: 0 };
   }
 }
 
-// ==================== GET SIMILAR UNIVERSITIES ====================
 async function getSimilarUniversities(cityId: number | null, currentId: number, limit = 3) {
   if (!cityId) return [];
   
@@ -337,17 +312,16 @@ async function getSimilarUniversities(cityId: number | null, currentId: number, 
         and(
           eq(institutes.cityId, cityId),
           eq(institutes.status, true),
+          eq(institutes.id, currentId),
           sql`${institutes.id} != ${currentId}`
         )
       )
       .limit(limit);
-  } catch (error) {
-    console.error('Error fetching similar universities:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GENERATE METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const university = await getUniversityBySlug(slug);
@@ -376,14 +350,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== MAIN PAGE ====================
 export default async function UniversityDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   
   const university = await getUniversityBySlug(slug);
   if (!university) notFound();
 
-  const [programs, admissions, results, stats, similarUniversities] = await Promise.all([
+  const [programs, admissionsList, results, stats, similarUniversities] = await Promise.all([
     getProgramsWithStats(university.id),
     getAdmissions(university.id, 4),
     getResults(university.id, 4),
@@ -394,7 +367,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -407,7 +379,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      {/* Hero Section */}
       <div className="relative bg-gradient-to-r from-blue-900 to-indigo-900 text-white">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-4xl">
@@ -432,7 +403,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               )}
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
                 <div className="text-3xl font-bold">{stats.totalPrograms}</div>
@@ -455,11 +425,9 @@ export default async function UniversityDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Sidebar - University Info */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 sticky top-24">
               <h2 className="text-xl font-bold text-gray-900 mb-4">University Information</h2>
@@ -499,7 +467,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                 </div>
               )}
 
-              {/* Quick Links */}
               <div className="mt-6 pt-6 border-t">
                 <h3 className="font-semibold text-gray-900 mb-3">Quick Links</h3>
                 <div className="space-y-2">
@@ -517,10 +484,8 @@ export default async function UniversityDetailPage({ params }: { params: Promise
             </div>
           </div>
 
-          {/* Main Content - Programs, Admissions, Results */}
           <div className="lg:col-span-2 space-y-8">
             
-            {/* Programs Section */}
             <section id="programs">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-gray-900">Programs Offered</h2>
@@ -563,8 +528,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               )}
             </section>
 
-            {/* Open Admissions Section */}
-            {admissions.length > 0 && (
+            {admissionsList.length > 0 && (
               <section id="admissions">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-bold text-gray-900">Open Admissions</h2>
@@ -574,7 +538,7 @@ export default async function UniversityDetailPage({ params }: { params: Promise
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {admissions.map((adm) => (
+                  {admissionsList.map((adm) => (
                     <Link
                       key={adm.id}
                       href={`/admissions/${adm.slug}`}
@@ -602,7 +566,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               </section>
             )}
 
-            {/* Recent Results Section */}
             {results.length > 0 && (
               <section id="results">
                 <div className="flex items-center justify-between mb-4">
@@ -643,7 +606,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
               </section>
             )}
 
-            {/* Similar Universities */}
             {similarUniversities.length > 0 && (
               <section>
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">Similar Universities</h2>
@@ -666,7 +628,6 @@ export default async function UniversityDetailPage({ params }: { params: Promise
         </div>
       </div>
 
-      {/* SEO Content Section */}
       <section className="bg-white py-12 border-t border-gray-200">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto prose prose-blue">

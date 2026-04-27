@@ -1,5 +1,7 @@
+// app/(public)/programs/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { 
   programs, 
@@ -7,26 +9,18 @@ import {
   institutes, 
   admissions,
   admissionOfferings,
-  programOfferings,
-  results, 
+  programOfferings, 
   cities,
-  seoMetadata
 } from '@/app/lib/schema';
-import { eq, and, desc, count, sql, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, count, inArray } from 'drizzle-orm';
 import { db } from '@/app/lib/db';
 import { generateSEO } from '@/app/lib/seo';
 
-// ==================== FORMAT DATE FUNCTIONS ====================
-function formatDate(date: Date | null) {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
 
-function formatShortDate(date: Date | null) {
+function formatShortDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
@@ -35,7 +29,6 @@ function formatShortDate(date: Date | null) {
   });
 }
 
-// ==================== TYPES ====================
 interface ProgramDetail {
   id: number;
   name: string;
@@ -49,7 +42,7 @@ interface ProgramDetail {
   featuredImage?: string | null;
 }
 
-interface InstituteWithStats {
+interface InstituteItem {
   id: number;
   name: string;
   slug: string;
@@ -58,11 +51,10 @@ interface InstituteWithStats {
   cityName: string | null;
   citySlug: string | null;
   admissionsCount: number;
-  resultsCount: number;
   isFeatured: boolean | null;
 }
 
-interface Admission {
+interface AdmissionItem {
   id: number;
   title: string;
   slug: string;
@@ -76,20 +68,6 @@ interface Admission {
   cityName: string | null;
 }
 
-interface Result {
-  id: number;
-  title: string;
-  slug: string;
-  year: number;
-  resultDate: Date | null;
-  instituteName: string;
-  instituteSlug: string;
-  instituteLogo: string | null;
-  cityName: string | null;
-  isPopular: boolean | null;
-}
-
-// ==================== GET PROGRAM BY SLUG ====================
 async function getProgramBySlug(slug: string): Promise<ProgramDetail | null> {
   try {
     const [program] = await db
@@ -111,16 +89,13 @@ async function getProgramBySlug(slug: string): Promise<ProgramDetail | null> {
       .limit(1);
 
     return program || null;
-  } catch (error) {
-    console.error('Error fetching program:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET INSTITUTES WITH STATS ====================
-async function getInstitutesWithStats(programId: number) {
+async function getInstitutesWithStats(programId: number): Promise<InstituteItem[]> {
   try {
-    // First get offerings for this program with instituteId
     const offerings = await db
       .select({
         id: programOfferings.id,
@@ -146,46 +121,43 @@ async function getInstitutesWithStats(programId: number) {
       })
       .from(institutes)
       .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .where(and(eq(institutes.status, true), sql`${institutes.id} IN (${instituteIds.join(',')})`))
+      .where(and(eq(institutes.status, true), inArray(institutes.id, instituteIds)))
       .orderBy(desc(institutes.isFeatured), institutes.name);
 
-    const institutesWithStats = await Promise.all(
-      institutesList.map(async (inst) => {
-        // Get offering for this program and institute
-        const offering = offerings.find(o => o.instituteId === inst.id);
-        
-        let admissionsCount = 0;
-        
-        if (offering) {
-          // Get admissions count through admissionOfferings
-          const [admissionsResult] = await db
-            .select({ count: count() })
-            .from(admissionOfferings)
-            .where(eq(admissionOfferings.offeringId, offering.id));
-          admissionsCount = Number(admissionsResult?.count) || 0;
-        }
+    const offeringMap = new Map(offerings.map(o => [o.instituteId, o.id]));
 
-        return {
-          ...inst,
-          admissionsCount,
-          resultsCount: 0,
-        };
-      })
-    );
+    const offeringIds = offerings.map(o => o.id);
+    let admissionsMap = new Map<number, number>();
+    
+    if (offeringIds.length > 0) {
+      const admissionsCounts = await db
+        .select({
+          offeringId: admissionOfferings.offeringId,
+          count: count(),
+        })
+        .from(admissionOfferings)
+        .where(inArray(admissionOfferings.offeringId, offeringIds))
+        .groupBy(admissionOfferings.offeringId);
+      
+      admissionsMap = new Map(admissionsCounts.map(a => [a.offeringId, Number(a.count)]));
+    }
 
-    return institutesWithStats.filter(
-      inst => inst.admissionsCount > 0
-    );
-  } catch (error) {
-    console.error('Error fetching institutes:', error);
+    return institutesList.map((inst) => {
+      const offeringId = offeringMap.get(inst.id);
+      const admissionsCount = offeringId ? admissionsMap.get(offeringId) || 0 : 0;
+
+      return {
+        ...inst,
+        admissionsCount,
+      };
+    }).filter(inst => inst.admissionsCount > 0);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET ADMISSIONS ====================
-async function getAdmissions(programId: number, limit = 6) {
+async function getAdmissions(programId: number, limit = 6): Promise<AdmissionItem[]> {
   try {
-    // First get offeringIds for this program
     const offerings = await db
       .select({ id: programOfferings.id })
       .from(programOfferings)
@@ -215,36 +187,21 @@ async function getAdmissions(programId: number, limit = 6) {
       .leftJoin(cities, eq(institutes.cityId, cities.id))
       .where(
         and(
-          sql`${admissionOfferings.offeringId} IN (${offeringIds.join(',')})`,
+          inArray(admissionOfferings.offeringId, offeringIds),
           eq(admissions.status, 'Open')
         )
       )
       .orderBy(admissions.expectedCloseDate)
       .limit(limit);
 
-    return result as Admission[];
-  } catch (error) {
-    console.error('Error fetching admissions:', error);
+    return result as AdmissionItem[];
+  } catch {
     return [];
   }
 }
 
-// ==================== GET RESULTS ====================
-async function getResults(programId: number, limit = 6): Promise<Result[]> {
-  try {
-    // Results no longer have direct programId in new schema
-    // Return empty array for now
-    return [];
-  } catch (error) {
-    console.error('Error fetching results:', error);
-    return [];
-  }
-}
-
-// ==================== GET STATS ====================
 async function getStats(programId: number) {
   try {
-    // Get offerings count
     const offerings = await db
       .select({ id: programOfferings.id, instituteId: programOfferings.instituteId })
       .from(programOfferings)
@@ -253,14 +210,13 @@ async function getStats(programId: number) {
     const instituteIds = [...new Set(offerings.map(o => o.instituteId))];
     const institutesCount = instituteIds.length;
 
-    // Get admissions count through offerings
     let admissionsCount = 0;
     if (offerings.length > 0) {
       const offeringIds = offerings.map(o => o.id);
       const [admissionsResult] = await db
         .select({ count: count() })
         .from(admissionOfferings)
-        .where(sql`${admissionOfferings.offeringId} IN (${offeringIds.join(',')})`);
+        .where(inArray(admissionOfferings.offeringId, offeringIds));
       admissionsCount = Number(admissionsResult?.count) || 0;
     }
 
@@ -269,13 +225,11 @@ async function getStats(programId: number) {
       admissions: admissionsCount,
       results: 0,
     };
-  } catch (error) {
-    console.error('Error fetching stats:', error);
+  } catch {
     return { institutes: 0, admissions: 0, results: 0 };
   }
 }
 
-// ==================== GENERATE METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const program = await getProgramBySlug(slug);
@@ -298,8 +252,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   });
 }
 
-// ==================== HELPER: Format Description ====================
-function formatDescription(text: string | null) {
+function formatDescription(text: string | null): React.ReactNode {
   if (!text) return null;
   return text.split('\n\n').map((paragraph, idx) => (
     <p key={idx} className="text-gray-600 leading-relaxed mb-4 last:mb-0">
@@ -308,17 +261,15 @@ function formatDescription(text: string | null) {
   ));
 }
 
-// ==================== MAIN PAGE ====================
 export default async function ProgramDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   
   const program = await getProgramBySlug(slug);
   if (!program) notFound();
 
-  const [institutes, admissionsList, resultsList, stats] = await Promise.all([
+  const [institutes, admissionsList, stats] = await Promise.all([
     getInstitutesWithStats(program.id),
     getAdmissions(program.id, 6),
-    getResults(program.id, 6),
     getStats(program.id),
   ]);
 
@@ -327,7 +278,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -340,7 +290,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* Hero Section - Premium Design */}
       <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-800">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -365,7 +314,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               {program.detailedOverview?.substring(0, 200) || `Complete guide to ${program.name} programs in Pakistan.`}
             </p>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-3 gap-4 max-w-2xl">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 text-center border border-white/20">
                 <div className="text-2xl md:text-3xl font-bold">{stats.institutes}</div>
@@ -384,15 +332,12 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Sidebar - Program Info */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-24 space-y-6">
               
-              {/* Program Details Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-4">
                   <h2 className="text-white font-semibold flex items-center gap-2">
@@ -424,7 +369,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                 </div>
               </div>
 
-              {/* Quick Links */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
                 <div className="space-y-2">
@@ -440,21 +384,13 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                       <span className="text-sm text-gray-700 group-hover:text-green-600">Open Admissions ({stats.admissions})</span>
                     </Link>
                   )}
-                  {stats.results > 0 && (
-                    <Link href="#results" className="flex items-center gap-3 p-2 rounded-lg hover:bg-orange-50 transition group">
-                      <span className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 group-hover:bg-orange-200">📊</span>
-                      <span className="text-sm text-gray-700 group-hover:text-orange-600">Results ({stats.results})</span>
-                    </Link>
-                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            {/* Eligibility Section */}
             {program.commonEligibility && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
@@ -470,7 +406,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {/* Career Scope Section */}
             {program.careerOutlook && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50">
@@ -486,7 +421,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
             
-            {/* Universities Section */}
             {institutes.length > 0 && (
               <section id="universities">
                 <div className="flex items-center justify-between mb-6">
@@ -510,7 +444,13 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                     >
                       <div className="flex items-start gap-4">
                         {inst.logo ? (
-                          <img src={inst.logo} alt={inst.name} className="w-12 h-12 object-contain rounded-lg" />
+                          <Image
+                            src={inst.logo}
+                            alt={inst.name}
+                            width={48}
+                            height={48}
+                            className="w-12 h-12 object-contain rounded-lg"
+                          />
                         ) : (
                           <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center text-xl">
                             🏛️
@@ -538,7 +478,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </section>
             )}
 
-            {/* Admissions Section */}
             {admissionsList.length > 0 && (
               <section id="admissions">
                 <div className="flex items-center justify-between mb-6">
@@ -563,7 +502,13 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
                           {adm.instituteLogo ? (
-                            <img src={adm.instituteLogo} alt={adm.instituteName} className="w-12 h-12 object-contain rounded-lg" />
+                            <Image
+                              src={adm.instituteLogo}
+                              alt={adm.instituteName}
+                              width={48}
+                              height={48}
+                              className="w-12 h-12 object-contain rounded-lg"
+                            />
                           ) : (
                             <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg flex items-center justify-center text-xl">
                               📝
@@ -601,7 +546,6 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </section>
             )}
 
-            {/* Overview Section - Bottom */}
             {program.detailedOverview && (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-gray-100">
@@ -617,12 +561,11 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {/* No Data State */}
             {!hasAnyData && (
               <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <div className="text-6xl mb-4">📚</div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
-                <p className="text-gray-500">We're currently gathering information for {program.name}. Please check back later.</p>
+                <p className="text-gray-500">We&apos;re currently gathering information for {program.name}. Please check back later.</p>
               </div>
             )}
           </div>

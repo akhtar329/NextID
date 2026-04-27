@@ -699,7 +699,7 @@ export default function EditAdmissionPage() {
                 type="url"
                 value={ogImage}
                 onChange={(e) => setOgImage(e.target.value)}
-                placeholder="https://nextid.pk/images/og/admission-default.jpg"
+                placeholder="https://www.nextid.pk/images/og/admission-default.jpg"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-gray-500 mt-1">

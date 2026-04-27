@@ -1,13 +1,17 @@
 // app/(public)/cities/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { cities, institutes, admissions, results, news, seoMetadata } from '@/app/lib/schema';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
-// ==================== FORMAT DATE FUNCTION ====================
-function formatDate(date: Date | null) {
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const dynamicParams = true;
+
+function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     day: 'numeric',
@@ -16,7 +20,7 @@ function formatDate(date: Date | null) {
   });
 }
 
-function formatShortDate(date: Date | null) {
+function formatShortDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
@@ -25,7 +29,6 @@ function formatShortDate(date: Date | null) {
   });
 }
 
-// ==================== TYPES ====================
 interface CityDetail {
   id: number;
   name: string;
@@ -88,7 +91,6 @@ interface NewsItem {
   isBreaking: boolean | null;
 }
 
-// ==================== GET CITY BY SLUG ====================
 async function getCityBySlug(slug: string): Promise<CityDetail | null> {
   try {
     const [city] = await db
@@ -113,13 +115,11 @@ async function getCityBySlug(slug: string): Promise<CityDetail | null> {
       .limit(1);
 
     return city || null;
-  } catch (error) {
-    console.error('Error fetching city:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET SEO METADATA ====================
 async function getSeoMetadata(entityType: string, entityId: number) {
   try {
     const [seo] = await db
@@ -133,13 +133,11 @@ async function getSeoMetadata(entityType: string, entityId: number) {
       )
       .limit(1);
     return seo || null;
-  } catch (error) {
-    console.error('Error fetching SEO metadata:', error);
+  } catch {
     return null;
   }
 }
 
-// ==================== GET INSTITUTES ====================
 async function getInstitutes(cityId: number, limit = 6): Promise<Institute[]> {
   try {
     const institutesList = await db
@@ -161,48 +159,60 @@ async function getInstitutes(cityId: number, limit = 6): Promise<Institute[]> {
       .orderBy(desc(institutes.isFeatured), institutes.name)
       .limit(limit);
 
-    const institutesWithStats = await Promise.all(
-      institutesList.map(async (inst) => {
-        const [programsCount] = await db
-          .select({ count: count() })
-          .from(sql`program_institutes`)
-          .where(sql`institute_id = ${inst.id}`);
+    if (institutesList.length === 0) return [];
 
-        const [admissionsCount] = await db
-          .select({ count: count() })
-          .from(admissions)
-          .where(
-            and(
-              eq(admissions.instituteId, inst.id),
-              eq(admissions.status, 'Open')
-            )
-          );
+    const instituteIds = institutesList.map(i => i.id);
 
-        const [resultsCount] = await db
-          .select({ count: count() })
-          .from(results)
-          .where(eq(results.instituteId, inst.id));
-
-        return {
-          ...inst,
-          programsCount: Number(programsCount?.count) || 0,
-          admissionsCount: Number(admissionsCount?.count) || 0,
-          resultsCount: Number(resultsCount?.count) || 0,
-        };
+    const programsCounts = await db
+      .select({
+        instituteId: sql<number>`program_institutes.institute_id`,
+        count: count(),
       })
-    );
+      .from(sql`program_institutes`)
+      .where(inArray(sql`program_institutes.institute_id`, instituteIds))
+      .groupBy(sql`program_institutes.institute_id`);
 
-    return institutesWithStats;
-  } catch (error) {
-    console.error('Error fetching institutes:', error);
+    const admissionsCounts = await db
+      .select({
+        instituteId: admissions.instituteId,
+        count: count(),
+      })
+      .from(admissions)
+      .where(
+        and(
+          inArray(admissions.instituteId, instituteIds),
+          eq(admissions.status, 'Open')
+        )
+      )
+      .groupBy(admissions.instituteId);
+
+    const resultsCounts = await db
+      .select({
+        instituteId: results.instituteId,
+        count: count(),
+      })
+      .from(results)
+      .where(inArray(results.instituteId, instituteIds))
+      .groupBy(results.instituteId);
+
+    const programsMap = new Map(programsCounts.map(p => [Number(p.instituteId), Number(p.count)]));
+    const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
+    const resultsMap = new Map(resultsCounts.map(r => [r.instituteId, Number(r.count)]));
+
+    return institutesList.map(inst => ({
+      ...inst,
+      programsCount: programsMap.get(inst.id) || 0,
+      admissionsCount: admissionsMap.get(inst.id) || 0,
+      resultsCount: resultsMap.get(inst.id) || 0,
+    }));
+  } catch {
     return [];
   }
 }
 
-// ==================== GET ADMISSIONS ====================
 async function getAdmissions(cityId: number, limit = 5): Promise<Admission[]> {
   try {
-    const admissionsList = await db
+    return await db
       .select({
         id: admissions.id,
         slug: admissions.slug,
@@ -224,18 +234,14 @@ async function getAdmissions(cityId: number, limit = 5): Promise<Admission[]> {
       )
       .orderBy(admissions.expectedCloseDate)
       .limit(limit);
-
-    return admissionsList;
-  } catch (error) {
-    console.error('Error fetching admissions:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET RESULTS ====================
 async function getResults(cityId: number, limit = 5): Promise<Result[]> {
   try {
-    const resultsList = await db
+    return await db
       .select({
         id: results.id,
         title: results.title,
@@ -256,15 +262,11 @@ async function getResults(cityId: number, limit = 5): Promise<Result[]> {
       )
       .orderBy(desc(results.resultDate), desc(results.year))
       .limit(limit);
-
-    return resultsList;
-  } catch (error) {
-    console.error('Error fetching results:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET NEWS ====================
 async function getNews(cityId: number, limit = 5): Promise<NewsItem[]> {
   try {
     return await db
@@ -286,13 +288,11 @@ async function getNews(cityId: number, limit = 5): Promise<NewsItem[]> {
       )
       .orderBy(desc(news.publishedAt))
       .limit(limit);
-  } catch (error) {
-    console.error('Error fetching news:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GET STATS ====================
 async function getStats(cityId: number) {
   try {
     const [institutesCount] = await db
@@ -333,13 +333,11 @@ async function getStats(cityId: number) {
       results: Number(resultsCount?.count) || 0,
       news: Number(newsCount?.count) || 0,
     };
-  } catch (error) {
-    console.error('Error fetching stats:', error);
+  } catch {
     return { institutes: 0, admissions: 0, results: 0, news: 0 };
   }
 }
 
-// ==================== GET YEARS ====================
 async function getYears(cityId: number) {
   try {
     const years = await db
@@ -351,13 +349,11 @@ async function getYears(cityId: number) {
       .orderBy(desc(admissions.year));
 
     return years.map(y => y.year);
-  } catch (error) {
-    console.error('Error fetching years:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== GENERATE METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const city = await getCityBySlug(slug);
@@ -386,7 +382,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== MAIN PAGE ====================
 export default async function CityDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   
@@ -407,7 +402,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       
-      {/* Hero Section - Premium Design */}
       <div className="relative overflow-hidden bg-gradient-to-br from-purple-700 via-purple-600 to-indigo-800">
         <div className="absolute inset-0 bg-black/20"></div>
         {city.imageUrl && (
@@ -467,7 +461,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
         </div>
       </div>
 
-      {/* Stats Bar */}
       <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x">
@@ -491,15 +484,12 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Sidebar */}
           <div className="lg:col-span-1 order-2 lg:order-1">
             <div className="sticky top-24 space-y-6">
               
-              {/* Quick Info Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4">
                   <h3 className="text-white font-semibold flex items-center gap-2">
@@ -537,7 +527,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
                 </div>
               </div>
 
-              {/* Years Card */}
               {years.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                   <h3 className="font-semibold text-gray-900 mb-3">Browse by Year</h3>
@@ -555,7 +544,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
                 </div>
               )}
 
-              {/* Quick Links */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
                 <div className="space-y-2">
@@ -588,10 +576,8 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="lg:col-span-2 order-1 lg:order-2 space-y-8">
             
-            {/* Institutes Section - TOP */}
             {institutesList.length > 0 && (
               <section id="institutes">
                 <div className="flex items-center justify-between mb-6">
@@ -653,7 +639,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
-            {/* Admissions Section */}
             {admissionsList.length > 0 && (
               <section id="admissions">
                 <div className="flex items-center justify-between mb-6">
@@ -713,7 +698,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
-            {/* Results Section */}
             {resultsList.length > 0 && (
               <section id="results">
                 <div className="flex items-center justify-between mb-6">
@@ -759,7 +743,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
-            {/* News Section */}
             {newsList.length > 0 && (
               <section id="news">
                 <div className="flex items-center justify-between mb-6">
@@ -817,7 +800,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
-            {/* About Section - BOTTOM (with proper paragraph formatting) */}
             {city.description && (
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-indigo-50">
@@ -837,7 +819,6 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               </section>
             )}
 
-            {/* No Data State */}
             {!hasAnyData && (
               <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <div className="text-6xl mb-4">📚</div>

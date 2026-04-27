@@ -34,7 +34,7 @@ export default function LoginPage() {
 
       if (response.ok && data.success) {
         toast.success("Welcome back 👋");
-        router.push("/admin/dashboard");
+        router.push("/admin");
         router.refresh();
       } else {
         toast.error(data.error || "Invalid email or password");

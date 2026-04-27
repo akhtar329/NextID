@@ -203,7 +203,7 @@ export default function CreateDateSheetPage() {
           ogTitle: seoData.ogTitle || seoData.metaTitle,
           ogDescription: seoData.ogDescription || seoData.metaDescription,
           ogImage: seoData.ogImage || formData.featuredImage,
-          canonicalUrl: `https://nextid.pk/date-sheets/${formData.slug}`,
+          canonicalUrl: `https://www.nextid.pk/date-sheets/${formData.slug}`,
           robots: "index, follow",
           ogType: "article",
           twitterCard: "summary_large_image",

@@ -1,128 +1,99 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
-  LayoutDashboard,
-  BookOpen,
-  Building,
-  MapPin,
-  CalendarCheck,
-  FileText,
   Users,
-  Settings,
-  BarChart3,      // ✅ Analytics icon
-  TrendingUp,     // ✅ For active visitors
+  Eye,
+  CalendarCheck,
+  Award,
+  Newspaper,
+  Building,
+  BookOpen,
+  MapPin,
+  ArrowUp,
+  TrendingUp,
 } from "lucide-react";
+import Link from "next/link";
 
-interface MenuItem {
-  label: string;
-  icon: React.ReactNode;
-  path: string;
-  badge?: number | string;  // ✅ For showing counts
-  badgeColor?: string;
-}
-
-export default function SuperAdminSidebar() {
-  const router = useRouter();
-  const [activeVisitors, setActiveVisitors] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch active visitors count
-  useEffect(() => {
-    const fetchActiveVisitors = async () => {
-      try {
-        const res = await fetch('/api/admin/analytics?period=today');
-        const data = await res.json();
-        if (data.success) {
-          setActiveVisitors(data.data.overview.activeVisitors);
-        }
-      } catch (error) {
-        console.error('Error fetching active visitors:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchActiveVisitors();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchActiveVisitors, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // ✅ Updated menuItems with Analytics
-  const menuItems: MenuItem[] = [
-    { label: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/admin/dashboard" },
-    { label: "Programs", icon: <BookOpen size={20} />, path: "/admin/programs" },
-    { label: "Institutes", icon: <Building size={20} />, path: "/admin/institutes" },
-    { label: "Cities", icon: <MapPin size={20} />, path: "/admin/cities" },
-    { label: "Admissions", icon: <CalendarCheck size={20} />, path: "/admin/admissions" },
-    
-    // ✅ NEW - Analytics Menu Item
-    { label: "Analytics", icon: <BarChart3 size={20} />, path: "/admin/analytics",},  
-    { label: "Admin Users", icon: <Users size={20} />, path: "/admin/admin-users" },
-    { label: "SEO & Settings", icon: <Settings size={20} />, path: "/admin/settings" },
+export default function AdminDashboard() {
+  const stats = [
+    { title: "Total Visitors", value: "12,345", icon: Users, trend: "+12%", color: "blue" },
+    { title: "Page Views", value: "45,678", icon: Eye, trend: "+8%", color: "green" },
+    { title: "Admissions", value: "156", icon: CalendarCheck, trend: "+5%", color: "purple" },
+    { title: "Results", value: "89", icon: Award, trend: "+3%", color: "orange" },
+    { title: "News", value: "234", icon: Newspaper, trend: "+15%", color: "red" },
+    { title: "Institutes", value: "45", icon: Building, trend: "+2%", color: "indigo" },
+    { title: "Programs", value: "89", icon: BookOpen, trend: "+7%", color: "pink" },
+    { title: "Cities", value: "23", icon: MapPin, trend: "+1%", color: "teal" },
   ];
 
-  const handleNavigation = (path: string) => {
-    router.push(path);
-  };
+  const recentActivities = [
+    { id: 1, title: "New admission opened for FAST University", time: "2 min ago", type: "admission" },
+    { id: 2, title: "BISE Lahore results announced", time: "1 hour ago", type: "result" },
+    { id: 3, title: "HEC scholarship deadline extended", time: "3 hours ago", type: "news" },
+  ];
 
   return (
-    <aside className="w-64 h-screen bg-gray-900 text-white flex flex-col">
+    <div>
       {/* Header */}
-      <div className="px-6 py-5 border-b border-gray-800">
-        <h1 className="text-lg font-semibold">Super Admin</h1>
-        <p className="text-xs text-gray-400">Public Educational Site</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+        <p className="text-gray-500">Welcome back! Here's what's happening today.</p>
       </div>
 
-      {/* Live Visitors Badge (Optional) */}
-      {activeVisitors > 0 && (
-        <div className="mx-4 mt-3 p-2 bg-gray-800 rounded-lg flex items-center gap-2">
-          <TrendingUp size={16} className="text-green-400" />
-          <span className="text-xs text-gray-300">
-            <span className="font-bold text-green-400">{activeVisitors}</span> active visitors
-          </span>
-        </div>
-      )}
-
-      {/* Menu Items */}
-      <nav className="mt-4 flex-1 overflow-y-auto">
-        {menuItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => handleNavigation(item.path)}
-            className="w-full flex items-center justify-between gap-3 px-6 py-3 text-sm hover:bg-gray-800 transition-colors rounded focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1 group"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-gray-400 group-hover:text-white transition-colors">
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </div>
-            
-            {/* Badge for active visitors */}
-            {item.badge && (
-              <span className={`${item.badgeColor || 'bg-blue-500'} text-white text-xs px-2 py-0.5 rounded-full animate-pulse`}>
-                {item.badge}
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
-
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-800 text-xs text-gray-400">
+      {/* Live Visitors */}
+      <div className="mb-6 bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-4 text-white">
         <div className="flex items-center justify-between">
-          <span>© {new Date().getFullYear()} NextID.pk</span>
-          {loading ? (
-            <span className="w-2 h-2 bg-gray-600 rounded-full animate-pulse"></span>
-          ) : (
-            <span className={`w-2 h-2 ${activeVisitors > 0 ? 'bg-green-500' : 'bg-gray-600'} rounded-full`}></span>
-          )}
+          <div className="flex items-center gap-3">
+            <TrendingUp size={24} />
+            <div>
+              <p className="text-lg font-semibold">48 Active Visitors</p>
+              <p className="text-sm text-green-100">Real-time visitors on your site</p>
+            </div>
+          </div>
+          <Link href="/admin/analytics" className="px-3 py-1 bg-white/20 rounded-lg text-sm">
+            View Details →
+          </Link>
         </div>
       </div>
-    </aside>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {stats.map((stat) => (
+          <div key={stat.title} className="bg-white rounded-lg shadow-sm border p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm text-gray-500">{stat.title}</p>
+                <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                  <ArrowUp size={12} /> {stat.trend}
+                </p>
+              </div>
+              <div className={`p-2 bg-${stat.color}-50 rounded-lg`}>
+                <stat.icon size={20} className={`text-${stat.color}-600`} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="p-4 border-b">
+          <h2 className="font-semibold">Recent Activity</h2>
+        </div>
+        <div className="divide-y">
+          {recentActivities.map((activity) => (
+            <div key={activity.id} className="p-4 flex justify-between items-center">
+              <div>
+                <p className="font-medium">{activity.title}</p>
+                <p className="text-sm text-gray-500">{activity.time}</p>
+              </div>
+              <span className="text-xs bg-gray-100 px-2 py-1 rounded">{activity.type}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
 // app/api/public/degrees/route.ts
-
 import { NextResponse } from "next/server";
 import { db } from "@/app/lib/db";
 import { degrees, levels } from "@/app/lib/schema";
@@ -19,9 +18,19 @@ export async function GET() {
       .where(eq(degrees.status, true))
       .orderBy(asc(degrees.displayOrder));
 
-    return NextResponse.json(allDegrees);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed to fetch degrees" }, { status: 500 });
+    const response = NextResponse.json({
+      success: true,
+      data: allDegrees,
+      total: allDegrees.length,
+    });
+
+    response.headers.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+
+    return response;
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Failed to fetch degrees" },
+      { status: 500 }
+    );
   }
 }

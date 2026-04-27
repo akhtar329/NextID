@@ -1,20 +1,30 @@
+// app/(public)/results/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
-import { results, programs, institutes, cities, boards } from '@/app/lib/schema';
+import { results, institutes, cities, boards } from '@/app/lib/schema';
 import { eq, and, ne, desc } from 'drizzle-orm';
 
-// ==================== TYPES ====================
-interface ProgramType {
-  id: number;
-  name: string | null;
-  slug: string | null;
-  detailedOverview: string | null;
-  commonEligibility: string | null;
-  typicalDuration: string | null;
-  careerOutlook: string | null;
-  typicalFeeRange: string | null;
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+export const fetchCache = 'force-cache';
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+  try {
+    const allResults = await db
+      .select({ slug: results.slug })
+      .from(results)
+      .where(eq(results.status, true))
+      .limit(200);
+    
+    return allResults.map((item) => ({
+      slug: item.slug,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 interface CityType {
@@ -58,12 +68,10 @@ interface ResultType {
   status: boolean | null;
   createdAt: Date | null;
   updatedAt: Date | null;
-  program: ProgramType | null;
   institute: InstituteType | null;
   board: BoardType | null;
 }
 
-// ==================== HELPER FUNCTIONS ====================
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -81,7 +89,6 @@ function formatShortDate(date: Date | null): string {
   });
 }
 
-// ==================== GET RESULT BY SLUG ====================
 async function getResultBySlug(slug: string): Promise<ResultType | null> {
   try {
     const [result] = await db
@@ -98,96 +105,107 @@ async function getResultBySlug(slug: string): Promise<ResultType | null> {
         status: results.status,
         createdAt: results.createdAt,
         updatedAt: results.updatedAt,
+        instituteId_field: institutes.id,
+        instituteName: institutes.name,
+        instituteSlug: institutes.slug,
+        instituteType: institutes.type,
+        instituteCityId: institutes.cityId,
+        instituteDescription: institutes.description,
+        instituteWebsite: institutes.website,
+        boardId_field: boards.id,
+        boardName: boards.name,
+        boardSlug: boards.slug,
+        boardCityId: boards.cityId,
+        boardWebsite: boards.website,
+        boardDescription: boards.description,
       })
       .from(results)
+      .leftJoin(institutes, eq(results.instituteId, institutes.id))
+      .leftJoin(boards, eq(results.boardId, boards.id))
       .where(eq(results.slug, slug))
       .limit(1);
 
     if (!result) return null;
 
-    // Get program details - no longer directly linked, so return null
-    const program: ProgramType | null = null;
+    let instituteCity: CityType | null = null;
+    let boardCity: CityType | null = null;
 
-    // Get institute details
+    if (result.instituteCityId) {
+      const [city] = await db
+        .select({
+          id: cities.id,
+          name: cities.name,
+          slug: cities.slug,
+          province: cities.province,
+        })
+        .from(cities)
+        .where(eq(cities.id, result.instituteCityId))
+        .limit(1);
+      instituteCity = city || null;
+    }
+
+    if (result.boardCityId) {
+      const [city] = await db
+        .select({
+          id: cities.id,
+          name: cities.name,
+          slug: cities.slug,
+          province: cities.province,
+        })
+        .from(cities)
+        .where(eq(cities.id, result.boardCityId))
+        .limit(1);
+      boardCity = city || null;
+    }
+
     let institute: InstituteType | null = null;
-    
-    if (result.instituteId) {
-      const [inst] = await db
-        .select({
-          id: institutes.id,
-          name: institutes.name,
-          slug: institutes.slug,
-          type: institutes.type,
-          cityId: institutes.cityId,
-          description: institutes.description,
-          website: institutes.website,
-        })
-        .from(institutes)
-        .where(eq(institutes.id, result.instituteId))
-        .limit(1);
-
-      if (inst) {
-        let city: CityType | null = null;
-        if (inst.cityId) {
-          const [c] = await db
-            .select({
-              id: cities.id,
-              name: cities.name,
-              slug: cities.slug,
-              province: cities.province,
-            })
-            .from(cities)
-            .where(eq(cities.id, inst.cityId))
-            .limit(1);
-          city = c || null;
-        }
-        institute = { ...inst, city };
-      }
+    if (result.instituteId_field) {
+      institute = {
+        id: result.instituteId_field,
+        name: result.instituteName,
+        slug: result.instituteSlug,
+        type: result.instituteType,
+        cityId: result.instituteCityId,
+        description: result.instituteDescription,
+        website: result.instituteWebsite,
+        city: instituteCity,
+      };
     }
 
-    // Get board details
     let board: BoardType | null = null;
-    if (result.boardId) {
-      const [b] = await db
-        .select({
-          id: boards.id,
-          name: boards.name,
-          slug: boards.slug,
-          cityId: boards.cityId,
-          website: boards.website,
-          description: boards.description,
-        })
-        .from(boards)
-        .where(eq(boards.id, result.boardId))
-        .limit(1);
-
-      if (b) {
-        let city: CityType | null = null;
-        if (b.cityId) {
-          const [c] = await db
-            .select({
-              id: cities.id,
-              name: cities.name,
-              slug: cities.slug,
-              province: cities.province,
-            })
-            .from(cities)
-            .where(eq(cities.id, b.cityId))
-            .limit(1);
-          city = c || null;
-        }
-        board = { ...b, city };
-      }
+    if (result.boardId_field) {
+      board = {
+        id: result.boardId_field,
+        name: result.boardName,
+        slug: result.boardSlug,
+        cityId: result.boardCityId,
+        website: result.boardWebsite,
+        description: result.boardDescription,
+        city: boardCity,
+      };
     }
 
-    return { ...result, program, institute, board };
-  } catch (error) {
-    console.error('Error fetching result:', error);
+    return {
+      id: result.id,
+      slug: result.slug,
+      title: result.title,
+      instituteId: result.instituteId,
+      boardId: result.boardId,
+      year: result.year,
+      resultDate: result.resultDate,
+      officialLink: result.officialLink,
+      isPopular: result.isPopular,
+      status: result.status,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      institute,
+      board,
+    };
+  } catch {
     return null;
   }
 }
 
-// ==================== GET RELATED RESULTS ====================
 async function getRelatedResults(result: ResultType) {
   if (!result.slug) return [];
   
@@ -223,13 +241,11 @@ async function getRelatedResults(result: ResultType) {
       .where(and(...conditions))
       .orderBy(desc(results.resultDate))
       .limit(5);
-  } catch (error) {
-    console.error('Error fetching related results:', error);
+  } catch {
     return [];
   }
 }
 
-// ==================== SEO FUNCTIONS ====================
 function generateMetaTitle(result: ResultType): string {
   const institutionName = result.institute?.name || result.board?.name || 'Board';
   const year = result.year || '2026';
@@ -253,7 +269,6 @@ function generateMetaDescription(result: ResultType): string {
   return description;
 }
 
-// ==================== METADATA ====================
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const result = await getResultBySlug(slug);
@@ -275,24 +290,53 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ==================== STATUS BADGE ====================
 function getStatusBadge(status: boolean | null) {
   if (status === true) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
   if (status === false) return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
   return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Unknown', icon: '❓' };
 }
 
-// ==================== MAIN PAGE ====================
-export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+async function getPageData(slug: string) {
   const result = await getResultBySlug(slug);
+  if (!result) return { result: null, relatedResults: [] };
   
-  if (!result) notFound();
-
   const relatedResults = await getRelatedResults(result);
+  return { result, relatedResults };
+}
+
+export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  let pageData;
+  
+  try {
+    const { slug } = await params;
+    pageData = await getPageData(slug);
+    
+    if (!pageData.result) {
+      notFound();
+    }
+  } catch {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-12">
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load result</h2>
+            <p className="text-gray-600">Please try again later</p>
+            <Link
+              href="/results"
+              className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+            >
+              View All Results
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const { result, relatedResults } = pageData;
   const statusBadge = getStatusBadge(result.status);
 
-  // Determine institution info
   const institutionName = result.institute?.name || result.board?.name || '';
   const institutionSlug = result.institute?.slug || result.board?.slug || '';
   const institutionType = result.institute ? 'universities' : 'boards';
@@ -301,11 +345,9 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
 
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Hero Section */}
       <div className="bg-gradient-to-r from-green-700 to-emerald-800 text-white">
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl">
-            {/* Breadcrumbs */}
             <div className="text-sm text-green-200 mb-4">
               <Link href="/" className="hover:text-white">Home</Link>
               {' / '}
@@ -314,7 +356,6 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               <span className="text-white">{result.title || 'Result'}</span>
             </div>
             
-            {/* Status Badge */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
               <span>{statusBadge.icon}</span>
               <span>{statusBadge.label}</span>
@@ -362,9 +403,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Main Content */}
           <div className="flex-1">
-            {/* Result Card */}
             <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Result Information</h2>
               
@@ -383,7 +422,6 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                 </div>
               </div>
 
-              {/* Official Links */}
               {(result.officialLink || officialWebsite) && (
                 <div className="border-t border-gray-200 pt-4">
                   <h3 className="font-semibold text-gray-900 mb-3">Official Resources</h3>
@@ -414,9 +452,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
             </div>
           </div>
 
-          {/* Sidebar */}
           <aside className="lg:w-80">
-            {/* How to Check Result */}
             <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                 <span>📝</span> How to Check Result?
@@ -424,7 +460,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               <ol className="space-y-3 text-sm text-gray-600">
                 <li className="flex gap-2">
                   <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                  <span>Click the "Check Result Online" button above</span>
+                  <span>Click the &quot;Check Result Online&quot; button above</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
@@ -436,12 +472,11 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                 </li>
                 <li className="flex gap-2">
                   <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                  <span>Click "Submit" to view your result</span>
+                  <span>Click &quot;Submit&quot; to view your result</span>
                 </li>
               </ol>
             </div>
 
-            {/* Related Results */}
             {relatedResults.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
                 <h3 className="font-bold text-gray-900 mb-3">Related Results</h3>
@@ -459,7 +494,6 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
         </div>
       </div>
 
-      {/* Schema Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

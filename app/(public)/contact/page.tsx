@@ -2,6 +2,9 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 
+export const revalidate = 86400;
+export const dynamic = 'force-static';
+
 export const metadata: Metadata = {
   title: 'Contact NextID.pk – Get Admissions Help & Educational Guidance in Pakistan',
   description: 'Reach out to NextID.pk for admissions, results, and educational guidance across Pakistan. Contact our support team today.',
@@ -19,7 +22,6 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Breadcrumbs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
@@ -30,7 +32,6 @@ export default function ContactPage() {
         </div>
       </div>
 
-      {/* Hero */}
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white py-16 relative overflow-hidden">
         <div className="container mx-auto px-4 text-center relative">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Contact NextID.pk</h1>
@@ -40,16 +41,13 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Contact Info + Form */}
       <section className="container mx-auto px-4 py-12">
         <div className="grid lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
           
-          {/* Left Column - Contact Info */}
           <div className="space-y-8">
             <div className="bg-white shadow-sm border border-gray-200 p-6 rounded-xl">
               <h2 className="text-2xl font-bold mb-6">Quick Connect</h2>
               <div className="grid sm:grid-cols-2 gap-4">
-                {/* Email */}
                 <div className="bg-blue-50 p-5 text-center rounded-lg hover:shadow-md transition">
                   <div className="text-3xl mb-2 text-blue-600">📧</div>
                   <h3 className="font-semibold text-gray-800">Email Us</h3>
@@ -58,7 +56,6 @@ export default function ContactPage() {
                   </a>
                   <p className="text-xs text-gray-500 mt-2">24/7 Support</p>
                 </div>
-                {/* Phone */}
                 <div className="bg-green-50 p-5 text-center rounded-lg hover:shadow-md transition">
                   <div className="text-3xl mb-2 text-green-600">📞</div>
                   <h3 className="font-semibold text-gray-800">Call Us</h3>
@@ -67,16 +64,14 @@ export default function ContactPage() {
                   </a>
                   <p className="text-xs text-gray-500 mt-2">Mon-Fri, 9am-6pm</p>
                 </div>
-                {/* WhatsApp */}
                 <div className="bg-green-100 p-5 text-center rounded-lg hover:shadow-md transition">
                   <div className="text-3xl mb-2 text-green-700">💬</div>
                   <h3 className="font-semibold text-gray-800">WhatsApp</h3>
-                  <a href="https://wa.me/923425537329" target="_blank" rel="noopener" className="text-sm text-green-700 hover:underline">
+                  <a href="https://wa.me/923425537329" target="_blank" rel="noopener noreferrer" className="text-sm text-green-700 hover:underline">
                     +92 342-5537329
                   </a>
                   <p className="text-xs text-gray-500 mt-2">Instant Response</p>
                 </div>
-                {/* Live Chat */}
                 <div className="bg-purple-50 p-5 text-center rounded-lg hover:shadow-md transition">
                   <div className="text-3xl mb-2 text-purple-600">💭</div>
                   <h3 className="font-semibold text-gray-800">Live Chat</h3>
@@ -86,7 +81,6 @@ export default function ContactPage() {
               </div>
             </div>
 
-            {/* Office Info */}
             <div className="bg-white shadow-sm border border-gray-200 p-6 rounded-xl">
               <h2 className="text-2xl font-bold mb-4">Visit Our Office</h2>
               <p className="text-gray-600">
@@ -95,19 +89,17 @@ export default function ContactPage() {
               <p className="mt-2 text-gray-600">Working Hours: Mon-Fri 9:00-18:00, Sat 10:00-14:00, Sun Closed</p>
             </div>
 
-            {/* SEO Text Section */}
             <div className="bg-white shadow-sm border border-gray-200 p-6 rounded-xl">
               <h2 className="text-2xl font-bold mb-4">About NextID.pk</h2>
               <p className="text-gray-700 mb-3">
-                NextID.pk is Pakistan’s education portal offering latest admissions, results, date sheets, and educational updates. Students from all provinces contact us for guidance and support.
+                NextID.pk is Pakistan's education portal offering latest admissions, results, date sheets, and educational updates. Students from all provinces contact us for guidance and support.
               </p>
               <p className="text-gray-700">
-                Contact us for personalized guidance on admissions, eligibility, and academic resources. We aim to provide reliable, accurate, and timely information to support students’ educational journey.
+                Contact us for personalized guidance on admissions, eligibility, and academic resources. We aim to provide reliable, accurate, and timely information to support students' educational journey.
               </p>
             </div>
           </div>
 
-          {/* Right Column - Contact Form */}
           <div className="bg-white shadow-sm border border-gray-200 p-8 rounded-xl">
             <h2 className="text-2xl font-bold mb-2">Send us a Message</h2>
             <p className="text-gray-600 mb-6">We'll respond within 24 hours</p>
@@ -129,7 +121,6 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Map Section */}
       <section className="bg-white py-12 border-t border-gray-200">
         <div className="container mx-auto px-4 max-w-4xl">
           <h2 className="text-2xl font-bold mb-6 text-center">Find Us on Map</h2>
@@ -142,7 +133,6 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* FAQ Section */}
       <section className="bg-gray-50 py-12">
         <div className="container mx-auto px-4 max-w-3xl">
           <h2 className="text-2xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
@@ -163,16 +153,18 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Structured Data */}
-      <script type="application/ld+json">
-        {JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "ContactPage",
-          "url": "https://www.nextid.pk/contact",
-          "name": "Contact NextID.pk",
-          "description": "Reach out to NextID.pk for admissions, results, and educational queries across Pakistan"
-        })}
-      </script>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ContactPage",
+            "url": "https://www.nextid.pk/contact",
+            "name": "Contact NextID.pk",
+            "description": "Reach out to NextID.pk for admissions, results, and educational queries across Pakistan"
+          })
+        }}
+      />
     </main>
   );
 }
