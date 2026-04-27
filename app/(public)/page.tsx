@@ -25,7 +25,7 @@ export const metadata: Metadata = generateSEOClient({
   image: "/og-image.jpg",
 });
 
-// ==================== TYPES ====================
+// ==================== TYPES ==================== +++++++++++++++++++
 type AdmissionType = {
   id: number;
   name: string;
