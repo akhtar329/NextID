@@ -9,7 +9,7 @@ import { eq, and, ne, desc } from 'drizzle-orm';
 
 export const revalidate = 86400;
 export const dynamic = 'force-static';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 export async function generateStaticParams() {
   try {

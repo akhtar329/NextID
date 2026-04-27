@@ -7,7 +7,7 @@ import { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
 
 export const revalidate = 3600;
 export const dynamic = 'force-static';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 interface DateSheetRow {
   id: number;

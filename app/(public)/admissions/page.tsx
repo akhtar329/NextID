@@ -16,7 +16,7 @@ import { generateSEO } from "@/app/lib/seo";
 
 export const revalidate = 86400;
 export const dynamic = 'force-static';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 const ITEMS_PER_PAGE = 10;
 

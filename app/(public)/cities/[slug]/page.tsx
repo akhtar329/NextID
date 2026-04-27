@@ -9,7 +9,7 @@ import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
 export const revalidate = 86400;
 export const dynamic = 'force-static';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 function formatDate(date: Date | null): string {
   if (!date) return '';

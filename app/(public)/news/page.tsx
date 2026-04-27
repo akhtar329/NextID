@@ -11,7 +11,7 @@ export const revalidate = 3600;
 export const dynamic = 'force-static';
 export const fetchCache = 'force-cache';
 export const preferredRegion = 'auto';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 interface CategoryNewsItem {
   id: number;

@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export const revalidate = 86400;
 export const dynamic = 'force-static';
-export const dynamicParams = true;
+// remove dynamicparams= true
 
 interface DateSheetPageProps {
   params: Promise<{ slug: string }>;
