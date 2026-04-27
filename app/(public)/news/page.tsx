@@ -1,16 +1,42 @@
-// app/(public)/news/page.tsx
+// app/(public)/news/page.tsx (COMPLETE WORKING VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Image from 'next/image';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, desc, sql } from 'drizzle-orm';
-export const revalidate = 86400;\nimport type { NewsItem, TrendingItem } from '@/app/types/types';
+import Image from 'next/image';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
+import { eq, desc, sql } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
-export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
+export const fetchCache = 'force-cache';
 export const preferredRegion = 'auto';
-// remove dynamicparams= true
+
+// ============================================
+// TYPE DEFINITIONS
+// ============================================
+interface NewsItem {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string | null;
+  imageUrl: string | null;
+  source: string | null;
+  author: string | null;
+  isBreaking: boolean | null;
+  isFeatured: boolean | null;
+  viewCount: number | null;
+  publishedAt: Date | null;
+}
+
+interface TrendingItem {
+  id: number;
+  title: string;
+  slug: string;
+  viewCount: number | null;
+  publishedAt: Date | null;
+}
 
 interface CategoryNewsItem {
   id: number;
@@ -41,6 +67,22 @@ interface FeaturedNewsItem {
   viewCount: number | null;
 }
 
+interface CategoryWithCount {
+  name: string;
+  slug: string;
+  count: number;
+}
+
+interface AllNewsResult {
+  breakingNews: NewsItem[];
+  featuredNews: FeaturedNewsItem[];
+  regularNews: NewsItem[];
+  allNews: NewsItem[];
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -75,191 +117,210 @@ export const metadata: Metadata = {
   }
 };
 
-interface AllNewsResult {
-  breakingNews: NewsItem[];
-  featuredNews: FeaturedNewsItem[];
-  regularNews: NewsItem[];
-  allNews: NewsItem[];
-}
+// ============================================
+// DATA FETCHING FUNCTIONS (CACHED)
+// ============================================
 
 async function getAllNewsOptimized(): Promise<AllNewsResult> {
-  try {
-    const data = await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        excerpt: news.excerpt,
-        content: news.content,
-        imageUrl: news.imageUrl,
-        source: news.source,
-        author: news.author,
-        isBreaking: news.isBreaking,
-        isFeatured: news.isFeatured,
-        viewCount: news.viewCount,
-        publishedAt: news.publishedAt,
-      })
-      .from(news)
-      .where(eq(news.status, true))
-      .orderBy(desc(news.publishedAt))
-      .limit(20);
-    
-    const breakingNews = data.filter(n => n.isBreaking).slice(0, 4);
-    const featuredNews = data.filter(n => n.isFeatured).slice(0, 5);
-    const regularNews = data.filter(n => !n.isBreaking && !n.isFeatured).slice(0, 6);
-    
-    return { breakingNews, featuredNews, regularNews, allNews: data };
-  } catch {
-    return { breakingNews: [], featuredNews: [], regularNews: [], allNews: [] };
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        const data = await db
+          .select({
+            id: news.id,
+            title: news.title,
+            slug: news.slug,
+            excerpt: news.excerpt,
+            content: news.content,
+            imageUrl: news.imageUrl,
+            source: news.source,
+            author: news.author,
+            isBreaking: news.isBreaking,
+            isFeatured: news.isFeatured,
+            viewCount: news.viewCount,
+            publishedAt: news.publishedAt,
+          })
+          .from(news)
+          .where(eq(news.status, true))
+          .orderBy(desc(news.publishedAt))
+          .limit(20);
+        
+        const breakingNews = data.filter((n: NewsItem) => n.isBreaking).slice(0, 4);
+        const featuredNews = data.filter((n: NewsItem) => n.isFeatured).slice(0, 5);
+        const regularNews = data.filter((n: NewsItem) => !n.isBreaking && !n.isFeatured).slice(0, 6);
+        
+        return { breakingNews, featuredNews, regularNews, allNews: data };
+      } catch {
+        return { breakingNews: [], featuredNews: [], regularNews: [], allNews: [] };
+      }
+    },
+    ['all-news'],
+    { revalidate: 3600, tags: ['news'] }
+  )();
 }
 
 async function getTrendingOptimized(): Promise<TrendingItem[]> {
-  try {
-    return await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        viewCount: news.viewCount,
-        publishedAt: news.publishedAt,
-      })
-      .from(news)
-      .where(eq(news.status, true))
-      .orderBy(desc(news.viewCount))
-      .limit(5);
-  } catch {
-    return [];
-  }
+  return unstable_cache(
+    async () => {
+      try {
+        return await db
+          .select({
+            id: news.id,
+            title: news.title,
+            slug: news.slug,
+            viewCount: news.viewCount,
+            publishedAt: news.publishedAt,
+          })
+          .from(news)
+          .where(eq(news.status, true))
+          .orderBy(desc(news.viewCount))
+          .limit(5);
+      } catch {
+        return [];
+      }
+    },
+    ['trending-news'],
+    { revalidate: 3600, tags: ['news-trending'] }
+  )();
 }
 
 async function getAllCategoryNewsOptimized() {
-  try {
-    const [cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews] = await Promise.all([
-      db
-        .select({
-          id: cities.id,
-          title: cities.name,
-          slug: cities.slug,
-          excerpt: cities.description,
-          imageUrl: cities.imageUrl,
-          publishedAt: cities.createdAt,
-          type: sql<string>`'city'`.as('type'),
-        })
-        .from(cities)
-        .where(eq(cities.status, true))
-        .orderBy(desc(cities.createdAt))
-        .limit(5),
-      
-      db
-        .select({
-          id: admissions.id,
-          title: admissions.name,
-          slug: admissions.slug,
-          excerpt: admissions.note,
-          imageUrl: admissions.featuredImage,
-          publishedAt: admissions.createdAt,
-          type: sql<string>`'admission'`.as('type'),
-        })
-        .from(admissions)
-        .where(eq(admissions.status, 'Open'))
-        .orderBy(desc(admissions.createdAt))
-        .limit(5),
-      
-      db
-        .select({
-          id: results.id,
-          title: results.title,
-          slug: results.slug,
-          excerpt: sql<string>`NULL`.as('excerpt'),
-          imageUrl: sql<string>`NULL`.as('imageUrl'),
-          publishedAt: results.createdAt,
-          type: sql<string>`'result'`.as('type'),
-        })
-        .from(results)
-        .where(eq(results.status, true))
-        .orderBy(desc(results.createdAt))
-        .limit(5),
-      
-      db
-        .select({
-          id: institutes.id,
-          title: institutes.name,
-          slug: institutes.slug,
-          excerpt: institutes.description,
-          imageUrl: institutes.featuredImage,
-          publishedAt: institutes.createdAt,
-          type: sql<string>`'university'`.as('type'),
-        })
-        .from(institutes)
-        .where(eq(institutes.status, true))
-        .orderBy(desc(institutes.createdAt))
-        .limit(5),
-      
-      db
-        .select({
-          id: boards.id,
-          title: boards.name,
-          slug: boards.slug,
-          excerpt: boards.description,
-          imageUrl: sql<string>`NULL`.as('imageUrl'),
-          publishedAt: boards.createdAt,
-          type: sql<string>`'board'`.as('type'),
-        })
-        .from(boards)
-        .where(eq(boards.status, true))
-        .orderBy(desc(boards.createdAt))
-        .limit(5),
-      
-      db
-        .select({
-          id: programs.id,
-          title: programs.name,
-          slug: programs.slug,
-          excerpt: programs.shortDescription,
-          imageUrl: sql<string>`NULL`.as('imageUrl'),
-          publishedAt: programs.createdAt,
-          type: sql<string>`'program'`.as('type'),
-        })
-        .from(programs)
-        .where(eq(programs.status, true))
-        .orderBy(desc(programs.createdAt))
-        .limit(5),
-    ]);
+  return unstable_cache(
+    async () => {
+      try {
+        const [cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews] = await Promise.all([
+          db
+            .select({
+              id: cities.id,
+              title: cities.name,
+              slug: cities.slug,
+              excerpt: cities.description,
+              imageUrl: cities.imageUrl,
+              publishedAt: cities.createdAt,
+              type: sql<string>`'city'`.as('type'),
+            })
+            .from(cities)
+            .where(eq(cities.status, true))
+            .orderBy(desc(cities.createdAt))
+            .limit(5),
+          
+          db
+            .select({
+              id: admissions.id,
+              title: admissions.name,
+              slug: admissions.slug,
+              excerpt: admissions.note,
+              imageUrl: admissions.featuredImage,
+              publishedAt: admissions.createdAt,
+              type: sql<string>`'admission'`.as('type'),
+            })
+            .from(admissions)
+            .where(eq(admissions.status, 'Open'))
+            .orderBy(desc(admissions.createdAt))
+            .limit(5),
+          
+          db
+            .select({
+              id: results.id,
+              title: results.title,
+              slug: results.slug,
+              excerpt: sql<string>`NULL`.as('excerpt'),
+              imageUrl: sql<string>`NULL`.as('imageUrl'),
+              publishedAt: results.createdAt,
+              type: sql<string>`'result'`.as('type'),
+            })
+            .from(results)
+            .where(eq(results.status, true))
+            .orderBy(desc(results.createdAt))
+            .limit(5),
+          
+          db
+            .select({
+              id: institutes.id,
+              title: institutes.name,
+              slug: institutes.slug,
+              excerpt: institutes.description,
+              imageUrl: institutes.featuredImage,
+              publishedAt: institutes.createdAt,
+              type: sql<string>`'university'`.as('type'),
+            })
+            .from(institutes)
+            .where(eq(institutes.status, true))
+            .orderBy(desc(institutes.createdAt))
+            .limit(5),
+          
+          db
+            .select({
+              id: boards.id,
+              title: boards.name,
+              slug: boards.slug,
+              excerpt: boards.description,
+              imageUrl: sql<string>`NULL`.as('imageUrl'),
+              publishedAt: boards.createdAt,
+              type: sql<string>`'board'`.as('type'),
+            })
+            .from(boards)
+            .where(eq(boards.status, true))
+            .orderBy(desc(boards.createdAt))
+            .limit(5),
+          
+          db
+            .select({
+              id: programs.id,
+              title: programs.name,
+              slug: programs.slug,
+              excerpt: programs.shortDescription,
+              imageUrl: sql<string>`NULL`.as('imageUrl'),
+              publishedAt: programs.createdAt,
+              type: sql<string>`'program'`.as('type'),
+            })
+            .from(programs)
+            .where(eq(programs.status, true))
+            .orderBy(desc(programs.createdAt))
+            .limit(5),
+        ]);
 
-    return { cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews };
-  } catch {
-    return { cityNews: [], admissionsNews: [], resultsNews: [], universitiesNews: [], boardsNews: [], programsNews: [] };
-  }
-}
-
-interface CategoryWithCount {
-  name: string;
-  slug: string;
-  count: number;
+        return { cityNews, admissionsNews, resultsNews, universitiesNews, boardsNews, programsNews };
+      } catch {
+        return { cityNews: [], admissionsNews: [], resultsNews: [], universitiesNews: [], boardsNews: [], programsNews: [] };
+      }
+    },
+    ['category-news'],
+    { revalidate: 86400, tags: ['news-categories'] }
+  )();
 }
 
 async function getDynamicCategoriesOptimized(): Promise<CategoryWithCount[]> {
-  try {
-    const totalNews = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(news)
-      .where(eq(news.status, true))
-      .then(r => Number(r[0]?.count) || 0);
+  return unstable_cache(
+    async () => {
+      try {
+        const totalNews = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(news)
+          .where(eq(news.status, true))
+          .then(r => Number(r[0]?.count) || 0);
 
-    return [
-      { name: 'All News', slug: 'all', count: totalNews },
-      { name: 'Admissions', slug: 'admissions', count: 0 },
-      { name: 'Results', slug: 'results', count: 0 },
-      { name: 'Scholarships', slug: 'scholarships', count: 0 },
-      { name: 'Board News', slug: 'boards', count: 0 },
-      { name: 'Universities', slug: 'universities', count: 0 },
-      { name: 'Jobs', slug: 'jobs', count: 0 },
-    ];
-  } catch {
-    return [{ name: 'All News', slug: 'all', count: 0 }];
-  }
+        return [
+          { name: 'All News', slug: 'all', count: totalNews },
+          { name: 'Admissions', slug: 'admissions', count: 0 },
+          { name: 'Results', slug: 'results', count: 0 },
+          { name: 'Scholarships', slug: 'scholarships', count: 0 },
+          { name: 'Board News', slug: 'boards', count: 0 },
+          { name: 'Universities', slug: 'universities', count: 0 },
+          { name: 'Jobs', slug: 'jobs', count: 0 },
+        ];
+      } catch {
+        return [{ name: 'All News', slug: 'all', count: 0 }];
+      }
+    },
+    ['dynamic-categories'],
+    { revalidate: 86400, tags: ['news-categories'] }
+  )();
 }
+
+// ============================================
+// UI COMPONENTS
+// ============================================
 
 function HeroSection({ allBreakingNews }: { allBreakingNews: NewsItem[] }) {
   const bannerNews = allBreakingNews[0];
@@ -528,6 +589,9 @@ function CategorySidebar({ categories, activeCategory }: { categories: CategoryW
   );
 }
 
+// ============================================
+// PAGE DATA FETCHING
+// ============================================
 async function getPageData(category: string) {
   const [
     { breakingNews, featuredNews, regularNews },
@@ -557,30 +621,46 @@ async function getPageData(category: string) {
   };
 }
 
+// ============================================
+// MAIN PAGE COMPONENT
+// ============================================
+function ErrorState() {
+  return (
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
+      <div className="text-center py-12 bg-gray-50 rounded-lg">
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load news</h2>
+        <p className="text-gray-600">Please try again later</p>
+        <Link href="/" className="inline-block mt-4 text-red-600 hover:underline">Go to Homepage</Link>
+      </div>
+    </div>
+  );
+}
+
 export default async function NewsPage({ 
   searchParams 
 }: { 
   searchParams?: Promise<{ [key: string]: string }>
 }) {
   let pageData;
+  let fetchError = false;
   
   try {
     const params = await searchParams || {};
     const category = params.category || 'all';
     pageData = await getPageData(category);
   } catch {
-    return (
-      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load news</h2>
-          <p className="text-gray-600">Please try again later</p>
-        </div>
-      </div>
-    );
+    fetchError = true;
+  }
+
+  if (fetchError || !pageData) {
+    return <ErrorState />;
   }
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=3600, stale-while-revalidate=86400" />
+      
       <HeroSection allBreakingNews={pageData.breakingNews} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -618,4 +698,3 @@ export default async function NewsPage({
     </div>
   );
 }
-

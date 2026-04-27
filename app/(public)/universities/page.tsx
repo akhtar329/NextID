@@ -1,13 +1,15 @@
-// app/(public)/universities/page.tsx
+// app/(public)/universities/page.tsx (COMPLETE OPTIMIZED VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, desc, like, and, or, sql, count, inArray, SQL } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
+import { eq, desc, like, and, or, sql, count, inArray, SQL } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
-export const revalidate = 86400;\nexport const metadata: Metadata = {
+export const metadata: Metadata = {
   title: 'Top Universities in Pakistan 2026 | Rankings, Admissions & Fees | NextID.pk',
   description: 'Find top universities in Pakistan: NUST, FAST, LUMS, Punjab University, Karachi University. Check rankings, admissions 2026, fees, programs & eligibility',
   keywords: 'universities in Pakistan, top universities Pakistan, NUST, FAST, LUMS, Punjab University, Karachi University, university rankings Pakistan, university admissions 2026, university fees, university programs',
@@ -79,109 +81,156 @@ const UNIVERSITY_RANKINGS: Record<string, number> = {
   'air': 10,
 };
 
+// ✅ OPTIMIZED: Cached version of getUniversities
 async function getUniversities(filters: Filters): Promise<University[]> {
-  try {
-    const conditions: SQL[] = [];
+  const cacheKey = `universities-list-${JSON.stringify(filters)}`;
+  
+  return unstable_cache(
+    async () => {
+      try {
+        const conditions: SQL[] = [];
 
-    if (filters.city) {
-      conditions.push(eq(cities.slug, filters.city));
+        if (filters.city) {
+          conditions.push(eq(cities.slug, filters.city));
+        }
+
+        if (filters.type) {
+          conditions.push(eq(institutes.type, filters.type));
+        }
+
+        if (filters.q) {
+          const searchTerm = `%${filters.q}%`;
+          conditions.push(
+            or(
+              like(institutes.name, searchTerm),
+              like(cities.name, searchTerm)
+            ) as SQL
+          );
+        }
+
+        const institutesList = await db
+          .select({
+            id: institutes.id,
+            name: institutes.name,
+            slug: institutes.slug,
+            type: institutes.type,
+            city: cities.name,
+            citySlug: cities.slug,
+            website: institutes.website,
+            description: institutes.description,
+            isFeatured: institutes.isFeatured,
+          })
+          .from(institutes)
+          .innerJoin(cities, eq(institutes.cityId, cities.id))
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(desc(institutes.isFeatured), institutes.name)
+          .limit(100);
+
+        if (institutesList.length === 0) return [];
+
+        const instituteIds = institutesList.map(i => i.id);
+
+        const [programsCounts, admissionsCounts] = await Promise.all([
+          db
+            .select({
+              instituteId: programOfferings.instituteId,
+              count: count(),
+            })
+            .from(programOfferings)
+            .where(inArray(programOfferings.instituteId, instituteIds))
+            .groupBy(programOfferings.instituteId),
+          
+          db
+            .select({
+              instituteId: admissions.instituteId,
+              count: count(),
+            })
+            .from(admissions)
+            .where(and(inArray(admissions.instituteId, instituteIds), eq(admissions.status, 'Open')))
+            .groupBy(admissions.instituteId),
+        ]);
+
+        const programsMap = new Map(programsCounts.map(p => [p.instituteId, Number(p.count)]));
+        const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
+
+        const institutesWithStats = institutesList.map((inst) => ({
+          ...inst,
+          programsCount: programsMap.get(inst.id) || 0,
+          admissionsCount: admissionsMap.get(inst.id) || 0,
+          established: null,
+        }));
+
+        const universitiesWithRanking = institutesWithStats.map(uni => ({
+          ...uni,
+          ranking: UNIVERSITY_RANKINGS[uni.slug] || 999,
+        }));
+
+        return universitiesWithRanking.sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch universities:', error);
+        return [];
+      }
+    },
+    [cacheKey],
+    {
+      revalidate: 86400,
+      tags: ['universities'],
     }
-
-    if (filters.type) {
-      conditions.push(eq(institutes.type, filters.type));
-    }
-
-    if (filters.q) {
-      const searchTerm = `%${filters.q}%`;
-      conditions.push(
-        or(
-          like(institutes.name, searchTerm),
-          like(cities.name, searchTerm)
-        ) as SQL
-      );
-    }
-
-    const institutesList = await db
-      .select({
-        id: institutes.id,
-        name: institutes.name,
-        slug: institutes.slug,
-        type: institutes.type,
-        city: cities.name,
-        citySlug: cities.slug,
-        website: institutes.website,
-        description: institutes.description,
-        isFeatured: institutes.isFeatured,
-      })
-      .from(institutes)
-      .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(institutes.isFeatured), institutes.name)
-      .limit(100);
-
-    if (institutesList.length === 0) return [];
-
-    const instituteIds = institutesList.map(i => i.id);
-
-    const programsCounts = await db
-      .select({
-        instituteId: programOfferings.instituteId,
-        count: count(),
-      })
-      .from(programOfferings)
-      .where(inArray(programOfferings.instituteId, instituteIds))
-      .groupBy(programOfferings.instituteId);
-
-    const admissionsCounts = await db
-      .select({
-        instituteId: admissions.instituteId,
-        count: count(),
-      })
-      .from(admissions)
-      .where(and(inArray(admissions.instituteId, instituteIds), eq(admissions.status, 'Open')))
-      .groupBy(admissions.instituteId);
-
-    const programsMap = new Map(programsCounts.map(p => [p.instituteId, Number(p.count)]));
-    const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
-
-    const institutesWithStats = institutesList.map((inst) => ({
-      ...inst,
-      programsCount: programsMap.get(inst.id) || 0,
-      admissionsCount: admissionsMap.get(inst.id) || 0,
-      established: null,
-    }));
-
-    const universitiesWithRanking = institutesWithStats.map(uni => ({
-      ...uni,
-      ranking: UNIVERSITY_RANKINGS[uni.slug] || 999,
-    }));
-
-    return universitiesWithRanking.sort((a, b) => (a.ranking || 999) - (b.ranking || 999));
-  } catch {
-    return [];
-  }
+  )();
 }
 
+// ✅ OPTIMIZED: Cached version of getStats
 async function getStats() {
-  try {
-    const [totalInstitutes] = await db.select({ count: count() }).from(institutes);
-    const [totalCities] = await db.select({ count: count() }).from(cities);
-    
-    const institutesWithAdmissions = await db
-      .select({ count: sql<number>`COUNT(DISTINCT ${institutes.id})` })
-      .from(institutes)
-      .innerJoin(admissions, eq(institutes.id, admissions.instituteId))
-      .where(eq(admissions.status, 'Open'))
-      .then(result => Number(result[0]?.count) || 0);
+  return unstable_cache(
+    async () => {
+      try {
+        const [totalInstitutes] = await db.select({ count: count() }).from(institutes);
+        const [totalCities] = await db.select({ count: count() }).from(cities);
+        
+        const institutesWithAdmissions = await db
+          .select({ count: sql<number>`COUNT(DISTINCT ${institutes.id})` })
+          .from(institutes)
+          .innerJoin(admissions, eq(institutes.id, admissions.instituteId))
+          .where(eq(admissions.status, 'Open'))
+          .then(result => Number(result[0]?.count) || 0);
 
-    return {
-      totalInstitutes: Number(totalInstitutes?.count) || 0,
-      totalCities: Number(totalCities?.count) || 0,
-      institutesWithAdmissions,
-    };
-  } catch {
-    return { totalInstitutes: 0, totalCities: 0, institutesWithAdmissions: 0 };
-  }
+        return {
+          totalInstitutes: Number(totalInstitutes?.count) || 0,
+          totalCities: Number(totalCities?.count) || 0,
+          institutesWithAdmissions,
+        };
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch stats:', error);
+        return { totalInstitutes: 0, totalCities: 0, institutesWithAdmissions: 0 };
+      }
+    },
+    ['universities-stats'],
+    {
+      revalidate: 86400,
+      tags: ['universities-stats'],
+    }
+  )();
+}
+
+// ✅ Error boundary component
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load universities</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 function Breadcrumbs({ filters }: { filters: Filters }) {
@@ -220,18 +269,38 @@ export default async function UniversitiesPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const params = await searchParams || {};
+  let universities: University[] = [];
+  let stats = { totalInstitutes: 0, totalCities: 0, institutesWithAdmissions: 0 };
+  let fetchError = false;
   
+  try {
+    const params = await searchParams || {};
+    
+    const filters: Filters = {
+      city: typeof params.city === 'string' ? params.city : '',
+      type: typeof params.type === 'string' ? params.type : '',
+      q: typeof params.q === 'string' ? params.q : '',
+    };
+
+    [universities, stats] = await Promise.all([
+      getUniversities(filters),
+      getStats(),
+    ]);
+  } catch (error) {
+    console.error('[PAGE] Failed to load universities:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
+
+  const params = await searchParams || {};
   const filters: Filters = {
     city: typeof params.city === 'string' ? params.city : '',
     type: typeof params.type === 'string' ? params.type : '',
     q: typeof params.q === 'string' ? params.q : '',
   };
-
-  const [universities, stats] = await Promise.all([
-    getUniversities(filters),
-    getStats(),
-  ]);
 
   const featuredUniversities = universities.filter(u => u.isFeatured).slice(0, 4);
   const regularUniversities = universities.filter(u => !u.isFeatured);
@@ -247,6 +316,8 @@ export default async function UniversitiesPage({
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <section className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
         <div className="container mx-auto px-4 py-12">
@@ -586,4 +657,3 @@ export default async function UniversitiesPage({
     </main>
   );
 }
-

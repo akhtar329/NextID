@@ -1,13 +1,13 @@
-// app/(public)/boards/page.tsx
+// app/(public)/boards/page.tsx (OPTIMIZED VERSION - FIXED ESLINT ERRORS)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { boards, cities, results, dateSheets } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, like, and, sql, count } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { boards, cities, results, dateSheets } from '@/app/lib/schema';
+import { eq, like, and, sql, count } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
-export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
-// remove dynamicparams= true
+// ✅ 24 hours cache (as requested - single person updates)
+export const revalidate = 86400;
 
 export async function generateStaticParams() {
   try {
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
   },
 };
 
-interface Board {
+interface BoardItem {
   id: number;
   name: string;
   slug: string;
@@ -107,98 +107,122 @@ const BOARD_ESTABLISHED: Record<string, string> = {
   'akueb': '2002',
 };
 
+// ✅ ADDED: Cached version of getBoards
 async function getBoards(filters: {
   province?: string;
   type?: string;
   q?: string;
 }) {
-  try {
-    const conditions: (ReturnType<typeof eq> | ReturnType<typeof like>)[] = [];
-    conditions.push(eq(boards.status, true));
+  const cacheKey = `boards-list-${JSON.stringify(filters)}`;
+  
+  return unstable_cache(
+    async () => {
+      try {
+        const conditions: (ReturnType<typeof eq> | ReturnType<typeof like>)[] = [];
+        conditions.push(eq(boards.status, true));
 
-    if (filters.type && filters.type !== '') {
-      if (filters.type === 'bise') {
-        conditions.push(like(boards.name, '%BISE%'));
-      } else if (filters.type === 'fbise') {
-        conditions.push(like(boards.name, '%FBISE%'));
-      } else if (filters.type === 'akueb') {
-        conditions.push(like(boards.name, '%AKUEB%'));
+        if (filters.type && filters.type !== '') {
+          if (filters.type === 'bise') {
+            conditions.push(like(boards.name, '%BISE%'));
+          } else if (filters.type === 'fbise') {
+            conditions.push(like(boards.name, '%FBISE%'));
+          } else if (filters.type === 'akueb') {
+            conditions.push(like(boards.name, '%AKUEB%'));
+          }
+        }
+
+        if (filters.q) {
+          const searchTerm = `%${filters.q}%`;
+          conditions.push(like(boards.name, searchTerm));
+        }
+
+        const boardsData = await db
+          .select({
+            id: boards.id,
+            name: boards.name,
+            slug: boards.slug,
+            city: cities.name,
+            citySlug: cities.slug,
+            website: boards.website,
+            description: boards.description,
+            resultsCount: sql<number>`count(DISTINCT ${results.id})`,
+            dateSheetsCount: sql<number>`count(DISTINCT ${dateSheets.id})`,
+            latestResultYear: sql<number | null>`max(${results.year})`,
+          })
+          .from(boards)
+          .leftJoin(cities, eq(boards.cityId, cities.id))
+          .leftJoin(results, eq(boards.id, results.boardId))
+          .leftJoin(dateSheets, eq(boards.id, dateSheets.boardId))
+          .where(and(...conditions))
+          .groupBy(
+            boards.id, boards.name, boards.slug,
+            cities.name, cities.slug,
+            boards.website, boards.description
+          )
+          .orderBy(boards.name)
+          .limit(100);
+
+        const boardsWithDetails = boardsData.map(board => ({
+          ...board,
+          resultsCount: board.resultsCount || 0,
+          dateSheetsCount: board.dateSheetsCount || 0,
+          established: BOARD_ESTABLISHED[board.slug] || 'N/A',
+        }));
+
+        let filteredBoards = boardsWithDetails;
+        if (filters.province && filters.province !== '') {
+          const citiesList = PROVINCE_CITIES[filters.province] || [];
+          filteredBoards = boardsWithDetails.filter(board => 
+            board.city && citiesList.includes(board.city)
+          );
+        }
+
+        return filteredBoards;
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch boards:', error);
+        return [];
       }
+    },
+    [cacheKey],
+    {
+      revalidate: 86400, // 24 hours as requested
+      tags: ['boards-list'],
     }
-
-    if (filters.q) {
-      const searchTerm = `%${filters.q}%`;
-      conditions.push(like(boards.name, searchTerm));
-    }
-
-    const boardsData = await db
-      .select({
-        id: boards.id,
-        name: boards.name,
-        slug: boards.slug,
-        city: cities.name,
-        citySlug: cities.slug,
-        website: boards.website,
-        description: boards.description,
-        resultsCount: sql<number>`count(DISTINCT ${results.id})`,
-        dateSheetsCount: sql<number>`count(DISTINCT ${dateSheets.id})`,
-        latestResultYear: sql<number | null>`max(${results.year})`,
-      })
-      .from(boards)
-      .leftJoin(cities, eq(boards.cityId, cities.id))
-      .leftJoin(results, eq(boards.id, results.boardId))
-      .leftJoin(dateSheets, eq(boards.id, dateSheets.boardId))
-      .where(and(...conditions))
-      .groupBy(
-        boards.id, boards.name, boards.slug,
-        cities.name, cities.slug,
-        boards.website, boards.description
-      )
-      .orderBy(boards.name)
-      .limit(100);
-
-    const boardsWithDetails = boardsData.map(board => ({
-      ...board,
-      resultsCount: board.resultsCount || 0,
-      dateSheetsCount: board.dateSheetsCount || 0,
-      established: BOARD_ESTABLISHED[board.slug] || 'N/A',
-    }));
-
-    let filteredBoards = boardsWithDetails;
-    if (filters.province && filters.province !== '') {
-      const citiesList = PROVINCE_CITIES[filters.province] || [];
-      filteredBoards = boardsWithDetails.filter(board => 
-        board.city && citiesList.includes(board.city)
-      );
-    }
-
-    return filteredBoards;
-  } catch {
-    return [];
-  }
+  )();
 }
 
+// ✅ ADDED: Cached version of getStats
 async function getStats(): Promise<Stats> {
-  try {
-    const [totalBoardsResult, totalCitiesResult, boardsWithResultsResult] = await Promise.all([
-      db.select({ count: count() }).from(boards).where(eq(boards.status, true)),
-      db.select({ count: count() }).from(cities).where(eq(cities.status, true)),
-      db
-        .select({ count: sql<number>`COUNT(DISTINCT ${boards.id})` })
-        .from(boards)
-        .innerJoin(results, eq(boards.id, results.boardId))
-        .where(eq(results.year, 2026))
-        .then(result => Number(result[0]?.count) || 0),
-    ]);
+  return unstable_cache(
+    async () => {
+      try {
+        const [totalBoardsResult, totalCitiesResult, boardsWithResultsResult] = await Promise.all([
+          db.select({ count: count() }).from(boards).where(eq(boards.status, true)),
+          db.select({ count: count() }).from(cities).where(eq(cities.status, true)),
+          db
+            .select({ count: sql<number>`COUNT(DISTINCT ${boards.id})` })
+            .from(boards)
+            .innerJoin(results, eq(boards.id, results.boardId))
+            .where(eq(results.year, 2026))
+            .then(result => Number(result[0]?.count) || 0),
+        ]);
 
-    return {
-      totalBoards: Number(totalBoardsResult[0]?.count) || 0,
-      totalCities: Number(totalCitiesResult[0]?.count) || 0,
-      boardsWithResults: boardsWithResultsResult,
-    };
-  } catch {
-    return { totalBoards: 0, totalCities: 0, boardsWithResults: 0 };
-  }
+        return {
+          totalBoards: Number(totalBoardsResult[0]?.count) || 0,
+          totalCities: Number(totalCitiesResult[0]?.count) || 0,
+          boardsWithResults: boardsWithResultsResult,
+        };
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch stats:', error);
+        return { totalBoards: 0, totalCities: 0, boardsWithResults: 0 };
+      }
+    },
+    ['boards-stats'],
+    {
+      revalidate: 86400, // 24 hours
+      tags: ['boards-stats'],
+    }
+  )();
 }
 
 function Breadcrumbs({ filters }: { filters: { province?: string; type?: string; q?: string } }) {
@@ -239,6 +263,7 @@ function Breadcrumbs({ filters }: { filters: { province?: string; type?: string;
   );
 }
 
+// ✅ FIXED: Moved data fetching OUT of the component return
 async function getPageData(filters: {
   province?: string;
   type?: string;
@@ -251,12 +276,36 @@ async function getPageData(filters: {
   return { boards: boardsList, stats };
 }
 
+// ✅ FIXED: Error boundary component for rendering errors
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load boards</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ✅ FIXED: Main component with proper error handling (NO try/catch wrapping JSX)
 export default async function BoardsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  // ✅ Data fetching happens BEFORE any JSX return
   let pageData;
+  let fetchError = false;
   
   try {
     const params = await searchParams || {};
@@ -268,392 +317,387 @@ export default async function BoardsPage({
     };
 
     pageData = await getPageData(filters);
+  } catch (error) {
+    console.error('[PAGE] Failed to load boards page:', error);
+    fetchError = true;
+  }
 
-    const buildUrl = (key: string, value: string) => {
-      const urlParams = new URLSearchParams();
-      if (filters.province && key !== 'province') urlParams.set('province', filters.province);
-      if (filters.type && key !== 'type') urlParams.set('type', filters.type);
-      if (filters.q && key !== 'q') urlParams.set('q', filters.q);
-      if (value) urlParams.set(key, value);
-      return urlParams.toString() ? `/boards?${urlParams.toString()}` : '/boards';
-    };
+  // ✅ Return error state if fetch failed
+  if (fetchError || !pageData) {
+    return <ErrorState />;
+  }
 
-    const boards = pageData.boards;
-    const stats = pageData.stats;
-    const featuredBoards = boards.slice(0, 4);
-    const regularBoards = boards.slice(4);
+  const { boards: boardsList, stats } = pageData;
+  const filters = {
+    province: (await searchParams)?.province as string || '',
+    type: (await searchParams)?.type as string || '',
+    q: (await searchParams)?.q as string || '',
+  };
 
-    return (
-      <main className="min-h-screen bg-gray-50">
-        
-        <section className="bg-gradient-to-r from-amber-700 to-orange-600 text-white">
-          <div className="container mx-auto px-4 py-12">
-            <div className="max-w-4xl mx-auto text-center">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                Education Boards in Pakistan 2026
-              </h1>
-              <p className="text-xl text-amber-100 mb-8">
-                BISE • FBISE • AKUEB • Results • Date Sheets • Model Papers
-              </p>
-              
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">{stats.totalBoards}+</div>
-                  <div className="text-sm text-amber-200">Education Boards</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">{stats.totalCities}+</div>
-                  <div className="text-sm text-amber-200">Cities</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">{stats.boardsWithResults}</div>
-                  <div className="text-sm text-amber-200">Announced Results 2026</div>
-                </div>
+  const buildUrl = (key: string, value: string) => {
+    const urlParams = new URLSearchParams();
+    if (filters.province && key !== 'province') urlParams.set('province', filters.province);
+    if (filters.type && key !== 'type') urlParams.set('type', filters.type);
+    if (filters.q && key !== 'q') urlParams.set('q', filters.q);
+    if (value) urlParams.set(key, value);
+    return urlParams.toString() ? `/boards?${urlParams.toString()}` : '/boards';
+  };
+
+  const featuredBoards = boardsList.slice(0, 4);
+  const regularBoards = boardsList.slice(4);
+
+  // ✅ JSX return with NO try/catch wrapping
+  return (
+    <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
+      
+      <section className="bg-gradient-to-r from-amber-700 to-orange-600 text-white">
+        <div className="container mx-auto px-4 py-12">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Education Boards in Pakistan 2026
+            </h1>
+            <p className="text-xl text-amber-100 mb-8">
+              BISE • FBISE • AKUEB • Results • Date Sheets • Model Papers
+            </p>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                <div className="text-2xl font-bold">{stats.totalBoards}+</div>
+                <div className="text-sm text-amber-200">Education Boards</div>
               </div>
-
-              <div className="max-w-2xl mx-auto">
-                <form action="/boards" method="GET" className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true">🔍</span>
-                    <input
-                      type="text"
-                      name="q"
-                      defaultValue={filters.q}
-                      placeholder="Search by board name..."
-                      className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="px-6 py-3 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition"
-                  >
-                    Search
-                  </button>
-                </form>
-                <p className="text-sm text-amber-200 mt-2">
-                  Popular: BISE Lahore • FBISE • BISE Karachi • BISE Rawalpindi
-                </p>
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                <div className="text-2xl font-bold">{stats.totalCities}+</div>
+                <div className="text-sm text-amber-200">Cities</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
+                <div className="text-2xl font-bold">{stats.boardsWithResults}</div>
+                <div className="text-sm text-amber-200">Announced Results 2026</div>
               </div>
             </div>
+
+            <div className="max-w-2xl mx-auto">
+              <form action="/boards" method="GET" className="flex gap-2">
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true">🔍</span>
+                  <input
+                    type="text"
+                    name="q"
+                    defaultValue={filters.q}
+                    placeholder="Search by board name..."
+                    className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition"
+                >
+                  Search
+                </button>
+              </form>
+              <p className="text-sm text-amber-200 mt-2">
+                Popular: BISE Lahore • FBISE • BISE Karachi • BISE Rawalpindi
+              </p>
+            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8">
+        <Breadcrumbs filters={filters} />
+        
+        <div className="flex flex-col lg:flex-row gap-8">
           
-          <Breadcrumbs filters={filters} />
-          
-          <div className="flex flex-col lg:flex-row gap-8">
-            
-            <aside className="lg:w-80 flex-shrink-0">
-              <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
-                <h2 className="font-bold text-lg mb-4">Filter Boards</h2>
-                
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-700 mb-3">Province</h3>
-                  <div className="space-y-2">
-                    {PROVINCES.map((province) => (
-                      <Link
-                        key={province.slug}
-                        href={buildUrl('province', province.slug)}
-                        className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                          filters.province === province.slug ? 'bg-amber-600 text-white' : 'hover:bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {province.name}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="font-semibold text-gray-700 mb-3">Board Type</h3>
-                  <div className="space-y-2">
-                    {BOARD_TYPES.map((type) => (
-                      <Link
-                        key={type.slug}
-                        href={buildUrl('type', type.slug)}
-                        className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                          filters.type === type.slug ? 'bg-amber-600 text-white' : 'hover:bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {type.name}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-
-                {(filters.province || filters.type || filters.q) && (
-                  <Link
-                    href="/boards"
-                    className="block text-center text-sm text-amber-600 hover:underline mt-4 pt-3 border-t"
-                  >
-                    Clear all filters
-                  </Link>
-                )}
-              </div>
-            </aside>
-
-            <div className="flex-1">
+          <aside className="lg:w-80 flex-shrink-0">
+            <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
+              <h2 className="font-bold text-lg mb-4">Filter Boards</h2>
               
-              <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-800">
-                      {boards.length} Education Boards Found
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      {filters.province && `Province: ${PROVINCES.find(p => p.slug === filters.province)?.name}`}
-                      {filters.type && ` • Type: ${BOARD_TYPES.find(t => t.slug === filters.type)?.name}`}
-                      {filters.q && ` • Search: &quot;${filters.q}&quot;`}
-                    </p>
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium">{boards.filter(b => b.resultsCount > 0).length}</span> with 2026 results
-                  </div>
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-700 mb-3">Province</h3>
+                <div className="space-y-2">
+                  {PROVINCES.map((province) => (
+                    <Link
+                      key={province.slug}
+                      href={buildUrl('province', province.slug)}
+                      className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                        filters.province === province.slug ? 'bg-amber-600 text-white' : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {province.name}
+                    </Link>
+                  ))}
                 </div>
               </div>
 
-              {featuredBoards.length > 0 && (
-                <div className="mb-8">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                    <span className="text-amber-500 mr-2" aria-hidden="true">🏆</span>
-                    Major Education Boards
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {featuredBoards.map((board) => (
-                      <article key={board.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
-                        <div className="p-5">
-                          <div className="flex justify-between items-start">
-                            <Link href={`/boards/${board.slug}`}>
-                              <h4 className="font-bold text-gray-900 mb-1 hover:text-amber-600 transition">
-                                {board.name}
-                              </h4>
-                            </Link>
-                            {board.established !== 'N/A' && (
-                              <span className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full">
-                                Est. {board.established}
-                              </span>
-                            )}
-                          </div>
-                          {board.city && (
-                            <p className="text-sm text-gray-600 mb-2">
-                              📍 {board.city}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
-                            <span>📊 {board.resultsCount} Results</span>
-                            <span>📅 {board.dateSheetsCount} Date Sheets</span>
-                            {board.latestResultYear && (
-                              <span className="text-green-600">Latest: {board.latestResultYear}</span>
-                            )}
-                          </div>
-                          {board.description && (
-                            <p className="text-sm text-gray-600 line-clamp-2 mb-3">{board.description}</p>
-                          )}
-                          <div className="flex gap-3">
-                            <Link 
-                              href={`/boards/${board.slug}`}
-                              className="text-sm text-amber-600 hover:underline font-medium"
-                            >
-                              Board Details →
-                            </Link>
-                            <Link 
-                              href={`/boards/${board.slug}/results`}
-                              className="text-sm text-blue-600 hover:underline font-medium"
-                            >
-                              Results
-                            </Link>
-                            <Link 
-                              href={`/boards/${board.slug}/date-sheets`}
-                              className="text-sm text-green-600 hover:underline font-medium"
-                            >
-                              Date Sheets
-                            </Link>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-700 mb-3">Board Type</h3>
+                <div className="space-y-2">
+                  {BOARD_TYPES.map((type) => (
+                    <Link
+                      key={type.slug}
+                      href={buildUrl('type', type.slug)}
+                      className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                        filters.type === type.slug ? 'bg-amber-600 text-white' : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {type.name}
+                    </Link>
+                  ))}
                 </div>
-              )}
+              </div>
 
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">All Education Boards</h3>
+              {(filters.province || filters.type || filters.q) && (
+                <Link
+                  href="/boards"
+                  className="block text-center text-sm text-amber-600 hover:underline mt-4 pt-3 border-t"
+                >
+                  Clear all filters
+                </Link>
+              )}
+            </div>
+          </aside>
+
+          <div className="flex-1">
+            
+            <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    {boardsList.length} Education Boards Found
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {filters.province && `Province: ${PROVINCES.find(p => p.slug === filters.province)?.name}`}
+                    {filters.type && ` • Type: ${BOARD_TYPES.find(t => t.slug === filters.type)?.name}`}
+                    {filters.q && ` • Search: &quot;${filters.q}&quot;`}
+                  </p>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="font-medium">{boardsList.filter(b => b.resultsCount > 0).length}</span> with 2026 results
+                </div>
+              </div>
+            </div>
+
+            {featuredBoards.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                  <span className="text-amber-500 mr-2" aria-hidden="true">🏆</span>
+                  Major Education Boards
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {regularBoards.length > 0 ? (
-                    regularBoards.map((board) => (
-                      <article key={board.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
-                        <div className="p-5">
+                  {featuredBoards.map((board) => (
+                    <article key={board.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
+                      <div className="p-5">
+                        <div className="flex justify-between items-start">
                           <Link href={`/boards/${board.slug}`}>
                             <h4 className="font-bold text-gray-900 mb-1 hover:text-amber-600 transition">
                               {board.name}
                             </h4>
                           </Link>
-                          {board.city && (
-                            <p className="text-sm text-gray-600 mb-2">
-                              📍 {board.city}
-                            </p>
+                          {board.established !== 'N/A' && (
+                            <span className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full">
+                              Est. {board.established}
+                            </span>
                           )}
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
-                            <span>📊 {board.resultsCount} Results</span>
-                            <span>📅 {board.dateSheetsCount} Date Sheets</span>
-                          </div>
-                          <div className="flex gap-3">
-                            <Link 
-                              href={`/boards/${board.slug}`}
-                              className="text-sm text-amber-600 hover:underline font-medium"
-                            >
-                              Details
-                            </Link>
-                            <Link 
-                              href={`/boards/${board.slug}/results`}
-                              className="text-sm text-blue-600 hover:underline font-medium"
-                            >
-                              Results
-                            </Link>
-                          </div>
                         </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="col-span-2 bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-                      <div className="text-6xl mb-4" aria-hidden="true">📋</div>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">No Boards Found</h3>
-                      <p className="text-gray-500 mb-6">
-                        {filters.province || filters.type || filters.q
-                          ? 'Try changing your filters'
-                          : 'Check back soon for more boards'}
-                      </p>
-                      <Link
-                        href="/boards"
-                        className="inline-block px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
-                      >
-                        View All Boards
-                      </Link>
-                    </div>
-                  )}
+                        {board.city && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            📍 {board.city}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
+                          <span>📊 {board.resultsCount} Results</span>
+                          <span>📅 {board.dateSheetsCount} Date Sheets</span>
+                          {board.latestResultYear && (
+                            <span className="text-green-600">Latest: {board.latestResultYear}</span>
+                          )}
+                        </div>
+                        {board.description && (
+                          <p className="text-sm text-gray-600 line-clamp-2 mb-3">{board.description}</p>
+                        )}
+                        <div className="flex gap-3">
+                          <Link 
+                            href={`/boards/${board.slug}`}
+                            className="text-sm text-amber-600 hover:underline font-medium"
+                          >
+                            Board Details →
+                          </Link>
+                          <Link 
+                            href={`/boards/${board.slug}/results`}
+                            className="text-sm text-blue-600 hover:underline font-medium"
+                          >
+                            Results
+                          </Link>
+                          <Link 
+                            href={`/boards/${board.slug}/date-sheets`}
+                            className="text-sm text-green-600 hover:underline font-medium"
+                          >
+                            Date Sheets
+                          </Link>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+            )}
 
-        <section className="bg-white py-12 border-t border-gray-200 mt-8">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Complete Guide to Education Boards in Pakistan
-              </h2>
-              
-              <div className="space-y-4 text-gray-700 leading-relaxed">
-                <p>
-                  <strong>Education Boards in Pakistan</strong> are responsible for conducting examinations and announcing results 
-                  for Matric (SSC) and Intermediate (HSSC) levels. The main boards include 
-                  <Link href="/boards/bise-lahore" className="text-amber-600 hover:underline"> BISE Lahore</Link>, 
-                  <Link href="/boards/bise-karachi" className="text-amber-600 hover:underline"> BISE Karachi</Link>, 
-                  <Link href="/boards/bise-rawalpindi" className="text-amber-600 hover:underline"> BISE Rawalpindi</Link>, 
-                  <Link href="/boards/fbise" className="text-amber-600 hover:underline"> FBISE Islamabad</Link>, and 
-                  <Link href="/boards/akueb" className="text-amber-600 hover:underline"> AKUEB</Link>. 
-                  Each board operates under its respective province or territory.
-                </p>
-                
-                <p>
-                  <strong>Board Results 2026</strong> are announced annually in July-September for annual examinations. 
-                  Students can check their results online by roll number. Most boards also offer gazettes, 
-                  position holders lists, and supplementary examination schedules.
-                </p>
-                
-                <p>
-                  <strong>Date Sheets 2026</strong> are released 1-2 months before examinations. Check individual board 
-                  pages for latest date sheets for SSC Part 1 &amp; 2, HSSC Part 1 &amp; 2, and special examinations.
-                </p>
-                
-                <p>
-                  <strong>Model Papers &amp; Past Papers</strong> are available for all boards to help students prepare 
-                  for examinations. These include solved papers, guess papers, and marking schemes.
-                </p>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">All Education Boards</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {regularBoards.length > 0 ? (
+                  regularBoards.map((board) => (
+                    <article key={board.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition overflow-hidden">
+                      <div className="p-5">
+                        <Link href={`/boards/${board.slug}`}>
+                          <h4 className="font-bold text-gray-900 mb-1 hover:text-amber-600 transition">
+                            {board.name}
+                          </h4>
+                        </Link>
+                        {board.city && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            📍 {board.city}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
+                          <span>📊 {board.resultsCount} Results</span>
+                          <span>📅 {board.dateSheetsCount} Date Sheets</span>
+                        </div>
+                        <div className="flex gap-3">
+                          <Link 
+                            href={`/boards/${board.slug}`}
+                            className="text-sm text-amber-600 hover:underline font-medium"
+                          >
+                            Details
+                          </Link>
+                          <Link 
+                            href={`/boards/${board.slug}/results`}
+                            className="text-sm text-blue-600 hover:underline font-medium"
+                          >
+                            Results
+                          </Link>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="col-span-2 bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
+                    <div className="text-6xl mb-4" aria-hidden="true">📋</div>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">No Boards Found</h3>
+                    <p className="text-gray-500 mb-6">
+                      {filters.province || filters.type || filters.q
+                        ? 'Try changing your filters'
+                        : 'Check back soon for more boards'}
+                    </p>
+                    <Link
+                      href="/boards"
+                      className="inline-block px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
+                    >
+                      View All Boards
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className="bg-white border-t border-gray-200 py-12">
-          <div className="container mx-auto px-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8">
-              Frequently Asked Questions About Education Boards
+      <section className="bg-white py-12 border-t border-gray-200 mt-8">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              Complete Guide to Education Boards in Pakistan
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-bold text-gray-900 mb-2">How many education boards are in Pakistan?</h3>
-                <p className="text-gray-600 text-sm">
-                  There are over 30 education boards in Pakistan including provincial BISE boards, FBISE (Federal), and AKUEB (Aga Khan University Board).
-                </p>
-              </div>
+            <div className="space-y-4 text-gray-700 leading-relaxed">
+              <p>
+                <strong>Education Boards in Pakistan</strong> are responsible for conducting examinations and announcing results 
+                for Matric (SSC) and Intermediate (HSSC) levels. The main boards include 
+                <Link href="/boards/bise-lahore" className="text-amber-600 hover:underline"> BISE Lahore</Link>, 
+                <Link href="/boards/bise-karachi" className="text-amber-600 hover:underline"> BISE Karachi</Link>, 
+                <Link href="/boards/bise-rawalpindi" className="text-amber-600 hover:underline"> BISE Rawalpindi</Link>, 
+                <Link href="/boards/fbise" className="text-amber-600 hover:underline"> FBISE Islamabad</Link>, and 
+                <Link href="/boards/akueb" className="text-amber-600 hover:underline"> AKUEB</Link>. 
+                Each board operates under its respective province or territory.
+              </p>
               
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-bold text-gray-900 mb-2">When are board results announced?</h3>
-                <p className="text-gray-600 text-sm">
-                  Matric (SSC) results are typically announced in July, while Intermediate (HSSC) results are announced in August-September each year.
-                </p>
-              </div>
+              <p>
+                <strong>Board Results 2026</strong> are announced annually in July-September for annual examinations. 
+                Students can check their results online by roll number. Most boards also offer gazettes, 
+                position holders lists, and supplementary examination schedules.
+              </p>
               
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-bold text-gray-900 mb-2">How can I check my board result online?</h3>
-                <p className="text-gray-600 text-sm">
-                  Visit the respective board page, enter your roll number in the search box, and view your result instantly. Results are also available on official board websites.
-                </p>
-              </div>
+              <p>
+                <strong>Date Sheets 2026</strong> are released 1-2 months before examinations. Check individual board 
+                pages for latest date sheets for SSC Part 1 &amp; 2, HSSC Part 1 &amp; 2, and special examinations.
+              </p>
               
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="font-bold text-gray-900 mb-2">What is the difference between BISE and FBISE?</h3>
-                <p className="text-gray-600 text-sm">
-                  BISE (Board of Intermediate and Secondary Education) operates at provincial level, while FBISE (Federal Board) caters to educational institutions in Islamabad, across Pakistan, and overseas.
-                </p>
-              </div>
+              <p>
+                <strong>Model Papers &amp; Past Papers</strong> are available for all boards to help students prepare 
+                for examinations. These include solved papers, guess papers, and marking schemes.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "ItemList",
-              "name": "Education Boards in Pakistan 2026",
-              "description": "Complete list of education boards in Pakistan with results, date sheets and announcements",
-              "numberOfItems": boards.length,
-              "itemListElement": boards.slice(0, 10).map((board, index) => ({
-                "@type": "ListItem",
-                "position": index + 1,
-                "url": `https://www.nextid.pk/boards/${board.slug}`,
-                "name": board.name
-              }))
-            })
-          }}
-        />
-      </main>
-    );
-    
-  } catch {
-    return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-12">
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
-            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load boards</h2>
-            <p className="text-gray-600">Please try again later</p>
-            <Link
-              href="/"
-              className="inline-block mt-4 px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition"
-            >
-              Go to Homepage
-            </Link>
+      <section className="bg-white border-t border-gray-200 py-12">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-8">
+            Frequently Asked Questions About Education Boards
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gray-50 rounded-xl p-6">
+              <h3 className="font-bold text-gray-900 mb-2">How many education boards are in Pakistan?</h3>
+              <p className="text-gray-600 text-sm">
+                There are over 30 education boards in Pakistan including provincial BISE boards, FBISE (Federal), and AKUEB (Aga Khan University Board).
+              </p>
+            </div>
+            
+            <div className="bg-gray-50 rounded-xl p-6">
+              <h3 className="font-bold text-gray-900 mb-2">When are board results announced?</h3>
+              <p className="text-gray-600 text-sm">
+                Matric (SSC) results are typically announced in July, while Intermediate (HSSC) results are announced in August-September each year.
+              </p>
+            </div>
+            
+            <div className="bg-gray-50 rounded-xl p-6">
+              <h3 className="font-bold text-gray-900 mb-2">How can I check my board result online?</h3>
+              <p className="text-gray-600 text-sm">
+                Visit the respective board page, enter your roll number in the search box, and view your result instantly. Results are also available on official board websites.
+              </p>
+            </div>
+            
+            <div className="bg-gray-50 rounded-xl p-6">
+              <h3 className="font-bold text-gray-900 mb-2">What is the difference between BISE and FBISE?</h3>
+              <p className="text-gray-600 text-sm">
+                BISE (Board of Intermediate and Secondary Education) operates at provincial level, while FBISE (Federal Board) caters to educational institutions in Islamabad, across Pakistan, and overseas.
+              </p>
+            </div>
           </div>
         </div>
-      </main>
-    );
-  }
-}
+      </section>
 
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Education Boards in Pakistan 2026",
+            "description": "Complete list of education boards in Pakistan with results, date sheets and announcements",
+            "numberOfItems": boardsList.length,
+            "itemListElement": boardsList.slice(0, 10).map((board, index) => ({
+              "@type": "ListItem",
+              "position": index + 1,
+              "url": `https://www.nextid.pk/boards/${board.slug}`,
+              "name": board.name
+            }))
+          })
+        }}
+      />
+    </main>
+  );
+}

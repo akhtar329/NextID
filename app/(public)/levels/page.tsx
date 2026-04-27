@@ -1,13 +1,15 @@
-// app/(public)/levels/page.tsx
+// app/(public)/levels/page.tsx (COMPLETE WORKING VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { levels, degrees, programs } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, and, count, inArray } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { levels, degrees, programs } from '@/app/lib/schema';
+import { eq, and, count, inArray } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
-export const revalidate = 86400;\nexport const metadata: Metadata = {
+export const metadata: Metadata = {
   title: 'Education Levels | Matric, Intermediate, Bachelor, Master | NextID.pk',
   description: 'Browse educational levels including Matric, Intermediate, Bachelor, Master, and PhD programs in Pakistan.',
   alternates: {
@@ -27,61 +29,93 @@ interface LevelWithStats {
   programsCount: number;
 }
 
+// ✅ OPTIMIZED: Cached version of getLevelsWithStats
 async function getLevelsWithStats(): Promise<LevelWithStats[]> {
-  try {
-    const allLevels = await db
-      .select({
-        id: levels.id,
-        name: levels.name,
-        slug: levels.slug,
-        fullForm: levels.fullForm,
-        displayOrder: levels.displayOrder,
-        status: levels.status,
-        createdAt: levels.createdAt,
-      })
-      .from(levels)
-      .where(eq(levels.status, true))
-      .orderBy(levels.displayOrder, levels.name);
+  return unstable_cache(
+    async () => {
+      try {
+        const allLevels = await db
+          .select({
+            id: levels.id,
+            name: levels.name,
+            slug: levels.slug,
+            fullForm: levels.fullForm,
+            displayOrder: levels.displayOrder,
+            status: levels.status,
+            createdAt: levels.createdAt,
+          })
+          .from(levels)
+          .where(eq(levels.status, true))
+          .orderBy(levels.displayOrder, levels.name);
 
-    if (allLevels.length === 0) {
-      return [];
-    }
+        if (allLevels.length === 0) {
+          return [];
+        }
 
-    const levelIds = allLevels.map(l => l.id);
+        const levelIds = allLevels.map(l => l.id);
 
-    const degreesCounts = await db
-      .select({
-        levelId: degrees.levelId,
-        count: count(),
-      })
-      .from(degrees)
-      .where(and(eq(degrees.status, true), inArray(degrees.levelId, levelIds)))
-      .groupBy(degrees.levelId);
+        const degreesCounts = await db
+          .select({
+            levelId: degrees.levelId,
+            count: count(),
+          })
+          .from(degrees)
+          .where(and(eq(degrees.status, true), inArray(degrees.levelId, levelIds)))
+          .groupBy(degrees.levelId);
 
-    const totalProgramsResult = await db
-      .select({ count: count() })
-      .from(programs)
-      .where(eq(programs.status, true));
-    
-    const totalProgramsCount = Number(totalProgramsResult[0]?.count) || 0;
+        const totalProgramsResult = await db
+          .select({ count: count() })
+          .from(programs)
+          .where(eq(programs.status, true));
+        
+        const totalProgramsCount = Number(totalProgramsResult[0]?.count) || 0;
 
-    const degreesMap = new Map(degreesCounts.map(d => [d.levelId, Number(d.count)]));
+        const degreesMap = new Map(degreesCounts.map(d => [d.levelId, Number(d.count)]));
 
-    const levelsWithStats = allLevels.map((level) => ({
-      ...level,
-      degreesCount: degreesMap.get(level.id) || 0,
-      programsCount: totalProgramsCount,
-    }));
+        const levelsWithStats = allLevels.map((level) => ({
+          ...level,
+          degreesCount: degreesMap.get(level.id) || 0,
+          programsCount: totalProgramsCount,
+        }));
 
-    return levelsWithStats.sort((a, b) => {
-      if (a.displayOrder !== b.displayOrder) {
-        return (a.displayOrder || 999) - (b.displayOrder || 999);
+        return levelsWithStats.sort((a, b) => {
+          if (a.displayOrder !== b.displayOrder) {
+            return (a.displayOrder || 999) - (b.displayOrder || 999);
+          }
+          return a.name.localeCompare(b.name);
+        });
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch levels:', error);
+        return [];
       }
-      return a.name.localeCompare(b.name);
-    });
-  } catch {
-    return [];
-  }
+    },
+    ['levels-with-stats'],
+    {
+      revalidate: 86400,
+      tags: ['levels'],
+    }
+  )();
+}
+
+// ✅ Error boundary component
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load levels</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 const levelIcons: Record<string, string> = {
@@ -107,7 +141,19 @@ const levelColors: Record<string, string> = {
 };
 
 export default async function LevelsPage() {
-  const levelsList = await getLevelsWithStats();
+  let levelsList: LevelWithStats[] = [];
+  let fetchError = false;
+  
+  try {
+    levelsList = await getLevelsWithStats();
+  } catch (error) {
+    console.error('[PAGE] Failed to load levels:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
 
   const totalLevels = levelsList.length;
   const totalDegrees = levelsList.reduce((sum, level) => sum + level.degreesCount, 0);
@@ -116,6 +162,8 @@ export default async function LevelsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <section className="bg-gradient-to-br from-green-900 to-emerald-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -398,4 +446,3 @@ export default async function LevelsPage() {
     </main>
   );
 }
-

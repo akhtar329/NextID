@@ -1,13 +1,17 @@
-// app/(public)/date-sheets/page.tsx
+// app/(public)/date-sheets/page.tsx (COMPLETE WORKING VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { dateSheets, boards, institutes, cities } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { dateSheets, boards, institutes, cities } from '@/app/lib/schema';
+import { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
-export const revalidate = 86400;\n// remove dynamicparams= true
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
+// ============================================
+// INTERFACE DEFINITIONS
+// ============================================
 interface DateSheetRow {
   id: number;
   title: string;
@@ -54,6 +58,9 @@ interface DateSheetFilters {
   page?: number;
 }
 
+// ============================================
+// CONSTANTS
+// ============================================
 const ITEMS_PER_PAGE = 12;
 
 const BOARD_TYPES = [
@@ -89,143 +96,144 @@ export const metadata: Metadata = {
 
 type ConditionType = ReturnType<typeof eq> | ReturnType<typeof like> | ReturnType<typeof and> | ReturnType<typeof or> | SQL;
 
+// ============================================
+// DATA FETCHING FUNCTIONS (CACHED)
+// ============================================
+
 async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResult> {
-  try {
-    const currentPage = filters.page || 1;
-    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-    
-    const conditions: ConditionType[] = [];
-    conditions.push(eq(dateSheets.status, true));
+  const cacheKey = `date-sheets-${JSON.stringify(filters)}`;
+  
+  return unstable_cache(
+    async () => {
+      try {
+        const currentPage = filters.page || 1;
+        const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+        
+        const conditions: ConditionType[] = [];
+        conditions.push(eq(dateSheets.status, true));
 
-    if (filters.examType && filters.examType !== '') {
-      conditions.push(eq(dateSheets.examType, filters.examType));
+        if (filters.examType && filters.examType !== '') {
+          conditions.push(eq(dateSheets.examType, filters.examType));
+        }
+
+        if (filters.year && filters.year !== '') {
+          conditions.push(eq(dateSheets.year, parseInt(filters.year)));
+        }
+
+        if (filters.q) {
+          const words = filters.q.trim().split(/\s+/);
+          const searchConditions = words.flatMap(word => {
+            const term = `%${word}%`;
+            return [
+              like(dateSheets.title, term),
+              like(boards.name, term),
+              like(institutes.name, term),
+            ];
+          });
+          conditions.push(or(...searchConditions));
+        }
+
+        if (filters.board === 'bise') {
+          conditions.push(sql`${dateSheets.boardId} IS NOT NULL`);
+        } else if (filters.board === 'fbise') {
+          conditions.push(eq(boards.name, 'Federal Board of Intermediate and Secondary Education (FBISE)'));
+        } else if (filters.board === 'university') {
+          conditions.push(sql`${dateSheets.instituteId} IS NOT NULL`);
+        }
+
+        const whereClause = and(...conditions);
+
+        const dateSheetsList = await db
+          .select({
+            id: dateSheets.id,
+            title: dateSheets.title,
+            slug: dateSheets.slug,
+            examType: dateSheets.examType,
+            examDate: dateSheets.examDate,
+            year: dateSheets.year,
+            boardId: dateSheets.boardId,
+            instituteId: dateSheets.instituteId,
+            viewCount: dateSheets.viewCount,
+            isPopular: dateSheets.isPopular,
+            officialLink: dateSheets.officialLink,
+            downloadLink: dateSheets.downloadLink,
+            boardName: boards.name,
+            boardSlug: boards.slug,
+            instituteName: institutes.name,
+            instituteSlug: institutes.slug,
+            cityId: institutes.cityId,
+            cityName: cities.name,
+            citySlug: cities.slug,
+            totalCount: sql<number>`count(*) over()`.as("totalCount"),
+          })
+          .from(dateSheets)
+          .leftJoin(boards, eq(dateSheets.boardId, boards.id))
+          .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
+          .leftJoin(cities, eq(institutes.cityId, cities.id))
+          .where(whereClause)
+          .orderBy(desc(dateSheets.isPopular), desc(dateSheets.year), desc(dateSheets.createdAt))
+          .limit(ITEMS_PER_PAGE)
+          .offset(offset);
+
+        const totalCount = dateSheetsList.length > 0 ? Number(dateSheetsList[0]?.totalCount) || 0 : 0;
+        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
+        return { 
+          dateSheets: dateSheetsList as DateSheetRow[], 
+          totalCount, 
+          totalPages, 
+          currentPage 
+        };
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch date sheets:', error);
+        return { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
+      }
+    },
+    [cacheKey],
+    {
+      revalidate: 86400,
+      tags: ['date-sheets'],
     }
-
-    if (filters.year && filters.year !== '') {
-      conditions.push(eq(dateSheets.year, parseInt(filters.year)));
-    }
-
-    if (filters.q) {
-      const words = filters.q.trim().split(/\s+/);
-      const searchConditions = words.flatMap(word => {
-        const term = `%${word}%`;
-        return [
-          like(dateSheets.title, term),
-          like(boards.name, term),
-          like(institutes.name, term),
-        ];
-      });
-      conditions.push(or(...searchConditions));
-    }
-
-    if (filters.board === 'bise') {
-      conditions.push(sql`${dateSheets.boardId} IS NOT NULL`);
-    } else if (filters.board === 'fbise') {
-      conditions.push(eq(boards.name, 'Federal Board of Intermediate and Secondary Education (FBISE)'));
-    } else if (filters.board === 'university') {
-      conditions.push(sql`${dateSheets.instituteId} IS NOT NULL`);
-    }
-
-    const whereClause = and(...conditions);
-
-    const countResult = await db
-      .select({ count: sql<number>`count(distinct ${dateSheets.id})` })
-      .from(dateSheets)
-      .leftJoin(boards, eq(dateSheets.boardId, boards.id))
-      .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
-      .where(whereClause);
-
-    const totalCount = Number(countResult[0]?.count) || 0;
-    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-    const dateSheetsList = await db
-      .select({
-        id: dateSheets.id,
-        title: dateSheets.title,
-        slug: dateSheets.slug,
-        examType: dateSheets.examType,
-        examDate: dateSheets.examDate,
-        year: dateSheets.year,
-        boardId: dateSheets.boardId,
-        instituteId: dateSheets.instituteId,
-        viewCount: dateSheets.viewCount,
-        isPopular: dateSheets.isPopular,
-        officialLink: dateSheets.officialLink,
-        downloadLink: dateSheets.downloadLink,
-        boardName: boards.name,
-        boardSlug: boards.slug,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        cityId: institutes.cityId,
-        cityName: cities.name,
-        citySlug: cities.slug,
-      })
-      .from(dateSheets)
-      .leftJoin(boards, eq(dateSheets.boardId, boards.id))
-      .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
-      .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .where(whereClause)
-      .orderBy(desc(dateSheets.isPopular), desc(dateSheets.year), desc(dateSheets.createdAt))
-      .limit(ITEMS_PER_PAGE)
-      .offset(offset);
-
-    return { 
-      dateSheets: dateSheetsList as DateSheetRow[], 
-      totalCount, 
-      totalPages, 
-      currentPage 
-    };
-  } catch {
-    return { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
-  }
+  )();
 }
 
 async function getStats(): Promise<StatsResult> {
-  try {
-    const totalSheets = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(dateSheets)
-      .where(eq(dateSheets.status, true));
+  return unstable_cache(
+    async () => {
+      try {
+        const [totalSheets, popularSheets, biseSheets, universitySheets, totalViews, years] = await Promise.all([
+          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(eq(dateSheets.status, true)),
+          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), eq(dateSheets.isPopular, true))),
+          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), sql`${dateSheets.boardId} IS NOT NULL`)),
+          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), sql`${dateSheets.instituteId} IS NOT NULL`)),
+          db.select({ sum: sql<number>`sum(${dateSheets.viewCount})` }).from(dateSheets).where(eq(dateSheets.status, true)),
+          db.select({ year: dateSheets.year }).from(dateSheets).where(eq(dateSheets.status, true)).groupBy(dateSheets.year).orderBy(desc(dateSheets.year))
+        ]);
 
-    const popularSheets = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(dateSheets)
-      .where(and(eq(dateSheets.status, true), eq(dateSheets.isPopular, true)));
-
-    const biseSheets = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(dateSheets)
-      .where(and(eq(dateSheets.status, true), sql`${dateSheets.boardId} IS NOT NULL`));
-
-    const universitySheets = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(dateSheets)
-      .where(and(eq(dateSheets.status, true), sql`${dateSheets.instituteId} IS NOT NULL`));
-
-    const totalViews = await db
-      .select({ sum: sql<number>`sum(${dateSheets.viewCount})` })
-      .from(dateSheets)
-      .where(eq(dateSheets.status, true));
-
-    const years = await db
-      .select({ year: dateSheets.year })
-      .from(dateSheets)
-      .where(eq(dateSheets.status, true))
-      .groupBy(dateSheets.year)
-      .orderBy(desc(dateSheets.year));
-
-    return { 
-      totalSheets: Number(totalSheets[0]?.count) || 0,
-      popularSheets: Number(popularSheets[0]?.count) || 0,
-      biseSheets: Number(biseSheets[0]?.count) || 0,
-      universitySheets: Number(universitySheets[0]?.count) || 0,
-      totalViews: Number(totalViews[0]?.sum) || 0,
-      availableYears: years.map(y => y.year),
-    };
-  } catch {
-    return { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
-  }
+        return { 
+          totalSheets: Number(totalSheets[0]?.count) || 0,
+          popularSheets: Number(popularSheets[0]?.count) || 0,
+          biseSheets: Number(biseSheets[0]?.count) || 0,
+          universitySheets: Number(universitySheets[0]?.count) || 0,
+          totalViews: Number(totalViews[0]?.sum) || 0,
+          availableYears: years.map(y => y.year),
+        };
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch stats:', error);
+        return { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
+      }
+    },
+    ['date-sheets-stats'],
+    {
+      revalidate: 86400,
+      tags: ['date-sheets-stats'],
+    }
+  )();
 }
+
+// ============================================
+// COMPONENTS
+// ============================================
 
 function Pagination({ currentPage, totalPages, filters }: { 
   currentPage: number; 
@@ -318,27 +326,73 @@ function Pagination({ currentPage, totalPages, filters }: {
   );
 }
 
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load date sheets</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ============================================
+// MAIN PAGE COMPONENT
+// ============================================
+
 export default async function DateSheetsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  // Initialize with default values
+  let dateSheetsResult: DateSheetsResult = { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
+  let stats: StatsResult = { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
+  let fetchError = false;
+  
+  try {
+    const params = await searchParams || {};
+    
+    const currentPage = typeof params.page === 'string' ? parseInt(params.page) : 1;
+    
+    const filters: DateSheetFilters = {
+      board: typeof params.board === 'string' ? params.board : '',
+      examType: typeof params.type === 'string' ? params.type : '',
+      year: typeof params.year === 'string' ? params.year : '',
+      q: typeof params.q === 'string' ? params.q : '',
+      page: currentPage,
+    };
+
+    [dateSheetsResult, stats] = await Promise.all([
+      getDateSheets(filters),
+      getStats(),
+    ]);
+  } catch (error) {
+    console.error('[PAGE] Failed to load date sheets:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
+
   const params = await searchParams || {};
-  
-  const currentPage = typeof params.page === 'string' ? parseInt(params.page) : 1;
-  
-  const filters: DateSheetFilters = {
+  const filters = {
     board: typeof params.board === 'string' ? params.board : '',
     examType: typeof params.type === 'string' ? params.type : '',
     year: typeof params.year === 'string' ? params.year : '',
     q: typeof params.q === 'string' ? params.q : '',
-    page: currentPage,
   };
-
-  const [dateSheetsResult, stats] = await Promise.all([
-    getDateSheets(filters),
-    getStats(),
-  ]);
 
   const buildUrl = (key: string, value: string) => {
     const urlParams = new URLSearchParams();
@@ -352,6 +406,7 @@ export default async function DateSheetsPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
         <div className="container mx-auto px-4 py-16 relative z-10">
@@ -580,4 +635,3 @@ export default async function DateSheetsPage({
     </main>
   );
 }
-

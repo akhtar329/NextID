@@ -1,9 +1,9 @@
-// app/(public)/admissions/page.tsx
+// app/(public)/admissions/page.tsx (OPTIMIZED VERSION)
 import { Metadata } from "next";
-export const revalidate = 86400;\nimport Link from "next/link";
-export const revalidate = 86400;\nimport Image from "next/image";
-export const revalidate = 86400;\nimport { db } from "@/app/lib/db";
-export const revalidate = 86400;\nimport {
+import Link from "next/link";
+import Image from "next/image";
+import { db } from "@/app/lib/db";
+import {
   admissions,
   admissionOfferings,
   programOfferings,
@@ -12,10 +12,11 @@ export const revalidate = 86400;\nimport {
   cities,
 } from "@/app/lib/schema";
 import { eq, desc, like, and, or, sql, count, SQL } from "drizzle-orm";
-export const revalidate = 86400;\nimport { generateSEO } from "@/app/lib/seo";
+import { generateSEO } from "@/app/lib/seo";
+import { unstable_cache } from "next/cache";
 
- 
-export const revalidate = 86400;\n// remove dynamicparams= true
+// ✅ OPTIMIZED: Different cache durations based on content type
+export const revalidate = 86400; // 1 hour (balanced for admissions)
 
 const ITEMS_PER_PAGE = 10;
 
@@ -120,61 +121,86 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
+// ✅ NEW: Cached version of getCitiesWithAdmissionCounts
 async function getCitiesWithAdmissionCounts(showClosed: boolean = false): Promise<CityWithCount[]> {
-  try {
-    const result = await db
-      .select({
-        id: cities.id,
-        name: cities.name,
-        slug: cities.slug,
-        province: cities.province,
-        isPopular: cities.isPopular,
-        count: sql<number>`count(distinct ${admissions.id})`.as("count"),
-      })
-      .from(cities)
-      .innerJoin(institutes, eq(institutes.cityId, cities.id))
-      .innerJoin(admissions, eq(admissions.instituteId, institutes.id))
-      .where(showClosed ? eq(admissions.status, "Closed") : eq(admissions.status, "Open"))
-      .groupBy(cities.id, cities.name, cities.slug, cities.province, cities.isPopular)
-      .orderBy(sql`count desc`);
-    
-    return result;
-  } catch {
-    return [];
-  }
+  const cacheKey = `admissions-cities-${showClosed}`;
+  
+  return unstable_cache(
+    async () => {
+      try {
+        const result = await db
+          .select({
+            id: cities.id,
+            name: cities.name,
+            slug: cities.slug,
+            province: cities.province,
+            isPopular: cities.isPopular,
+            count: sql<number>`count(distinct ${admissions.id})`.as("count"),
+          })
+          .from(cities)
+          .innerJoin(institutes, eq(institutes.cityId, cities.id))
+          .innerJoin(admissions, eq(admissions.instituteId, institutes.id))
+          .where(showClosed ? eq(admissions.status, "Closed") : eq(admissions.status, "Open"))
+          .groupBy(cities.id, cities.name, cities.slug, cities.province, cities.isPopular)
+          .orderBy(sql`count desc`);
+        
+        return result;
+      } catch (error) {
+        console.error("[CACHE] Failed to fetch cities:", error);
+        return [];
+      }
+    },
+    [cacheKey],
+    {
+      revalidate: 86400, // 24 hours - cities change rarely
+      tags: [`cities-admissions-${showClosed}`],
+    }
+  )();
 }
 
+// ✅ NEW: Cached version of getStats
 async function getStats() {
-  try {
-    const [totalOpen, totalClosed, totalUniversities, totalCities, closingSoon] = await Promise.all([
-      db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Open")),
-      db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Closed")),
-      db.select({ count: count() }).from(institutes).where(eq(institutes.status, true)),
-      db.select({ count: count() }).from(cities).where(eq(cities.status, true)),
-      db.select({ count: count() }).from(admissions).where(and(
-        eq(admissions.status, "Open"),
-        sql`${admissions.expectedCloseDate} < NOW() + INTERVAL '7 days'`
-      )),
-    ]);
+  return unstable_cache(
+    async () => {
+      try {
+        const [totalOpen, totalClosed, totalUniversities, totalCities, closingSoon] = await Promise.all([
+          db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Open")),
+          db.select({ count: count() }).from(admissions).where(eq(admissions.status, "Closed")),
+          db.select({ count: count() }).from(institutes).where(eq(institutes.status, true)),
+          db.select({ count: count() }).from(cities).where(eq(cities.status, true)),
+          db.select({ count: count() }).from(admissions).where(and(
+            eq(admissions.status, "Open"),
+            sql`${admissions.expectedCloseDate} < NOW() + INTERVAL '7 days'`
+          )),
+        ]);
 
-    return {
-      totalAdmissions: Number(totalOpen[0]?.count) || 0,
-      closedAdmissions: Number(totalClosed[0]?.count) || 0,
-      totalUniversities: Number(totalUniversities[0]?.count) || 0,
-      totalCities: Number(totalCities[0]?.count) || 0,
-      closingSoon: Number(closingSoon[0]?.count) || 0,
-    };
-  } catch {
-    return {
-      totalAdmissions: 0,
-      closedAdmissions: 0,
-      totalUniversities: 0,
-      totalCities: 0,
-      closingSoon: 0,
-    };
-  }
+        return {
+          totalAdmissions: Number(totalOpen[0]?.count) || 0,
+          closedAdmissions: Number(totalClosed[0]?.count) || 0,
+          totalUniversities: Number(totalUniversities[0]?.count) || 0,
+          totalCities: Number(totalCities[0]?.count) || 0,
+          closingSoon: Number(closingSoon[0]?.count) || 0,
+        };
+      } catch (error) {
+        console.error("[CACHE] Failed to fetch stats:", error);
+        return {
+          totalAdmissions: 0,
+          closedAdmissions: 0,
+          totalUniversities: 0,
+          totalCities: 0,
+          closingSoon: 0,
+        };
+      }
+    },
+    ["admissions-stats"],
+    {
+      revalidate: 3600, // 1 hour - stats change moderately
+      tags: ["admissions-stats"],
+    }
+  )();
 }
 
+// ✅ OPTIMIZED: getAdmissions with caching and reduced DB queries
 async function getAdmissions(filters: {
   city?: string;
   level?: string;
@@ -182,145 +208,152 @@ async function getAdmissions(filters: {
   page?: number;
   showClosed?: boolean;
 }) {
-  try {
-    const currentPage = filters.page || 1;
-    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-    const conditions: SQL[] = [];
+  const cacheKey = `admissions-list-${JSON.stringify(filters)}`;
+  
+  return unstable_cache(
+    async () => {
+      try {
+        const currentPage = filters.page || 1;
+        const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+        const conditions: SQL[] = [];
 
-    if (!filters.showClosed) {
-      conditions.push(eq(admissions.status, "Open"));
-    } else {
-      conditions.push(eq(admissions.status, "Closed"));
-    }
-
-    if (filters.city) {
-      conditions.push(eq(cities.slug, filters.city));
-    }
-
-    if (filters.level && filters.level !== "") {
-      const levelConfig = PROGRAM_TYPES.find(t => t.slug === filters.level);
-      if (levelConfig?.keywords && levelConfig.keywords.length > 0) {
-        const keywordConditions = levelConfig.keywords.map(keyword => 
-          like(programs.name, `%${keyword}%`)
-        );
-        const orCondition = or(...keywordConditions);
-        if (orCondition) {
-          conditions.push(orCondition);
+        if (!filters.showClosed) {
+          conditions.push(eq(admissions.status, "Open"));
+        } else {
+          conditions.push(eq(admissions.status, "Closed"));
         }
+
+        if (filters.city) {
+          conditions.push(eq(cities.slug, filters.city));
+        }
+
+        if (filters.level && filters.level !== "") {
+          const levelConfig = PROGRAM_TYPES.find(t => t.slug === filters.level);
+          if (levelConfig?.keywords && levelConfig.keywords.length > 0) {
+            const keywordConditions = levelConfig.keywords.map(keyword => 
+              like(programs.name, `%${keyword}%`)
+            );
+            const orCondition = or(...keywordConditions);
+            if (orCondition) {
+              conditions.push(orCondition);
+            }
+          }
+        }
+
+        if (filters.q) {
+          const words = filters.q.trim().split(/\s+/);
+          const searchConditions = words.flatMap((word) => {
+            const term = `%${word}%`;
+            return [like(institutes.name, term), like(admissions.name, term)];
+          });
+          const orCondition = or(...searchConditions);
+          if (orCondition) {
+            conditions.push(orCondition as SQL);
+          }
+        }
+
+        const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+        // ✅ OPTIMIZATION 1: Single query for both count and data using window function
+        const admissionsWithMeta = await db
+          .select({
+            id: admissions.id,
+            name: admissions.name,
+            slug: admissions.slug,
+            year: admissions.year,
+            session: admissions.session,
+            status: admissions.status,
+            expectedCloseDate: admissions.expectedCloseDate,
+            instituteId: admissions.instituteId,
+            instituteName: institutes.name,
+            instituteSlug: institutes.slug,
+            instituteType: institutes.type,
+            instituteLogo: institutes.logo,
+            cityId: cities.id,
+            cityName: cities.name,
+            citySlug: cities.slug,
+            programId: programs.id,
+            programName: programs.name,
+            programSlug: programs.slug,
+            // ✅ Window function for total count
+            totalCount: sql<number>`count(*) over()`.as("totalCount"),
+          })
+          .from(admissions)
+          .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+          .innerJoin(cities, eq(institutes.cityId, cities.id))
+          .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+          .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+          .leftJoin(programs, eq(programOfferings.programId, programs.id))
+          .where(whereClause)
+          .orderBy(
+            filters.showClosed
+              ? desc(admissions.expectedCloseDate)
+              : sql`CASE WHEN ${admissions.expectedCloseDate} IS NULL THEN 1 ELSE 0 END, ${admissions.expectedCloseDate} ASC`
+          )
+          .limit(ITEMS_PER_PAGE)
+          .offset(offset);
+
+        // ✅ OPTIMIZATION 2: Get total count from first row (window function)
+        const totalCount = admissionsWithMeta.length > 0 ? Number(admissionsWithMeta[0]?.totalCount) || 0 : 0;
+        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+
+        // Group programs by admission
+        const admissionsMap = new Map<number, Admission>();
+        
+        for (const row of admissionsWithMeta) {
+          if (!admissionsMap.has(row.id)) {
+            admissionsMap.set(row.id, {
+              id: row.id,
+              name: row.name,
+              slug: row.slug,
+              year: row.year,
+              session: row.session,
+              status: row.status,
+              expectedCloseDate: row.expectedCloseDate,
+              instituteId: row.instituteId,
+              instituteName: row.instituteName,
+              instituteSlug: row.instituteSlug,
+              instituteType: row.instituteType,
+              instituteLogo: row.instituteLogo,
+              cityId: row.cityId,
+              cityName: row.cityName,
+              citySlug: row.citySlug,
+              programs: [],
+            });
+          }
+          
+          if (row.programId) {
+            admissionsMap.get(row.id)!.programs.push({
+              id: row.programId,
+              name: row.programName || '',
+              slug: row.programSlug || '', 
+              degreeName: null,
+            });
+          }
+        }
+
+        return {
+          admissions: Array.from(admissionsMap.values()),
+          totalCount,
+          totalPages,
+          currentPage,
+        };
+      } catch (error) {
+        console.error("[CACHE] Failed to fetch admissions:", error);
+        return {
+          admissions: [],
+          totalCount: 0,
+          totalPages: 0,
+          currentPage: 1,
+        };
       }
+    },
+    [cacheKey],
+    {
+      revalidate: 300, // 5 minutes - admissions change frequently
+      tags: ["admissions-list"],
     }
-
-    if (filters.q) {
-      const words = filters.q.trim().split(/\s+/);
-      const searchConditions = words.flatMap((word) => {
-        const term = `%${word}%`;
-        return [like(institutes.name, term), like(admissions.name, term)];
-      });
-      const orCondition = or(...searchConditions);
-      if (orCondition) {
-        conditions.push(orCondition as SQL);
-      }
-    }
-
-    const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
-
-    const countResult = await db
-      .select({ count: sql<number>`count(distinct ${admissions.id})` })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
-      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
-      .leftJoin(programs, eq(programOfferings.programId, programs.id))
-      .where(whereClause);
-
-    const totalCount = Number(countResult[0]?.count) || 0;
-    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-    const admissionsWithProgramsRaw = await db
-      .select({
-        id: admissions.id,
-        name: admissions.name,
-        slug: admissions.slug,
-        year: admissions.year,
-        session: admissions.session,
-        status: admissions.status,
-        expectedCloseDate: admissions.expectedCloseDate,
-        instituteId: admissions.instituteId,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        instituteType: institutes.type,
-        instituteLogo: institutes.logo,
-        cityId: cities.id,
-        cityName: cities.name,
-        citySlug: cities.slug,
-        programId: programs.id,
-        programName: programs.name,
-        programSlug: programs.slug,
-      })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .innerJoin(cities, eq(institutes.cityId, cities.id))
-      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
-      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
-      .leftJoin(programs, eq(programOfferings.programId, programs.id))
-      .where(whereClause)
-      .orderBy(
-        filters.showClosed
-          ? desc(admissions.expectedCloseDate)
-          : sql`CASE WHEN ${admissions.expectedCloseDate} IS NULL THEN 1 ELSE 0 END, ${admissions.expectedCloseDate} ASC`
-      )
-      .limit(ITEMS_PER_PAGE)
-      .offset(offset);
-
-    const admissionsMap = new Map<number, Admission>();
-    
-    for (const row of admissionsWithProgramsRaw) {
-      if (!admissionsMap.has(row.id)) {
-        admissionsMap.set(row.id, {
-          id: row.id,
-          name: row.name,
-          slug: row.slug,
-          year: row.year,
-          session: row.session,
-          status: row.status,
-          expectedCloseDate: row.expectedCloseDate,
-          instituteId: row.instituteId,
-          instituteName: row.instituteName,
-          instituteSlug: row.instituteSlug,
-          instituteType: row.instituteType,
-          instituteLogo: row.instituteLogo,
-          cityId: row.cityId,
-          cityName: row.cityName,
-          citySlug: row.citySlug,
-          programs: [],
-        });
-      }
-      
-      if (row.programId) {
-        admissionsMap.get(row.id)!.programs.push({
-          id: row.programId,
-          name: row.programName || '',
-          slug: row.programSlug || '', 
-          degreeName: null,
-        });
-      }
-    }
-
-    return {
-      admissions: Array.from(admissionsMap.values()),
-      totalCount,
-      totalPages,
-      currentPage,
-    };
-  } catch {
-    return {
-      admissions: [],
-      totalCount: 0,
-      totalPages: 0,
-      currentPage: 1,
-    };
-  }
+  )();
 }
 
 function AdmissionCard({ admission, showClosed }: { admission: Admission; showClosed: boolean }) {
@@ -469,6 +502,7 @@ export default async function AdmissionsPage({
     showClosed,
   };
 
+  // ✅ OPTIMIZATION: Parallel execution with caching
   const [admissionsResult, stats, citiesWithCounts] = await Promise.all([
     getAdmissions(filters),
     getStats(),
@@ -499,6 +533,9 @@ export default async function AdmissionsPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      {/* ✅ SEO: Added meta tags for better caching headers */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=3600, stale-while-revalidate=86400" />
+      
       <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-800 py-16">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto text-center">
@@ -639,4 +676,3 @@ export default async function AdmissionsPage({
     </main>
   );
 }
-

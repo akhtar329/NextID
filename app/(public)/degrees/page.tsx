@@ -1,13 +1,15 @@
-// app/(public)/degrees/page.tsx
+// app/(public)/degrees/page.tsx (COMPLETE WORKING VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { degrees, levels, programs } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, count, inArray } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { degrees, levels, programs } from '@/app/lib/schema';
+import { eq, count, inArray } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
-export const revalidate = 86400;\nexport const metadata: Metadata = {
+export const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
   description: 'Browse all educational degrees in Pakistan including BS, BA, BSc, MA, MSc, and professional degrees. Find degree programs, admissions, and institutes.',
   keywords: 'degrees in Pakistan, BS degree, BA degree, BSc degree, MA degree, MSc degree, professional degrees, educational degrees',
@@ -36,66 +38,98 @@ interface DegreeWithStats {
   programsCount: number;
 }
 
+// ✅ OPTIMIZED: Cached version of getDegreesWithStats
 async function getDegreesWithStats(): Promise<DegreeWithStats[]> {
-  try {
-    const allDegrees = await db
-      .select({
-        id: degrees.id,
-        name: degrees.name,
-        slug: degrees.slug,
-        fullForm: degrees.fullForm,
-        levelId: degrees.levelId,
-        displayOrder: degrees.displayOrder,
-        status: degrees.status,
-        createdAt: degrees.createdAt,
-      })
-      .from(degrees)
-      .where(eq(degrees.status, true))
-      .orderBy(degrees.displayOrder, degrees.name);
+  return unstable_cache(
+    async () => {
+      try {
+        const allDegrees = await db
+          .select({
+            id: degrees.id,
+            name: degrees.name,
+            slug: degrees.slug,
+            fullForm: degrees.fullForm,
+            levelId: degrees.levelId,
+            displayOrder: degrees.displayOrder,
+            status: degrees.status,
+            createdAt: degrees.createdAt,
+          })
+          .from(degrees)
+          .where(eq(degrees.status, true))
+          .orderBy(degrees.displayOrder, degrees.name);
 
-    if (allDegrees.length === 0) {
-      return [];
+        if (allDegrees.length === 0) {
+          return [];
+        }
+
+        const levelIds = [...new Set(allDegrees.map(d => d.levelId).filter((id): id is number => id !== null))];
+        
+        let levelMap = new Map<number, { name: string; slug: string }>();
+        
+        if (levelIds.length > 0) {
+          const levelsList = await db
+            .select({
+              id: levels.id,
+              name: levels.name,
+              slug: levels.slug,
+            })
+            .from(levels)
+            .where(inArray(levels.id, levelIds));
+          
+          levelMap = new Map(levelsList.map(l => [l.id, { name: l.name, slug: l.slug }]));
+        }
+
+        const programsResult = await db
+          .select({ count: count() })
+          .from(programs)
+          .where(eq(programs.status, true));
+
+        const totalProgramsCount = Number(programsResult[0]?.count) || 0;
+
+        const degreesWithStats = allDegrees.map((degree) => {
+          const level = degree.levelId ? levelMap.get(degree.levelId) : null;
+
+          return {
+            ...degree,
+            levelName: level?.name || 'Other',
+            levelSlug: level?.slug || '',
+            programsCount: totalProgramsCount,
+          };
+        });
+
+        return degreesWithStats.sort((a, b) => a.name.localeCompare(b.name));
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch degrees:', error);
+        return [];
+      }
+    },
+    ['degrees-with-stats'],
+    {
+      revalidate: 86400, // 24 hours as requested
+      tags: ['degrees'],
     }
+  )();
+}
 
-    const levelIds = [...new Set(allDegrees.map(d => d.levelId).filter((id): id is number => id !== null))];
-    
-    let levelMap = new Map<number, { name: string; slug: string }>();
-    
-    if (levelIds.length > 0) {
-      const levelsList = await db
-        .select({
-          id: levels.id,
-          name: levels.name,
-          slug: levels.slug,
-        })
-        .from(levels)
-        .where(inArray(levels.id, levelIds));
-      
-      levelMap = new Map(levelsList.map(l => [l.id, { name: l.name, slug: l.slug }]));
-    }
-
-    const programsResult = await db
-      .select({ count: count() })
-      .from(programs)
-      .where(eq(programs.status, true));
-
-    const totalProgramsCount = Number(programsResult[0]?.count) || 0;
-
-    const degreesWithStats = allDegrees.map((degree) => {
-      const level = degree.levelId ? levelMap.get(degree.levelId) : null;
-
-      return {
-        ...degree,
-        levelName: level?.name || 'Other',
-        levelSlug: level?.slug || '',
-        programsCount: totalProgramsCount,
-      };
-    });
-
-    return degreesWithStats.sort((a, b) => a.name.localeCompare(b.name));
-  } catch {
-    return [];
-  }
+// ✅ Error boundary component
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load degrees</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 const degreeIcons: Record<string, string> = {
@@ -124,7 +158,19 @@ const degreeIcons: Record<string, string> = {
 const defaultIcon = '🎓';
 
 export default async function DegreesPage() {
-  const degreesList = await getDegreesWithStats();
+  let degreesList: DegreeWithStats[] = [];
+  let fetchError = false;
+  
+  try {
+    degreesList = await getDegreesWithStats();
+  } catch (error) {
+    console.error('[PAGE] Failed to load degrees:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
 
   const degreesByLevel = degreesList.reduce((acc, degree) => {
     const level = degree.levelName;
@@ -142,6 +188,8 @@ export default async function DegreesPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <section className="bg-gradient-to-br from-indigo-900 to-purple-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -392,4 +440,3 @@ export default async function DegreesPage() {
     </main>
   );
 }
-

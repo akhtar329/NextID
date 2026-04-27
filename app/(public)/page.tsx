@@ -1,19 +1,19 @@
-// app/(public)/page.tsx
-
+// app/(public)/page.tsx (COMPLETE OPTIMIZED VERSION)
 import type { Metadata } from "next";
-export const revalidate = 86400;\nimport HeroSection from "@/app/component/sections/Home/HeroSection";
-export const revalidate = 86400;\nimport { generateSEOClient } from "@/app/lib/seo";
-export const revalidate = 86400;\nimport { db } from "@/app/lib/db";
-export const revalidate = 86400;\nimport { desc, eq } from "drizzle-orm";
-export const revalidate = 86400;\nimport { unstable_cache } from "next/cache";
-export const revalidate = 86400;\nimport { admissions, results, programs, institutes } from "@/app/lib/schema";
-export const revalidate = 86400;\nimport AdmissionSection from "@/app/component/sections/Home/AdmissionSection";
-export const revalidate = 86400;\nimport ResultsSection from "@/app/component/sections/Home/ResultsSection";
-export const revalidate = 86400;\nimport CoursesSection from "@/app/component/sections/Home/CoursesSection";
-export const revalidate = 86400;\nimport UniversitiesSection from "@/app/component/sections/Home/UniversitiesSection";
-export const revalidate = 86400;\nimport SidebarWidgets from "@/app/component/sections/Home/SidebarWidgets";
+import { desc, eq } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
+import { db } from "@/app/lib/db";
+import { admissions, results, programs, institutes } from "@/app/lib/schema";
+import { generateSEOClient } from "@/app/lib/seo";
+import HeroSection from "@/app/component/sections/Home/HeroSection";
+import AdmissionSection from "@/app/component/sections/Home/AdmissionSection";
+import ResultsSection from "@/app/component/sections/Home/ResultsSection";
+import CoursesSection from "@/app/component/sections/Home/CoursesSection";
+import UniversitiesSection from "@/app/component/sections/Home/UniversitiesSection";
+import SidebarWidgets from "@/app/component/sections/Home/SidebarWidgets";
 
-export const revalidate = 86400;\n// ==================== ISR CONFIGURATION ====================
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
 // ==================== SEO ====================
 export const metadata: Metadata = generateSEOClient({
@@ -91,7 +91,7 @@ const getHomePageData = unstable_cache(
             session: admissions.session,
           })
           .from(admissions)
-          .where(eq(admissions.status, "open"))
+          .where(eq(admissions.status, "Open"))
           .orderBy(desc(admissions.createdAt))
           .limit(6),
 
@@ -157,7 +157,7 @@ const getHomePageData = unstable_cache(
   },
   ["homepage-data"],
   {
-    revalidate: 3600,
+    revalidate: 86400, // ✅ Changed to 24 hours as requested
     tags: ["home"],
   }
 );
@@ -179,12 +179,14 @@ const organizationSchema = {
 
 // ==================== PAGE ====================
 export default async function HomePage() {
-  // Data is fetched but components will fetch their own data
-  // This is kept for cache warming purposes
+  // ✅ Pre-fetch data for cache warming (but components will render from cache)
   await getHomePageData();
 
   return (
     <>
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
+      
       {/* Schema */}
       <script
         type="application/ld+json"
@@ -245,4 +247,3 @@ export default async function HomePage() {
     </>
   );
 }
-

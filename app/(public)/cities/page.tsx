@@ -1,13 +1,15 @@
-// app/(public)/cities/page.tsx
+// app/(public)/cities/page.tsx (FULLY OPTIMIZED)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { cities, institutes, admissions, news } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, and, count, inArray } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { cities, institutes, admissions, news } from '@/app/lib/schema';
+import { eq, and, count, inArray } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
-export const revalidate = 86400;\nexport const metadata: Metadata = {
+export const metadata: Metadata = {
   title: 'Education Cities in Pakistan | Institutes, Admissions & Results | NextID.pk',
   description: 'Find institutes, universities, admissions, results, and educational news by city in Pakistan.',
   alternates: {
@@ -30,102 +32,144 @@ interface CityWithStats {
   totalCount: number;
 }
 
-interface CountResult {
-  cityId: number;
-  count: number;
+// ✅ OPTIMIZED: Single cached function for all city data
+async function getCitiesWithStats(): Promise<CityWithStats[]> {
+  return unstable_cache(
+    async () => {
+      try {
+        const allCities = await db
+          .select({
+            id: cities.id,
+            name: cities.name,
+            slug: cities.slug,
+            province: cities.province,
+            isPopular: cities.isPopular,
+            status: cities.status,
+            createdAt: cities.createdAt,
+          })
+          .from(cities)
+          .where(eq(cities.status, true))
+          .orderBy(cities.name);
+
+        if (allCities.length === 0) return [];
+
+        const cityIds = allCities.map(c => c.id);
+
+        // ✅ OPTIMIZATION: Batch queries in parallel
+        const [institutesCounts, admissionsCounts, newsCounts] = await Promise.all([
+          db
+            .select({
+              cityId: institutes.cityId,
+              count: count(),
+            })
+            .from(institutes)
+            .where(and(eq(institutes.status, true), inArray(institutes.cityId, cityIds)))
+            .groupBy(institutes.cityId),
+          
+          db
+            .select({
+              cityId: institutes.cityId,
+              count: count(),
+            })
+            .from(admissions)
+            .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+            .where(and(eq(admissions.status, 'Open'), inArray(institutes.cityId, cityIds)))
+            .groupBy(institutes.cityId),
+          
+          db
+            .select({
+              cityId: news.cityId,
+              count: count(),
+            })
+            .from(news)
+            .where(and(eq(news.status, true), inArray(news.cityId, cityIds)))
+            .groupBy(news.cityId),
+        ]);
+
+        const institutesMap = new Map(institutesCounts.map(i => [i.cityId, Number(i.count)]));
+        const admissionsMap = new Map(admissionsCounts.map(a => [a.cityId, Number(a.count)]));
+        const newsMap = new Map(newsCounts.map(n => [n.cityId, Number(n.count)]));
+
+        const citiesWithStats: CityWithStats[] = allCities.map(city => {
+          const institutesCount = institutesMap.get(city.id) || 0;
+          const admissionsCount = admissionsMap.get(city.id) || 0;
+          const newsCount = newsMap.get(city.id) || 0;
+          
+          // Results count - simplified since results don't have direct city mapping
+          const resultsCount = 0;
+          
+          const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
+          
+          return {
+            ...city,
+            institutesCount,
+            admissionsCount,
+            resultsCount,
+            newsCount,
+            totalCount,
+          };
+        });
+
+        return citiesWithStats.sort((a, b) => {
+          if (a.isPopular && !b.isPopular) return -1;
+          if (!a.isPopular && b.isPopular) return 1;
+          return b.totalCount - a.totalCount;
+        });
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch cities:', error);
+        return [];
+      }
+    },
+    ['cities-with-stats'],
+    {
+      revalidate: 86400, // 24 hours as requested
+      tags: ['cities'],
+    }
+  )();
 }
 
-async function getCitiesWithStats(): Promise<CityWithStats[]> {
-  try {
-    const allCities = await db
-      .select({
-        id: cities.id,
-        name: cities.name,
-        slug: cities.slug,
-        province: cities.province,
-        isPopular: cities.isPopular,
-        status: cities.status,
-        createdAt: cities.createdAt,
-      })
-      .from(cities)
-      .where(eq(cities.status, true))
-      .orderBy(cities.name);
-
-    if (allCities.length === 0) return [];
-
-    const cityIds = allCities.map(c => c.id);
-
-    const institutesCounts = await db
-      .select({
-        cityId: institutes.cityId,
-        count: count(),
-      })
-      .from(institutes)
-      .where(and(eq(institutes.status, true), inArray(institutes.cityId, cityIds)))
-      .groupBy(institutes.cityId);
-
-    const admissionsCounts = await db
-      .select({
-        cityId: institutes.cityId,
-        count: count(),
-      })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(and(eq(admissions.status, 'open'), inArray(institutes.cityId, cityIds)))
-      .groupBy(institutes.cityId);
-
-    const newsCounts = await db
-      .select({
-        cityId: news.cityId,
-        count: count(),
-      })
-      .from(news)
-      .where(and(eq(news.status, true), inArray(news.cityId, cityIds)))
-      .groupBy(news.cityId);
-
-    const institutesMap = new Map(institutesCounts.map(i => [i.cityId, Number(i.count)]));
-    const admissionsMap = new Map(admissionsCounts.map(a => [a.cityId, Number(a.count)]));
-    const newsMap = new Map(newsCounts.map(n => [n.cityId, Number(n.count)]));
-
-    const citiesWithStats: CityWithStats[] = allCities.map(city => {
-      const institutesCount = institutesMap.get(city.id) || 0;
-      const admissionsCount = admissionsMap.get(city.id) || 0;
-      const newsCount = newsMap.get(city.id) || 0;
-      
-      // Calculate resultsCount - simplified since results don't have direct city mapping
-      const resultsCount = 0;
-      
-      const totalCount = institutesCount + admissionsCount + resultsCount + newsCount;
-      
-      return {
-        ...city,
-        institutesCount,
-        admissionsCount,
-        resultsCount,
-        newsCount,
-        totalCount,
-      };
-    });
-
-    return citiesWithStats.sort((a, b) => {
-      if (a.isPopular && !b.isPopular) return -1;
-      if (!a.isPopular && b.isPopular) return 1;
-      return b.totalCount - a.totalCount;
-    });
-  } catch {
-    return [];
-  }
+// ✅ Error boundary component
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load cities</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 export default async function CitiesPage() {
-  const citiesList = await getCitiesWithStats();
+  let citiesList: CityWithStats[] = [];
+  let fetchError = false;
+  
+  try {
+    citiesList = await getCitiesWithStats();
+  } catch (error) {
+    console.error('[PAGE] Failed to load cities:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
 
   const totalCities = citiesList.length;
   const popularCities = citiesList.filter(c => c.isPopular === true).length;
   const totalInstitutes = citiesList.reduce((sum, city) => sum + city.institutesCount, 0);
   const totalAdmissions = citiesList.reduce((sum, city) => sum + city.admissionsCount, 0);
   const totalResults = citiesList.reduce((sum, city) => sum + city.resultsCount, 0);
-  // totalNews removed - not used in JSX
+  const totalNews = citiesList.reduce((sum, city) => sum + city.newsCount, 0);
 
   const citiesByProvince = citiesList.reduce((acc, city) => {
     const province = city.province || 'Other';
@@ -147,6 +191,8 @@ export default async function CitiesPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -205,7 +251,7 @@ export default async function CitiesPage() {
         
         {citiesList.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl shadow-sm">
-            <div className="text-6xl mb-4">🏙️</div>
+            <div className="text-6xl mb-4" aria-hidden="true">🏙️</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No city data found</h3>
             <p className="text-gray-500">No educational data available for cities yet.</p>
           </div>
@@ -419,4 +465,3 @@ export default async function CitiesPage() {
     </main>
   );
 }
-

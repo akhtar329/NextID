@@ -1,13 +1,15 @@
-// app/(public)/programs/page.tsx
+// app/(public)/programs/page.tsx (OPTIMIZED VERSION)
 import { Metadata } from 'next';
-export const revalidate = 86400;\nimport Link from 'next/link';
-export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
-export const revalidate = 86400;\nimport { programs, categories, programOfferings } from '@/app/lib/schema';
-export const revalidate = 86400;\nimport { eq, desc, count, inArray } from 'drizzle-orm';
+import Link from 'next/link';
+import { db } from '@/app/lib/db';
+import { programs, categories, programOfferings } from '@/app/lib/schema';
+import { eq, desc, count, inArray } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
- 
+// ✅ SINGLE revalidate - 24 hours as requested
+export const revalidate = 86400;
 
-export const revalidate = 86400;\nexport const metadata: Metadata = {
+export const metadata: Metadata = {
   title: 'Programs | BS, BSc, Engineering, Medical & More | NextID.pk',
   description: 'Browse all educational programs in Pakistan including BS, BSc, Engineering, Medical, and professional programs. Find program details, universities, and admissions.',
   keywords: 'programs in Pakistan, BS program, BSc program, Engineering program, Medical program, professional programs',
@@ -33,75 +35,107 @@ interface ProgramWithStats {
   institutesCount: number;
 }
 
+// ✅ OPTIMIZED: Cached version of getProgramsWithStats
 async function getProgramsWithStats(): Promise<ProgramWithStats[]> {
-  try {
-    const allPrograms = await db
-      .select({
-        id: programs.id,
-        name: programs.name,
-        slug: programs.slug,
-        shortDescription: programs.shortDescription,
-        isFeatured: programs.isFeatured,
-        status: programs.status,
-        categoryId: programs.categoryId,
-      })
-      .from(programs)
-      .where(eq(programs.status, true))
-      .orderBy(desc(programs.isFeatured), programs.name);
+  return unstable_cache(
+    async () => {
+      try {
+        const allPrograms = await db
+          .select({
+            id: programs.id,
+            name: programs.name,
+            slug: programs.slug,
+            shortDescription: programs.shortDescription,
+            isFeatured: programs.isFeatured,
+            status: programs.status,
+            categoryId: programs.categoryId,
+          })
+          .from(programs)
+          .where(eq(programs.status, true))
+          .orderBy(desc(programs.isFeatured), programs.name);
 
-    if (allPrograms.length === 0) {
-      return [];
+        if (allPrograms.length === 0) {
+          return [];
+        }
+
+        const programIds = allPrograms.map(p => p.id);
+        const categoryIds = [...new Set(allPrograms.map(p => p.categoryId).filter((id): id is number => id !== null))];
+        
+        let categoryMap = new Map<number, { name: string; slug: string }>();
+        
+        if (categoryIds.length > 0) {
+          const categoriesList = await db
+            .select({
+              id: categories.id,
+              name: categories.name,
+              slug: categories.slug,
+            })
+            .from(categories)
+            .where(inArray(categories.id, categoryIds));
+          
+          categoryMap = new Map(categoriesList.map(c => [c.id, { name: c.name, slug: c.slug }]));
+        }
+
+        const institutesCounts = await db
+          .select({
+            programId: programOfferings.programId,
+            count: count(),
+          })
+          .from(programOfferings)
+          .where(inArray(programOfferings.programId, programIds))
+          .groupBy(programOfferings.programId);
+
+        const institutesMap = new Map(institutesCounts.map(i => [i.programId, Number(i.count)]));
+
+        const programsWithStats = allPrograms.map((program) => {
+          const category = program.categoryId ? categoryMap.get(program.categoryId) : null;
+          const institutesCount = institutesMap.get(program.id) || 0;
+
+          return {
+            id: program.id,
+            name: program.name,
+            slug: program.slug,
+            shortDescription: program.shortDescription,
+            isFeatured: program.isFeatured,
+            categoryName: category?.name || null,
+            categorySlug: category?.slug || null,
+            institutesCount,
+          };
+        });
+
+        return programsWithStats;
+      } catch (error) {
+        console.error('[CACHE] Failed to fetch programs:', error);
+        return [];
+      }
+    },
+    ['programs-with-stats'],
+    {
+      revalidate: 86400, // 24 hours as requested
+      tags: ['programs'],
     }
+  )();
+}
 
-    const programIds = allPrograms.map(p => p.id);
-    const categoryIds = [...new Set(allPrograms.map(p => p.categoryId).filter((id): id is number => id !== null))];
-    
-    let categoryMap = new Map<number, { name: string; slug: string }>();
-    
-    if (categoryIds.length > 0) {
-      const categoriesList = await db
-        .select({
-          id: categories.id,
-          name: categories.name,
-          slug: categories.slug,
-        })
-        .from(categories)
-        .where(inArray(categories.id, categoryIds));
-      
-      categoryMap = new Map(categoriesList.map(c => [c.id, { name: c.name, slug: c.slug }]));
-    }
-
-    const institutesCounts = await db
-      .select({
-        programId: programOfferings.programId,
-        count: count(),
-      })
-      .from(programOfferings)
-      .where(inArray(programOfferings.programId, programIds))
-      .groupBy(programOfferings.programId);
-
-    const institutesMap = new Map(institutesCounts.map(i => [i.programId, Number(i.count)]));
-
-    const programsWithStats = allPrograms.map((program) => {
-      const category = program.categoryId ? categoryMap.get(program.categoryId) : null;
-      const institutesCount = institutesMap.get(program.id) || 0;
-
-      return {
-        id: program.id,
-        name: program.name,
-        slug: program.slug,
-        shortDescription: program.shortDescription,
-        isFeatured: program.isFeatured,
-        categoryName: category?.name || null,
-        categorySlug: category?.slug || null,
-        institutesCount,
-      };
-    });
-
-    return programsWithStats;
-  } catch {
-    return [];
-  }
+// ✅ Error boundary component
+function ErrorState() {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load programs</h2>
+          <p className="text-gray-600">Please try again later</p>
+          <Link
+            href="/"
+            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            Go to Homepage
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 const categoryIcons: Record<string, string> = {
@@ -128,7 +162,19 @@ const categoryIcons: Record<string, string> = {
 const defaultIcon = '📚';
 
 export default async function ProgramsPage() {
-  const programsList = await getProgramsWithStats();
+  let programsList: ProgramWithStats[] = [];
+  let fetchError = false;
+  
+  try {
+    programsList = await getProgramsWithStats();
+  } catch (error) {
+    console.error('[PAGE] Failed to load programs:', error);
+    fetchError = true;
+  }
+
+  if (fetchError) {
+    return <ErrorState />;
+  }
 
   const programsByCategory = programsList.reduce((acc, program) => {
     const category = program.categoryName || 'Other';
@@ -146,6 +192,8 @@ export default async function ProgramsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* ✅ SEO: Added cache header */}
+      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
       <section className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -402,4 +450,3 @@ export default async function ProgramsPage() {
     </main>
   );
 }
-
