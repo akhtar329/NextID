@@ -1,14 +1,13 @@
 // app/(public)/results/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { ReactElement } from 'react';
-import { db } from '@/app/lib/db';
-import { results, boards, institutes, cities } from '@/app/lib/schema';
-import { eq, desc, and, or, like, sql, count, SQL } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { ReactElement } from 'react';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { results, boards, institutes, cities } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, desc, and, or, like, sql, count, SQL } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
-export const fetchCache = 'force-cache';
+ 
+export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
 // remove dynamicparams= true
 
 export async function generateStaticParams() {
@@ -817,3 +816,4 @@ export default async function ResultsPage({
     );
   }
 }
+

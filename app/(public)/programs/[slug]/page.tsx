@@ -17,7 +17,7 @@ import { db } from '@/app/lib/db';
 import { generateSEO } from '@/app/lib/seo';
 
 export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 // remove dynamicparams= true
 
 function formatShortDate(date: Date | null): string {

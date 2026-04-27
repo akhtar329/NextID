@@ -1,14 +1,13 @@
 // app/(public)/universities/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql, count, inArray, SQL } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { institutes, cities, programOfferings, admissions } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, desc, like, and, or, sql, count, inArray, SQL } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 
-export const metadata: Metadata = {
+export const revalidate = 86400;\nexport const metadata: Metadata = {
   title: 'Top Universities in Pakistan 2026 | Rankings, Admissions & Fees | NextID.pk',
   description: 'Find top universities in Pakistan: NUST, FAST, LUMS, Punjab University, Karachi University. Check rankings, admissions 2026, fees, programs & eligibility',
   keywords: 'universities in Pakistan, top universities Pakistan, NUST, FAST, LUMS, Punjab University, Karachi University, university rankings Pakistan, university admissions 2026, university fees, university programs',
@@ -587,3 +586,4 @@ export default async function UniversitiesPage({
     </main>
   );
 }
+

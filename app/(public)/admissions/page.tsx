@@ -1,9 +1,9 @@
 // app/(public)/admissions/page.tsx
 import { Metadata } from "next";
-import Link from "next/link";
-import Image from "next/image";
-import { db } from "@/app/lib/db";
-import {
+export const revalidate = 86400;\nimport Link from "next/link";
+export const revalidate = 86400;\nimport Image from "next/image";
+export const revalidate = 86400;\nimport { db } from "@/app/lib/db";
+export const revalidate = 86400;\nimport {
   admissions,
   admissionOfferings,
   programOfferings,
@@ -12,11 +12,10 @@ import {
   cities,
 } from "@/app/lib/schema";
 import { eq, desc, like, and, or, sql, count, SQL } from "drizzle-orm";
-import { generateSEO } from "@/app/lib/seo";
+export const revalidate = 86400;\nimport { generateSEO } from "@/app/lib/seo";
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
-// remove dynamicparams= true
+ 
+export const revalidate = 86400;\n// remove dynamicparams= true
 
 const ITEMS_PER_PAGE = 10;
 
@@ -640,3 +639,4 @@ export default async function AdmissionsPage({
     </main>
   );
 }
+

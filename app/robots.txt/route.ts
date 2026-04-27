@@ -168,5 +168,4 @@ Sitemap: ${getBaseUrl()}/sitemap.xml`;
 }
 
 // Optional: Add ISR configuration at page level if using static generation
-export const dynamic = 'force-static'; // Force static generation if possible
-export const revalidate = CACHE_DURATION; // ISR revalidation every 7 days
+  // Force static generation if possible

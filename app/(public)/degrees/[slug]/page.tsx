@@ -18,7 +18,7 @@ import {
 import { eq, and, desc, inArray, isNotNull } from 'drizzle-orm';
 
 export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 // remove dynamicparams= true
 
 interface Props {

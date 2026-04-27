@@ -1,13 +1,12 @@
 // app/(public)/date-sheets/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { dateSheets, boards, institutes, cities } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { dateSheets, boards, institutes, cities } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
 
-export const revalidate = 3600;
-export const dynamic = 'force-static';
-// remove dynamicparams= true
+ 
+export const revalidate = 86400;\n// remove dynamicparams= true
 
 interface DateSheetRow {
   id: number;
@@ -581,3 +580,4 @@ export default async function DateSheetsPage({
     </main>
   );
 }
+

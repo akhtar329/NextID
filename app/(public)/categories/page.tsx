@@ -1,8 +1,8 @@
 // app/(public)/categories/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { 
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { 
   categories, 
   institutes, 
   admissions, 
@@ -15,9 +15,8 @@ import {
 } from '@/app/lib/schema';
 import { eq, and, sql, inArray, isNotNull, count } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
-export const fetchCache = 'force-cache';
+ 
+export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
 
 export const metadata: Metadata = {
   title: 'Education Categories | Institutes, Admissions, Results & News | NextID.pk',
@@ -618,3 +617,4 @@ export default async function CategoriesPage() {
     </main>
   );
 }
+

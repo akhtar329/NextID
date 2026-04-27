@@ -1,14 +1,13 @@
 // app/(public)/levels/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { levels, degrees, programs } from '@/app/lib/schema';
-import { eq, and, count, inArray } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { levels, degrees, programs } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, and, count, inArray } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 
-export const metadata: Metadata = {
+export const revalidate = 86400;\nexport const metadata: Metadata = {
   title: 'Education Levels | Matric, Intermediate, Bachelor, Master | NextID.pk',
   description: 'Browse educational levels including Matric, Intermediate, Bachelor, Master, and PhD programs in Pakistan.',
   alternates: {
@@ -399,3 +398,4 @@ export default async function LevelsPage() {
     </main>
   );
 }
+

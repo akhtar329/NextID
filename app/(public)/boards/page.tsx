@@ -1,13 +1,12 @@
 // app/(public)/boards/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { boards, cities, results, dateSheets } from '@/app/lib/schema';
-import { eq, like, and, sql, count } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { boards, cities, results, dateSheets } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, like, and, sql, count } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
-export const fetchCache = 'force-cache';
+ 
+export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
 // remove dynamicparams= true
 
 export async function generateStaticParams() {
@@ -657,3 +656,4 @@ export default async function BoardsPage({
     );
   }
 }
+

@@ -1,14 +1,13 @@
 // app/(public)/degrees/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { degrees, levels, programs } from '@/app/lib/schema';
-import { eq, count, inArray } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { degrees, levels, programs } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, count, inArray } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 
-export const metadata: Metadata = {
+export const revalidate = 86400;\nexport const metadata: Metadata = {
   title: 'Degrees | BS, BA, BSc, MA, MSc & More | NextID.pk',
   description: 'Browse all educational degrees in Pakistan including BS, BA, BSc, MA, MSc, and professional degrees. Find degree programs, admissions, and institutes.',
   keywords: 'degrees in Pakistan, BS degree, BA degree, BSc degree, MA degree, MSc degree, professional degrees, educational degrees',
@@ -393,3 +392,4 @@ export default async function DegreesPage() {
     </main>
   );
 }
+

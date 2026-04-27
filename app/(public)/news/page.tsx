@@ -1,15 +1,14 @@
 // app/(public)/news/page.tsx
 import { Metadata } from 'next';
-import Image from 'next/image';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
-import { eq, desc, sql } from 'drizzle-orm';
-import type { NewsItem, TrendingItem } from '@/app/types/types';
+export const revalidate = 86400;\nimport Image from 'next/image';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { news, admissions, results, boards, institutes, cities, programs } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, desc, sql } from 'drizzle-orm';
+export const revalidate = 86400;\nimport type { NewsItem, TrendingItem } from '@/app/types/types';
 
-export const revalidate = 3600;
-export const dynamic = 'force-static';
-export const fetchCache = 'force-cache';
+ 
+export const revalidate = 86400;\nexport const fetchCache = 'force-cache';
 export const preferredRegion = 'auto';
 // remove dynamicparams= true
 
@@ -619,3 +618,4 @@ export default async function NewsPage({
     </div>
   );
 }
+

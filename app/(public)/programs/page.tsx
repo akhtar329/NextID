@@ -1,14 +1,13 @@
 // app/(public)/programs/page.tsx
 import { Metadata } from 'next';
-import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { programs, categories, programOfferings } from '@/app/lib/schema';
-import { eq, desc, count, inArray } from 'drizzle-orm';
+export const revalidate = 86400;\nimport Link from 'next/link';
+export const revalidate = 86400;\nimport { db } from '@/app/lib/db';
+export const revalidate = 86400;\nimport { programs, categories, programOfferings } from '@/app/lib/schema';
+export const revalidate = 86400;\nimport { eq, desc, count, inArray } from 'drizzle-orm';
 
-export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 
-export const metadata: Metadata = {
+export const revalidate = 86400;\nexport const metadata: Metadata = {
   title: 'Programs | BS, BSc, Engineering, Medical & More | NextID.pk',
   description: 'Browse all educational programs in Pakistan including BS, BSc, Engineering, Medical, and professional programs. Find program details, universities, and admissions.',
   keywords: 'programs in Pakistan, BS program, BSc program, Engineering program, Medical program, professional programs',
@@ -403,3 +402,4 @@ export default async function ProgramsPage() {
     </main>
   );
 }
+

@@ -7,7 +7,7 @@ import { boards, cities, results, dateSheets, news, seoMetadata } from '@/app/li
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 
 export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 export const fetchCache = 'force-cache';
 // remove dynamicparams= true
 

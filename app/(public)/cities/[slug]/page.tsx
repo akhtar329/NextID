@@ -8,7 +8,7 @@ import { cities, institutes, admissions, results, news, seoMetadata } from '@/ap
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
 export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 // remove dynamicparams= true
 
 function formatDate(date: Date | null): string {

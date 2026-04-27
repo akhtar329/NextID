@@ -1,21 +1,19 @@
 // app/(public)/page.tsx
 
 import type { Metadata } from "next";
-import HeroSection from "@/app/component/sections/Home/HeroSection";
-import { generateSEOClient } from "@/app/lib/seo";
-import { db } from "@/app/lib/db";
-import { desc, eq } from "drizzle-orm";
-import { unstable_cache } from "next/cache";
-import { admissions, results, programs, institutes } from "@/app/lib/schema";
-import AdmissionSection from "@/app/component/sections/Home/AdmissionSection";
-import ResultsSection from "@/app/component/sections/Home/ResultsSection";
-import CoursesSection from "@/app/component/sections/Home/CoursesSection";
-import UniversitiesSection from "@/app/component/sections/Home/UniversitiesSection";
-import SidebarWidgets from "@/app/component/sections/Home/SidebarWidgets";
+export const revalidate = 86400;\nimport HeroSection from "@/app/component/sections/Home/HeroSection";
+export const revalidate = 86400;\nimport { generateSEOClient } from "@/app/lib/seo";
+export const revalidate = 86400;\nimport { db } from "@/app/lib/db";
+export const revalidate = 86400;\nimport { desc, eq } from "drizzle-orm";
+export const revalidate = 86400;\nimport { unstable_cache } from "next/cache";
+export const revalidate = 86400;\nimport { admissions, results, programs, institutes } from "@/app/lib/schema";
+export const revalidate = 86400;\nimport AdmissionSection from "@/app/component/sections/Home/AdmissionSection";
+export const revalidate = 86400;\nimport ResultsSection from "@/app/component/sections/Home/ResultsSection";
+export const revalidate = 86400;\nimport CoursesSection from "@/app/component/sections/Home/CoursesSection";
+export const revalidate = 86400;\nimport UniversitiesSection from "@/app/component/sections/Home/UniversitiesSection";
+export const revalidate = 86400;\nimport SidebarWidgets from "@/app/component/sections/Home/SidebarWidgets";
 
-// ==================== ISR CONFIGURATION ====================
-export const revalidate = 3600;
-export const dynamic = "force-static";
+export const revalidate = 86400;\n// ==================== ISR CONFIGURATION ====================
 
 // ==================== SEO ====================
 export const metadata: Metadata = generateSEOClient({
@@ -247,3 +245,4 @@ export default async function HomePage() {
     </>
   );
 }
+

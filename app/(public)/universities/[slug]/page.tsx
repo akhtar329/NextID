@@ -15,7 +15,7 @@ import {
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
 export const revalidate = 86400;
-export const dynamic = 'force-static';
+ 
 // remove dynamicparams= true
 
 function formatShortDate(date: Date | null): string {

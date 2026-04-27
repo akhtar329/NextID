@@ -72,4 +72,3 @@ ${urls.join("")}
   }
 }
 
-export const revalidate = 86400;
