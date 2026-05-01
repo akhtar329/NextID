@@ -4,23 +4,30 @@ import Image from "next/image";
 import { db } from "@/app/lib/db";
 import { cities } from "@/app/lib/schema";
 import { eq } from "drizzle-orm";
+import { unstable_cache } from 'next/cache';
 
 // ==================== FETCH CITIES (No Cache Layer) ====================
-async function getCities(): Promise<{ name: string; slug: string }[]> {
-  try {
-    const allCities = await db
-      .select({
-        name: cities.name,
-        slug: cities.slug,
-      })
-      .from(cities)
-      .where(eq(cities.status, true));
+const getCities = unstable_cache(
+  async (): Promise<{ name: string; slug: string }[]> => {
+    try {
+      const allCities = await db
+        .select({
+          name: cities.name,
+          slug: cities.slug,
+        })
+        .from(cities)
+        .where(eq(cities.status, true));
 
-    return allCities.slice(0, 5);
-  } catch {
-    return [];
+      return allCities.slice(0, 5);
+    } catch {
+      return [];
+    }
+  },
+  ['footer-cities'],
+  {
+    revalidate: 86400, // 24 hours
   }
-}
+);
 
 // ==================== STATIC DATA (No DB needed) ====================
 const quickLinks = [

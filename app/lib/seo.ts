@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { db } from "@/app/lib/db";
 import { seoMetadata } from "@/app/lib/schema";
 import { eq, and } from "drizzle-orm";
+import { unstable_cache } from 'next/cache';
 
 const BASE_URL = "https://www.nextid.pk";
 const SITE_NAME = "NextID";
@@ -70,31 +71,35 @@ const DEFAULT_KEYWORDS = [
 // ─────────────────────────────────────────────
 // ✅ Fetch SEO from DB
 // ─────────────────────────────────────────────
-export async function fetchSeoMetadata(
-  entityType: EntityType,
-  entityId: number
-) {
-  try {
-    const [metadata] = await db
-      .select()
-      .from(seoMetadata)
-      .where(
-        and(
-          eq(seoMetadata.entityType, entityType),
-          eq(seoMetadata.entityId, entityId)
+const fetchSeoMetadata = unstable_cache(
+  async (entityType: EntityType, entityId: number) => {
+    try {
+      const [metadata] = await db
+        .select()
+        .from(seoMetadata)
+        .where(
+          and(
+            eq(seoMetadata.entityType, entityType),
+            eq(seoMetadata.entityId, entityId)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    return metadata || null;
-  } catch (error) {
-    console.error(
-      `Error fetching SEO metadata for ${entityType}/${entityId}:`,
-      error
-    );
-    return null;
+      return metadata || null;
+    } catch (error) {
+      console.error(
+        `Error fetching SEO metadata for ${entityType}/${entityId}:`,
+        error
+      );
+      return null;
+    }
+  },
+  ['seo-metadata'], // Cache key
+  {
+    revalidate: 86400, // 24 hours cache
+    tags: ['seo'], // For on-demand revalidation
   }
-}
+);
 
 // ─────────────────────────────────────────────
 // ✅ Parse robots string safely

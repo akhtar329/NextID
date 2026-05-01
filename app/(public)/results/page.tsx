@@ -773,7 +773,7 @@ export default async function ResultsPage({
       </div>
 
       {/* Rest of your JSX remains the same - FAQ sections, etc. */}
-      {/* ... keep all remaining content from your original file ... */}
+      {/* ... keep all remaining content from your original file . ........... */}
       
     </main>
   );

@@ -1,25 +1,14 @@
 // app/(public)/cities/[slug]/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { db } from '@/app/lib/db';
 import { cities, institutes, admissions, results, news, seoMetadata } from '@/app/lib/schema';
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
 export const revalidate = 86400;
  
-// remove dynamicparams= true
-
-function formatDate(date: Date | null): string {
-  if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
 function formatShortDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -120,239 +109,274 @@ async function getCityBySlug(slug: string): Promise<CityDetail | null> {
   }
 }
 
-async function getSeoMetadata(entityType: string, entityId: number) {
-  try {
-    const [seo] = await db
-      .select()
-      .from(seoMetadata)
-      .where(
-        and(
-          eq(seoMetadata.entityType, entityType),
-          eq(seoMetadata.entityId, entityId)
+// ✅ Cached getSeoMetadata
+const getSeoMetadata = unstable_cache(
+  async (entityType: string, entityId: number) => {
+    try {
+      const [seo] = await db
+        .select()
+        .from(seoMetadata)
+        .where(
+          and(
+            eq(seoMetadata.entityType, entityType),
+            eq(seoMetadata.entityId, entityId)
+          )
         )
-      )
-      .limit(1);
-    return seo || null;
-  } catch {
-    return null;
-  }
-}
+        .limit(1);
+      return seo || null;
+    } catch {
+      return null;
+    }
+  },
+  ['city-seo'],
+  { revalidate: 86400 }
+);
 
-async function getInstitutes(cityId: number, limit = 6): Promise<Institute[]> {
-  try {
-    const institutesList = await db
-      .select({
-        id: institutes.id,
-        name: institutes.name,
-        slug: institutes.slug,
-        type: institutes.type,
-        logo: institutes.logo,
-        isFeatured: institutes.isFeatured,
-      })
-      .from(institutes)
-      .where(
-        and(
-          eq(institutes.cityId, cityId),
-          eq(institutes.status, true)
+// ✅ Cached getInstitutes
+const getInstitutes = unstable_cache(
+  async (cityId: number, limit = 6): Promise<Institute[]> => {
+    try {
+      const institutesList = await db
+        .select({
+          id: institutes.id,
+          name: institutes.name,
+          slug: institutes.slug,
+          type: institutes.type,
+          logo: institutes.logo,
+          isFeatured: institutes.isFeatured,
+        })
+        .from(institutes)
+        .where(
+          and(
+            eq(institutes.cityId, cityId),
+            eq(institutes.status, true)
+          )
         )
-      )
-      .orderBy(desc(institutes.isFeatured), institutes.name)
-      .limit(limit);
+        .orderBy(desc(institutes.isFeatured), institutes.name)
+        .limit(limit);
 
-    if (institutesList.length === 0) return [];
+      if (institutesList.length === 0) return [];
 
-    const instituteIds = institutesList.map(i => i.id);
+      const instituteIds = institutesList.map(i => i.id);
 
-    const programsCounts = await db
-      .select({
-        instituteId: sql<number>`program_institutes.institute_id`,
-        count: count(),
-      })
-      .from(sql`program_institutes`)
-      .where(inArray(sql`program_institutes.institute_id`, instituteIds))
-      .groupBy(sql`program_institutes.institute_id`);
+      const programsCounts = await db
+        .select({
+          instituteId: sql<number>`program_institutes.institute_id`,
+          count: count(),
+        })
+        .from(sql`program_institutes`)
+        .where(inArray(sql`program_institutes.institute_id`, instituteIds))
+        .groupBy(sql`program_institutes.institute_id`);
 
-    const admissionsCounts = await db
-      .select({
-        instituteId: admissions.instituteId,
-        count: count(),
-      })
-      .from(admissions)
-      .where(
-        and(
-          inArray(admissions.instituteId, instituteIds),
-          eq(admissions.status, 'Open')
+      const admissionsCounts = await db
+        .select({
+          instituteId: admissions.instituteId,
+          count: count(),
+        })
+        .from(admissions)
+        .where(
+          and(
+            inArray(admissions.instituteId, instituteIds),
+            eq(admissions.status, 'Open')
+          )
         )
-      )
-      .groupBy(admissions.instituteId);
+        .groupBy(admissions.instituteId);
 
-    const resultsCounts = await db
-      .select({
-        instituteId: results.instituteId,
-        count: count(),
-      })
-      .from(results)
-      .where(inArray(results.instituteId, instituteIds))
-      .groupBy(results.instituteId);
+      const resultsCounts = await db
+        .select({
+          instituteId: results.instituteId,
+          count: count(),
+        })
+        .from(results)
+        .where(inArray(results.instituteId, instituteIds))
+        .groupBy(results.instituteId);
 
-    const programsMap = new Map(programsCounts.map(p => [Number(p.instituteId), Number(p.count)]));
-    const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
-    const resultsMap = new Map(resultsCounts.map(r => [r.instituteId, Number(r.count)]));
+      const programsMap = new Map(programsCounts.map(p => [Number(p.instituteId), Number(p.count)]));
+      const admissionsMap = new Map(admissionsCounts.map(a => [a.instituteId, Number(a.count)]));
+      const resultsMap = new Map(resultsCounts.map(r => [r.instituteId, Number(r.count)]));
 
-    return institutesList.map(inst => ({
-      ...inst,
-      programsCount: programsMap.get(inst.id) || 0,
-      admissionsCount: admissionsMap.get(inst.id) || 0,
-      resultsCount: resultsMap.get(inst.id) || 0,
-    }));
-  } catch {
-    return [];
-  }
-}
+      return institutesList.map(inst => ({
+        ...inst,
+        programsCount: programsMap.get(inst.id) || 0,
+        admissionsCount: admissionsMap.get(inst.id) || 0,
+        resultsCount: resultsMap.get(inst.id) || 0,
+      }));
+    } catch {
+      return [];
+    }
+  },
+  ['city-institutes'],
+  { revalidate: 86400 }
+);
 
-async function getAdmissions(cityId: number, limit = 5): Promise<Admission[]> {
-  try {
-    return await db
-      .select({
-        id: admissions.id,
-        slug: admissions.slug,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        instituteLogo: institutes.logo,
-        year: admissions.year,
-        session: admissions.session,
-        status: admissions.status,
-        expectedCloseDate: admissions.expectedCloseDate,
-      })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(
-        and(
-          eq(institutes.cityId, cityId),
-          eq(admissions.status, 'Open')
+// ✅ Cached getAdmissions
+const getAdmissions = unstable_cache(
+  async (cityId: number, limit = 5): Promise<Admission[]> => {
+    try {
+      return await db
+        .select({
+          id: admissions.id,
+          slug: admissions.slug,
+          instituteName: institutes.name,
+          instituteSlug: institutes.slug,
+          instituteLogo: institutes.logo,
+          year: admissions.year,
+          session: admissions.session,
+          status: admissions.status,
+          expectedCloseDate: admissions.expectedCloseDate,
+        })
+        .from(admissions)
+        .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+        .where(
+          and(
+            eq(institutes.cityId, cityId),
+            eq(admissions.status, 'Open')
+          )
         )
-      )
-      .orderBy(admissions.expectedCloseDate)
-      .limit(limit);
-  } catch {
-    return [];
-  }
-}
+        .orderBy(admissions.expectedCloseDate)
+        .limit(limit);
+    } catch {
+      return [];
+    }
+  },
+  ['city-admissions'],
+  { revalidate: 86400 }
+);
 
-async function getResults(cityId: number, limit = 5): Promise<Result[]> {
-  try {
-    return await db
-      .select({
-        id: results.id,
-        title: results.title,
-        slug: results.slug,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        year: results.year,
-        resultDate: results.resultDate,
-        isPopular: results.isPopular,
-      })
-      .from(results)
-      .innerJoin(institutes, eq(results.instituteId, institutes.id))
-      .where(
-        and(
-          eq(institutes.cityId, cityId),
-          eq(results.status, true)
+// ✅ Cached getResults
+const getResults = unstable_cache(
+  async (cityId: number, limit = 5): Promise<Result[]> => {
+    try {
+      return await db
+        .select({
+          id: results.id,
+          title: results.title,
+          slug: results.slug,
+          instituteName: institutes.name,
+          instituteSlug: institutes.slug,
+          year: results.year,
+          resultDate: results.resultDate,
+          isPopular: results.isPopular,
+        })
+        .from(results)
+        .innerJoin(institutes, eq(results.instituteId, institutes.id))
+        .where(
+          and(
+            eq(institutes.cityId, cityId),
+            eq(results.status, true)
+          )
         )
-      )
-      .orderBy(desc(results.resultDate), desc(results.year))
-      .limit(limit);
-  } catch {
-    return [];
-  }
-}
+        .orderBy(desc(results.resultDate), desc(results.year))
+        .limit(limit);
+    } catch {
+      return [];
+    }
+  },
+  ['city-results'],
+  { revalidate: 86400 }
+);
 
-async function getNews(cityId: number, limit = 5): Promise<NewsItem[]> {
-  try {
-    return await db
-      .select({
-        id: news.id,
-        title: news.title,
-        slug: news.slug,
-        excerpt: news.excerpt,
-        imageUrl: news.imageUrl,
-        publishedAt: news.publishedAt,
-        isBreaking: news.isBreaking,
-      })
-      .from(news)
-      .where(
-        and(
-          eq(news.cityId, cityId),
-          eq(news.status, true)
+// ✅ Cached getNews
+const getNews = unstable_cache(
+  async (cityId: number, limit = 5): Promise<NewsItem[]> => {
+    try {
+      return await db
+        .select({
+          id: news.id,
+          title: news.title,
+          slug: news.slug,
+          excerpt: news.excerpt,
+          imageUrl: news.imageUrl,
+          publishedAt: news.publishedAt,
+          isBreaking: news.isBreaking,
+        })
+        .from(news)
+        .where(
+          and(
+            eq(news.cityId, cityId),
+            eq(news.status, true)
+          )
         )
-      )
-      .orderBy(desc(news.publishedAt))
-      .limit(limit);
-  } catch {
-    return [];
-  }
-}
+        .orderBy(desc(news.publishedAt))
+        .limit(limit);
+    } catch {
+      return [];
+    }
+  },
+  ['city-news'],
+  { revalidate: 86400 }
+);
 
-async function getStats(cityId: number) {
-  try {
-    const [institutesCount] = await db
-      .select({ count: count() })
-      .from(institutes)
-      .where(
-        and(
-          eq(institutes.cityId, cityId),
-          eq(institutes.status, true)
-        )
-      );
+// ✅ Cached getStats
+const getStats = unstable_cache(
+  async (cityId: number) => {
+    try {
+      const [institutesCount] = await db
+        .select({ count: count() })
+        .from(institutes)
+        .where(
+          and(
+            eq(institutes.cityId, cityId),
+            eq(institutes.status, true)
+          )
+        );
 
-    const [admissionsCount] = await db
-      .select({ count: count() })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(
-        and(
-          eq(institutes.cityId, cityId),
-          eq(admissions.status, 'Open')
-        )
-      );
+      const [admissionsCount] = await db
+        .select({ count: count() })
+        .from(admissions)
+        .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+        .where(
+          and(
+            eq(institutes.cityId, cityId),
+            eq(admissions.status, 'Open')
+          )
+        );
 
-    const [resultsCount] = await db
-      .select({ count: count() })
-      .from(results)
-      .innerJoin(institutes, eq(results.instituteId, institutes.id))
-      .where(eq(institutes.cityId, cityId));
+      const [resultsCount] = await db
+        .select({ count: count() })
+        .from(results)
+        .innerJoin(institutes, eq(results.instituteId, institutes.id))
+        .where(eq(institutes.cityId, cityId));
 
-    const [newsCount] = await db
-      .select({ count: count() })
-      .from(news)
-      .where(eq(news.cityId, cityId));
+      const [newsCount] = await db
+        .select({ count: count() })
+        .from(news)
+        .where(eq(news.cityId, cityId));
 
-    return {
-      institutes: Number(institutesCount?.count) || 0,
-      admissions: Number(admissionsCount?.count) || 0,
-      results: Number(resultsCount?.count) || 0,
-      news: Number(newsCount?.count) || 0,
-    };
-  } catch {
-    return { institutes: 0, admissions: 0, results: 0, news: 0 };
-  }
-}
+      return {
+        institutes: Number(institutesCount?.count) || 0,
+        admissions: Number(admissionsCount?.count) || 0,
+        results: Number(resultsCount?.count) || 0,
+        news: Number(newsCount?.count) || 0,
+      };
+    } catch {
+      return { institutes: 0, admissions: 0, results: 0, news: 0 };
+    }
+  },
+  ['city-stats'],
+  { revalidate: 86400 }
+);
 
-async function getYears(cityId: number) {
-  try {
-    const years = await db
-      .select({ year: admissions.year })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(eq(institutes.cityId, cityId))
-      .groupBy(admissions.year)
-      .orderBy(desc(admissions.year));
+// ✅ Cached getYears
+const getYears = unstable_cache(
+  async (cityId: number) => {
+    try {
+      const years = await db
+        .select({ year: admissions.year })
+        .from(admissions)
+        .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
+        .where(eq(institutes.cityId, cityId))
+        .groupBy(admissions.year)
+        .orderBy(desc(admissions.year));
 
-    return years.map(y => y.year);
-  } catch {
-    return [];
-  }
-}
+      return years.map(y => y.year);
+    } catch {
+      return [];
+    }
+  },
+  ['city-years'],
+  { revalidate: 86400 }
+);
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -406,6 +430,7 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
         <div className="absolute inset-0 bg-black/20"></div>
         {city.imageUrl && (
           <div className="absolute inset-0">
+           { /* eslint-disable-next-line @next/next/no-img-element */}
             <img src={city.imageUrl} alt={city.name} className="w-full h-full object-cover opacity-30" />
           </div>
         )}
@@ -601,6 +626,7 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
                     >
                       <div className="flex items-start gap-4">
                         {inst.logo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={inst.logo} alt={inst.name} className="w-14 h-14 object-contain rounded-xl" />
                         ) : (
                           <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-xl flex items-center justify-center text-2xl">
@@ -663,6 +689,7 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-4">
                           {adm.instituteLogo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={adm.instituteLogo} alt={adm.instituteName || ''} className="w-12 h-12 object-contain rounded-xl" />
                           ) : (
                             <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-emerald-100 rounded-xl flex items-center justify-center text-xl">
@@ -766,6 +793,7 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
                     >
                       <div className="flex gap-4">
                         {item.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={item.imageUrl} alt={item.title} className="w-20 h-20 object-cover rounded-xl" />
                         ) : (
                           <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center text-3xl">
@@ -823,7 +851,7 @@ export default async function CityDetailPage({ params }: { params: Promise<{ slu
               <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <div className="text-6xl mb-4">📚</div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Information Coming Soon</h3>
-                <p className="text-gray-500">We're currently gathering information for {city.name}. Please check back later.</p>
+                <p className="text-gray-500">We&apos;re currently gathering information for {city.name}. Please check back later.</p>
               </div>
             )}
           </div>
