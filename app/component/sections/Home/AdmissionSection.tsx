@@ -1,12 +1,13 @@
 // app/component/sections/Home/AdmissionSection.tsx
-// ✅ Server Component - Responsive Design (Mobile Optimized)
+// ✅ FULLY OPTIMIZED - Single Query + Caching
 
 import Link from 'next/link';
 import { db } from '@/app/lib/db';
-import { admissions, institutes, cities, programOfferings, programs, degrees } from '@/app/lib/schema';
-import { eq, desc, and, sql } from 'drizzle-orm'; // ✅ Removed unused 'isNull'
+import { admissions, institutes, cities, programOfferings, programs, degrees, admissionOfferings } from '@/app/lib/schema';
+import { eq, desc, and, sql } from 'drizzle-orm';
+import { unstable_cache } from 'next/cache';
 
-// Types matching your actual schema
+// Types
 interface Program {
   id: number;
   name: string;
@@ -30,11 +31,11 @@ interface Admission {
   programs: Program[];
 }
 
-// Server-side data fetching with proper relations
-async function getAdmissions(): Promise<Admission[]> {
+// ✅ OPTIMIZED: Single query for ALL data using SQL aggregation
+async function getAdmissionsOptimized(): Promise<Admission[]> {
   try {
-    // Fetch admissions with institute and city info
-    const admissionsData = await db
+    // SINGLE QUERY: Get admissions with programs aggregated
+    const results = await db
       .select({
         id: admissions.id,
         name: admissions.name,
@@ -48,64 +49,78 @@ async function getAdmissions(): Promise<Admission[]> {
         instituteName: institutes.name,
         instituteSlug: institutes.slug,
         instituteCity: cities.name,
+        // ✅ Aggregate programs as JSON array
+        programsData: sql<Array<{
+          programId: number;
+          programName: string;
+          programSlug: string;
+          degreeName: string | null;
+        }>>`json_agg(
+          json_build_object(
+            'programId', ${programs.id},
+            'programName', ${programs.name},
+            'programSlug', ${programs.slug},
+            'degreeName', ${degrees.name}
+          )
+        ) FILTER (WHERE ${programs.id} IS NOT NULL)`,
       })
       .from(admissions)
       .leftJoin(institutes, eq(admissions.instituteId, institutes.id))
       .leftJoin(cities, eq(institutes.cityId, cities.id))
+      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
+      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
+      .leftJoin(programs, eq(programOfferings.programId, programs.id))
+      .leftJoin(degrees, eq(programOfferings.degreeId, degrees.id))
       .where(
         and(
           eq(admissions.status, 'Open'),
           sql`${admissions.expectedCloseDate} > NOW() OR ${admissions.expectedCloseDate} IS NULL`
         )
       )
+      .groupBy(
+        admissions.id, admissions.name, admissions.slug, admissions.year,
+        admissions.session, admissions.status, admissions.expectedCloseDate,
+        admissions.expectedOpenDate, admissions.instituteId,
+        institutes.name, institutes.slug, cities.name
+      )
       .orderBy(desc(admissions.year))
-      .limit(50);
+      .limit(20); // ✅ Limit to 20 for home page
 
-    // Fetch programs for each admission through admissionOfferings and programOfferings
-    const admissionsWithPrograms = await Promise.all(
-      admissionsData.map(async (admission) => {
-        // Get program offerings for this admission
-        const offerings = await db
-          .select({
-            programId: programs.id,
-            programName: programs.name,
-            programSlug: programs.slug,
-            degreeName: degrees.name,
-          })
-          .from(programOfferings)
-          .innerJoin(
-            sql`admission_offerings`,
-            sql`admission_offerings.offering_id = ${programOfferings.id}`
-          )
-          .innerJoin(programs, eq(programOfferings.programId, programs.id))
-          .leftJoin(degrees, eq(programOfferings.degreeId, degrees.id))
-          .where(sql`admission_offerings.admission_id = ${admission.id}`)
-          .limit(5);
-
-        const programsList = offerings.map((o) => ({
-          id: o.programId,
-          name: o.programName,
-          slug: o.programSlug,
-          degreeName: o.degreeName || undefined,
-        }));
-
-        return {
-          ...admission,
-          expectedCloseDate: admission.expectedCloseDate,
-          expectedOpenDate: admission.expectedOpenDate,
-          programs: programsList,
-        };
-      })
-    );
-
-    return admissionsWithPrograms;
+    // Transform results
+    return results.map((row) => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      year: row.year,
+      session: row.session,
+      status: row.status,
+      expectedCloseDate: row.expectedCloseDate,
+      expectedOpenDate: row.expectedOpenDate,
+      instituteId: row.instituteId,
+      instituteName: row.instituteName,
+      instituteSlug: row.instituteSlug,
+      instituteCity: row.instituteCity,
+      programs: (row.programsData || []).map((p) => ({
+        id: p.programId,
+        name: p.programName,
+        slug: p.programSlug,
+        degreeName: p.degreeName || undefined,
+      })),
+    }));
   } catch (error) {
     console.error('Error fetching admissions:', error);
     return [];
   }
 }
 
-// Helper functions (pure functions - no side effects)
+// ✅ CACHED version - 5 minutes
+const getCachedAdmissions = unstable_cache(
+  getAdmissionsOptimized,
+  ['home-admissions'],
+  { revalidate: 300, tags: ['admissions-home'] }
+);
+
+// Helper functions
 function getDaysLeft(date: Date | null): number | null {
   if (!date) return null;
   try {
@@ -113,10 +128,8 @@ function getDaysLeft(date: Date | null): number | null {
     const now = new Date();
     deadline.setHours(23, 59, 59, 999);
     now.setHours(23, 59, 59, 999);
-    
     const diffTime = deadline.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
     return diffDays > 0 ? diffDays : null;
   } catch {
     return null;
@@ -151,7 +164,7 @@ function getProgramDisplay(programs: Program[]): string {
   return `${first} + ${programs.length - 1} more`;
 }
 
-// Admission Card Component (Pure Server Component)
+// Admission Card Component
 function AdmissionCard({ admission, index }: { admission: Admission; index: number }) {
   const daysLeft = getDaysLeft(admission.expectedCloseDate);
   const isUrgent = daysLeft !== null && daysLeft <= 3;
@@ -166,12 +179,10 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
         'border-gray-100 bg-white hover:bg-gray-50'
       }`}
     >
-      <div className="p-4 md:p-6"> {/* ✅ Smaller padding on mobile */}
-        {/* Header with Badge */}
+      <div className="p-4 md:p-6">
         <div className="flex items-start justify-between mb-3 md:mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1 md:mb-2">
-              {/* Rank Badge - Smaller on mobile */}
               <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${
                 isUrgent ? 'bg-red-500 text-white' :
                 isWarning ? 'bg-orange-500 text-white' :
@@ -183,7 +194,6 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
                 {admission.instituteName || admission.name}
               </h3>
             </div>
-            
             <div className="flex flex-wrap items-center gap-1 md:gap-2 text-xs md:text-sm">
               <span className="text-gray-600">{admission.session || 'Fall'} {admission.year}</span>
               <span className="text-gray-300 hidden md:inline">•</span>
@@ -191,7 +201,6 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
             </div>
           </div>
           
-          {/* Days Left Badge - Smaller on mobile */}
           {daysLeft ? (
             <div className={`flex flex-col items-center px-2 md:px-4 py-1 md:py-2 rounded-lg md:rounded-xl text-center ${
               isUrgent ? 'bg-red-100 animate-pulse' :
@@ -214,7 +223,6 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
           )}
         </div>
         
-        {/* Programs Section - Hidden on mobile if too many */}
         <div className="mb-3 md:mb-4">
           <div className="flex items-center gap-1 md:gap-2 text-xs md:text-sm text-gray-600 mb-1 md:mb-2">
             <span className="font-semibold">🎓 Programs:</span>
@@ -237,7 +245,6 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
           )}
         </div>
         
-        {/* Footer with CTA - Simplified on mobile */}
         <div className="flex items-center justify-between pt-2 md:pt-3 border-t border-gray-100">
           {admission.expectedCloseDate && (
             <div className="text-[10px] md:text-xs text-gray-500 hidden sm:block">
@@ -254,15 +261,16 @@ function AdmissionCard({ admission, index }: { admission: Admission; index: numb
   );
 }
 
-// ✅ Main Server Component
+// ✅ Main Server Component with revalidate
+export const revalidate = 300; // 5 minutes cache for this section
+
 export default async function LatestAdmissionsSection() {
-  const admissions = await getAdmissions();
+  const admissions = await getCachedAdmissions();
 
   if (!admissions.length) {
     return null;
   }
 
-  // Filter valid open admissions
   const validOpenAdmissions = admissions.filter(ad => {
     if (ad.status !== 'Open') return false;
     if (!ad.expectedCloseDate) return true;
@@ -270,7 +278,6 @@ export default async function LatestAdmissionsSection() {
     return daysLeft !== null;
   });
 
-  // Calculate stats
   const closingThisWeek = validOpenAdmissions.filter(ad => {
     if (!ad.expectedCloseDate) return false;
     const daysLeft = getDaysLeft(ad.expectedCloseDate);
@@ -291,7 +298,6 @@ export default async function LatestAdmissionsSection() {
 
   const totalAdmissions = validOpenAdmissions.length;
   
-  // Get closing soon admissions (next 30 days)
   const closingSoon = validOpenAdmissions
     .filter(ad => {
       if (!ad.expectedCloseDate) return false;
@@ -308,7 +314,6 @@ export default async function LatestAdmissionsSection() {
     <section className="py-8 md:py-12 bg-gradient-to-br from-blue-50 via-white to-indigo-50/30">
       <div className="container mx-auto px-4 max-w-6xl">
         
-        {/* Hero Section with Stats - Responsive */}
         <div className="text-center mb-6 md:mb-10">
           <div className="inline-block mb-3 md:mb-4">
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs md:text-sm font-semibold px-3 md:px-4 py-1 rounded-full">
@@ -320,9 +325,6 @@ export default async function LatestAdmissionsSection() {
             Admissions 2026 in Pakistan
           </h2>
           
-          {/* ✅ Responsive Stats Cards - Different on Mobile vs Desktop */}
-          
-          {/* Mobile View: Single line stats bar */}
           <div className="block md:hidden bg-white rounded-xl shadow-sm p-3 mb-4">
             <div className="flex items-center justify-around">
               <div className="text-center">
@@ -342,7 +344,6 @@ export default async function LatestAdmissionsSection() {
             </div>
           </div>
           
-          {/* Desktop View: Full stats cards */}
           <div className="hidden md:flex flex-wrap items-center justify-center gap-4 mb-4">
             <div className="bg-red-100 rounded-full px-4 py-2">
               <span className="text-red-600 font-bold text-2xl">⏰ {closingThisWeek.length}</span>
@@ -361,16 +362,13 @@ export default async function LatestAdmissionsSection() {
           </p>
         </div>
 
-        {/* Stats Cards Row - Responsive Grid */}
         <div className="hidden md:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* All Admissions Card */}
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-center text-white shadow-lg">
             <div className="text-3xl font-bold">{totalAdmissions}</div>
             <div className="text-sm opacity-90">Total Admissions</div>
             <div className="text-xs opacity-75 mt-1">Open Now</div>
           </div>
           
-          {/* Urgent Card */}
           <div className={`rounded-xl p-4 text-center shadow-lg ${
             urgentToday.length > 0 
               ? 'bg-gradient-to-br from-red-500 to-red-600 text-white animate-pulse' 
@@ -381,7 +379,6 @@ export default async function LatestAdmissionsSection() {
             <div className="text-xs opacity-75 mt-1">Closing in ≤3 days</div>
           </div>
           
-          {/* Warning Card */}
           <div className={`rounded-xl p-4 text-center shadow-lg ${
             (closingThisWeek.length - urgentToday.length) > 0
               ? 'bg-gradient-to-br from-orange-500 to-orange-600 text-white'
@@ -392,7 +389,6 @@ export default async function LatestAdmissionsSection() {
             <div className="text-xs opacity-75 mt-1">4-7 days left</div>
           </div>
           
-          {/* Normal Card */}
           <div className={`rounded-xl p-4 text-center shadow-lg ${
             normalCount > 0
               ? 'bg-gradient-to-br from-green-500 to-green-600 text-white'
@@ -404,14 +400,12 @@ export default async function LatestAdmissionsSection() {
           </div>
         </div>
 
-        {/* Admissions Cards Grid */}
         <div className="space-y-3 md:space-y-4">
           {closingSoon.slice(0, 5).map((admission, index) => (
             <AdmissionCard key={admission.id} admission={admission} index={index} />
           ))}
         </div>
 
-        {/* View All Link - Responsive */}
         {closingSoon.length > 5 && (
           <div className="text-center mt-8 md:mt-10">
             <Link
