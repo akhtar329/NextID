@@ -7,7 +7,7 @@ import { db } from '@/app/lib/db';
 import { news, programs, institutes, boards, cities } from '@/app/lib/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
  
 export const fetchCache = 'force-cache';
 // remove dynamicparams= true

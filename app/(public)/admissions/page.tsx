@@ -194,7 +194,7 @@ async function getStats() {
     },
     ["admissions-stats"],
     {
-      revalidate: 3600, // 1 hour - stats change moderately
+      revalidate: 86400, // 24 hours - stats change moderately
       tags: ["admissions-stats"],
     }
   )();

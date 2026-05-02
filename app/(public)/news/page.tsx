@@ -155,7 +155,7 @@ async function getAllNewsOptimized(): Promise<AllNewsResult> {
       }
     },
     ['all-news'],
-    { revalidate: 3600, tags: ['news'] }
+    { revalidate: 86400, tags: ['news'] }
   )();
 }
 
@@ -180,7 +180,7 @@ async function getTrendingOptimized(): Promise<TrendingItem[]> {
       }
     },
     ['trending-news'],
-    { revalidate: 3600, tags: ['news-trending'] }
+    { revalidate: 86400, tags: ['news-trending'] }
   )();
 }
 
