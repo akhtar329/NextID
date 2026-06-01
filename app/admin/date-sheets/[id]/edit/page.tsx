@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft, Save, Eye, Star } from "lucide-react";
@@ -82,11 +82,8 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     ogImage: "",
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
-  const fetchData = async () => {
+  // ✅ FIX 1: Move fetchData BEFORE useEffect and wrap with useCallback
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -160,7 +157,12 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, router]);
+
+  // ✅ FIX 2: useEffect with proper dependency
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -181,10 +183,10 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     setSeoData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ✅ FIXED: Changed parameter type to accept string | any
-  const handleDescriptionChange = (value: string | any) => {
-    const textValue = typeof value === 'string' ? value : '';
-    setFormData((prev) => ({ ...prev, description: textValue }));
+  // ✅ FIX 3: Remove 'any' type - use proper type
+  const handleDescriptionChange = (value: string | unknown) => {
+    const stringValue = typeof value === 'string' ? value : '';
+    setFormData((prev) => ({ ...prev, description: stringValue }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -331,7 +333,7 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                   className="w-full px-4 py-2 border rounded-lg bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-60"
                 />
                 <p className="text-xs text-amber-500 mt-1">
-                  ⚠️ Slug cannot be edited. It's permanently set when created.
+                  ⚠️ Slug cannot be edited. It is permanently set when created.
                 </p>
               </div>
 
@@ -455,7 +457,7 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Description - FIXED RichTextEditor */}
+              {/* Description with RichTextEditor */}
               <div className="col-span-2">
                 <label className="block text-sm font-medium mb-2">Description (Content)</label>
                 <RichTextEditor
