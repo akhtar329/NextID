@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import BulkUpload from "@/components/ui/BulkUpload";
-import { useBulkUpload } from "@/app/hooks/useBulkUpload";
+import { useBulkUpload } from "@/hooks/useBulkUpload";
 
 export default function CreateCategoryPage() {
   const router = useRouter();

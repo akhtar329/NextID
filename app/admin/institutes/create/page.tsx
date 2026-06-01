@@ -9,7 +9,7 @@ import PrimaryButton from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/select";
 import BulkUpload from "@/components/ui/BulkUpload";
-import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
+import { useBulkUpload, BulkItem } from "@/hooks/useBulkUpload";
 
 interface City {
   id: number;

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import PrimaryButton from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import BulkUpload from "@/components/ui/BulkUpload";
-import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
+import { useBulkUpload, BulkItem } from "@/hooks/useBulkUpload";
 
 interface CityBulkItem extends BulkItem {
   province?: string;
