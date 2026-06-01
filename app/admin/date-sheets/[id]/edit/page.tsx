@@ -184,10 +184,10 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
   };
 
   // ✅ FIX 3: Remove 'any' type - use proper type
-  const handleDescriptionChange = (value: string | unknown) => {
-    const stringValue = typeof value === 'string' ? value : '';
-    setFormData((prev) => ({ ...prev, description: stringValue }));
-  };
+const handleDescriptionChange = (value: string | EditorSection[]) => {
+  const stringValue = typeof value === 'string' ? value : '';
+  setFormData((prev) => ({ ...prev, description: stringValue }));
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
