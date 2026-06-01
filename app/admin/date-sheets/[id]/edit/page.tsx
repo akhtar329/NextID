@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft, Save, Eye, Star } from "lucide-react";
 import { toast } from "sonner";
-import RichTextEditor from "@/components/ui/RichTextEditor";
+import RichTextEditor, { EditorSection } from "@/components/ui/RichTextEditor";
 
 interface Board {
   id: number;
