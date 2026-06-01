@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Building2, MapPin, BookOpen, GraduationCap, Star, Award, ArrowRight } from 'lucide-react';
 import { University } from '@/types/universities.types';
 
-export function UniversityCard({ university, featured = false }: { university: University; featured?: boolean }) {
+export default function UniversityCard({ university, featured = false }: { university: University; featured?: boolean }) {
   return (
     <div className="group relative bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-xl transition-all duration-300 overflow-hidden">
       {/* Featured Badge */}
