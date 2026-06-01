@@ -186,9 +186,10 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     setSeoData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleDescriptionChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, description: value }));
-  };
+ const handleDescriptionChange = (value: string | any) => {
+  const textValue = typeof value === 'string' ? value : '';
+  setFormData((prev) => ({ ...prev, description: textValue }));
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
