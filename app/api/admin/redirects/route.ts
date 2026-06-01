@@ -1,10 +1,10 @@
 // app/api/admin/redirects/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { redirects as initialRedirects } from '@/app/lib/redirects-config';
+import { redirects as initialRedirects } from '@/services/redirects-config';
 import fs from 'fs';
 import path from 'path';
 
-// In-memory storage for runtime changes
+// In-memory storage for runtime change
 let currentRedirects = [...initialRedirects];
 
 export async function GET() {
