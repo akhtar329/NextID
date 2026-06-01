@@ -1,4 +1,3 @@
-// app/admin/date-sheets/[id]/edit/page.tsx
 "use client";
 
 import { useState, useEffect, use } from "react";
@@ -103,7 +102,7 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
         setFormData({
           id: sheetData.id || 0,
           title: sheetData.title || "",
-          slug: sheetData.slug || "",  // ✅ Slug from database - never changes
+          slug: sheetData.slug || "",
           boardId: sheetData.boardId || null,
           instituteId: sheetData.instituteId || null,
           examType: sheetData.examType || "",
@@ -163,7 +162,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  // ✅ Handle change - NO slug update on title change
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -174,9 +172,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    
-    // ✅ IMPORTANT: DO NOT update slug when title changes
-    // Slug should remain as it was when created
   };
 
   const handleSeoChange = (
@@ -186,21 +181,21 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
     setSeoData((prev) => ({ ...prev, [name]: value }));
   };
 
- const handleDescriptionChange = (value: string | any) => {
-  const textValue = typeof value === 'string' ? value : '';
-  setFormData((prev) => ({ ...prev, description: textValue }));
-};
+  // ✅ FIXED: Changed parameter type to accept string | any
+  const handleDescriptionChange = (value: string | any) => {
+    const textValue = typeof value === 'string' ? value : '';
+    setFormData((prev) => ({ ...prev, description: textValue }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      // ✅ Send existing slug (not a new one)
       const payload = {
         id: formData.id,
         title: formData.title,
-        slug: formData.slug,  // ✅ Original slug from database
+        slug: formData.slug,
         boardId: formData.boardId ? Number(formData.boardId) : null,
         instituteId: formData.instituteId ? Number(formData.instituteId) : null,
         examType: formData.examType || null,
@@ -222,7 +217,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
       });
 
       if (res.ok) {
-        // Update SEO metadata
         const seoPayload = {
           entityType: "date_sheet",
           entityId: formData.id,
@@ -307,7 +301,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
               Basic Information
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Title - Can be edited */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-2">
                   Title <span className="text-red-500">*</span>
@@ -325,10 +318,9 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 </p>
               </div>
 
-              {/* Slug - READ ONLY - Never changes */}
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Slug (URL) <span className="text-xs text-red-500"></span>
+                  Slug (URL)
                 </label>
                 <input
                   type="text"
@@ -343,7 +335,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 </p>
               </div>
 
-              {/* Year */}
               <div>
                 <label className="block text-sm font-medium mb-2">Year *</label>
                 <input
@@ -356,7 +347,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Exam Type */}
               <div>
                 <label className="block text-sm font-medium mb-2">Exam Type</label>
                 <select
@@ -372,7 +362,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 </select>
               </div>
 
-              {/* Exam Date */}
               <div>
                 <label className="block text-sm font-medium mb-2">Exam Date</label>
                 <input
@@ -384,7 +373,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Board */}
               <div>
                 <label className="block text-sm font-medium mb-2">Board</label>
                 <select
@@ -402,7 +390,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 </select>
               </div>
 
-              {/* Institute */}
               <div>
                 <label className="block text-sm font-medium mb-2">Institute</label>
                 <select
@@ -420,7 +407,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 </select>
               </div>
 
-              {/* Official Link */}
               <div>
                 <label className="block text-sm font-medium mb-2">Official Link</label>
                 <input
@@ -433,7 +419,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Download Link */}
               <div>
                 <label className="block text-sm font-medium mb-2">Download Link</label>
                 <input
@@ -446,7 +431,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* PDF File */}
               <div>
                 <label className="block text-sm font-medium mb-2">PDF File URL</label>
                 <input
@@ -459,7 +443,6 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Featured Image */}
               <div>
                 <label className="block text-sm font-medium mb-2">Featured Image URL</label>
                 <input
@@ -472,7 +455,7 @@ export default function EditDateSheetPage({ params }: { params: Promise<{ id: st
                 />
               </div>
 
-              {/* Description */}
+              {/* Description - FIXED RichTextEditor */}
               <div className="col-span-2">
                 <label className="block text-sm font-medium mb-2">Description (Content)</label>
                 <RichTextEditor
