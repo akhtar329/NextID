@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/select";
-import RichTextEditor from "@/components/ui/RichTextEditor";
+import RichTextEditor, { EditorSection } from "@/components/ui/RichTextEditor";
 import { X, Hash, Plus } from "lucide-react";
 
 type NewsItem = {
