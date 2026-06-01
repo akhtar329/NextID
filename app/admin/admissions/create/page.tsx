@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import PrimaryButton from "@/components/ui/Button";
 import Select from "@/components/ui/select";
-import RichTextEditor from "@/components/ui/RichTextEditor";
+import RichTextEditor, { EditorSection } from "@/components/ui/RichTextEditor";
 
 type Program = {
   id: number;
@@ -55,10 +55,10 @@ type AdmissionFormData = {
   ogImage: string | null;
 };
 
-type ApiProgramResponse = {
+type LinkedOfferingItem = {
   id: number;
-  program_id?: number;
   programId?: number;
+  program_id?: number;
   name?: string;
   programName?: string;
   degree_name?: string;
@@ -311,9 +311,19 @@ export default function CreateAdmissionPage() {
     setMeritInfo(e.target.value);
   };
 
-  const handleNoteChange = (value: string) => {
+
+const handleNoteChange = (value: string | any) => {
+  if (typeof value === 'string') {
     setNote(value);
-  };
+  } else {
+    try {
+      const textValue = JSON.stringify(value);
+      setNote(textValue);
+    } catch {
+      setNote('');
+    }
+  }
+};
 
   useEffect(() => {
     async function fetchData() {
@@ -348,13 +358,14 @@ export default function CreateAdmissionPage() {
       // Get linked programs from API
       const linkedOfferings = linkedData.offerings || linkedData.programs || [];
 
-      const linked = linkedOfferings.map((item: any) => ({
+      // ✅ FIXED: Using LinkedOfferingItem type instead of any
+      const linked = linkedOfferings.map((item: LinkedOfferingItem) => ({
         offeringId: item.id,
-        programId: item.programId,
-        programName: item.programName || item.name || "Unknown",
-        degreeName: item.degreeName || "BS",
+        programId: item.programId ?? item.program_id ?? 0,
+        programName: item.programName ?? item.name ?? "Unknown",
+        degreeName: item.degreeName ?? item.degree_name ?? "BS",
         duration: item.duration,
-        feeRange: item.feeRange,
+        feeRange: item.feeRange ?? item.fee_range,
       }));
 
       setLinkedPrograms(linked);
@@ -365,16 +376,18 @@ export default function CreateAdmissionPage() {
       const allPrograms = allProgramsData.programs || [];
 
       // 3. Get IDs of programs that are ALREADY linked
+      // ✅ FIXED: Added proper type for p
       const linkedProgramIds = linked.map((l: LinkedProgram) => l.programId);
 
       console.log("📋 Linked Program IDs:", linkedProgramIds);
       console.log(
         "📋 All Program IDs:",
-        allPrograms.map((p) => p.id),
+        allPrograms.map((p: Program) => p.id),
       );
 
       // 4. Show ONLY unlinked programs in Available section
-      let unlinkedPrograms = allPrograms.filter(
+      // ✅ FIXED: Changed let to const and added proper type
+      const unlinkedPrograms = allPrograms.filter(
         (p: Program) => !linkedProgramIds.includes(p.id),
       );
 
@@ -386,7 +399,7 @@ export default function CreateAdmissionPage() {
 
       console.log(
         "✅ Unlinked Program IDs:",
-        unlinkedPrograms.map((p) => p.id),
+        unlinkedPrograms.map((p: Program) => p.id),
       );
 
       setAvailablePrograms(unlinkedPrograms);
