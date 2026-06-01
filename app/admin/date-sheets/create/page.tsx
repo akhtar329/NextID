@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft, Save, Eye, Star } from "lucide-react";
 import { toast } from "sonner";
-import RichTextEditor from "@/components/ui/RichTextEditor";
+import RichTextEditor, { EditorSection } from "@/components/ui/RichTextEditor";
 
 interface Board {
   id: number;
@@ -144,9 +144,10 @@ export default function CreateDateSheetPage() {
     setSeoData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleDescriptionChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, description: value }));
-  };
+const handleDescriptionChange = (value: string | EditorSection[]) => {
+  const stringValue = typeof value === 'string' ? value : '';
+  setFormData((prev) => ({ ...prev, description: stringValue }));
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
