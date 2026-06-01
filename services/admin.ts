@@ -1,6 +1,6 @@
 // app/lib/seed.ts
-import { db } from './db.ts';
-import { adminUsers, adminRoles } from './schema.ts';
+import { db } from '@/db/db';
+import { adminUsers, adminRoles } from '@/db/schema';
 import { hash } from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 

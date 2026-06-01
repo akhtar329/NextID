@@ -1,4 +1,4 @@
-// app/api/admin/admissions/route.ts - COMPLETE FILE
+// app/api/admin/admissions/route.ts - COMPLETE FILE (FIXED)
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
@@ -273,7 +273,7 @@ export async function PUT(request: NextRequest) {
       .where(eq(admissions.id, body.id))
       .returning();
     
-    // Update SEO if provided
+    // ✅ FIXED: Use and() instead of multiple .where()
     if (body.metaTitle || body.metaDescription) {
       await db
         .update(seoMetadata)
@@ -287,8 +287,10 @@ export async function PUT(request: NextRequest) {
           ogImage: body.ogImage || null,
           updatedAt: new Date(),
         })
-        .where(eq(seoMetadata.entityId, body.id))
-        .where(eq(seoMetadata.entityType, 'admission'));
+        .where(and(
+          eq(seoMetadata.entityId, body.id),
+          eq(seoMetadata.entityType, 'admission')
+        ));
     }
     
     await invalidateAdmissionsCache();

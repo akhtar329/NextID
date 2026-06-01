@@ -65,8 +65,21 @@ const CATEGORY_OPTIONS = [
 
 // ✅ Popular Tags Suggestions
 const POPULAR_TAGS = [
-  "Admissions", "Results", "Scholarships", "Exams", "NUST", "PU", "UET", 
-  "LUMS", "IBA", "HEC", "BISE", "CSS", "PMS", "NTS", "Entry Test"
+  "Admissions",
+  "Results",
+  "Scholarships",
+  "Exams",
+  "NUST",
+  "PU",
+  "UET",
+  "LUMS",
+  "IBA",
+  "HEC",
+  "BISE",
+  "CSS",
+  "PMS",
+  "NTS",
+  "Entry Test",
 ];
 
 // ✅ SEO Metadata Interface
@@ -175,12 +188,12 @@ export default function EditNewsPage() {
 
   // ✅ Remove Tag Function
   const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+    setTags(tags.filter((tag) => tag !== tagToRemove));
   };
 
   // ✅ Handle Tag Input Key Press
   const handleTagKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       addTag(tagInput);
     }
@@ -196,16 +209,28 @@ export default function EditNewsPage() {
           fetch("/api/admin/boards"),
           fetch("/api/admin/cities"),
         ]);
-        
+
         const pData = await pRes.json();
         const iData = await iRes.json();
         const bData = await bRes.json();
         const cData = await cRes.json();
 
-        setPrograms(pData.programs?.map((p: any) => ({ value: p.id, label: p.name })) || []);
-        setInstitutes(iData.institutes?.map((i: any) => ({ value: i.id, label: `${i.name} (${i.cityName})` })) || []);
-        setBoards(bData.boards?.map((b: any) => ({ value: b.id, label: b.name })) || []);
-        setCities(cData.cities?.map((c: any) => ({ value: c.id, label: c.name })) || []);
+        setPrograms(
+          pData.programs?.map((p: any) => ({ value: p.id, label: p.name })) ||
+            [],
+        );
+        setInstitutes(
+          iData.institutes?.map((i: any) => ({
+            value: i.id,
+            label: `${i.name} (${i.cityName})`,
+          })) || [],
+        );
+        setBoards(
+          bData.boards?.map((b: any) => ({ value: b.id, label: b.name })) || [],
+        );
+        setCities(
+          cData.cities?.map((c: any) => ({ value: c.id, label: c.name })) || [],
+        );
       } catch (err) {
         console.error(err);
         toast.error("Failed to load relations");
@@ -225,7 +250,8 @@ export default function EditNewsPage() {
         const res = await fetch(`/api/admin/news/${newsId}`);
         if (!res.ok) throw new Error("News not found");
         const data = await res.json();
-        if (!data.success) throw new Error(data.error || "Failed to fetch news");
+        if (!data.success)
+          throw new Error(data.error || "Failed to fetch news");
 
         const news: NewsItem = data.news;
         setTitle(news.title);
@@ -248,7 +274,7 @@ export default function EditNewsPage() {
         setIsBreaking(news.isBreaking);
         setStatus(news.status);
         setViewCount(news.viewCount || 0);
-        
+
         // ✅ Load SEO metadata
         if (news.seo) {
           setSeo({
@@ -264,7 +290,7 @@ export default function EditNewsPage() {
             twitterDescription: news.seo.twitterDescription || "",
             twitterImage: news.seo.twitterImage || "",
           });
-          
+
           // Mark as manually edited if values exist
           setSeoManuallyEdited({
             metaTitle: !!news.seo.metaTitle,
@@ -278,7 +304,9 @@ export default function EditNewsPage() {
       } catch (err) {
         console.error(err);
         setError(err instanceof Error ? err.message : "Failed to fetch news");
-        toast.error(err instanceof Error ? err.message : "Failed to fetch news");
+        toast.error(
+          err instanceof Error ? err.message : "Failed to fetch news",
+        );
       } finally {
         setFetchLoading(false);
       }
@@ -289,69 +317,81 @@ export default function EditNewsPage() {
   // ✅ Auto-generate SEO title from news title (if not manually edited)
   useEffect(() => {
     if (title && !seoManuallyEdited.metaTitle) {
-      const truncatedTitle = title.length > META_TITLE_MAX 
-        ? title.substring(0, META_TITLE_MAX - 3) + "..." 
-        : title;
-      setSeo(prev => ({ ...prev, metaTitle: truncatedTitle }));
+      const truncatedTitle =
+        title.length > META_TITLE_MAX
+          ? title.substring(0, META_TITLE_MAX - 3) + "..."
+          : title;
+      setSeo((prev) => ({ ...prev, metaTitle: truncatedTitle }));
     }
     if (title && !seoManuallyEdited.ogTitle) {
-      const truncatedTitle = title.length > OG_TITLE_MAX 
-        ? title.substring(0, OG_TITLE_MAX - 3) + "..." 
-        : title;
-      setSeo(prev => ({ ...prev, ogTitle: truncatedTitle }));
+      const truncatedTitle =
+        title.length > OG_TITLE_MAX
+          ? title.substring(0, OG_TITLE_MAX - 3) + "..."
+          : title;
+      setSeo((prev) => ({ ...prev, ogTitle: truncatedTitle }));
     }
     if (title && !seoManuallyEdited.twitterTitle) {
-      const truncatedTitle = title.length > TWITTER_TITLE_MAX 
-        ? title.substring(0, TWITTER_TITLE_MAX - 3) + "..." 
-        : title;
-      setSeo(prev => ({ ...prev, twitterTitle: truncatedTitle }));
+      const truncatedTitle =
+        title.length > TWITTER_TITLE_MAX
+          ? title.substring(0, TWITTER_TITLE_MAX - 3) + "..."
+          : title;
+      setSeo((prev) => ({ ...prev, twitterTitle: truncatedTitle }));
     }
   }, [title, seoManuallyEdited]);
 
   // ✅ Auto-generate meta description from excerpt (if not manually edited)
   useEffect(() => {
-    const sourceText = excerpt || content.replace(/<[^>]*>/g, '').substring(0, 200);
+    const sourceText =
+      excerpt || content.replace(/<[^>]*>/g, "").substring(0, 200);
     if (sourceText && !seoManuallyEdited.metaDescription) {
-      const truncatedDesc = sourceText.length > META_DESC_MAX 
-        ? sourceText.substring(0, META_DESC_MAX - 3) + "..." 
-        : sourceText;
-      setSeo(prev => ({ ...prev, metaDescription: truncatedDesc }));
+      const truncatedDesc =
+        sourceText.length > META_DESC_MAX
+          ? sourceText.substring(0, META_DESC_MAX - 3) + "..."
+          : sourceText;
+      setSeo((prev) => ({ ...prev, metaDescription: truncatedDesc }));
     }
     if (sourceText && !seoManuallyEdited.ogDescription) {
-      const truncatedDesc = sourceText.length > OG_DESC_MAX 
-        ? sourceText.substring(0, OG_DESC_MAX - 3) + "..." 
-        : sourceText;
-      setSeo(prev => ({ ...prev, ogDescription: truncatedDesc }));
+      const truncatedDesc =
+        sourceText.length > OG_DESC_MAX
+          ? sourceText.substring(0, OG_DESC_MAX - 3) + "..."
+          : sourceText;
+      setSeo((prev) => ({ ...prev, ogDescription: truncatedDesc }));
     }
     if (sourceText && !seoManuallyEdited.twitterDescription) {
-      const truncatedDesc = sourceText.length > TWITTER_DESC_MAX 
-        ? sourceText.substring(0, TWITTER_DESC_MAX - 3) + "..." 
-        : sourceText;
-      setSeo(prev => ({ ...prev, twitterDescription: truncatedDesc }));
+      const truncatedDesc =
+        sourceText.length > TWITTER_DESC_MAX
+          ? sourceText.substring(0, TWITTER_DESC_MAX - 3) + "..."
+          : sourceText;
+      setSeo((prev) => ({ ...prev, twitterDescription: truncatedDesc }));
     }
   }, [excerpt, content, seoManuallyEdited]);
 
   // ✅ Auto-generate canonical URL from slug
   useEffect(() => {
     if (slug && !seo.canonicalUrl) {
-      setSeo(prev => ({ ...prev, canonicalUrl: `https://www.nextid.pk/news/${slug}` }));
+      setSeo((prev) => ({
+        ...prev,
+        canonicalUrl: `https://www.nextid.pk/news/${slug}`,
+      }));
     }
   }, [slug]);
 
   // ✅ Auto-set og:image from featured image
   useEffect(() => {
     if (imageUrl && !seo.ogImage) {
-      setSeo(prev => ({ ...prev, ogImage: imageUrl }));
+      setSeo((prev) => ({ ...prev, ogImage: imageUrl }));
     }
     if (imageUrl && !seo.twitterImage) {
-      setSeo(prev => ({ ...prev, twitterImage: imageUrl }));
+      setSeo((prev) => ({ ...prev, twitterImage: imageUrl }));
     }
   }, [imageUrl]);
 
   // ✅ Handle image URL change (block base64)
   const handleImageUrlChange = (url: string) => {
-    if (url.startsWith('data:image')) {
-      toast.error("Base64 images are not supported. Please use a valid image URL.");
+    if (url.startsWith("data:image")) {
+      toast.error(
+        "Base64 images are not supported. Please use a valid image URL.",
+      );
       return;
     }
     setImageUrl(url);
@@ -360,56 +400,62 @@ export default function EditNewsPage() {
 
   // ✅ Handle SEO field changes with limits
   const handleMetaTitleChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, metaTitle: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, metaTitle: true }));
     if (val.length <= META_TITLE_MAX) {
-      setSeo(prev => ({ ...prev, metaTitle: val }));
+      setSeo((prev) => ({ ...prev, metaTitle: val }));
     } else {
       toast.warning(`Meta title cannot exceed ${META_TITLE_MAX} characters`);
     }
   };
 
   const handleMetaDescriptionChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, metaDescription: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, metaDescription: true }));
     if (val.length <= META_DESC_MAX) {
-      setSeo(prev => ({ ...prev, metaDescription: val }));
+      setSeo((prev) => ({ ...prev, metaDescription: val }));
     } else {
-      toast.warning(`Meta description cannot exceed ${META_DESC_MAX} characters`);
+      toast.warning(
+        `Meta description cannot exceed ${META_DESC_MAX} characters`,
+      );
     }
   };
 
   const handleOgTitleChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, ogTitle: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, ogTitle: true }));
     if (val.length <= OG_TITLE_MAX) {
-      setSeo(prev => ({ ...prev, ogTitle: val }));
+      setSeo((prev) => ({ ...prev, ogTitle: val }));
     } else {
       toast.warning(`OG title cannot exceed ${OG_TITLE_MAX} characters`);
     }
   };
 
   const handleOgDescriptionChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, ogDescription: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, ogDescription: true }));
     if (val.length <= OG_DESC_MAX) {
-      setSeo(prev => ({ ...prev, ogDescription: val }));
+      setSeo((prev) => ({ ...prev, ogDescription: val }));
     } else {
       toast.warning(`OG description cannot exceed ${OG_DESC_MAX} characters`);
     }
   };
 
   const handleTwitterTitleChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, twitterTitle: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, twitterTitle: true }));
     if (val.length <= TWITTER_TITLE_MAX) {
-      setSeo(prev => ({ ...prev, twitterTitle: val }));
+      setSeo((prev) => ({ ...prev, twitterTitle: val }));
     } else {
-      toast.warning(`Twitter title cannot exceed ${TWITTER_TITLE_MAX} characters`);
+      toast.warning(
+        `Twitter title cannot exceed ${TWITTER_TITLE_MAX} characters`,
+      );
     }
   };
 
   const handleTwitterDescriptionChange = (val: string) => {
-    setSeoManuallyEdited(prev => ({ ...prev, twitterDescription: true }));
+    setSeoManuallyEdited((prev) => ({ ...prev, twitterDescription: true }));
     if (val.length <= TWITTER_DESC_MAX) {
-      setSeo(prev => ({ ...prev, twitterDescription: val }));
+      setSeo((prev) => ({ ...prev, twitterDescription: val }));
     } else {
-      toast.warning(`Twitter description cannot exceed ${TWITTER_DESC_MAX} characters`);
+      toast.warning(
+        `Twitter description cannot exceed ${TWITTER_DESC_MAX} characters`,
+      );
     }
   };
 
@@ -431,8 +477,10 @@ export default function EditNewsPage() {
     }
 
     // ✅ Check for base64 image
-    if (imageUrl && imageUrl.startsWith('data:image')) {
-      setError("Base64 images are not supported. Please use a valid image URL.");
+    if (imageUrl && imageUrl.startsWith("data:image")) {
+      setError(
+        "Base64 images are not supported. Please use a valid image URL.",
+      );
       setLoading(false);
       return;
     }
@@ -479,16 +527,20 @@ export default function EditNewsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to update news");
+      if (!res.ok || !data.success)
+        throw new Error(data.error || "Failed to update news");
 
       // ✅ Clear cache after update
-      await fetch('/api/admin/news/clear-cache', { method: 'POST' });
+      await fetch("/api/admin/news/clear-cache", { method: "POST" });
 
       toast.success("News updated successfully", { id: toastId });
       router.push("/admin/news");
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to update news", { id: toastId });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update news",
+        { id: toastId },
+      );
       setError(err instanceof Error ? err.message : "Failed to update news");
     } finally {
       setLoading(false);
@@ -511,19 +563,27 @@ export default function EditNewsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center text-sm text-gray-500 mb-2">
-            <Link href="/admin" className="hover:text-blue-600">Dashboard</Link>
+            <Link href="/admin" className="hover:text-blue-600">
+              Dashboard
+            </Link>
             <span className="mx-2">›</span>
-            <Link href="/admin/news" className="hover:text-blue-600">News</Link>
+            <Link href="/admin/news" className="hover:text-blue-600">
+              News
+            </Link>
             <span className="mx-2">›</span>
             <span className="text-gray-700">Edit: {title || "News"}</span>
           </div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             Edit News
             {isBreaking && (
-              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">Breaking</span>
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                Breaking
+              </span>
             )}
             {isFeatured && (
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">Featured</span>
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                Featured
+              </span>
             )}
           </h1>
         </div>
@@ -533,12 +593,22 @@ export default function EditNewsPage() {
             onClick={() => setShowSeoPanel(!showSeoPanel)}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 flex items-center gap-2"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
             SEO Settings
           </button>
-          
+
           <Link
             href="/admin/news"
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -574,15 +644,19 @@ export default function EditNewsPage() {
                     required
                   />
                 </div>
-                
+
                 {/* Slug - READ ONLY */}
                 <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-md">
                   <span className="text-gray-500 text-sm">Permalink:</span>
-                  <span className="text-blue-600 text-sm">https://www.nextid.pk/news/</span>
+                  <span className="text-blue-600 text-sm">
+                    https://www.nextid.pk/news/
+                  </span>
                   <span className="flex-1 px-2 py-1 bg-white border rounded text-sm font-mono text-gray-600">
                     {slug}
                   </span>
-                  <span className="text-xs text-gray-400">(Slug cannot be changed)</span>
+                  <span className="text-xs text-gray-400">
+                    (Slug cannot be changed)
+                  </span>
                 </div>
               </div>
             </div>
@@ -617,11 +691,13 @@ export default function EditNewsPage() {
               <div className="p-6">
                 {editorTab === "write" ? (
                   <RichTextEditor
-  value={content}
-  onChange={(value) => setContent(typeof value === 'string' ? value : '')}
-  placeholder="Write your news content here..."
-  minHeight={400}
-/>
+                    value={content}
+                    onChange={(value) =>
+                      setContent(typeof value === "string" ? value : "")
+                    }
+                    placeholder="Write your news content here..."
+                    minHeight={400}
+                  />
                 ) : (
                   <div className="prose max-w-none">
                     <h2 className="text-2xl font-bold mb-4">{title}</h2>
@@ -640,7 +716,9 @@ export default function EditNewsPage() {
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Excerpt
-                <span className="text-xs text-gray-500 ml-2">(used for meta description if not manually set)</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  (used for meta description if not manually set)
+                </span>
               </label>
               <textarea
                 value={excerpt}
@@ -649,7 +727,9 @@ export default function EditNewsPage() {
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-400 mt-1">{excerpt.length}/200 characters recommended</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {excerpt.length}/200 characters recommended
+              </p>
             </div>
 
             {/* ✅ Category & Tags Section */}
@@ -659,7 +739,9 @@ export default function EditNewsPage() {
                   <Hash className="w-4 h-4" />
                   Category & Tags
                 </h3>
-                <p className="text-xs text-gray-500 mt-1">Categorize your news for better discovery</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Categorize your news for better discovery
+                </p>
               </div>
               <div className="p-4 space-y-4">
                 {/* Category Select */}
@@ -682,7 +764,11 @@ export default function EditNewsPage() {
                   </select>
                   {category && (
                     <p className="text-xs text-green-600 mt-1">
-                      ✓ Selected: {CATEGORY_OPTIONS.find(c => c.value === category)?.label}
+                      ✓ Selected:{" "}
+                      {
+                        CATEGORY_OPTIONS.find((c) => c.value === category)
+                          ?.label
+                      }
                     </p>
                   )}
                 </div>
@@ -690,7 +776,8 @@ export default function EditNewsPage() {
                 {/* Tags Input */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tags <span className="text-xs text-gray-400">(Max 10 tags)</span>
+                    Tags{" "}
+                    <span className="text-xs text-gray-400">(Max 10 tags)</span>
                   </label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {tags.map((tag) => (
@@ -727,7 +814,7 @@ export default function EditNewsPage() {
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>
-                  
+
                   {/* Popular Tags Suggestions */}
                   <div className="mt-3">
                     <p className="text-xs text-gray-500 mb-2">Popular tags:</p>
@@ -753,14 +840,18 @@ export default function EditNewsPage() {
               <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
                 <div className="bg-gray-50 px-4 py-3 border-b">
                   <h3 className="font-medium">SEO Metadata</h3>
-                  <p className="text-xs text-gray-500 mt-1">Auto-syncs with title & excerpt. Edit manually to override.</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Auto-syncs with title & excerpt. Edit manually to override.
+                  </p>
                 </div>
                 <div className="p-4 space-y-4">
                   {/* Meta Title */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Meta Title
-                      <span className="text-xs text-gray-500 ml-2">(50-60 characters recommended)</span>
+                      <span className="text-xs text-gray-500 ml-2">
+                        (50-60 characters recommended)
+                      </span>
                     </label>
                     <input
                       type="text"
@@ -774,7 +865,9 @@ export default function EditNewsPage() {
                         {seo.metaTitle.length}/{META_TITLE_MAX} characters
                       </p>
                       {seo.metaTitle.length > META_TITLE_MAX && (
-                        <p className="text-xs text-red-500">Exceeds Google's recommended limit!</p>
+                        <p className="text-xs text-red-500">
+                          Exceeds Google's recommended limit!
+                        </p>
                       )}
                     </div>
                   </div>
@@ -783,11 +876,15 @@ export default function EditNewsPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Meta Description
-                      <span className="text-xs text-gray-500 ml-2">(150-160 characters recommended)</span>
+                      <span className="text-xs text-gray-500 ml-2">
+                        (150-160 characters recommended)
+                      </span>
                     </label>
                     <textarea
                       value={seo.metaDescription}
-                      onChange={(e) => handleMetaDescriptionChange(e.target.value)}
+                      onChange={(e) =>
+                        handleMetaDescriptionChange(e.target.value)
+                      }
                       placeholder="Brief description for search engines (auto-syncs with excerpt)"
                       rows={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -797,7 +894,9 @@ export default function EditNewsPage() {
                         {seo.metaDescription.length}/{META_DESC_MAX} characters
                       </p>
                       {seo.metaDescription.length > META_DESC_MAX && (
-                        <p className="text-xs text-red-500">Exceeds Google's recommended limit!</p>
+                        <p className="text-xs text-red-500">
+                          Exceeds Google's recommended limit!
+                        </p>
                       )}
                     </div>
                   </div>
@@ -806,26 +905,34 @@ export default function EditNewsPage() {
                   <Input
                     label="Meta Keywords"
                     value={seo.metaKeywords}
-                    onChange={(val) => setSeo(prev => ({ ...prev, metaKeywords: val }))}
+                    onChange={(val) =>
+                      setSeo((prev) => ({ ...prev, metaKeywords: val }))
+                    }
                     placeholder="keyword1, keyword2, keyword3"
                   />
-                  
+
                   {/* Canonical URL */}
                   <Input
                     label="Canonical URL"
                     value={seo.canonicalUrl}
-                    onChange={(val) => setSeo(prev => ({ ...prev, canonicalUrl: val }))}
+                    onChange={(val) =>
+                      setSeo((prev) => ({ ...prev, canonicalUrl: val }))
+                    }
                     placeholder="https://www.nextid.pk/news/slug"
                   />
-                  
+
                   {/* Open Graph Section */}
                   <div className="border-t pt-4">
-                    <h4 className="font-medium text-sm text-gray-700 mb-3">Open Graph (Facebook/WhatsApp/LinkedIn)</h4>
+                    <h4 className="font-medium text-sm text-gray-700 mb-3">
+                      Open Graph (Facebook/WhatsApp/LinkedIn)
+                    </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           OG Title
-                          <span className="text-xs text-gray-500 ml-2">(max {OG_TITLE_MAX} chars)</span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            (max {OG_TITLE_MAX} chars)
+                          </span>
                         </label>
                         <input
                           type="text"
@@ -834,42 +941,62 @@ export default function EditNewsPage() {
                           placeholder="Social media title"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-400 mt-1">{seo.ogTitle.length}/{OG_TITLE_MAX}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {seo.ogTitle.length}/{OG_TITLE_MAX}
+                        </p>
                       </div>
                       <Input
                         label="OG Image URL"
                         value={seo.ogImage}
-                        onChange={(val) => setSeo(prev => ({ ...prev, ogImage: val }))}
+                        onChange={(val) =>
+                          setSeo((prev) => ({ ...prev, ogImage: val }))
+                        }
                         placeholder="https://example.com/og-image.jpg"
                       />
                     </div>
                     <div className="mt-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         OG Description
-                        <span className="text-xs text-gray-500 ml-2">(max {OG_DESC_MAX} chars)</span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          (max {OG_DESC_MAX} chars)
+                        </span>
                       </label>
                       <textarea
                         value={seo.ogDescription}
-                        onChange={(e) => handleOgDescriptionChange(e.target.value)}
+                        onChange={(e) =>
+                          handleOgDescriptionChange(e.target.value)
+                        }
                         placeholder="Description for social media sharing"
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <p className="text-xs text-gray-400 mt-1">{seo.ogDescription.length}/{OG_DESC_MAX}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {seo.ogDescription.length}/{OG_DESC_MAX}
+                      </p>
                     </div>
                   </div>
-                  
+
                   {/* Twitter Card Section */}
                   <div className="border-t pt-4">
-                    <h4 className="font-medium text-sm text-gray-700 mb-3">Twitter Card</h4>
+                    <h4 className="font-medium text-sm text-gray-700 mb-3">
+                      Twitter Card
+                    </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Select
                         label="Twitter Card Type"
                         value={seo.twitterCard}
-                        onChange={(val) => setSeo(prev => ({ ...prev, twitterCard: val as string }))}
+                        onChange={(val) =>
+                          setSeo((prev) => ({
+                            ...prev,
+                            twitterCard: val as string,
+                          }))
+                        }
                         options={[
                           { value: "summary", label: "Summary" },
-                          { value: "summary_large_image", label: "Summary with Large Image" },
+                          {
+                            value: "summary_large_image",
+                            label: "Summary with Large Image",
+                          },
                           { value: "app", label: "App" },
                           { value: "player", label: "Player" },
                         ]}
@@ -877,37 +1004,51 @@ export default function EditNewsPage() {
                       <Input
                         label="Twitter Image URL"
                         value={seo.twitterImage}
-                        onChange={(val) => setSeo(prev => ({ ...prev, twitterImage: val }))}
+                        onChange={(val) =>
+                          setSeo((prev) => ({ ...prev, twitterImage: val }))
+                        }
                         placeholder="https://example.com/twitter-image.jpg"
                       />
                     </div>
                     <div className="mt-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Twitter Title
-                        <span className="text-xs text-gray-500 ml-2">(max {TWITTER_TITLE_MAX} chars)</span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          (max {TWITTER_TITLE_MAX} chars)
+                        </span>
                       </label>
                       <input
                         type="text"
                         value={seo.twitterTitle}
-                        onChange={(e) => handleTwitterTitleChange(e.target.value)}
+                        onChange={(e) =>
+                          handleTwitterTitleChange(e.target.value)
+                        }
                         placeholder="Twitter card title"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <p className="text-xs text-gray-400 mt-1">{seo.twitterTitle.length}/{TWITTER_TITLE_MAX}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {seo.twitterTitle.length}/{TWITTER_TITLE_MAX}
+                      </p>
                     </div>
                     <div className="mt-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Twitter Description
-                        <span className="text-xs text-gray-500 ml-2">(max {TWITTER_DESC_MAX} chars)</span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          (max {TWITTER_DESC_MAX} chars)
+                        </span>
                       </label>
                       <textarea
                         value={seo.twitterDescription}
-                        onChange={(e) => handleTwitterDescriptionChange(e.target.value)}
+                        onChange={(e) =>
+                          handleTwitterDescriptionChange(e.target.value)
+                        }
                         placeholder="Description for Twitter"
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <p className="text-xs text-gray-400 mt-1">{seo.twitterDescription.length}/{TWITTER_DESC_MAX}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {seo.twitterDescription.length}/{TWITTER_DESC_MAX}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -969,7 +1110,9 @@ export default function EditNewsPage() {
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b">
                 <h3 className="font-medium">Featured Image</h3>
-                <p className="text-xs text-gray-500 mt-1">✅ Image URL only (No base64)</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  ✅ Image URL only (No base64)
+                </p>
               </div>
               <div className="p-4">
                 {imagePreview ? (
@@ -991,8 +1134,18 @@ export default function EditNewsPage() {
                         }}
                         className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
                         </svg>
                       </button>
                     </div>
@@ -1000,14 +1153,28 @@ export default function EditNewsPage() {
                   </div>
                 ) : (
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <svg className="w-12 h-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <svg
+                      className="w-12 h-12 mx-auto text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
                     </svg>
-                    <p className="mt-2 text-sm text-gray-500">Enter image URL below</p>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Enter image URL below
+                    </p>
                   </div>
                 )}
                 <div className="mt-3">
-                  <label className="block text-xs text-gray-600 mb-1">Image URL (https://...)</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Image URL (https://...)
+                  </label>
                   <input
                     type="url"
                     value={imageUrl}
@@ -1015,7 +1182,9 @@ export default function EditNewsPage() {
                     placeholder="https://example.com/image.jpg"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-400 mt-1">⚠️ Base64 images not allowed. Use direct image URL.</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    ⚠️ Base64 images not allowed. Use direct image URL.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1030,13 +1199,19 @@ export default function EditNewsPage() {
                   label="Program"
                   value={programId || 0}
                   onChange={(val: number) => setProgramId(val)}
-                  options={[{ value: 0, label: "— Select Program —" }, ...programs]}
+                  options={[
+                    { value: 0, label: "— Select Program —" },
+                    ...programs,
+                  ]}
                 />
                 <Select
                   label="Institute"
                   value={instituteId || 0}
                   onChange={(val: number) => setInstituteId(val)}
-                  options={[{ value: 0, label: "— Select Institute —" }, ...institutes]}
+                  options={[
+                    { value: 0, label: "— Select Institute —" },
+                    ...institutes,
+                  ]}
                 />
                 <Select
                   label="Board"
@@ -1087,7 +1262,9 @@ export default function EditNewsPage() {
                     onChange={(e) => setIsFeatured(e.target.checked)}
                     className="h-4 w-4 text-orange-600 rounded"
                   />
-                  <span className="text-sm text-gray-700">⭐ Featured News (Shows in Sidebar)</span>
+                  <span className="text-sm text-gray-700">
+                    ⭐ Featured News (Shows in Sidebar)
+                  </span>
                 </label>
                 <label className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                   <input
@@ -1096,7 +1273,9 @@ export default function EditNewsPage() {
                     onChange={(e) => setIsBreaking(e.target.checked)}
                     className="h-4 w-4 text-red-600 rounded"
                   />
-                  <span className="text-sm text-gray-700">🔴 Breaking News (Shows in Banner)</span>
+                  <span className="text-sm text-gray-700">
+                    🔴 Breaking News (Shows in Banner)
+                  </span>
                 </label>
               </div>
             </div>
@@ -1113,7 +1292,9 @@ export default function EditNewsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Last Modified:</span>
-                  <span className="font-medium">{new Date().toLocaleDateString()}</span>
+                  <span className="font-medium">
+                    {new Date().toLocaleDateString()}
+                  </span>
                 </div>
               </div>
             </div>

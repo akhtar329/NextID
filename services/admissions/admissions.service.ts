@@ -93,7 +93,7 @@ export async function refreshAdmissionsData(filters?: AdmissionFilters): Promise
   // Clear relevant cache
   if (filters) {
     // Clear specific cache
-    await invalidateAdmissionsCache(filters);
+    await invalidateAdmissionsCache();
   } else {
     // Clear ALL admissions cache
     await invalidateAdmissionsCache();

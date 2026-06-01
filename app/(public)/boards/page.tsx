@@ -1,4 +1,6 @@
 // app/(public)/boards/page.tsx (OPTIMIZED VERSION - FIXED ESLINT ERRORS)
+
+export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/db/db';
