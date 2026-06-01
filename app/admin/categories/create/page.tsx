@@ -9,11 +9,12 @@ import Button from "@/components/ui/Button";
 import BulkUpload from "@/components/ui/BulkUpload";
 import { useBulkUpload } from "@/hooks/useBulkUpload";
 
-export default function CreateCategoryPage() {
+export default function CreateCategoryPage()  {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"single" | "bulk">("single");
   
-  // Single category states
+  // Single category states happen here
+  // 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [displayOrder, setDisplayOrder] = useState(0);
