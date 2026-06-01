@@ -15,7 +15,7 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
 }
 
 /* =========================
-   GET → Fetch Single Level
+   GET → Fetch Single Level helper
 ========================= */
 export async function GET(
   req: NextRequest,
@@ -269,7 +269,7 @@ export async function DELETE(
     }
 
     // Check if level is being used by any degrees
-    const { degrees } = await import("../../../../lib/schema");
+    const { degrees } = await import("@/db/schema");
     const usedByDegrees = await db
       .select()
       .from(degrees)
