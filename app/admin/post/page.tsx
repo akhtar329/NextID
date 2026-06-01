@@ -62,7 +62,11 @@ export default function AdminPostsPage() {
   }, [filterType, filterStatus, search, page, limit]);
 
   useEffect(() => {
-    fetchPosts();
+    const timer = setTimeout(() => {
+      fetchPosts();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [fetchPosts]);
 
   // Handle single delete
@@ -124,6 +128,11 @@ export default function AdminPostsPage() {
     }
   };
 
+  // Handle manual refresh
+  const handleRefresh = async () => {
+    await fetchPosts();
+  };
+
   // Get type badge color
   const getTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
@@ -162,12 +171,36 @@ export default function AdminPostsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Manage Posts</h1>
           <p className="text-gray-500 mt-1">Create, edit, and manage all content</p>
         </div>
-        <Link
-          href="/admin/post/create"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-        >
-          + Create New Post
-        </Link>
+        <div className="flex gap-3">
+          {/* Refresh Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg 
+              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+              />
+            </svg>
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+          
+          <Link
+            href="/admin/post/create"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            + Create New Post
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -346,7 +379,7 @@ export default function AdminPostsPage() {
                 ))
               )}
             </tbody>
-          </table>
+           </table>
         </div>
       </div>
 
