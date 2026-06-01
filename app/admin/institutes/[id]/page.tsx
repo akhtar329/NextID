@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
+import PrimaryButton from "@/components/ui/Button";
 
 type Institute = {
   id: number;

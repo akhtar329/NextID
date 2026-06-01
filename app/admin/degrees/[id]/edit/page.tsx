@@ -4,9 +4,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import Input from "@/app/component/ui/Input";
-import Button from "@/app/component/ui/Button";
-import Select from "@/app/component/ui/select";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
+import Select from "@/components/ui/select";
 
 interface Level {
   id: number;

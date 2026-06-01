@@ -1,7 +1,7 @@
 // app/api/admin/seo-metadata/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // GET - Fetch SEO metadata

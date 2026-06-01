@@ -11,10 +11,10 @@ import {
   admissionOfferings,
   programOfferings, 
   cities,
-} from '@/app/lib/schema';
+} from '@/db/schema';
 import { eq, and, desc, count, inArray } from 'drizzle-orm';
-import { db } from '@/app/lib/db';
-import { generateSEO } from '@/app/lib/seo';
+import { db } from '@/db/db';
+import { generateSEO } from '@/lib/seo';
 
 export const revalidate = 86400;
  

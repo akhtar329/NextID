@@ -2,8 +2,8 @@
 // app/api/super-admin/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
-import { db } from "@/app/lib/db"; // aapka Drizzle ORM instance
-import { adminUsers } from "@/app/lib/schema"; // Drizzle schema table
+import { db } from "@/db/db"; // aapka Drizzle ORM instance
+import { adminUsers } from "@/db/schema"; // Drizzle schema table
 
 export async function POST(req: NextRequest) {
   try {

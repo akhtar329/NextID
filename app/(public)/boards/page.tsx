@@ -1,8 +1,8 @@
 // app/(public)/boards/page.tsx (OPTIMIZED VERSION - FIXED ESLINT ERRORS)
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { boards, cities, results, dateSheets } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { boards, cities, results, dateSheets } from '@/db/schema';
 import { eq, like, and, sql, count } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 

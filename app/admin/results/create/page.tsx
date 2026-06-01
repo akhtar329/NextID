@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import Input from "@/app/component/ui/Input";
-import Select from "@/app/component/ui/select";
-import BulkUpload from "@/app/component/ui/BulkUpload";
+import PrimaryButton from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/select";
+import BulkUpload from "@/components/ui/BulkUpload";
 import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
 
 // -------------------- TYPES --------------------

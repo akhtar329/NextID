@@ -1,7 +1,7 @@
 // app/api/public/news/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { news } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { news } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 function safeLimit(value: string | null): number {

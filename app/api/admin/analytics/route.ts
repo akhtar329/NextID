@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/app/lib/db';
-import { pageViews, visitorSessions, dailyStats } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { pageViews, visitorSessions, dailyStats } from '@/db/schema';
 import { desc, sql, and, between, eq } from 'drizzle-orm';
 
 // Define types

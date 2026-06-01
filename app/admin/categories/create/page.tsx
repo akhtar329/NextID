@@ -4,9 +4,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import Input from "@/app/component/ui/Input";
-import Button from "@/app/component/ui/Button";
-import BulkUpload from "@/app/component/ui/BulkUpload";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
+import BulkUpload from "@/components/ui/BulkUpload";
 import { useBulkUpload } from "@/app/hooks/useBulkUpload";
 
 export default function CreateCategoryPage() {

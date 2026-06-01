@@ -1,8 +1,8 @@
 // app/api/admin/program-institutes/[id]/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/app/lib/db';
-import { programOfferings } from '@/app/lib/schema';  // ✅ Changed
+import { db } from '@/db/db';
+import { programOfferings } from '@/db/schema';  // ✅ Changed
 import { eq } from 'drizzle-orm';
 
 interface Props {

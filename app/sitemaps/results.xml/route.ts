@@ -1,44 +1,71 @@
-// app/sitemaps/results.xml/route.ts
+// app/sitemaps/results/route.ts
+
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { results } from "@/app/lib/schema";
-import { eq } from "drizzle-orm";
+import { db } from "@/db/db";
+import { posts } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
 const BASE_URL = "https://www.nextid.pk";
 
 export async function GET() {
+  const today = new Date().toISOString().split("T")[0];
+  
   try {
-    const data = await db
-      .select({ slug: results.slug, updatedAt: results.updatedAt })
-      .from(results)
-      .where(eq(results.status, true));
-
-    const urls = data
-      .map(
-        (r) => `
-  <url>
-    <loc>${BASE_URL}/results/${r.slug}</loc>
-    <lastmod>${r.updatedAt?.toISOString() ?? new Date().toISOString()}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>`
+    const postsList = await db
+      .select({
+        slug: posts.slug,
+        updatedAt: posts.updatedAt,
+      })
+      .from(posts)
+      .where(
+        sql`${posts.type} = 'result' AND ${posts.status} = 'published'`
       )
-      .join("");
-
+      .limit(1000);
+    
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
+  <url>
+    <loc>${BASE_URL}/results</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+${postsList.map((post) => `
+  <url>
+    <loc>${BASE_URL}/results/${post.slug}</loc>
+    <lastmod>${post.updatedAt ? new Date(post.updatedAt).toISOString().split("T")[0] : today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`).join("")}
 </urlset>`;
-
+    
     return new NextResponse(xml, {
+      status: 200,
       headers: {
         "Content-Type": "application/xml",
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
-        // ✅ X-Robots-Tag REMOVED
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
+    
   } catch (error) {
-    console.error("❌ Results sitemap error:", error);
-    return new NextResponse("Error generating sitemap", { status: 500 });
+    console.error("Error generating results sitemap:", error);
+    
+    const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${BASE_URL}/results</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>`;
+    
+    return new NextResponse(fallbackXml, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml",
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=43200",
+      },
+    });
   }
 }

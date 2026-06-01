@@ -1,3 +1,6 @@
+
+// app/layout.tsx
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
@@ -21,7 +24,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
-
         {/* MAIN CONTENT FIRST (IMPORTANT FOR LCP) */}
         {children}
 
@@ -41,6 +43,23 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
 
+        {/* Google tag (gtag.js) */}
+        <Script
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
+        />
+        <Script
+          id="google-analytics"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-2VNFCBN0SG');
+            `,
+          }}
+        />
       </body>
     </html>
   );

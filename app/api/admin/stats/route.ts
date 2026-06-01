@@ -1,12 +1,12 @@
 // app/api/admin/stats/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
+import { db } from "@/db/db";
 import {
   adminUsers,
   pageViews,
   systemStats,
   visitorSessions,
-} from "@/app/lib/schema";
+} from "@/db/schema";
 import { eq, gte, count, sql, desc } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import os from "os";

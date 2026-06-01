@@ -1,8 +1,8 @@
 // app/api/public/cities/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { cities } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { cities } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 
 export async function GET() {

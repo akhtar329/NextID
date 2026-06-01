@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import SearchInput from "@/app/component/ui/SearchInput";
-import Table, { Column } from "@/app/component/ui/Table";
+import PrimaryButton from "@/components/ui/Button";
+import SearchInput from "@/components/ui/SearchInput";
+import Table, { Column } from "@/components/ui/Table";
 
 type NewsItem = {
   id: number;

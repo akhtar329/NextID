@@ -6,9 +6,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import Input from "@/app/component/ui/Input";
-import Select from "@/app/component/ui/select";
+import PrimaryButton from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/select";
 
 type Status = boolean;
 

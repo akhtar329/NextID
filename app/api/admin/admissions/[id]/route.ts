@@ -1,43 +1,19 @@
-// app/api/admin/admissions/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // ==================== TYPES ====================
-interface AdmissionUpdateData {
-  name: string;
-  slug: string;
-  instituteId: number;
-  year: number;
-  session: string | null;
-  status: 'Expected' | 'Open' | 'Closed';
-  expectedOpenDate: string | null;
-  expectedCloseDate: string | null;
-  meritInfo: string | null;
-  note: string | null;
-  officialLink: string | null;
-  offeringIds: number[];
-  featuredImage?: string | null;
-  galleryImages?: string[] | null;
-  // SEO Fields
-  metaTitle?: string | null;
-  metaDescription?: string | null;
-  metaKeywords?: string | null;
-  canonicalUrl?: string | null;
-  robots?: string | null;
-  ogTitle?: string | null;
-  ogDescription?: string | null;
-  ogImage?: string | null;
-}
+// FIXED: Remove unused interface or keep it for future use
+// interface AdmissionUpdateData { ... } - Removed since not used
 
 // ==================== HELPER FUNCTIONS ====================
 const validateStatus = (status: string): status is 'Expected' | 'Open' | 'Closed' => {
   return ['Expected', 'Open', 'Closed'].includes(status);
 };
 
-const validateOfferingIds = (offeringIds: any): offeringIds is number[] => {
+// FIXED: Changed 'any' to 'unknown' with proper type checking
+const validateOfferingIds = (offeringIds: unknown): offeringIds is number[] => {
   return Array.isArray(offeringIds) && offeringIds.length > 0 && offeringIds.every(id => typeof id === 'number');
 };
 
@@ -291,7 +267,7 @@ export async function PUT(
         .where(eq(admissions.id, admissionId))
         .returning();
 
-      // 2. Update offering links (delete old, insert new) - using admissionOfferings
+      // 2. Update offering links (delete old, insert new)
       await tx
         .delete(admissionOfferings)
         .where(eq(admissionOfferings.admissionId, admissionId));
@@ -375,18 +351,20 @@ export async function PUT(
       message: `Admission updated successfully with ${result.offeringCount} offering(s)`,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {  // FIXED: Changed from 'any' to 'unknown'
     console.error("❌ Error updating admission:", error);
     
+    const err = error as { code?: string; message?: string };
+    
     // Handle unique constraint violations
-    if (error.code === '23505') {
-      if (error.message?.includes('admissions_slug_unique')) {
+    if (err.code === '23505') {
+      if (err.message?.includes('admissions_slug_unique')) {
         return NextResponse.json(
           { success: false, error: "Slug already exists. Please choose a different slug." },
           { status: 400 }
         );
       }
-      if (error.message?.includes('seo_metadata_entity_type_entity_id_unique')) {
+      if (err.message?.includes('seo_metadata_entity_type_entity_id_unique')) {
         return NextResponse.json(
           { success: false, error: "SEO metadata already exists for this admission." },
           { status: 400 }
@@ -395,7 +373,7 @@ export async function PUT(
     }
 
     // Handle foreign key violations
-    if (error.code === '23503') {
+    if (err.code === '23503') {
       return NextResponse.json(
         { success: false, error: "Invalid institute ID or offering ID. Please check your data." },
         { status: 400 }
@@ -403,7 +381,7 @@ export async function PUT(
     }
 
     return NextResponse.json(
-      { success: false, error: "Failed to update admission", details: error.message },
+      { success: false, error: "Failed to update admission", details: err.message },
       { status: 500 }
     );
   }

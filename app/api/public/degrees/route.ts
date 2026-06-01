@@ -1,7 +1,7 @@
 // app/api/public/degrees/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { degrees, levels } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { degrees, levels } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 
 export async function GET() {

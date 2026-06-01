@@ -1,7 +1,7 @@
 // app/api/admin/levels/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "../../../../lib/db";
-import { levels } from "../../../../lib/schema";
+import { db } from "@/db/db";
+import { levels } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 /* =========================

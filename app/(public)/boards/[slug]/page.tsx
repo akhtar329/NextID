@@ -2,8 +2,8 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
-import { boards, cities, results, dateSheets, news, seoMetadata } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { boards, cities, results, dateSheets, news, seoMetadata } from '@/db/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 
 export const revalidate = 86400;

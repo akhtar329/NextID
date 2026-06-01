@@ -1,8 +1,8 @@
 // app/api/admin/degrees/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { degrees, programOfferings } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { degrees, programOfferings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // GET /api/admin/degrees/:id

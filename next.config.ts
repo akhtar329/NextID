@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '**.gstatic.com',  // Sabhi gstatic subdomains
+        hostname: '**.gstatic.com',
         port: '',
         pathname: '/**',
       },
@@ -43,6 +43,19 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: '**.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
+      // ✅ ADDED: Blogger Images Domain
+      {
+        protocol: 'https',
+        hostname: 'blogger.googleusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
         port: '',
         pathname: '/**',
       },
@@ -60,13 +73,10 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-    // Agar bilkul sab allow karna hai to (not recommended for production)
-    // domains: ['*'],  // Next.js 12.3 se pehle ke liye
   },
 
   async redirects() {
     return [
-      // non-www ko www par redirect karo (canonical fix)
       {
         source: "/:path*",
         has: [{ type: "host", value: "nextid.pk" }],
@@ -79,7 +89,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Font files aur static media ko noindex karo
         source: "/_next/static/media/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex" },
@@ -90,7 +99,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // manifest.json ko bhi noindex karo
         source: "/manifest.json",
         headers: [{ key: "X-Robots-Tag", value: "noindex" }],
       },

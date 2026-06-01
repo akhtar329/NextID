@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import SearchInput from "@/app/component/ui/SearchInput";
-import Table from "@/app/component/ui/Table";
+import PrimaryButton from "@/components/ui/Button";
+import SearchInput from "@/components/ui/SearchInput";
+import Table from "@/components/ui/Table";
 
 type Institute = {
   id: number;

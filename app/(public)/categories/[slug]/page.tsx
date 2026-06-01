@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
+import { db } from '@/db/db';
 import { 
   categories, 
   degrees, 
@@ -12,7 +12,7 @@ import {
   programOfferings,
   results, 
   news,
-} from '@/app/lib/schema';
+} from '@/db/schema';
 import { eq, and, desc, inArray, sql, isNotNull } from 'drizzle-orm';
 
 export const revalidate = 86400;

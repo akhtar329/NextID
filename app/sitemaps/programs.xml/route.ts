@@ -1,7 +1,7 @@
 // app/sitemaps/programs.xml/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { programs } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { programs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const BASE_URL = "https://www.nextid.pk";

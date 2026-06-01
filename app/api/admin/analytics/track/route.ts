@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { pageViews, visitorSessions } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { pageViews, visitorSessions } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {

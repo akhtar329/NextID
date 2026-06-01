@@ -1,48 +1,71 @@
-// app/sitemaps/admissions.xml/route.ts
+// app/sitemaps/admissions/route.ts
+
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { admissions } from "@/app/lib/schema";
-import { eq } from "drizzle-orm";
+import { db } from "@/db/db";
+import { posts } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
 const BASE_URL = "https://www.nextid.pk";
 
 export async function GET() {
+  const today = new Date().toISOString().split("T")[0];
+  
   try {
-    const data = await db
+    const postsList = await db
       .select({
-        slug: admissions.slug,
-        updatedAt: admissions.updatedAt,
-        status: admissions.status,
+        slug: posts.slug,
+        updatedAt: posts.updatedAt,
       })
-      .from(admissions)
-      .where(eq(admissions.status, "Open")); // ✅ Sirf Open admissions index hon
-
-    const urls = data
-      .map(
-        (a) => `
-  <url>
-    <loc>${BASE_URL}/admissions/${a.slug}</loc>
-    <lastmod>${a.updatedAt ? new Date(a.updatedAt).toISOString() : new Date().toISOString()}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>`
+      .from(posts)
+      .where(
+        sql`${posts.type} = 'admission' AND ${posts.status} = 'published'`
       )
-      .join("");
-
+      .limit(1000);
+    
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
+  <url>
+    <loc>${BASE_URL}/admissions</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+${postsList.map((post) => `
+  <url>
+    <loc>${BASE_URL}/admissions/${post.slug}</loc>
+    <lastmod>${post.updatedAt ? new Date(post.updatedAt).toISOString().split("T")[0] : today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`).join("")}
 </urlset>`;
-
+    
     return new NextResponse(xml, {
+      status: 200,
       headers: {
         "Content-Type": "application/xml",
-        "Cache-Control": "public, s-maxage=21600, stale-while-revalidate=86400", // ✅ 6 ghante
-        // ✅ X-Robots-Tag REMOVED — sitemap index honi chahiye
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
       },
     });
+    
   } catch (error) {
-    console.error("❌ Admissions sitemap error:", error);
-    return new NextResponse("Error generating sitemap", { status: 500 });
+    console.error("Error generating admissions sitemap:", error);
+    
+    const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${BASE_URL}/admissions</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>`;
+    
+    return new NextResponse(fallbackXml, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/xml",
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=43200",
+      },
+    });
   }
 }

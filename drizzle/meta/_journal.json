@@ -43,6 +43,13 @@
       "when": 1775757134507,
       "tag": "0005_wealthy_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780056592204,
+      "tag": "0006_jittery_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

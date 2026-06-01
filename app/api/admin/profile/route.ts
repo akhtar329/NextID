@@ -1,8 +1,8 @@
 // app/api/admin/profile/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { db } from '@/app/lib/db';
-import { adminUsers, adminRoles } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { adminUsers, adminRoles } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {

@@ -1,7 +1,7 @@
 // app/api/admin/date-sheets/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { dateSheets, boards, institutes } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { dateSheets, boards, institutes } from "@/db/schema";
 import { eq, desc, ilike, or } from "drizzle-orm";
 
 // ✅ GET method (already exists)

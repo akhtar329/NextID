@@ -1,4 +1,4 @@
-// app/admin/news/[id]/edit/page.tsx (Updated - Dark Mode button removed, SEO auto-sync with limits)
+// app/admin/news/[id]/edit/page.tsx
 
 "use client";
 
@@ -6,9 +6,11 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import Input from "@/app/component/ui/Input";
-import Select from "@/app/component/ui/select";
-import RichTextEditor from "@/app/component/ui/RichTextEditor";
+import Image from "next/image";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/select";
+import RichTextEditor from "@/components/ui/RichTextEditor";
+import { X, Hash, Plus } from "lucide-react";
 
 type NewsItem = {
   id: number;
@@ -16,6 +18,8 @@ type NewsItem = {
   slug: string;
   content: string;
   excerpt: string | null;
+  category: string | null;
+  tags: string[] | null;
   imageUrl: string | null;
   programId: number | null;
   instituteId: number | null;
@@ -46,6 +50,24 @@ type NewsItem = {
 };
 
 type Option = { value: number; label: string };
+
+// ✅ Category Options
+const CATEGORY_OPTIONS = [
+  { value: "Admissions", label: "🎓 Admissions" },
+  { value: "Results", label: "📊 Results" },
+  { value: "Scholarships", label: "💰 Scholarships" },
+  { value: "Exams", label: "📝 Exams" },
+  { value: "Events", label: "🎉 Events" },
+  { value: "Announcements", label: "📢 Announcements" },
+  { value: "Jobs", label: "💼 Jobs" },
+  { value: "News", label: "📰 General News" },
+];
+
+// ✅ Popular Tags Suggestions
+const POPULAR_TAGS = [
+  "Admissions", "Results", "Scholarships", "Exams", "NUST", "PU", "UET", 
+  "LUMS", "IBA", "HEC", "BISE", "CSS", "PMS", "NTS", "Entry Test"
+];
 
 // ✅ SEO Metadata Interface
 interface SeoMetadata {
@@ -80,6 +102,9 @@ export default function EditNewsPage() {
   const [slug, setSlug] = useState("");
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
+  const [category, setCategory] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [source, setSource] = useState("");
@@ -135,6 +160,32 @@ export default function EditNewsPage() {
   // WordPress-like tabs for content area
   const [editorTab, setEditorTab] = useState<"write" | "preview">("write");
 
+  // ✅ Add Tag Function
+  const addTag = (tag: string) => {
+    const trimmedTag = tag.trim().toLowerCase();
+    if (trimmedTag && !tags.includes(trimmedTag) && tags.length < 10) {
+      setTags([...tags, trimmedTag]);
+      setTagInput("");
+    } else if (tags.length >= 10) {
+      toast.warning("Maximum 10 tags allowed");
+    } else if (tags.includes(trimmedTag)) {
+      toast.warning("Tag already added");
+    }
+  };
+
+  // ✅ Remove Tag Function
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  // ✅ Handle Tag Input Key Press
+  const handleTagKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag(tagInput);
+    }
+  };
+
   // Fetch all dropdown data
   useEffect(() => {
     async function fetchRelations() {
@@ -181,6 +232,8 @@ export default function EditNewsPage() {
         setSlug(news.slug);
         setContent(news.content);
         setExcerpt(news.excerpt || "");
+        setCategory(news.category || "");
+        setTags(news.tags || []);
         setImageUrl(news.imageUrl || "");
         setImagePreview(news.imageUrl || null);
         setSource(news.source || "");
@@ -371,6 +424,12 @@ export default function EditNewsPage() {
       return;
     }
 
+    if (!category) {
+      setError("Please select a category.");
+      setLoading(false);
+      return;
+    }
+
     // ✅ Check for base64 image
     if (imageUrl && imageUrl.startsWith('data:image')) {
       setError("Base64 images are not supported. Please use a valid image URL.");
@@ -387,8 +446,11 @@ export default function EditNewsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
+          slug,
           content,
           excerpt,
+          category,
+          tags,
           imageUrl,
           source,
           author,
@@ -419,6 +481,9 @@ export default function EditNewsPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to update news");
 
+      // ✅ Clear cache after update
+      await fetch('/api/admin/news/clear-cache', { method: 'POST' });
+
       toast.success("News updated successfully", { id: toastId });
       router.push("/admin/news");
     } catch (err) {
@@ -442,7 +507,7 @@ export default function EditNewsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header - Dark mode button removed (now in topbar) */}
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <div className="flex items-center text-sm text-gray-500 mb-2">
@@ -493,7 +558,7 @@ export default function EditNewsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Title & Slug Section - Slug READ-ONLY */}
+            {/* Title & Slug Section */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="space-y-4">
                 <div>
@@ -585,6 +650,102 @@ export default function EditNewsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-gray-400 mt-1">{excerpt.length}/200 characters recommended</p>
+            </div>
+
+            {/* ✅ Category & Tags Section */}
+            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Hash className="w-4 h-4" />
+                  Category & Tags
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">Categorize your news for better discovery</p>
+              </div>
+              <div className="p-4 space-y-4">
+                {/* Category Select */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">-- Select Category --</option>
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                  {category && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✓ Selected: {CATEGORY_OPTIONS.find(c => c.value === category)?.label}
+                    </p>
+                  )}
+                </div>
+
+                {/* Tags Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tags <span className="text-xs text-gray-400">(Max 10 tags)</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-md"
+                      >
+                        <Hash className="w-3 h-3" />
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="hover:text-red-600 transition"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyPress={handleTagKeyPress}
+                      placeholder="Type tag and press Enter or comma..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addTag(tagInput)}
+                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  {/* Popular Tags Suggestions */}
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-2">Popular tags:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {POPULAR_TAGS.slice(0, 8).map((suggestedTag) => (
+                        <button
+                          key={suggestedTag}
+                          type="button"
+                          onClick={() => addTag(suggestedTag)}
+                          className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full hover:bg-blue-100 hover:text-blue-600 transition"
+                        >
+                          {suggestedTag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* SEO Panel (Collapsible) */}
@@ -804,7 +965,7 @@ export default function EditNewsPage() {
               </div>
             </div>
 
-            {/* Featured Image Box */}
+            {/* Featured Image Box - ✅ Using Next.js Image */}
             <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b">
                 <h3 className="font-medium">Featured Image</h3>
@@ -814,9 +975,11 @@ export default function EditNewsPage() {
                 {imagePreview ? (
                   <div className="space-y-3">
                     <div className="relative group">
-                      <img
+                      <Image
                         src={imagePreview}
                         alt="Featured"
+                        width={400}
+                        height={160}
                         className="w-full h-40 object-cover rounded border"
                         onError={() => setImagePreview(null)}
                       />

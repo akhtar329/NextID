@@ -1,8 +1,8 @@
 // app/(public)/degrees/page.tsx (COMPLETE WORKING VERSION)
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { degrees, levels, programs } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { degrees, levels, programs } from '@/db/schema';
 import { eq, count, inArray } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 

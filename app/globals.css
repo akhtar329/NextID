@@ -1,66 +1,116 @@
-/* app/globals.css */
+/* =========================
+   NEXTID DESIGN SYSTEM
+   globals.css
+========================= */
+
+/* Tailwind Core */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@keyframes slideDown {
-  0% { opacity: 0; transform: translateY(-10px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideInRight {
-  0% { opacity: 0; transform: translateX(100%); }
-  100% { opacity: 1; transform: translateX(0); }
-}
-
-.animate-slideDown {
-  animation: slideDown 0.3s ease-out forwards;
-}
-
-.animate-slideInRight {
-  animation: slideInRight 0.3s ease-out forwards;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slideDown {
-  animation: slideDown 0.2s ease-out forwards;
-}
-
-/* app/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+/* =========================
+   DESIGN TOKENS (BASE THEME)
+========================= */
 @layer base {
   :root {
+    /* Backgrounds */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
+    /* Cards */
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+
+    /* Primary Brand */
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
+
+    /* Borders */
+    --border: 214.3 31.8% 91.4%;
+
+    /* Muted */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
+
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
+
+    --border: 217.2 32.6% 17.5%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+  }
+
+  body {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))] antialiased;
   }
 }
 
+/* =========================
+   TYPOGRAPHY SYSTEM
+========================= */
+@layer components {
+  .h1 {
+    @apply text-3xl md:text-5xl font-bold tracking-tight;
+  }
+
+  .h2 {
+    @apply text-2xl md:text-3xl font-semibold;
+  }
+
+  .h3 {
+    @apply text-xl font-semibold;
+  }
+
+  .text-muted {
+    @apply text-sm text-gray-500;
+  }
+}
+
+/* =========================
+   BUTTON SYSTEM
+========================= */
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 text-white hover:bg-blue-700;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-800 hover:bg-gray-200;
+  }
+
+  .btn-outline {
+    @apply border border-gray-300 hover:border-blue-500;
+  }
+}
+
+/* =========================
+   CARD SYSTEM
+========================= */
+@layer components {
+  .card {
+    @apply bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition;
+  }
+
+  .card-body {
+    @apply p-4;
+  }
+}
+
+/* =========================
+   ANIMATIONS
+========================= */
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -72,18 +122,41 @@
   }
 }
 
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .animate-slideDown {
   animation: slideDown 0.2s ease-out forwards;
 }
 
-/* Custom scrollbar for dark mode */
+.animate-slideInRight {
+  animation: slideInRight 0.25s ease-out forwards;
+}
+
+/* =========================
+   UTILITIES
+========================= */
+.container-page {
+  @apply max-w-6xl mx-auto px-4 md:px-6;
+}
+
+/* =========================
+   SCROLLBAR (CLEAN)
+========================= */
 ::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #f3f4f6;
 }
 
 .dark ::-webkit-scrollbar-track {
@@ -101,8 +174,4 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
 }

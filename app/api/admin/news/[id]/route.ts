@@ -1,8 +1,8 @@
 // app/api/admin/news/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { news, programs, institutes, cities, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { news, programs, institutes, cities, seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // GET - Fetch single news with SEO metadata
@@ -26,6 +26,8 @@ export async function GET(
         slug: news.slug,
         content: news.content,
         excerpt: news.excerpt,
+        category: news.category,
+        tags: news.tags,
         programId: news.programId,
         instituteId: news.instituteId,
         boardId: news.boardId,
@@ -135,6 +137,11 @@ export async function PATCH(
       if (body.slug !== undefined) updateData.slug = body.slug;
       if (body.content !== undefined) updateData.content = body.content;
       if (body.excerpt !== undefined) updateData.excerpt = body.excerpt || null;
+      
+      // ✅ ADDED: Category & Tags fields
+      if (body.category !== undefined) updateData.category = body.category || null;
+      if (body.tags !== undefined) updateData.tags = body.tags || [];
+      
       if (body.programId !== undefined) updateData.programId = body.programId ? Number(body.programId) : null;
       if (body.instituteId !== undefined) updateData.instituteId = body.instituteId ? Number(body.instituteId) : null;
       if (body.boardId !== undefined) updateData.boardId = body.boardId ? Number(body.boardId) : null;
@@ -247,8 +254,7 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "News not found" }, { status: 404 });
     }
 
-    // ✅ Delete in transaction (SEO metadata will be deleted automatically due to CASCADE? 
-    // If not, delete manually)
+    // ✅ Delete in transaction
     await db.transaction(async (tx) => {
       // Delete SEO metadata first
       await tx

@@ -1,23 +1,22 @@
 // app/robots.txt/route.ts
 import { NextResponse } from 'next/server';
 
-// Extract sitemap URLs to constant for reusability
+// ==================== SITEMAP URLs ====================
 const SITEMAPS = [
   '/sitemap.xml',
+  '/sitemaps/pages.xml',
   '/sitemaps/admissions.xml',
-  '/sitemaps/universities.xml',
-  '/sitemaps/programs.xml',
-  '/sitemaps/news.xml',
   '/sitemaps/results.xml',
-  '/sitemaps/boards.xml',
-  '/sitemaps/cities.xml',
-  '/sitemaps/pages.xml'
+  '/sitemaps/news.xml',
+  '/sitemaps/date-sheets.xml',
+  '/sitemaps/scholarships.xml',
+  '/sitemaps/jobs.xml',
 ] as const;
 
-// AI Bots to block (training scrapers)
+// ==================== AI BOTS TO BLOCK ====================
 const AI_BOTS = [
   'GPTBot',
-  'ChatGPT-User', 
+  'ChatGPT-User',
   'OAI-SearchBot',
   'ClaudeBot',
   'Claude-Web',
@@ -40,56 +39,98 @@ const AI_BOTS = [
   'AhrefsBot',
   'MJ12bot',
   'Dotbot',
-  'DataForSeoBot'
+  'DataForSeoBot',
+  'Google-Extended',
+  'Amazonbot',
+  'FacebookExternalHit',
 ] as const;
 
-// Base domain - configurable for different environments
-const getBaseUrl = () => {
-  if (process.env.NEXT_PUBLIC_BASE_URL) {
-    return process.env.NEXT_PUBLIC_BASE_URL;
-  }
-  return process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}`
-    : 'https://www.nextid.pk';
-};
+// ==================== BLOCKED PATHS ====================
+const BLOCKED_PATHS = [
+  // Admin & Auth
+  '/admin/',
+  '/login/',
+  '/register/',
+  '/forgot-password/',
+  '/reset-password/',
+  '/verify-email/',
+  '/unauthorized/',
+  '/error/',
+  
+  // API routes
+  '/api/',
+  '/api/auth/',
+  '/api/admin/',
+  
+  // Old/deprecated paths (301 redirects will handle these)
+  '/programs/',
+  '/boards/',
+  '/cities/',
+  '/institutes',
+  '/universities/',
+  '/city/',
+  '/tutors/',
+  '/blogs/',
+  '/questions/',
+  
+  // Dynamic/filter pages (low SEO value)
+  '/*?page=',
+  '/*?sort=',
+  '/*?filter=',
+  '/*?degree=',
+  '/*?category=',
+  
+  // Static assets
+  '/_next/static/media/',
+  '/_next/static/chunks/',
+  '/_next/image/',
+  '/_next/data/',
+];
 
-// Generate robots.txt content - pure function
+// ==================== GENERATE robots.txt ====================
 const generateRobotsTxt = (baseUrl: string): string => {
   const sitemapEntries = SITEMAPS.map(sitemap => `Sitemap: ${baseUrl}${sitemap}`).join('\n');
   
-  // Generate AI bot block rules
+  // AI Bot rules
   const aiBotRules = AI_BOTS.map(bot => `User-agent: ${bot}\nDisallow: /`).join('\n\n');
   
-  return `# robots.txt for NextID Educational Platform
+  // Blocked paths rules
+  const blockedPathRules = BLOCKED_PATHS.map(path => `Disallow: ${path}`).join('\n');
+  
+  return `# robots.txt for NextID.pk
 # Generated: ${new Date().toISOString().split('T')[0]}
-# Last Updated: Blocked AI training bots to save compute resources
+# Purpose: Block AI training bots, optimize crawl budget
 
 # ============================================
-# AI TRAINING BOTS - BLOCKED (Save Compute)
+# AI TRAINING BOTS - FULLY BLOCKED
 # ============================================
 ${aiBotRules}
 
 # ============================================
-# DEFAULT RULE (All other crawlers)
+# LEGITIMATE SEARCH ENGINES - ALLOWED
 # ============================================
-User-agent: *
-Allow: /
-
-# Allow legitimate search engines
 User-agent: Googlebot
 Allow: /
+Disallow: /admin/
+Disallow: /api/
 
 User-agent: Bingbot
 Allow: /
+Disallow: /admin/
+Disallow: /api/
 
 User-agent: DuckDuckBot
 Allow: /
+Disallow: /admin/
+Disallow: /api/
 
 User-agent: Baiduspider
 Allow: /
+Disallow: /admin/
 
 User-agent: YandexBot
 Allow: /
+Disallow: /admin/
 
 User-agent: twitterbot
 Allow: /
@@ -104,51 +145,16 @@ User-agent: Discordbot
 Allow: /
 
 # ============================================
-# PRIVATE & AUTHENTICATION ROUTES
+# DEFAULT RULE (All other crawlers)
 # ============================================
-Disallow: /admin/
-Disallow: /login/
-Disallow: /register/
-Disallow: /unauthorized/
-Disallow: /forgot-password/
-Disallow: /reset-password/
-Disallow: /verify-email/
-Disallow: /error/
+User-agent: *
+Allow: /
+Crawl-delay: 1
 
 # ============================================
-# API ROUTES (internal use only)
+# BLOCKED PATHS
 # ============================================
-Disallow: /api/
-Disallow: /api/auth/
-Disallow: /api/admin/
-
-# ============================================
-# STATIC ASSETS (optimize crawl budget)
-# ============================================
-Disallow: /_next/static/media/
-Disallow: /_next/static/chunks/
-Disallow: /_next/image/
-Disallow: /_next/data/
-
-# ============================================
-# USER-GENERATED & SEARCH PAGES (low SEO value)
-# ============================================
-Disallow: /search?
-Disallow: /filter?
-Disallow: /compare?
-Disallow: /dashboard/
-
-# ============================================
-# DUPLICATE OR THIN CONTENT
-# ============================================
-Disallow: /*?page=
-Disallow: /*?sort=
-Disallow: /*?filter=
-
-# ============================================
-# SLOW CRAWL PATHS
-# ============================================
-Crawl-delay: 2
+${blockedPathRules}
 
 # ============================================
 # SITEMAPS
@@ -157,20 +163,27 @@ ${sitemapEntries}
 `;
 };
 
+// ==================== GET BASE URL ====================
+const getBaseUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_BASE_URL) {
+    return process.env.NEXT_PUBLIC_BASE_URL;
+  }
+  return process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}`
+    : 'https://www.nextid.pk';
+};
+
+// ==================== MAIN HANDLER ====================
 export async function GET() {
   try {
     const baseUrl = getBaseUrl();
     const robotsTxt = generateRobotsTxt(baseUrl);
     
-    // Simple headers - NO CACHE
     return new NextResponse(robotsTxt, {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        // No cache - always fresh
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=43200', // 24 hour cache
       },
     });
     
@@ -180,6 +193,7 @@ export async function GET() {
     // Fallback robots.txt
     const fallbackRobotsTxt = `User-agent: *
 Allow: /
+Disallow: /admin/
 Disallow: /api/
 Sitemap: ${getBaseUrl()}/sitemap.xml`;
     
@@ -187,7 +201,7 @@ Sitemap: ${getBaseUrl()}/sitemap.xml`;
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Cache-Control': 'public, s-maxage=3600',
       },
     });
   }

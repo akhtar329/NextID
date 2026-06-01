@@ -1,8 +1,8 @@
 // app/(public)/programs/page.tsx (OPTIMIZED VERSION)
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { programs, categories, programOfferings } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { programs, categories, programOfferings } from '@/db/schema';
 import { eq, desc, count, inArray } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 

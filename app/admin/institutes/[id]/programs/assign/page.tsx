@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import SearchInput from "@/app/component/ui/SearchInput";
+import PrimaryButton from "@/components/ui/Button";
+import SearchInput from "@/components/ui/SearchInput";
 
 type Program = {
   id: number;

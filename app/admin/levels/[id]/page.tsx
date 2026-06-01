@@ -2,8 +2,8 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { levels, degrees } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { levels, degrees } from '@/db/schema';
 import { eq, and, desc, count, inArray } from 'drizzle-orm';
 
 export const metadata: Metadata = {

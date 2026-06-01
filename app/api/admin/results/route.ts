@@ -1,8 +1,8 @@
 // app/api/admin/results/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { results, institutes, boards } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { results, institutes, boards } from "@/db/schema";
 import { desc, eq, and } from "drizzle-orm";
 
 export async function GET(request: Request) {

@@ -1,7 +1,7 @@
 // app/api/admin/categories/bulk/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { categories } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { categories } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {

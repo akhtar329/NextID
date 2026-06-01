@@ -1,7 +1,7 @@
 // app/api/auth/reset-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { adminUsers } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { adminUsers } from "@/db/schema";
 import bcrypt from "bcryptjs";
 import { and, eq, gt } from "drizzle-orm";
 

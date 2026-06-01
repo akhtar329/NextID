@@ -1,8 +1,8 @@
 // app/api/admin/boards/bulk/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { boards, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { boards, seoMetadata } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 // Types

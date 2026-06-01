@@ -1,0 +1,180 @@
+// app/components/layout/Sidebar.tsx
+
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Newspaper,
+  GraduationCap,
+  FileText,
+  Calendar,
+  MapPin,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Wrench,
+  RefreshCw,
+  FileEdit,
+  List,
+  PlusCircle,
+  Eye,
+  Users,
+} from "lucide-react";
+
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+const navItems = [
+  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  
+  // ==================== POSTS SECTION ====================
+  { name: "Posts", href: "/admin/post", icon: FileEdit, divider: true },
+  { name: "All Posts", href: "/admin/post", icon: List },
+  { name: "Create Post", href: "/admin/post/create", icon: PlusCircle },
+  
+  // ==================== CONTENT TYPES (Legacy/Reference) ====================
+  { name: "Content", href: "#", icon: FileText, divider: true },
+  { name: "Admissions", href: "/admin/admissions", icon: GraduationCap },
+  { name: "Results", href: "/admin/results", icon: FileText },
+  { name: "Date Sheets", href: "/admin/date-sheets", icon: Calendar },
+  { name: "News", href: "/admin/news", icon: Newspaper },
+  
+  // ==================== REFERENCE DATA ====================
+  { name: "Reference", href: "#", icon: MapPin, divider: true },
+  { name: "Cities", href: "/admin/cities", icon: MapPin },
+  { name: "Boards", href: "/admin/boards", icon: MapPin },
+  { name: "Institutes", href: "/admin/institutes", icon: MapPin },
+  { name: "Programs", href: "/admin/programs", icon: MapPin },
+  
+  // ==================== SYSTEM ====================
+  { name: "System", href: "#", icon: Settings, divider: true },
+  { name: "Users", href: "/admin/users", icon: Users },
+  { name: "Settings", href: "/admin/settings", icon: Settings },
+  { name: "Maintenance", href: "/admin/settings/maintenance", icon: Wrench },
+  { name: "SEO Redirects", href: "/admin/settings/redirects", icon: RefreshCw },
+];
+
+export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const pathname = usePathname();
+
+  const isActive = (href: string) => {
+    if (href === "#") return false;
+    if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin/post") {
+      return pathname === "/admin/post" || pathname.startsWith("/admin/post/");
+    }
+    if (href === "/admin/settings") {
+      return pathname === "/admin/settings" || 
+             pathname === "/admin/settings/maintenance" || 
+             pathname === "/admin/settings/redirects";
+    }
+    return pathname.startsWith(href);
+  };
+
+  return (
+    <div className={`h-full bg-white border-r flex flex-col transition-all duration-300 ${collapsed ? "w-16" : "w-64"}`}>
+      
+      {/* Logo Section + Collapse Button */}
+      <div className={`border-b ${collapsed ? "py-3" : "p-4"}`}>
+        <div className="flex items-center justify-between">
+          <Link href="/admin" className={`flex items-center gap-2 ${collapsed ? "justify-center w-full" : ""}`}>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <span className="text-white font-bold">N</span>
+            </div>
+            {!collapsed && (
+              <div className="overflow-hidden">
+                <span className="font-bold text-lg text-gray-800 block leading-tight">NextID</span>
+                <span className="text-xs text-gray-400">Admin Panel</span>
+              </div>
+            )}
+          </Link>
+          
+          {!collapsed && (
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all"
+              title="Collapse"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
+        </div>
+        
+        {collapsed && (
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all"
+              title="Expand"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-4 overflow-y-auto">
+        <div className="space-y-1 px-2">
+          {navItems.map((item, index) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            
+            // Divider
+            if (item.divider && !collapsed) {
+              return (
+                <div key={item.name} className="pt-2 mt-2 first:pt-0">
+                  <div className="px-3 py-1">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      {item.name}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+            
+            // Divider when collapsed (just a separator)
+            if (item.divider && collapsed) {
+              return (
+                <div key={item.name} className="border-t border-gray-100 my-2"></div>
+              );
+            }
+            
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`
+                  flex items-center gap-3 px-3 py-2 rounded-lg transition-all
+                  ${collapsed ? "justify-center" : ""}
+                  ${active 
+                    ? "bg-blue-50 text-blue-700" 
+                    : "text-gray-600 hover:bg-gray-100"}
+                `}
+                title={collapsed ? item.name : undefined}
+              >
+                <Icon size={20} className="shrink-0" />
+                {!collapsed && <span className="text-sm whitespace-nowrap">{item.name}</span>}
+                {active && !collapsed && (
+                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Footer Info */}
+      {!collapsed && (
+        <div className="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
+          <p>NextID Admin Panel</p>
+          <p className="mt-1">Version 1.0.0</p>
+        </div>
+      )}
+    </div>
+  );
+}

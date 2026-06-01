@@ -1,7 +1,7 @@
 // app/api/admin/analytics/session/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/app/lib/db';
-import { visitorSessions } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { visitorSessions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 // Rate limiting map

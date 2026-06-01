@@ -1,7 +1,7 @@
 // app/api/public/universities/route.ts
 import { NextResponse } from 'next/server';
-import { db } from "@/app/lib/db";
-import { institutes, cities } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { institutes, cities } from "@/db/schema";
 import { eq, asc, and } from "drizzle-orm";
 
 export async function GET(request: Request) {

@@ -2,7 +2,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
+import { db } from '@/db/db';
 import { 
   institutes, 
   cities, 
@@ -11,7 +11,7 @@ import {
   admissionOfferings,
   programOfferings,
   results, 
-} from '@/app/lib/schema';
+} from '@/db/schema';
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 
 export const revalidate = 86400;

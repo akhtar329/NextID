@@ -1,5 +1,5 @@
 {
-  "schema": "./app/lib/schema.ts",
+  "schema": "./db/schema.ts",
   "out": "./drizzle",
   "dialect": "postgresql",
   "dbCredentials": {

@@ -1,8 +1,8 @@
 // app/api/admin/degrees/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { degrees } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { degrees } from "@/db/schema";
 
 export async function GET() {
   try {

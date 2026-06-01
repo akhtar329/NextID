@@ -1,8 +1,8 @@
 "use client";
 
 import { ReactNode, useState, useEffect } from "react";
-import Sidebar from "@/app/component/layout/Sidebar";
-import Topbar from "@/app/component/layout/Topbar";
+import Sidebar from "@/components/layout/Sidebar";
+import Topbar from "@/components/layout/Topbar";
 import { Toaster } from "sonner";
 
 interface AdminLayoutProps {

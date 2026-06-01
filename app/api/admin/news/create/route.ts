@@ -1,8 +1,8 @@
 // app/api/admin/news/create/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { news, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { news, seoMetadata } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -16,6 +16,17 @@ export async function POST(request: Request) {
         { 
           success: false, 
           error: "Title, Slug, and Content are required" 
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Validate category
+    if (!body.category) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "Category is required" 
         },
         { status: 400 }
       );
@@ -56,6 +67,9 @@ export async function POST(request: Request) {
           slug: body.slug,
           content: body.content,
           excerpt: body.excerpt || null,
+          // ✅ ADDED: Category & Tags
+          category: body.category || null,
+          tags: body.tags || [],
           programId: body.programId ? Number(body.programId) : null,
           instituteId: body.instituteId ? Number(body.instituteId) : null,
           boardId: body.boardId ? Number(body.boardId) : null,

@@ -5,10 +5,10 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import Input from "@/app/component/ui/Input";
-import Select from "@/app/component/ui/select";
-import BulkUpload from "@/app/component/ui/BulkUpload";
+import PrimaryButton from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/select";
+import BulkUpload from "@/components/ui/BulkUpload";
 import { useBulkUpload, BulkItem } from "@/app/hooks/useBulkUpload";
 
 type CityOption = { value: number; label: string };

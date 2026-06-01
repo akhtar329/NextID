@@ -1,95 +1,89 @@
 // app/(public)/admissions/[slug]/page.tsx
+
 import { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
-import { admissions, admissionOfferings, programOfferings, programs, institutes, cities, seoMetadata } from '@/app/lib/schema';
-import { eq, and, ne, desc } from 'drizzle-orm';
+import { 
+  Calendar, 
+  MapPin, 
+  Building2, 
+  Clock, 
+  ExternalLink, 
+  GraduationCap,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  DollarSign,
+  FileText,
+  Award,
+  TrendingUp,
+  Shield,
+  LucideIcon,
+  Share2,
+  Bell,
+  MessageCircle,
+  Download,
+  Users,
+  ClipboardList,
+  CreditCard,
+  UserCheck,
+  FileCheck
+} from 'lucide-react';
 
-export const revalidate = 86400;
- 
-// remove dynamicparams= true
+import { postService } from '@/services/post/post.service';
 
-export async function generateStaticParams() {
-  try {
-    const allAdmissions = await db
-      .select({ slug: admissions.slug })
-      .from(admissions)
-      .where(eq(admissions.status, 'Open'))
-      .limit(200);
-    
-    return allAdmissions.map((item) => ({
-      slug: item.slug,
-    }));
-  } catch {
-    return [];
-  }
-}
+export const revalidate = 3600;
 
-interface ProgramWithDetails {
+// Types
+interface Program {
   id: number;
   name: string;
   slug: string;
-  duration: string | null;
-  feeRange: string | null;
-  specificEligibility: string | null;
-  degreeName?: string | null;
+  degreeName?: string;
+  duration?: string;
+  feeRange?: string;
+  seats?: number;
+  specificEligibility?: string;
 }
 
-interface CityType {
-  id: number;
-  name: string;
-  slug: string;
-  province: string | null;
+interface FeeStructure {
+  applicationFee?: number;
+  tuitionFee?: number;
+  [key: string]: number | undefined;
 }
 
-interface InstituteType {
+interface AdmissionDetail {
   id: number;
-  name: string;
   slug: string;
-  type: string | null;
-  description: string | null;
-  website: string | null;
-  city: CityType | null;
-  featuredImage?: string | null;
-  logo?: string | null;
-}
-
-interface AdmissionWithPrograms {
-  id: number;
-  name: string;
-  slug: string;
+  title: string;
+  content: string | null;
+  excerpt: string | null;
+  status: string;
   year: number;
   session: string | null;
-  status: 'Expected' | 'Open' | 'Closed';
-  expectedOpenDate: Date | null;
-  expectedCloseDate: Date | null;
+  openDate: Date | null;
+  closeDate: Date | null;
+  instituteName: string;
+  instituteSlug: string;
+  cityName: string;
+  citySlug: string;
+  eligibility: string | null;
+  howToApply: string | null;
+  requiredDocuments: string[];
+  feeStructure: FeeStructure | null;
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  institute: InstituteType | null;
-  programs: ProgramWithDetails[];
-  programCount: number;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  featuredImage?: string | null;
-  galleryImages?: string | null;
+  applicationLink: string | null;
+  featuredImage: string | null;
+  programs: Program[];
+  viewCount: number;
 }
 
-interface RelatedAdmission {
-  id: number;
-  name: string | null;
-  slug: string | null;
-  year: number | null;
-  session: string | null;
-  status: string | null;
-  instituteName: string | null;
-  instituteSlug: string | null;
-}
-
+// Helper functions
 function formatDate(date: Date | null): string {
-  if (!date) return '';
+  if (!date) return 'TBA';
   return new Date(date).toLocaleDateString('en-PK', { 
     day: 'numeric', 
     month: 'long', 
@@ -106,457 +100,667 @@ function getDaysRemaining(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-async function getAdmissionBySlug(slug: string): Promise<AdmissionWithPrograms | null> {
+function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
+  if (!meta) return defaultValue;
+  const value = meta[key] as T;
+  return value !== undefined ? value : defaultValue;
+}
+
+function getStatusConfig(status: string): {
+  bg: string;
+  text: string;
+  label: string;
+  icon: LucideIcon;
+  border: string;
+} {
+  const configs: Record<string, {
+    bg: string;
+    text: string;
+    label: string;
+    icon: LucideIcon;
+    border: string;
+  }> = {
+    'Open': { 
+      bg: 'bg-green-100', 
+      text: 'text-green-700', 
+      label: 'Applications Open', 
+      icon: CheckCircle,
+      border: 'border-green-200'
+    },
+    'Closed': { 
+      bg: 'bg-red-100', 
+      text: 'text-red-700', 
+      label: 'Applications Closed', 
+      icon: XCircle,
+      border: 'border-red-200'
+    },
+    'Expected': { 
+      bg: 'bg-yellow-100', 
+      text: 'text-yellow-700', 
+      label: 'Opening Soon', 
+      icon: Clock,
+      border: 'border-yellow-200'
+    },
+  };
+  return configs[status] || { 
+    bg: 'bg-gray-100', 
+    text: 'text-gray-700', 
+    label: status, 
+    icon: AlertCircle,
+    border: 'border-gray-200'
+  };
+}
+
+// Get admission detail from posts service
+async function getAdmissionDetail(slug: string): Promise<AdmissionDetail | null> {
   try {
-    const result = await db
-      .select({
-        id: admissions.id,
-        name: admissions.name,
-        slug: admissions.slug,
-        year: admissions.year,
-        session: admissions.session,
-        status: admissions.status,
-        expectedOpenDate: admissions.expectedOpenDate,
-        expectedCloseDate: admissions.expectedCloseDate,
-        meritInfo: admissions.meritInfo,
-        note: admissions.note,
-        officialLink: admissions.officialLink,
-        instituteId: admissions.instituteId,
-        createdAt: admissions.createdAt,
-        updatedAt: admissions.updatedAt,
-        featuredImage: admissions.featuredImage,
-        galleryImages: admissions.galleryImages,
-        instituteId_field: institutes.id,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        instituteType: institutes.type,
-        instituteDescription: institutes.description,
-        instituteWebsite: institutes.website,
-        instituteLogo: institutes.logo,
-        instituteFeaturedImage: institutes.featuredImage,
-        instituteCityId: institutes.cityId,
-        cityId_field: cities.id,
-        cityName: cities.name,
-        citySlug: cities.slug,
-        cityProvince: cities.province,
-        programId: programs.id,
-        programName: programs.name,
-        programSlug: programs.slug,
-        programDuration: programOfferings.duration,
-        programFeeRange: programOfferings.feeRange,
-        programEligibility: programOfferings.specificEligibility,
-      })
-      .from(admissions)
-      .leftJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .leftJoin(cities, eq(institutes.cityId, cities.id))
-      .leftJoin(admissionOfferings, eq(admissions.id, admissionOfferings.admissionId))
-      .leftJoin(programOfferings, eq(admissionOfferings.offeringId, programOfferings.id))
-      .leftJoin(programs, eq(programOfferings.programId, programs.id))
-      .where(eq(admissions.slug, slug));
-
-    if (result.length === 0) return null;
-
-    const firstRow = result[0];
-    let institute: InstituteType | null = null;
+    const post = await postService.getPost(slug);
     
-    if (firstRow.instituteId_field) {
-      let city: CityType | null = null;
-      if (firstRow.cityId_field) {
-        city = {
-          id: firstRow.cityId_field,
-          name: firstRow.cityName || '',
-          slug: firstRow.citySlug || '',
-          province: firstRow.cityProvince,
-        };
-      }
-      
-      institute = {
-        id: firstRow.instituteId_field,
-        name: firstRow.instituteName || '',
-        slug: firstRow.instituteSlug || '',
-        type: firstRow.instituteType,
-        description: firstRow.instituteDescription,
-        website: firstRow.instituteWebsite,
-        logo: firstRow.instituteLogo,
-        featuredImage: firstRow.instituteFeaturedImage,
-        city,
-      };
+    if (!post || post.type !== 'admission') {
+      return null;
     }
-
-    const programsMap = new Map<number, ProgramWithDetails>();
     
-    for (const row of result) {
-      if (row.programId && !programsMap.has(row.programId)) {
-        programsMap.set(row.programId, {
-          id: row.programId,
-          name: row.programName || '',
-          slug: row.programSlug || '',
-          duration: row.programDuration,
-          feeRange: row.programFeeRange,
-          specificEligibility: row.programEligibility,
-        });
-      }
-    }
-
-    const programsList = Array.from(programsMap.values());
-    let galleryImagesValue: string | null | undefined = firstRow.galleryImages as string | null | undefined;
-    if (galleryImagesValue === null) galleryImagesValue = undefined;
-
+    const meta = post.meta;
+    const programsRaw = getMetaValue(meta, 'programs', []) as Array<Record<string, unknown>>;
+    
+    const programs: Program[] = programsRaw.map((p: Record<string, unknown>) => ({
+      id: p.id as number,
+      name: p.name as string,
+      slug: p.slug as string,
+      degreeName: p.degreeName as string | undefined,
+      duration: p.duration as string | undefined,
+      feeRange: p.feeRange as string | undefined,
+      seats: p.seats as number | undefined,
+      specificEligibility: p.specificEligibility as string | undefined,
+    }));
+    
+    const feeStructureRaw = getMetaValue(meta, 'feeStructure', null) as FeeStructure | null;
+    
     return {
-      id: firstRow.id,
-      name: firstRow.name,
-      slug: firstRow.slug,
-      year: firstRow.year,
-      session: firstRow.session,
-      status: firstRow.status as 'Expected' | 'Open' | 'Closed',
-      expectedOpenDate: firstRow.expectedOpenDate,
-      expectedCloseDate: firstRow.expectedCloseDate,
-      meritInfo: firstRow.meritInfo,
-      note: firstRow.note,
-      officialLink: firstRow.officialLink,
-      institute,
-      programs: programsList,
-      programCount: programsList.length,
-      createdAt: firstRow.createdAt,
-      updatedAt: firstRow.updatedAt,
-      featuredImage: firstRow.featuredImage,
-      galleryImages: galleryImagesValue,
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      content: post.content,
+      excerpt: post.excerpt,
+      status: getMetaValue(meta, 'status', 'Open'),
+      year: getMetaValue(meta, 'year', new Date().getFullYear()),
+      session: getMetaValue(meta, 'session', null),
+      openDate: getMetaValue(meta, 'openDate', null) ? new Date(getMetaValue(meta, 'openDate', '')) : null,
+      closeDate: getMetaValue(meta, 'closeDate', null) ? new Date(getMetaValue(meta, 'closeDate', '')) : null,
+      instituteName: getMetaValue(meta, 'instituteName', 'University'),
+      instituteSlug: getMetaValue(meta, 'instituteSlug', 'university'),
+      cityName: getMetaValue(meta, 'cityName', 'Pakistan'),
+      citySlug: getMetaValue(meta, 'citySlug', 'pakistan'),
+      eligibility: getMetaValue(meta, 'eligibility', null),
+      howToApply: getMetaValue(meta, 'howToApply', null),
+      requiredDocuments: getMetaValue(meta, 'requiredDocuments', []),
+      feeStructure: feeStructureRaw,
+      meritInfo: getMetaValue(meta, 'meritInfo', null),
+      note: getMetaValue(meta, 'note', null),
+      officialLink: getMetaValue(meta, 'officialLink', null),
+      applicationLink: getMetaValue(meta, 'applicationLink', null),
+      featuredImage: post.featuredImage,
+      programs,
+      viewCount: post.viewCount || 0,
     };
-  } catch {
+  } catch (error) {
+    console.error('Error fetching admission detail:', error);
     return null;
   }
 }
 
-async function getRelatedAdmissions(admission: AdmissionWithPrograms): Promise<RelatedAdmission[]> {
-  if (!admission.institute?.id) return [];
-  
+// Get related admissions
+async function getRelatedAdmissions(currentSlug: string): Promise<Array<{
+  id: number;
+  slug: string;
+  name: string;
+  instituteName: string;
+  year: number;
+  session: string;
+}>> {
   try {
-    return await db
-      .select({
-        id: admissions.id,
-        name: admissions.name,
-        slug: admissions.slug,
-        year: admissions.year,
-        session: admissions.session,
-        status: admissions.status,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-      })
-      .from(admissions)
-      .innerJoin(institutes, eq(admissions.instituteId, institutes.id))
-      .where(and(
-        eq(admissions.instituteId, admission.institute.id),
-        ne(admissions.slug, admission.slug)
-      ))
-      .orderBy(desc(admissions.createdAt))
-      .limit(5);
+    const allAdmissions = await postService.getPostsByType('admission', 10);
+    return allAdmissions
+      .filter(p => p.slug !== currentSlug)
+      .slice(0, 3)
+      .map(post => ({
+        id: post.id,
+        slug: post.slug,
+        name: post.title,
+        instituteName: getMetaValue(post.meta, 'instituteName', 'University'),
+        year: getMetaValue(post.meta, 'year', new Date().getFullYear()),
+        session: getMetaValue(post.meta, 'session', 'Fall'),
+      }));
   } catch {
     return [];
   }
 }
 
-async function getSEOMetadata(admissionId: number) {
-  try {
-    const result = await db
-      .select({
-        metaTitle: seoMetadata.metaTitle,
-        metaDescription: seoMetadata.metaDescription,
-        canonicalUrl: seoMetadata.canonicalUrl,
-        ogTitle: seoMetadata.ogTitle,
-        ogDescription: seoMetadata.ogDescription,
-        ogImage: seoMetadata.ogImage,
-      })
-      .from(seoMetadata)
-      .where(and(
-        eq(seoMetadata.entityType, 'admission'),
-        eq(seoMetadata.entityId, admissionId)
-      ))
-      .limit(1);
-    
-    return result[0] || null;
-  } catch {
-    return null;
-  }
+// Render HTML content safely
+function RenderHtml({ content }: { content: string | null }) {
+  if (!content) return null;
+  return (
+    <div 
+      className="prose prose-sm max-w-none text-gray-600"
+      dangerouslySetInnerHTML={{ __html: content.replace(/\n/g, '<br/>') }}
+    />
+  );
 }
 
-function getStatusBadge(status: string) {
-  const badges = {
-    'Open': { bg: 'bg-green-100', text: 'text-green-700', label: 'Applications Open', icon: '🟢' },
-    'Closed': { bg: 'bg-red-100', text: 'text-red-700', label: 'Applications Closed', icon: '🔴' },
-    'Expected': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Opening Soon', icon: '🟡' },
-  };
-  return badges[status as keyof typeof badges] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status, icon: '📌' };
-}
-
+// Metadata generation
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const admission = await getAdmissionBySlug(slug);
+  const admission = await getAdmissionDetail(slug);
   
   if (!admission) {
     return { title: 'Admission Not Found', robots: { index: false } };
   }
 
-  const seoData = await getSEOMetadata(admission.id);
-  
-  if (seoData?.metaTitle && seoData?.metaDescription) {
-    return {
-      title: seoData.metaTitle,
-      description: seoData.metaDescription,
-      alternates: seoData.canonicalUrl ? { canonical: seoData.canonicalUrl } : undefined,
-      openGraph: {
-        title: seoData.ogTitle || seoData.metaTitle,
-        description: seoData.ogDescription || seoData.metaDescription,
-        images: seoData.ogImage ? [{ url: seoData.ogImage }] : undefined,
-        type: 'article',
-      },
-    };
-  }
-  
-  const instituteName = admission.institute?.name || 'University';
-  const year = admission.year || '2026';
-  
   return {
-    title: `${admission.name || `${instituteName} Admissions ${year}`} | NextID.pk`,
-    description: `${instituteName} admissions ${year}. ${admission.programCount} programs offered. Last date: ${formatDate(admission.expectedCloseDate) || 'TBA'}. Apply online at NextID.pk`,
+    title: `${admission.title || `${admission.instituteName} Admissions ${admission.year}`} | NextID.pk`,
+    description: `${admission.instituteName} admissions ${admission.year}. ${admission.programs.length} programs offered. Last date: ${formatDate(admission.closeDate)}`,
     alternates: { canonical: `https://www.nextid.pk/admissions/${admission.slug}` },
     openGraph: {
-      title: `${instituteName} Admissions ${year}`,
-      description: `Apply for ${admission.programs.slice(0, 3).map(p => p.name).join(', ')} at ${instituteName}`,
+      title: `${admission.instituteName} Admissions ${admission.year}`,
+      description: `Apply for programs at ${admission.instituteName}. Last date: ${formatDate(admission.closeDate)}`,
       url: `https://www.nextid.pk/admissions/${admission.slug}`,
       type: 'article',
     },
   };
 }
 
-async function getPageData(slug: string) {
-  const admission = await getAdmissionBySlug(slug);
-  if (!admission) return { admission: null, relatedAdmissions: [] };
-  
-  const relatedAdmissions = await getRelatedAdmissions(admission);
-  return { admission, relatedAdmissions };
-}
-
+// Main Page Component
 export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  let pageData;
+  const { slug } = await params;
+  const admission = await getAdmissionDetail(slug);
   
-  try {
-    const { slug } = await params;
-    pageData = await getPageData(slug);
-    
-    if (!pageData.admission) {
-      notFound();
-    }
-  } catch {
-    return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-12">
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
-            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load admission details</h2>
-            <p className="text-gray-600">Please try again later</p>
-            <Link
-              href="/admissions"
-              className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              View All Admissions
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+  if (!admission) {
+    notFound();
   }
 
-  const { admission, relatedAdmissions } = pageData;
-  const statusBadge = getStatusBadge(admission.status);
-  const daysRemaining = getDaysRemaining(admission.expectedCloseDate);
+  const statusConfig = getStatusConfig(admission.status);
+  const StatusIcon = statusConfig.icon;
+  const daysRemaining = getDaysRemaining(admission.closeDate);
+  const effectiveCloseDate = admission.closeDate;
+  const relatedAdmissions = await getRelatedAdmissions(slug);
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl">
-            <div className="text-sm text-blue-200 mb-4">
-              <Link href="/" className="hover:text-white">Home</Link>
-              {' / '}
-              <Link href="/admissions" className="hover:text-white">Admissions</Link>
-              {' / '}
-              <span className="text-white">{admission.institute?.name}</span>
+      
+      {/* Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse delay-1000" />
+        </div>
+        
+        <div className="container mx-auto px-4 py-12 lg:py-16 relative">
+          {/* Breadcrumbs */}
+          <div className="text-sm text-indigo-200 mb-6 flex items-center gap-2 flex-wrap">
+            <Link href="/" className="hover:text-white transition">Home</Link>
+            <span>/</span>
+            <Link href="/admissions" className="hover:text-white transition">Admissions</Link>
+            <span>/</span>
+            <span className="text-white">{admission.instituteName}</span>
+          </div>
+          
+          {/* Status Badge */}
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium mb-5 ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border} border`}>
+            <StatusIcon className="w-4 h-4" />
+            <span>{statusConfig.label}</span>
+            {daysRemaining && statusConfig.label === 'Applications Open' && (
+              <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                {daysRemaining} days left
+              </span>
+            )}
+          </div>
+          
+          {/* Title */}
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
+            {admission.title}
+          </h1>
+          
+          {/* Meta Info */}
+          <div className="flex flex-wrap gap-4 text-indigo-200">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="w-4 h-4" />
+              <Link href={`/cities/${admission.citySlug}`} className="hover:text-white transition">
+                {admission.cityName}
+              </Link>
             </div>
-            
-            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
-              <span>{statusBadge.icon}</span>
-              <span>{statusBadge.label}</span>
-              {daysRemaining && (
-                <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">
-                  {daysRemaining} days left
-                </span>
-              )}
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4" />
+              <span>Session: {admission.session || `Fall ${admission.year}`}</span>
             </div>
-            
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              {admission.name || `${admission.institute?.name} Admissions ${admission.year}`}
-            </h1>
-            
-            <div className="flex flex-wrap gap-4 text-blue-200">
-              {admission.institute?.city && (
-                <div className="flex items-center gap-1">
-                  <span>📍</span>
-                  <Link href={`/cities/${admission.institute.city.slug}`} className="hover:text-white">
-                    {admission.institute.city.name}
-                  </Link>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <span>📅</span>
-                <span>Session: {admission.session || `Fall ${admission.year}`}</span>
+            {effectiveCloseDate && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                <span>Last Date: {formatDate(effectiveCloseDate)}</span>
               </div>
-              {admission.expectedCloseDate && (
-                <div className="flex items-center gap-1">
-                  <span>⏰</span>
-                  <span>Last Date: {formatDate(admission.expectedCloseDate)}</span>
-                </div>
-              )}
-            </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white hover:bg-white/20 transition">
+              <Share2 className="w-4 h-4" />
+              Share
+            </button>
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white hover:bg-white/20 transition">
+              <Bell className="w-4 h-4" />
+              Get Alerts
+            </button>
+            <button className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-lg text-white hover:bg-white/20 transition">
+              <Download className="w-4 h-4" />
+              Save PDF
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8 lg:py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          <div className="flex-1">
-            {admission.institute && (
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-                <div className="flex items-start gap-4">
-                  {admission.institute.logo && (
-                    <Image
-                      src={admission.institute.logo}
-                      alt={admission.institute.name}
-                      width={64}
-                      height={64}
-                      className="w-16 h-16 object-contain rounded-lg"
-                    />
-                  )}
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900 mb-2">{admission.institute.name}</h2>
-                    <p className="text-gray-600">{admission.institute.description}</p>
-                    {admission.institute.website && (
-                      <a href={admission.institute.website} target="_blank" rel="noopener noreferrer" 
-                         className="inline-block mt-3 text-blue-600 hover:underline">
-                        Visit Official Website →
-                      </a>
-                    )}
+          {/* Left Column - Main Content */}
+          <div className="flex-1 space-y-6">
+            
+            {/* Deadline Alert Banner */}
+            {effectiveCloseDate && daysRemaining && daysRemaining <= 14 && (
+              <div className="bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl p-4 text-white shadow-lg">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-8 h-8 animate-pulse" />
+                    <div>
+                      <p className="font-bold text-lg">Application Deadline Approaching!</p>
+                      <p className="text-sm opacity-90">Submit your application before {formatDate(effectiveCloseDate)}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Available Programs 
-                {admission.programCount > 0 && (
-                  <span className="text-sm font-normal text-gray-500 ml-2">
-                    ({admission.programCount} {admission.programCount === 1 ? 'Program' : 'Programs'})
-                  </span>
-                )}
+            {/* Quick Info Cards */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
+                Admission Quick Info
               </h2>
-              
-              {admission.programs.length > 0 ? (
-                <div className="space-y-4">
-                  {admission.programs.map((program, index) => (
-                    <div key={program.id || index} className="border-b border-gray-100 pb-4 last:border-0">
-                      <Link href={`/programs/${program.slug}`}>
-                        <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
-                          {program.name}
-                        </h3>
-                      </Link>
-                      {program.duration && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          <span className="font-medium">Duration:</span> {program.duration}
-                        </p>
-                      )}
-                      {program.feeRange && (
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium">Fee Range:</span> {program.feeRange}
-                        </p>
-                      )}
-                      {program.specificEligibility && (
-                        <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-                          <p className="text-sm font-medium text-gray-700">Eligibility:</p>
-                          <p className="text-sm text-gray-600">{program.specificEligibility}</p>
-                        </div>
-                      )}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-xl">
+                  <p className="text-2xl font-bold text-blue-600">{admission.programs.length}</p>
+                  <p className="text-xs text-gray-600">Programs</p>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-xl">
+                  <p className="text-2xl font-bold text-green-600">{admission.year}</p>
+                  <p className="text-xs text-gray-600">Session Year</p>
+                </div>
+                <div className="text-center p-3 bg-purple-50 rounded-xl">
+                  <p className="text-2xl font-bold text-purple-600">{admission.cityName}</p>
+                  <p className="text-xs text-gray-600">Location</p>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-xl">
+                  <p className="text-2xl font-bold text-orange-600">{statusConfig.label === 'Applications Open' ? 'Active' : 'Closed'}</p>
+                  <p className="text-xs text-gray-600">Status</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Institute Info Card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
+              <div className="flex flex-col sm:flex-row gap-5">
+                {admission.featuredImage && (
+                  <div className="shrink-0">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-50 p-2 border border-gray-100">
+                      <Image
+                        src={admission.featuredImage}
+                        alt={admission.instituteName}
+                        width={80}
+                        height={80}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-indigo-600" />
+                    {admission.instituteName}
+                  </h2>
+                  {admission.content && (
+                    <p className="text-gray-600 text-sm leading-relaxed line-clamp-3">
+                      {admission.content}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Eligibility Criteria Section */}
+            {admission.eligibility && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-green-600" />
+                  Eligibility Criteria
+                </h2>
+                <RenderHtml content={admission.eligibility} />
+              </div>
+            )}
+
+            {/* How to Apply Section */}
+            {admission.howToApply && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <FileCheck className="w-5 h-5 text-blue-600" />
+                  How to Apply
+                </h2>
+                <RenderHtml content={admission.howToApply} />
+                
+                {/* Application Links */}
+                {(admission.applicationLink || admission.officialLink) && (
+                  <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-gray-100">
+                    {admission.applicationLink && (
+                      <a href={admission.applicationLink} target="_blank" rel="noopener noreferrer"
+                         className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow-sm">
+                        Apply Online
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                    {admission.officialLink && (
+                      <a href={admission.officialLink} target="_blank" rel="noopener noreferrer"
+                         className="inline-flex items-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition">
+                        Official Website
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Required Documents Section */}
+            {admission.requiredDocuments.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-red-600" />
+                  Required Documents
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {admission.requiredDocuments.map((doc: string, i: number) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span className="text-sm text-gray-700">{doc}</span>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <div className="text-4xl mb-3">📚</div>
-                  <p className="text-gray-600">Program details will be updated soon.</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    For more information, please visit the official website.
-                  </p>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {(admission.meritInfo || admission.note || admission.officialLink) && (
-              <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Important Information</h2>
-                {admission.meritInfo && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-800">Merit Information</h3>
-                    <p className="text-gray-600">{admission.meritInfo}</p>
-                  </div>
-                )}
-                {admission.note && (
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-800">Additional Notes</h3>
-                    <p className="text-gray-600">{admission.note}</p>
-                  </div>
-                )}
-                {admission.officialLink && (
-                  <a href={admission.officialLink} target="_blank" rel="noopener noreferrer"
-                     className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Apply Online →
-                  </a>
-                )}
+            {/* Fee Structure Section */}
+            {admission.feeStructure && (admission.feeStructure.applicationFee || admission.feeStructure.tuitionFee) && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-purple-600" />
+                  Fee Structure
+                </h2>
+                <div className="space-y-3">
+                  {admission.feeStructure.applicationFee && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-700">Application Fee</span>
+                      <span className="font-semibold text-gray-900">PKR {admission.feeStructure.applicationFee.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {admission.feeStructure.tuitionFee && (
+                    <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                      <span className="text-gray-700">Tuition Fee (per year)</span>
+                      <span className="font-semibold text-gray-900">PKR {admission.feeStructure.tuitionFee.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Programs Section */}
+            {admission.programs.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-indigo-600" />
+                  Available Programs
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    ({admission.programs.length} {admission.programs.length === 1 ? 'Program' : 'Programs'})
+                  </span>
+                </h2>
+                
+                <div className="space-y-4">
+                  {admission.programs.map((program, index) => (
+                    <div key={program.id || index} className="border border-gray-100 rounded-xl p-4 hover:border-indigo-200 transition">
+                      <div className="flex justify-between items-start flex-wrap gap-3">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {program.name}
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                            {program.duration && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Clock className="w-4 h-4" />
+                                <span>Duration: {program.duration}</span>
+                              </div>
+                            )}
+                            {program.feeRange && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <DollarSign className="w-4 h-4" />
+                                <span>Fee: {program.feeRange}</span>
+                              </div>
+                            )}
+                            {program.seats && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Users className="w-4 h-4" />
+                                <span>Seats: {program.seats}</span>
+                              </div>
+                            )}
+                          </div>
+                          {program.specificEligibility && (
+                            <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                              <p className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                                <FileText className="w-4 h-4" />
+                                Eligibility:
+                              </p>
+                              <p className="text-sm text-gray-600 mt-1">{program.specificEligibility}</p>
+                            </div>
+                          )}
+                        </div>
+                        {admission.applicationLink && statusConfig.label === 'Applications Open' && (
+                          <a href={admission.applicationLink} target="_blank" rel="noopener noreferrer"
+                             className="shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition">
+                            Apply Now
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Merit Information */}
+            {admission.meritInfo && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-yellow-600" />
+                  Merit Information
+                </h2>
+                <p className="text-gray-600 text-sm whitespace-pre-line">{admission.meritInfo}</p>
+              </div>
+            )}
+
+            {/* Additional Notes */}
+            {admission.note && (
+              <div className="bg-yellow-50 rounded-2xl border border-yellow-200 p-6">
+                <h2 className="text-xl font-bold text-yellow-800 mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  Additional Notes
+                </h2>
+                <RenderHtml content={admission.note} />
               </div>
             )}
           </div>
 
-          <aside className="lg:w-80">
+          {/* Right Column - Sidebar */}
+          <aside className="lg:w-80 space-y-6">
+            
+            {/* Sticky Apply Button */}
+            {admission.applicationLink && statusConfig.label === 'Applications Open' && (
+              <div className="sticky top-24 bg-white rounded-2xl shadow-lg p-5 border border-indigo-200">
+                <h3 className="font-bold text-gray-900 mb-3">Ready to Apply?</h3>
+                <a href={admission.applicationLink} target="_blank" rel="noopener noreferrer"
+                   className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition shadow-md">
+                  Apply Online Now
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <p className="text-xs text-gray-500 text-center mt-3">Application deadline: {formatDate(effectiveCloseDate)}</p>
+              </div>
+            )}
+            
+            {/* Important Dates Card */}
+            {(admission.openDate || effectiveCloseDate) && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  Important Dates
+                </h3>
+                <div className="space-y-3">
+                  {admission.openDate && (
+                    <div className="flex justify-between items-center p-3 bg-green-50 rounded-xl">
+                      <span className="text-sm text-gray-600">Application Starts</span>
+                      <span className="font-semibold text-green-700">{formatDate(admission.openDate)}</span>
+                    </div>
+                  )}
+                  {effectiveCloseDate && (
+                    <div className={`flex justify-between items-center p-3 rounded-xl ${daysRemaining && daysRemaining <= 7 ? 'bg-red-50' : 'bg-gray-50'}`}>
+                      <span className="text-sm text-gray-600">Application Deadline</span>
+                      <span className={`font-semibold ${daysRemaining && daysRemaining <= 7 ? 'text-red-700' : 'text-gray-700'}`}>
+                        {formatDate(effectiveCloseDate)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Download Resources */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Download className="w-5 h-5 text-indigo-600" />
+                Download Resources
+              </h3>
+              <div className="space-y-2">
+                {admission.officialLink && (
+                  <a href={admission.officialLink} target="_blank" rel="noopener noreferrer" 
+                     className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-indigo-50 transition text-sm">
+                    <span>📘 Official Admission Notification</span>
+                    <ExternalLink className="w-4 h-4 text-indigo-600" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* WhatsApp Updates */}
+            <div className="bg-gradient-to-r from-green-500 to-teal-500 rounded-2xl p-5 text-white">
+              <h3 className="font-bold mb-2 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                Get Updates on WhatsApp
+              </h3>
+              <p className="text-sm opacity-90 mb-3">Get admission reminders, deadline alerts, and merit list updates directly on WhatsApp.</p>
+              <a href="https://wa.me/923XXXXXXXXX?text=I%20want%20to%20get%20updates%20for%20admissions" 
+                 target="_blank"
+                 className="block w-full text-center px-4 py-2 bg-white text-green-700 rounded-lg text-sm font-semibold hover:bg-gray-100 transition">
+                Join WhatsApp Channel
+              </a>
+            </div>
+
+            {/* Related Admissions */}
             {relatedAdmissions.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
-                <h3 className="font-bold text-gray-900 mb-3">Related Admissions</h3>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-indigo-600" />
+                  Related Admissions
+                </h3>
                 <div className="space-y-3">
                   {relatedAdmissions.map((rel) => (
-                    <Link key={rel.id} href={`/admissions/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition">
-                      <p className="font-medium text-gray-800 text-sm">{rel.name || rel.instituteName}</p>
-                      <p className="text-xs text-gray-500">{rel.year} • {rel.session || 'Fall'}</p>
+                    <Link 
+                      key={rel.id} 
+                      href={`/admissions/${rel.slug}`} 
+                      className="block p-3 bg-gray-50 rounded-xl hover:bg-indigo-50 transition group"
+                    >
+                      <p className="font-medium text-gray-800 text-sm group-hover:text-indigo-600 transition">
+                        {rel.name || rel.instituteName}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">{rel.year} • {rel.session || 'Fall'}</p>
                     </Link>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Need Help Card */}
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 border border-indigo-100">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-indigo-600" />
+                Need Help?
+              </h3>
+              <p className="text-sm text-gray-600 mb-3">
+                Have questions about this admission? Our team is here to help you.
+              </p>
+              <Link 
+                href="/contact" 
+                className="block w-full text-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+              >
+                Contact Us
+              </Link>
+            </div>
           </aside>
         </div>
       </div>
 
+      {/* Floating WhatsApp Button */}
+      <a href="https://wa.me/923XXXXXXXXX?text=I%20need%20help%20with%20admissions" 
+         target="_blank"
+         className="fixed bottom-6 right-6 z-50 bg-green-500 text-white p-4 rounded-full shadow-lg hover:bg-green-600 transition animate-bounce">
+        <MessageCircle className="w-6 h-6" />
+      </a>
+
+      {/* Floating Apply Button for Mobile */}
+      {admission.applicationLink && statusConfig.label === 'Applications Open' && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 p-3 lg:hidden">
+          <a href={admission.applicationLink} target="_blank" rel="noopener noreferrer"
+             className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold">
+            Apply Now
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      )}
+
+      {/* Schema Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "EducationalOrganization",
-            "name": admission.institute?.name,
+            "name": admission.instituteName,
             "url": `https://www.nextid.pk/admissions/${admission.slug}`,
-            "description": `${admission.institute?.name} admissions ${admission.year}`,
+            "description": admission.title,
             "address": {
               "@type": "PostalAddress",
-              "addressLocality": admission.institute?.city?.name,
+              "addressLocality": admission.cityName,
               "addressCountry": "PK"
-            }
+            },
+            "potentialAction": admission.applicationLink ? {
+              "@type": "ApplyAction",
+              "name": "Apply Now",
+              "target": admission.applicationLink
+            } : undefined
           })
         }}
       />

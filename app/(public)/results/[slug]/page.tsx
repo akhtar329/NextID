@@ -1,75 +1,47 @@
 // app/(public)/results/[slug]/page.tsx
+
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
-import { results, institutes, cities, boards } from '@/app/lib/schema';
-import { eq, and, ne, desc } from 'drizzle-orm';
+import { postService } from '@/services/post/post.service';
 
 export const revalidate = 86400;
- 
-export const fetchCache = 'force-cache';
-// remove dynamicparams= true
 
-export async function generateStaticParams() {
-  try {
-    const allResults = await db
-      .select({ slug: results.slug })
-      .from(results)
-      .where(eq(results.status, true))
-      .limit(200);
-    
-    return allResults.map((item) => ({
-      slug: item.slug,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-interface CityType {
+// ============ TYPES ============
+interface ResultDetail {
   id: number;
-  name: string | null;
-  slug: string | null;
-  province: string | null;
-}
-
-interface InstituteType {
-  id: number;
-  name: string | null;
-  slug: string | null;
-  type: string | null;
-  cityId: number | null;
-  description: string | null;
-  website: string | null;
-  city: CityType | null;
-}
-
-interface BoardType {
-  id: number;
-  name: string | null;
-  slug: string | null;
-  cityId: number | null;
-  website: string | null;
-  description: string | null;
-  city: CityType | null;
-}
-
-interface ResultType {
-  id: number;
-  slug: string | null;
-  title: string | null;
-  instituteId: number | null;
-  boardId: number | null;
-  year: number | null;
+  slug: string;
+  title: string;
+  content: string | null;
+  excerpt: string | null;
+  year: number;
   resultDate: Date | null;
+  boardName: string | null;
+  boardSlug: string | null;
+  instituteName: string | null;
+  instituteSlug: string | null;
+  cityName: string | null;
   officialLink: string | null;
-  isPopular: boolean | null;
-  status: boolean | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  institute: InstituteType | null;
-  board: BoardType | null;
+  isPopular: boolean;
+  status: boolean;
+  viewCount: number;
+}
+
+interface RelatedResult {
+  id: number;
+  slug: string;
+  title: string;
+  year: number;
+  resultDate: Date | null;
+  instituteName: string | null;
+  boardName: string | null;
+}
+
+// ============ HELPER FUNCTIONS ============
+function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
+  if (!meta) return defaultValue;
+  const value = meta[key] as T;
+  return value !== undefined ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -89,184 +61,80 @@ function formatShortDate(date: Date | null): string {
   });
 }
 
-async function getResultBySlug(slug: string): Promise<ResultType | null> {
+// ============ DATA FETCHING ============
+async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
   try {
-    const [result] = await db
-      .select({
-        id: results.id,
-        slug: results.slug,
-        title: results.title,
-        instituteId: results.instituteId,
-        boardId: results.boardId,
-        year: results.year,
-        resultDate: results.resultDate,
-        officialLink: results.officialLink,
-        isPopular: results.isPopular,
-        status: results.status,
-        createdAt: results.createdAt,
-        updatedAt: results.updatedAt,
-        instituteId_field: institutes.id,
-        instituteName: institutes.name,
-        instituteSlug: institutes.slug,
-        instituteType: institutes.type,
-        instituteCityId: institutes.cityId,
-        instituteDescription: institutes.description,
-        instituteWebsite: institutes.website,
-        boardId_field: boards.id,
-        boardName: boards.name,
-        boardSlug: boards.slug,
-        boardCityId: boards.cityId,
-        boardWebsite: boards.website,
-        boardDescription: boards.description,
-      })
-      .from(results)
-      .leftJoin(institutes, eq(results.instituteId, institutes.id))
-      .leftJoin(boards, eq(results.boardId, boards.id))
-      .where(eq(results.slug, slug))
-      .limit(1);
-
-    if (!result) return null;
-
-    let instituteCity: CityType | null = null;
-    let boardCity: CityType | null = null;
-
-    if (result.instituteCityId) {
-      const [city] = await db
-        .select({
-          id: cities.id,
-          name: cities.name,
-          slug: cities.slug,
-          province: cities.province,
-        })
-        .from(cities)
-        .where(eq(cities.id, result.instituteCityId))
-        .limit(1);
-      instituteCity = city || null;
+    const post = await postService.getPost(slug);
+    
+    if (!post || post.type !== 'result') {
+      return null;
     }
-
-    if (result.boardCityId) {
-      const [city] = await db
-        .select({
-          id: cities.id,
-          name: cities.name,
-          slug: cities.slug,
-          province: cities.province,
-        })
-        .from(cities)
-        .where(eq(cities.id, result.boardCityId))
-        .limit(1);
-      boardCity = city || null;
-    }
-
-    let institute: InstituteType | null = null;
-    if (result.instituteId_field) {
-      institute = {
-        id: result.instituteId_field,
-        name: result.instituteName,
-        slug: result.instituteSlug,
-        type: result.instituteType,
-        cityId: result.instituteCityId,
-        description: result.instituteDescription,
-        website: result.instituteWebsite,
-        city: instituteCity,
-      };
-    }
-
-    let board: BoardType | null = null;
-    if (result.boardId_field) {
-      board = {
-        id: result.boardId_field,
-        name: result.boardName,
-        slug: result.boardSlug,
-        cityId: result.boardCityId,
-        website: result.boardWebsite,
-        description: result.boardDescription,
-        city: boardCity,
-      };
-    }
-
+    
+    const meta = post.meta;
+    
     return {
-      id: result.id,
-      slug: result.slug,
-      title: result.title,
-      instituteId: result.instituteId,
-      boardId: result.boardId,
-      year: result.year,
-      resultDate: result.resultDate,
-      officialLink: result.officialLink,
-      isPopular: result.isPopular,
-      status: result.status,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-      institute,
-      board,
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      content: post.content,
+      excerpt: post.excerpt,
+      year: getMetaValue(meta, 'year', new Date().getFullYear()),
+      resultDate: getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null,
+      boardName: getMetaValue(meta, 'boardName', null),
+      boardSlug: getMetaValue(meta, 'boardSlug', null),
+      instituteName: getMetaValue(meta, 'universityName', null),
+      instituteSlug: getMetaValue(meta, 'universitySlug', null),
+      cityName: getMetaValue(meta, 'cityName', null),
+      officialLink: getMetaValue(meta, 'officialLink', null),
+      isPopular: post.isPopular || false,
+      status: true,
+      viewCount: post.viewCount || 0,
     };
-  } catch {
+  } catch (error) {
+    console.error('Error fetching result detail:', error);
     return null;
   }
 }
 
-async function getRelatedResults(result: ResultType) {
-  if (!result.slug) return [];
-  
+async function getRelatedResults(currentResult: ResultDetail): Promise<RelatedResult[]> {
   try {
-    const conditions = [];
+    const allResults = await postService.getPostsByType('result', 20);
     
-    if (result.instituteId) {
-      conditions.push(eq(results.instituteId, result.instituteId));
-    } else if (result.boardId) {
-      conditions.push(eq(results.boardId, result.boardId));
-    }
+    const related = allResults
+      .filter(post => post.slug !== currentResult.slug)
+      .slice(0, 5)
+      .map(post => {
+        const meta = post.meta;
+        return {
+          id: post.id,
+          slug: post.slug,
+          title: post.title,
+          year: getMetaValue(meta, 'year', new Date().getFullYear()),
+          resultDate: getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null,
+          instituteName: getMetaValue(meta, 'universityName', null),
+          boardName: getMetaValue(meta, 'boardName', null),
+        };
+      });
     
-    if (result.year) {
-      conditions.push(eq(results.year, result.year));
-    }
-    
-    conditions.push(eq(results.status, true));
-    conditions.push(ne(results.slug, result.slug || ''));
-
-    return await db
-      .select({
-        id: results.id,
-        slug: results.slug,
-        title: results.title,
-        year: results.year,
-        resultDate: results.resultDate,
-        instituteName: institutes.name,
-        boardName: boards.name,
-      })
-      .from(results)
-      .leftJoin(institutes, eq(results.instituteId, institutes.id))
-      .leftJoin(boards, eq(results.boardId, boards.id))
-      .where(and(...conditions))
-      .orderBy(desc(results.resultDate))
-      .limit(5);
-  } catch {
+    return related;
+  } catch (error) {
+    console.error('Error fetching related results:', error);
     return [];
   }
 }
 
-function generateMetaTitle(result: ResultType): string {
-  const institutionName = result.institute?.name || result.board?.name || 'Board';
-  const year = result.year || '2026';
-  
-  let title = `Result ${year} - ${institutionName} | NextID.pk`;
-  if (title.length > 60) title = title.substring(0, 57) + '...';
-  return title;
+// ============ METADATA ============
+function generateMetaTitle(result: ResultDetail): string {
+  const institutionName = result.instituteName || result.boardName || 'Board';
+  const year = result.year;
+  return `${institutionName} Result ${year} | Check Online | NextID.pk`;
 }
 
-function generateMetaDescription(result: ResultType): string {
-  const institutionName = result.institute?.name || result.board?.name || 'board';
-  const cityName = result.institute?.city?.name || result.board?.city?.name || 'Pakistan';
-  const year = result.year || '2026';
+function generateMetaDescription(result: ResultDetail): string {
+  const institutionName = result.instituteName || result.boardName || 'board';
+  const year = result.year;
   const resultDate = result.resultDate ? formatShortDate(result.resultDate) : 'TBA';
-  const status = result.status ? 'published' : 'pending';
-  
-  let description = `Check ${institutionName} result ${year} in ${cityName}. Result date: ${resultDate}. Status: ${status}. `;
-  description += `Download marksheet, check passing percentage at NextID.pk.`;
-  
-  if (description.length > 160) description = description.substring(0, 157) + '...';
-  return description;
+  return `Check ${institutionName} result ${year} online. Result date: ${resultDate}. Download marksheet at NextID.pk.`;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -290,72 +158,44 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-function getStatusBadge(status: boolean | null) {
-  if (status === true) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
-  if (status === false) return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
-  return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Unknown', icon: '❓' };
+function getStatusBadge(status: boolean) {
+  if (status) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
+  return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
 }
 
-async function getPageData(slug: string) {
+// ============ MAIN PAGE ============
+export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const result = await getResultBySlug(slug);
-  if (!result) return { result: null, relatedResults: [] };
+  
+  if (!result) {
+    notFound();
+  }
   
   const relatedResults = await getRelatedResults(result);
-  return { result, relatedResults };
-}
-
-export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  let pageData;
-  
-  try {
-    const { slug } = await params;
-    pageData = await getPageData(slug);
-    
-    if (!pageData.result) {
-      notFound();
-    }
-  } catch {
-    return (
-      <main className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-12">
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm">
-            <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load result</h2>
-            <p className="text-gray-600">Please try again later</p>
-            <Link
-              href="/results"
-              className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-            >
-              View All Results
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  const { result, relatedResults } = pageData;
   const statusBadge = getStatusBadge(result.status);
-
-  const institutionName = result.institute?.name || result.board?.name || '';
-  const institutionSlug = result.institute?.slug || result.board?.slug || '';
-  const institutionType = result.institute ? 'universities' : 'boards';
-  const cityName = result.institute?.city?.name || result.board?.city?.name || '';
-  const officialWebsite = result.institute?.website || result.board?.website || '';
+  const institutionName = result.instituteName || result.boardName || '';
+  const institutionSlug = result.instituteSlug || result.boardSlug || '';
+  const institutionType = result.instituteName ? 'universities' : 'boards';
+  const officialWebsite = result.officialLink;
 
   return (
     <main className="min-h-screen bg-gray-50">
+      
+      {/* Hero Section */}
       <div className="bg-gradient-to-r from-green-700 to-emerald-800 text-white">
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl">
+            {/* Breadcrumbs */}
             <div className="text-sm text-green-200 mb-4">
               <Link href="/" className="hover:text-white">Home</Link>
               {' / '}
               <Link href="/results" className="hover:text-white">Results</Link>
               {' / '}
-              <span className="text-white">{result.title || 'Result'}</span>
+              <span className="text-white">{result.title}</span>
             </div>
             
+            {/* Status Badge */}
             <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${statusBadge.bg} ${statusBadge.text}`}>
               <span>{statusBadge.icon}</span>
               <span>{statusBadge.label}</span>
@@ -364,10 +204,12 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               )}
             </div>
             
+            {/* Title */}
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              {result.title || `Result ${result.year || '2026'}`}
+              {result.title}
             </h1>
             
+            {/* Meta Info */}
             <div className="flex flex-wrap gap-4 text-green-200">
               {institutionName && (
                 <div className="flex items-center gap-1">
@@ -377,10 +219,10 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                   </Link>
                 </div>
               )}
-              {cityName && (
+              {result.cityName && (
                 <div className="flex items-center gap-1">
                   <span>📍</span>
-                  <span>{cityName}</span>
+                  <span>{result.cityName}</span>
                 </div>
               )}
               {result.year && (
@@ -400,9 +242,11 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           
+          {/* Left Column */}
           <div className="flex-1">
             <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Result Information</h2>
@@ -420,38 +264,41 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                   <p className="text-sm text-gray-500">Announcement Date</p>
                   <p className="font-semibold text-gray-900">{formatDate(result.resultDate) || 'TBA'}</p>
                 </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">Total Views</p>
+                  <p className="font-semibold text-gray-900">{result.viewCount.toLocaleString()}</p>
+                </div>
               </div>
 
-              {(result.officialLink || officialWebsite) && (
-                <div className="border-t border-gray-200 pt-4">
+              {result.content && (
+                <div className="border-t border-gray-200 pt-4 mt-2">
+                  <h3 className="font-semibold text-gray-900 mb-3">Additional Information</h3>
+                  <div 
+                    className="prose prose-sm max-w-none text-gray-600"
+                    dangerouslySetInnerHTML={{ __html: result.content }}
+                  />
+                </div>
+              )}
+
+              {officialWebsite && (
+                <div className="border-t border-gray-200 pt-4 mt-2">
                   <h3 className="font-semibold text-gray-900 mb-3">Official Resources</h3>
                   <div className="flex flex-wrap gap-3">
-                    {result.officialLink && (
-                      <a 
-                        href={result.officialLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                      >
-                        <span>📄</span> Check Result Online
-                      </a>
-                    )}
-                    {officialWebsite && (
-                      <a 
-                        href={officialWebsite}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-                      >
-                        <span>🌐</span> Official Website
-                      </a>
-                    )}
+                    <a 
+                      href={officialWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    >
+                      <span>📄</span> Check Result Online
+                    </a>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
+          {/* Right Sidebar */}
           <aside className="lg:w-80">
             <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -483,7 +330,7 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
                 <div className="space-y-3">
                   {relatedResults.map((rel) => (
                     <Link key={rel.id} href={`/results/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-green-50 transition">
-                      <p className="font-medium text-gray-800 text-sm">{rel.title || rel.instituteName || rel.boardName}</p>
+                      <p className="font-medium text-gray-800 text-sm">{rel.title}</p>
                       <p className="text-xs text-gray-500">{rel.year}</p>
                     </Link>
                   ))}
@@ -494,24 +341,28 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
         </div>
       </div>
 
+      {/* Schema Markup */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "EducationEvent",
-            "name": result.title || `Result ${result.year}`,
+            "name": result.title,
             "description": generateMetaDescription(result),
             "startDate": result.resultDate?.toISOString(),
             "location": {
               "@type": "Place",
               "name": institutionName,
-              "address": { "@type": "PostalAddress", "addressLocality": cityName, "addressCountry": "PK" }
+              "address": {
+                "@type": "PostalAddress",
+                "addressLocality": result.cityName || 'Pakistan',
+                "addressCountry": "PK"
+              }
             },
             "organizer": {
               "@type": "Organization",
-              "name": institutionName,
-              "url": officialWebsite
+              "name": institutionName
             }
           })
         }}

@@ -1,20 +1,29 @@
-// app/admin/admissions/[id]/edit/page.tsx
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import Select from "@/app/component/ui/select";
-import RichTextEditor from "@/app/component/ui/RichTextEditor";
+import PrimaryButton from "@/components/ui/Button";
+import Select from "@/components/ui/select";
+import RichTextEditor from "@/components/ui/RichTextEditor";
 
 type Program = {
   id: number;
   name: string;
-  degreeName: string;
   slug: string;
+  shortDescription: string | null;
+  typicalDuration: string | null;
+  typicalFeeRange: string | null;
+};
+
+type LinkedProgram = {
+  offeringId: number;
+  programId: number;
+  programName: string;
+  degreeName: string;
+  duration: string | null;
+  feeRange: string | null;
 };
 
 type Institute = {
@@ -46,19 +55,34 @@ type Admission = {
   meritInfo: string | null;
   note: string | null;
   officialLink: string | null;
-  programs: Program[];
+  offerings?: { offeringId: number }[];
   instituteId: number;
   institute: Institute;
   seo?: SeoData;
+};
+
+type ApiProgramResponse = {
+  id: number;
+  program_id?: number;
+  programId?: number;
+  name?: string;
+  programName?: string;
+  degree_name?: string;
+  degreeName?: string;
+  duration?: string | null;
+  fee_range?: string | null;
+  feeRange?: string | null;
 };
 
 export default function EditAdmissionPage() {
   const router = useRouter();
   const params = useParams();
   const admissionId = params.id as string;
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Form states
-  const [selectedPrograms, setSelectedPrograms] = useState<number[]>([]);
+  const [selectedOfferings, setSelectedOfferings] = useState<number[]>([]);
+  const [selectedNewPrograms, setSelectedNewPrograms] = useState<number[]>([]);
   const [instituteId, setInstituteId] = useState<number | null>(null);
   const [year, setYear] = useState("");
   const [session, setSession] = useState("");
@@ -68,37 +92,46 @@ export default function EditAdmissionPage() {
   const [meritInfo, setMeritInfo] = useState("");
   const [note, setNote] = useState("");
   const [officialLink, setOfficialLink] = useState("");
-  
-  // SEO states
-  const [metaTitle, setMetaTitle] = useState("");
-  const [metaDescription, setMetaDescription] = useState("");
-  const [canonicalUrl, setCanonicalUrl] = useState("");
+
+  const [manualSlug, setManualSlug] = useState("");
+  const [manualMetaTitle, setManualMetaTitle] = useState("");
+  const [manualMetaDescription, setManualMetaDescription] = useState("");
+  const [manualCanonicalUrl, setManualCanonicalUrl] = useState("");
+  const [manualOgTitle, setManualOgTitle] = useState("");
+  const [manualOgDescription, setManualOgDescription] = useState("");
+
   const [robots, setRobots] = useState("index, follow");
-  const [ogTitle, setOgTitle] = useState("");
-  const [ogDescription, setOgDescription] = useState("");
   const [ogImage, setOgImage] = useState("");
   const [autoGenerateSeo, setAutoGenerateSeo] = useState(true);
-  
-  // Name and Slug states
+
   const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [manualName, setManualName] = useState(false);
-  const [originalSlug, setOriginalSlug] = useState("");
+  const [singleLoading, setSingleLoading] = useState(false);
 
-  // Data states
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [linkedPrograms, setLinkedPrograms] = useState<LinkedProgram[]>([]);
+  const [availablePrograms, setAvailablePrograms] = useState<Program[]>([]);
   const [institutes, setInstitutes] = useState<Institute[]>([]);
-  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [loadingPrograms, setLoadingPrograms] = useState(false);
+  const [linkingPrograms, setLinkingPrograms] = useState(false);
+  const [showAvailablePrograms, setShowAvailablePrograms] = useState(false);
+  const [initialSelectedIds, setInitialSelectedIds] = useState<number[]>([]);
 
-  // Selected items for preview
-  const [selectedInstitute, setSelectedInstitute] = useState<Institute | null>(null);
-  const [selectedProgramsList, setSelectedProgramsList] = useState<Program[]>([]);
+  const selectedInstitute = useMemo(() => {
+    if (instituteId) {
+      return institutes.find((i) => i.id === instituteId) || null;
+    }
+    return null;
+  }, [instituteId, institutes]);
 
-  // Slug generator
-  const generateSlug = (text: string): string => {
+  const selectedOfferingsList = useMemo(() => {
+    if (selectedOfferings.length > 0) {
+      return linkedPrograms.filter(p => selectedOfferings.includes(p.offeringId));
+    }
+    return [];
+  }, [selectedOfferings, linkedPrograms]);
+
+  const generateSlugFromName = (text: string): string => {
     return text
       .toLowerCase()
       .trim()
@@ -108,153 +141,222 @@ export default function EditAdmissionPage() {
       .replace(/^-|-$/g, "");
   };
 
-  // Auto-generate SEO meta
-  const generateSeoMeta = () => {
-    if (!autoGenerateSeo) return;
-    
-    if (selectedInstitute && year && name) {
-      const sessionText = session ? ` ${session}` : '';
-      const instituteName = selectedInstitute.name;
-      
-      // Generate slug for canonical URL
-      const cleanInstituteName = selectedInstitute.name
-        .replace(/University|College|Institute|of|the|and|&/gi, '')
-        .trim();
-      const sessionSlug = session ? `-${session.toLowerCase()}` : '';
-      const slugBase = `admissions-open-at-${cleanInstituteName}${sessionSlug}-${year}`;
-      const generatedSlug = generateSlug(slugBase);
-      
-      // Meta Title (under 60 chars)
-      let generatedTitle = `${instituteName} Admission ${year}`;
-      if (generatedTitle.length > 55) {
-        generatedTitle = instituteName.substring(0, 40) + ` Admission ${year}`;
-      }
-      setMetaTitle(generatedTitle + " | NextID");
-      
-      // Meta Description (under 160 chars)
-      const programsList = selectedProgramsList.map(p => p.name).slice(0, 3).join(", ");
-      const programText = programsList ? ` Programs: ${programsList}.` : "";
-      let generatedDesc = `${instituteName}${sessionText} admission ${year} is open. Check last date, eligibility criteria${programText} fee structure and apply online.`;
-      if (generatedDesc.length > 155) {
-        generatedDesc = generatedDesc.substring(0, 152) + "...";
-      }
-      setMetaDescription(generatedDesc);
-      
-      // Canonical URL
-      setCanonicalUrl(`https://www.nextid.pk/admissions/${generatedSlug}`);
-      
-      // OG Title
-      setOgTitle(`${instituteName} Admission ${year} - Apply Now`);
-      
-      // OG Description
-      setOgDescription(`${instituteName}${sessionText} admission ${year}. Limited seats available. Apply before deadline.`);
+  const generateMetaTitle = (admissionName: string): string => {
+    if (!admissionName) return "";
+    const cleanName = admissionName.replace(/^Admissions Open at\s+/i, "");
+    let metaTitle = `${cleanName} | NextID`;
+    if (metaTitle.length > 60) {
+      metaTitle = cleanName.substring(0, 50) + " | NextID";
     }
+    return metaTitle;
   };
 
-  // Handle name change
+  const generateMetaDescription = (
+    meritInfoVal: string,
+    noteVal: string,
+    instituteName: string,
+    yearVal: string,
+  ): string => {
+    let description = "";
+
+    if (meritInfoVal && meritInfoVal.trim()) {
+      description = meritInfoVal.trim().replace(/<[^>]*>/g, "");
+      if (description.length > 157) {
+        description = description.substring(0, 154) + "...";
+      }
+    } else if (noteVal && noteVal.trim()) {
+      description = noteVal.trim().replace(/<[^>]*>/g, "");
+      if (description.length > 157) {
+        description = description.substring(0, 154) + "...";
+      }
+    } else {
+      description = `${instituteName} admissions for year ${yearVal}. Check eligibility criteria, merit, and apply online.`;
+      if (description.length > 157) {
+        description = description.substring(0, 154) + "...";
+      }
+    }
+
+    return description;
+  };
+
+  const generateOgTitle = (admissionName: string): string => {
+    if (!admissionName) return "";
+    let ogTitle = `${admissionName} - Apply Now`;
+    if (ogTitle.length > 90) {
+      ogTitle = admissionName.substring(0, 80) + "...";
+    }
+    return ogTitle;
+  };
+
+  const generateOgDescription = (
+    meritInfoVal: string,
+    noteVal: string,
+    instituteName: string,
+    yearVal: string,
+  ): string => {
+    let description = "";
+
+    if (meritInfoVal && meritInfoVal.trim()) {
+      description = meritInfoVal.trim().replace(/<[^>]*>/g, "");
+      if (description.length > 197) {
+        description = description.substring(0, 194) + "...";
+      }
+    } else if (noteVal && noteVal.trim()) {
+      description = noteVal.trim().replace(/<[^>]*>/g, "");
+      if (description.length > 197) {
+        description = description.substring(0, 194) + "...";
+      }
+    } else {
+      description = `${instituteName} admissions ${yearVal}. Limited seats available. Apply before deadline.`;
+    }
+
+    return description;
+  };
+
+  const computedSlug = useMemo(() => {
+    if (autoGenerateSeo && name) {
+      return generateSlugFromName(name);
+    }
+    return manualSlug;
+  }, [autoGenerateSeo, name, manualSlug]);
+
+  const computedMetaTitle = useMemo(() => {
+    if (autoGenerateSeo && name) {
+      return generateMetaTitle(name);
+    }
+    return manualMetaTitle;
+  }, [autoGenerateSeo, name, manualMetaTitle]);
+
+  const computedCanonicalUrl = useMemo(() => {
+    if (autoGenerateSeo && computedSlug) {
+      return `https://www.nextid.pk/admissions/${computedSlug}`;
+    }
+    return manualCanonicalUrl;
+  }, [autoGenerateSeo, computedSlug, manualCanonicalUrl]);
+
+  const computedMetaDescription = useMemo(() => {
+    if (autoGenerateSeo && selectedInstitute) {
+      return generateMetaDescription(
+        meritInfo,
+        note,
+        selectedInstitute.name,
+        year,
+      );
+    }
+    return manualMetaDescription;
+  }, [
+    autoGenerateSeo,
+    meritInfo,
+    note,
+    selectedInstitute,
+    year,
+    manualMetaDescription,
+  ]);
+
+  const computedOgTitle = useMemo(() => {
+    if (autoGenerateSeo && name) {
+      return generateOgTitle(name);
+    }
+    return manualOgTitle;
+  }, [autoGenerateSeo, name, manualOgTitle]);
+
+  const computedOgDescription = useMemo(() => {
+    if (autoGenerateSeo && selectedInstitute) {
+      return generateOgDescription(
+        meritInfo,
+        note,
+        selectedInstitute.name,
+        year,
+      );
+    }
+    return manualOgDescription;
+  }, [
+    autoGenerateSeo,
+    meritInfo,
+    note,
+    selectedInstitute,
+    year,
+    manualOgDescription,
+  ]);
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      setIsDarkMode(isDark);
+    };
+    checkTheme();
+    const observer = new MutationObserver(() => checkTheme());
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newName = e.target.value;
-    setName(newName);
-    setManualName(true);
-    
-    if (newName) {
-      setSlug(generateSlug(newName));
-    }
+    setName(e.target.value);
   };
 
-  // Handle slug change
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSlug(generateSlug(e.target.value));
+    setManualSlug(generateSlugFromName(e.target.value));
   };
 
-  // Auto-generate name when institute/year/programs change
-  useEffect(() => {
-    if (selectedInstitute && year && selectedProgramsList.length > 0 && !manualName) {
-      const sessionText = session ? ` ${session}` : '';
-      const generatedName = `Admissions Open at ${selectedInstitute.name}${sessionText} ${year}`;
-      
-      const cleanInstituteName = selectedInstitute.name
-        .replace(/University|College|Institute|of|the|and|&/gi, '')
-        .trim();
-      
-      const sessionSlug = session ? `-${session.toLowerCase()}` : '';
-      const slugBase = `admissions-open-at-${cleanInstituteName}${sessionSlug}-${year}`;
-      const generatedSlug = generateSlug(slugBase);
-      
-      setName(generatedName);
-      setSlug(generatedSlug);
-    }
-  }, [selectedInstitute, selectedProgramsList, year, session, manualName]);
-
-  // Auto-generate SEO when name/slug/institute changes
-  useEffect(() => {
-    if (name && slug && selectedInstitute) {
-      generateSeoMeta();
-    }
-  }, [name, slug, selectedInstitute, year, session, selectedProgramsList, autoGenerateSeo]);
-
-  // Handle program selection
-  const handleProgramSelect = (programId: number) => {
-    if (selectedPrograms.includes(programId)) {
-      setSelectedPrograms(selectedPrograms.filter(id => id !== programId));
-    } else {
-      setSelectedPrograms([...selectedPrograms, programId]);
-    }
-    setManualName(false);
+  const handleMetaTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManualMetaTitle(e.target.value);
   };
 
-  // Handle select all programs
-  const handleSelectAllPrograms = () => {
-    if (selectedPrograms.length === filteredPrograms.length) {
-      setSelectedPrograms([]);
-    } else {
-      setSelectedPrograms(filteredPrograms.map(p => p.id));
-    }
-    setManualName(false);
+  const handleMetaDescriptionChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    setManualMetaDescription(e.target.value);
   };
 
-  // Update selected institute when instituteId changes
-  useEffect(() => {
-    if (instituteId) {
-      const institute = institutes.find(i => i.id === instituteId);
-      setSelectedInstitute(institute || null);
-    } else {
-      setSelectedInstitute(null);
-    }
-  }, [instituteId, institutes]);
+  const handleCanonicalUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManualCanonicalUrl(e.target.value);
+  };
 
-  // Update selected programs list
-  useEffect(() => {
-    if (selectedPrograms.length > 0) {
-      const programsList = programs.filter(p => selectedPrograms.includes(p.id));
-      setSelectedProgramsList(programsList);
-    } else {
-      setSelectedProgramsList([]);
-    }
-  }, [selectedPrograms, programs]);
+  const handleOgTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManualOgTitle(e.target.value);
+  };
 
-  // Fetch programs, institutes, and admission data
+  const handleOgDescriptionChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    setManualOgDescription(e.target.value);
+  };
+
+  const handleMeritInfoChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMeritInfo(e.target.value);
+  };
+
+  // Fetch institutes
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch programs
-        const programsRes = await fetch("/api/admin/programs");
-        const programsData = await programsRes.json();
-        setPrograms(programsData.programs || []);
-
-        // Fetch institutes
         const institutesRes = await fetch("/api/admin/institutes");
         const institutesData = await institutesRes.json();
         setInstitutes(institutesData.institutes || []);
+      } catch {
+        toast.error("Failed to load form data");
+      } finally {
+        setFetchLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
 
-        // Fetch admission details (including SEO)
-        const admissionRes = await fetch(`/api/admin/admissions/${admissionId}`);
-        const admissionData = await admissionRes.json();
+  // Fetch admission data
+  useEffect(() => {
+    async function fetchAdmissionData() {
+      if (!admissionId) return;
+      
+      try {
+        const res = await fetch(`/api/admin/admissions/${admissionId}`);
+        const data = await res.json();
         
-        if (admissionData.success && admissionData.admission) {
-          const ad: Admission = admissionData.admission;
+        if (data.success && data.admission) {
+          const ad: Admission = data.admission;
           
-          setSelectedPrograms(ad.programs?.map(p => p.id) || []);
+          const offeringIds = ad.offerings?.map((o: { offeringId: number }) => o.offeringId) || [];
+          setInitialSelectedIds(offeringIds);
+          setSelectedOfferings(offeringIds);
           setInstituteId(ad.instituteId);
           setYear(ad.year.toString());
           setSession(ad.session || "");
@@ -265,263 +367,511 @@ export default function EditAdmissionPage() {
           setNote(ad.note || "");
           setOfficialLink(ad.officialLink || "");
           setName(ad.name || "");
-          setSlug(ad.slug || "");
-          setOriginalSlug(ad.slug || "");
+          setManualSlug(ad.slug || "");
           
-          // ✅ Set SEO data if exists
-          if (ad.seo) {
-            setMetaTitle(ad.seo.metaTitle || "");
-            setMetaDescription(ad.seo.metaDescription || "");
-            setCanonicalUrl(ad.seo.canonicalUrl || "");
+          if (ad.seo && (ad.seo.metaTitle || ad.seo.metaDescription)) {
+            setManualMetaTitle(ad.seo.metaTitle || "");
+            setManualMetaDescription(ad.seo.metaDescription || "");
+            setManualCanonicalUrl(ad.seo.canonicalUrl || "");
             setRobots(ad.seo.robots || "index, follow");
-            setOgTitle(ad.seo.ogTitle || "");
-            setOgDescription(ad.seo.ogDescription || "");
+            setManualOgTitle(ad.seo.ogTitle || "");
+            setManualOgDescription(ad.seo.ogDescription || "");
             setOgImage(ad.seo.ogImage || "");
-            setAutoGenerateSeo(false); // Disable auto if existing SEO data
+            setAutoGenerateSeo(false);
+          } else {
+            setAutoGenerateSeo(true);
           }
         }
-
       } catch (err) {
-        console.error("Error fetching data:", err);
-        toast.error("Failed to load data");
-      } finally {
-        setFetchLoading(false);
+        console.error("Error fetching admission:", err);
+        toast.error("Failed to load admission data");
       }
     }
     
-    if (admissionId) {
-      fetchData();
-    }
+    fetchAdmissionData();
   }, [admissionId]);
 
-  // Filter programs when institute changes
+  const fetchInstitutePrograms = useCallback(async (instId: number) => {
+    if (!instId) {
+      setLinkedPrograms([]);
+      setAvailablePrograms([]);
+      return;
+    }
+
+    setLoadingPrograms(true);
+    try {
+      const linkedRes = await fetch(`/api/admin/program_offerings/by-institute/${instId}`);
+      const linkedData = await linkedRes.json();
+
+      const linkedOfferings = linkedData.offerings || linkedData.programs || [];
+
+      const linked: LinkedProgram[] = linkedOfferings.map((item: ApiProgramResponse) => ({
+        offeringId: item.id,
+        programId: item.programId || item.program_id || 0,
+        programName: item.programName || item.name || "Unknown",
+        degreeName: item.degreeName || item.degree_name || "BS",
+        duration: item.duration || null,
+        feeRange: item.feeRange || item.fee_range || null,
+      }));
+
+      setLinkedPrograms(linked);
+
+      const allProgramsRes = await fetch("/api/admin/programs");
+      const allProgramsData = await allProgramsRes.json();
+      const allPrograms = allProgramsData.programs || [];
+
+      const linkedProgramIds = linked.map((l: LinkedProgram) => l.programId);
+
+      const unlinkedPrograms = allPrograms.filter(
+        (p: Program) => !linkedProgramIds.includes(p.id),
+      );
+
+      setAvailablePrograms(unlinkedPrograms);
+    } catch (error) {
+      console.error("Error fetching programs:", error);
+      setLinkedPrograms([]);
+      setAvailablePrograms([]);
+    } finally {
+      setLoadingPrograms(false);
+    }
+  }, []);
+
+  // ✅ FIXED: Use useEffect with proper dependency
   useEffect(() => {
     if (instituteId) {
-      const fetchInstitutePrograms = async () => {
-        try {
-          const res = await fetch(`/api/admin/program-institutes/by-institute/${instituteId}`);
-          const data = await res.json();
-          if (data.success) {
-            setFilteredPrograms(data.programs || []);
-          } else {
-            setFilteredPrograms(programs);
-          }
-        } catch (err) {
-          console.error("Error fetching institute programs:", err);
-          setFilteredPrograms([]);
-        }
-      };
-      fetchInstitutePrograms();
-    } else {
-      setFilteredPrograms([]);
+      fetchInstitutePrograms(instituteId);
     }
-  }, [instituteId, programs]);
+  }, [instituteId, fetchInstitutePrograms]);
+
+  // ✅ CRITICAL: Sync selectedOfferings with initialSelectedIds after linkedPrograms load
+  useEffect(() => {
+    if (linkedPrograms.length > 0 && initialSelectedIds.length > 0) {
+      const validSelections = initialSelectedIds.filter(id =>
+        linkedPrograms.some(p => p.offeringId === id)
+      );
+      
+      if (validSelections.length > 0 && JSON.stringify(selectedOfferings) !== JSON.stringify(validSelections)) {
+        setSelectedOfferings(validSelections);
+      }
+    }
+  }, [linkedPrograms, initialSelectedIds, selectedOfferings]);
+
+  const handleInstituteChange = (val: number) => {
+    setInstituteId(val);
+    setSelectedOfferings([]);
+    setSelectedNewPrograms([]);
+    setShowAvailablePrograms(false);
+  };
+
+  const handleLinkedProgramSelect = (offeringId: number) => {
+    setSelectedOfferings((prev) =>
+      prev.includes(offeringId)
+        ? prev.filter((id) => id !== offeringId)
+        : [...prev, offeringId],
+    );
+  };
+
+  const handleSelectAllLinked = () => {
+    if (selectedOfferings.length === linkedPrograms.length) {
+      setSelectedOfferings([]);
+    } else {
+      setSelectedOfferings(linkedPrograms.map((p) => p.offeringId));
+    }
+  };
+
+  const handleNewProgramSelect = (programId: number) => {
+    setSelectedNewPrograms((prev) =>
+      prev.includes(programId)
+        ? prev.filter((id) => id !== programId)
+        : [...prev, programId],
+    );
+  };
+
+  const handleSelectAllNew = () => {
+    if (selectedNewPrograms.length === availablePrograms.length) {
+      setSelectedNewPrograms([]);
+    } else {
+      setSelectedNewPrograms(availablePrograms.map((p) => p.id));
+    }
+  };
+
+  const handleLinkNewPrograms = async () => {
+    if (selectedNewPrograms.length === 0) {
+      toast.error("Please select programs to link");
+      return;
+    }
+
+    setLinkingPrograms(true);
+    toast.loading(`Linking ${selectedNewPrograms.length} program(s)...`);
+
+    try {
+      await Promise.all(
+        selectedNewPrograms.map(async (programId) => {
+          const res = await fetch("/api/admin/program_offerings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              programId: programId,
+              degreeId: 1,
+              instituteId: instituteId,
+              status: true,
+            }),
+          });
+          if (!res.ok) throw new Error("Failed to link");
+          return res.json();
+        }),
+      );
+
+      toast.success(
+        `${selectedNewPrograms.length} program(s) linked successfully!`,
+      );
+
+      if (instituteId) {
+        await fetchInstitutePrograms(instituteId);
+      }
+
+      setSelectedNewPrograms([]);
+      setShowAvailablePrograms(false);
+    } catch {
+      toast.error("Failed to link programs");
+    } finally {
+      setLinkingPrograms(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    setSingleLoading(true);
+    setFormError(null);
 
-    if (!instituteId || selectedPrograms.length === 0 || !year || !status) {
-      setError("Institute, at least one Program, Year, and Status are required.");
-      setLoading(false);
+    if (!instituteId) {
+      setFormError("Institute is required.");
+      setSingleLoading(false);
       return;
     }
 
-    if (!name || !slug) {
-      setError("Name and Slug are required.");
-      setLoading(false);
+    if (selectedOfferings.length === 0) {
+      setFormError("At least one Program is required.");
+      setSingleLoading(false);
       return;
     }
 
-    toast.loading("Updating admission...", { id: "update-admission" });
+    if (!year) {
+      setFormError("Year is required.");
+      setSingleLoading(false);
+      return;
+    }
+
+    if (!name || !name.trim()) {
+      setFormError("Admission Name is required.");
+      setSingleLoading(false);
+      return;
+    }
+
+    const finalSlug = computedSlug;
+    if (!finalSlug || !finalSlug.trim()) {
+      setFormError("Slug is required.");
+      setSingleLoading(false);
+      return;
+    }
+
+    const formData = {
+      name: name.trim(),
+      slug: finalSlug,
+      offeringIds: selectedOfferings,
+      instituteId: Number(instituteId),
+      year: Number(year),
+      session: session || null,
+      status,
+      expectedOpenDate: expectedOpenDate || null,
+      expectedCloseDate: expectedCloseDate || null,
+      meritInfo: meritInfo || null,
+      note: note || null,
+      officialLink: officialLink || null,
+      metaTitle: computedMetaTitle || null,
+      metaDescription: computedMetaDescription || null,
+      canonicalUrl: computedCanonicalUrl || null,
+      robots: robots || "index, follow",
+      ogTitle: computedOgTitle || null,
+      ogDescription: computedOgDescription || null,
+      ogImage: ogImage || null,
+    };
 
     try {
       const res = await fetch(`/api/admin/admissions/${admissionId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          slug,
-          programIds: selectedPrograms,
-          instituteId: Number(instituteId),
-          year: Number(year),
-          session: session || null,
-          status,
-          expectedOpenDate: expectedOpenDate || null,
-          expectedCloseDate: expectedCloseDate || null,
-          meritInfo: meritInfo || null,
-          note: note || null,
-          officialLink: officialLink || null,
-          // ✅ SEO fields
-          metaTitle: metaTitle || null,
-          metaDescription: metaDescription || null,
-          canonicalUrl: canonicalUrl || null,
-          robots: robots || "index, follow",
-          ogTitle: ogTitle || null,
-          ogDescription: ogDescription || null,
-          ogImage: ogImage || null,
-        }),
+        body: JSON.stringify(formData),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || data.details || "Failed to update admission");
+        throw new Error(
+          data.error || data.details || "Failed to update admission",
+        );
       }
 
       if (data.success) {
-        toast.success("Admission updated successfully!", { 
-          id: "update-admission",
-          duration: 3000 
-        });
-        
-        if (slug !== originalSlug) {
-          router.push(`/admin/admissions`);
-        } else {
-          router.push(`/admin/admissions/${admissionId}`);
-        }
-      } else {
-        throw new Error(data.error || "Failed to update admission");
+        toast.success("Admission updated successfully!");
+        router.push("/admin/admissions");
+        router.refresh();
       }
-
     } catch (err) {
-      console.error("Error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to update admission", { 
-        id: "update-admission" 
-      });
-      setError(err instanceof Error ? err.message : "Failed to update admission");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update admission",
+      );
+      setFormError(
+        err instanceof Error ? err.message : "Failed to update admission",
+      );
     } finally {
-      setLoading(false);
+      setSingleLoading(false);
     }
   };
 
   if (fetchLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div
+        className={`p-6 max-w-4xl mx-auto min-h-screen ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
+      >
         <div className="flex justify-center items-center h-64">
-          <div className="text-gray-500">Loading...</div>
+          <div className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
+            Loading...
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {/* Breadcrumb */}
+    <div
+      className={`p-6 max-w-4xl mx-auto min-h-screen ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
+    >
       <div className="mb-6">
-        <div className="flex items-center text-sm text-gray-500 mb-2">
-          <Link href="/admin" className="hover:text-blue-600">Dashboard</Link>
-          <span className="mx-2">›</span>
-          <Link href="/admin/admissions" className="hover:text-blue-600">Admissions</Link>
-          <span className="mx-2">›</span>
-          <Link href={`/admin/admissions/${admissionId}`} className="hover:text-blue-600">
-            {name || `Admission #${admissionId}`}
+        <div
+          className={`flex items-center text-sm mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+        >
+          <Link
+            href="/admin"
+            className={
+              isDarkMode ? "hover:text-blue-400" : "hover:text-blue-600"
+            }
+          >
+            Dashboard
           </Link>
           <span className="mx-2">›</span>
-          <span className="text-gray-700">Edit</span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Edit Admission</h1>
           <Link
-            href={`/admin/admissions/${admissionId}`}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            href="/admin/admissions"
+            className={
+              isDarkMode ? "hover:text-blue-400" : "hover:text-blue-600"
+            }
           >
-            Cancel
+            Admissions
+          </Link>
+          <span className="mx-2">›</span>
+          <span className={isDarkMode ? "text-gray-300" : "text-gray-700"}>
+            Edit
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <h1
+            className={`text-2xl font-semibold ${isDarkMode ? "text-white" : "text-gray-900"}`}
+          >
+            Edit Admission
+          </h1>
+          <Link
+            href="/admin/admissions"
+            className={`px-4 py-2 rounded-md ${isDarkMode ? "bg-blue-900 text-blue-300 hover:bg-blue-800" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}
+          >
+            Back to Admissions
           </Link>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+      {formError && (
+        <div
+          className={`mb-4 border px-4 py-3 rounded ${isDarkMode ? "bg-red-950 border-red-800 text-red-400" : "bg-red-50 border-red-200 text-red-700"}`}
+        >
+          {formError}
         </div>
       )}
 
-      <form className="bg-white p-6 rounded-lg shadow-sm border space-y-4" onSubmit={handleSubmit}>
-        {/* Institute Selection */}
+      <form
+        className={`rounded-lg shadow-sm border space-y-6 p-6 ${isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white"}`}
+        onSubmit={handleSubmit}
+      >
         <Select
           label="Institute *"
           value={instituteId ?? 0}
-          onChange={(val: number) => {
-            setInstituteId(val);
-            setManualName(false);
-          }}
+          onChange={handleInstituteChange}
           options={[
             { value: 0, label: "Select Institute" },
-            ...institutes.map(i => ({
+            ...institutes.map((i) => ({
               value: i.id,
               label: `${i.name} (${i.cityName})`,
-            }))
+            })),
           ]}
           required
         />
 
-        {/* Multi-Program Selection */}
-        {instituteId && (
-          <div className="border rounded-lg p-4">
+        {loadingPrograms && instituteId && (
+          <div className="text-center py-4">
+            <div
+              className={`animate-spin rounded-full h-6 w-6 border-b-2 mx-auto ${isDarkMode ? "border-blue-400" : "border-blue-600"}`}
+            ></div>
+            <p className="text-sm mt-2">Loading programs...</p>
+          </div>
+        )}
+
+        {/* Linked Programs Section */}
+        {instituteId && !loadingPrograms && linkedPrograms.length > 0 && (
+          <div
+            className={`border rounded-lg p-4 ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+          >
             <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-gray-700">
-                Select Programs * ({selectedPrograms.length} selected)
+              <label
+                className={`block text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+              >
+                ✅ Linked Programs ({selectedOfferings.length} selected)
               </label>
-              {filteredPrograms.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleSelectAllPrograms}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  {selectedPrograms.length === filteredPrograms.length ? 'Deselect All' : 'Select All'}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleSelectAllLinked}
+                className={`text-sm ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
+              >
+                {selectedOfferings.length === linkedPrograms.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </button>
             </div>
-            
-            {filteredPrograms.length === 0 ? (
-              <p className="text-sm text-gray-500 py-2">No programs found for this institute</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded">
-                {filteredPrograms.map((program) => (
-                  <label
-                    key={program.id}
-                    className={`flex items-center p-2 rounded cursor-pointer transition-colors ${
-                      selectedPrograms.includes(program.id)
-                        ? 'bg-blue-50 border-blue-200'
-                        : 'hover:bg-gray-50'
-                    }`}
+            <div
+              className={`grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+            >
+              {linkedPrograms.map((program, idx) => (
+                <label
+                  key={`linked-${program.offeringId}-${idx}`}
+                  className={`flex items-center p-2 rounded cursor-pointer border ${selectedOfferings.includes(program.offeringId) ? (isDarkMode ? "bg-blue-900/30 border-blue-700" : "bg-blue-50 border-blue-200") : isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedOfferings.includes(program.offeringId)}
+                    onChange={() =>
+                      handleLinkedProgramSelect(program.offeringId)
+                    }
+                    className="mr-2"
+                  />
+                  <div>
+                    <span
+                      className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                    >
+                      {program.programName}
+                    </span>
+                    <span
+                      className={`text-xs ml-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      ({program.degreeName})
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Available Programs Section with Toggle */}
+        {instituteId && !loadingPrograms && availablePrograms.length > 0 && (
+          <div
+            className={`border rounded-lg p-4 ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+          >
+            <button
+              type="button"
+              onClick={() => setShowAvailablePrograms(!showAvailablePrograms)}
+              className={`w-full flex items-center justify-between p-2 rounded ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+            >
+              <span>
+                📌 Available Programs to Link ({availablePrograms.length}{" "}
+                unlinked)
+              </span>
+              <span>{showAvailablePrograms ? "▲" : "▼"}</span>
+            </button>
+
+            {showAvailablePrograms && (
+              <>
+                <div className="flex justify-between mt-4 mb-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllNew}
+                    className={`text-sm ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedPrograms.includes(program.id)}
-                      onChange={() => handleProgramSelect(program.id)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
-                    />
-                    <span className="text-sm">{program.name}</span>
-                  </label>
-                ))}
-              </div>
+                    {selectedNewPrograms.length === availablePrograms.length
+                      ? "Deselect All"
+                      : "Select All"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLinkNewPrograms}
+                    disabled={
+                      linkingPrograms || selectedNewPrograms.length === 0
+                    }
+                    className={`px-3 py-1 text-sm rounded ${linkingPrograms || selectedNewPrograms.length === 0 ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 text-white"}`}
+                  >
+                    {linkingPrograms
+                      ? "Linking..."
+                      : `Link ${selectedNewPrograms.length} Program(s)`}
+                  </button>
+                </div>
+                <div
+                  className={`grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border rounded ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+                >
+                  {availablePrograms.map((program, idx) => (
+                    <label
+                      key={`available-${program.id}-${idx}`}
+                      className={`flex items-center p-2 rounded cursor-pointer border ${selectedNewPrograms.includes(program.id) ? (isDarkMode ? "bg-green-900/30 border-green-700" : "bg-green-50 border-green-200") : isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNewPrograms.includes(program.id)}
+                        onChange={() => handleNewProgramSelect(program.id)}
+                        className="mr-2"
+                      />
+                      <span
+                        className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                      >
+                        {program.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
             )}
+          </div>
+        )}
+
+        {/* Message when no available programs */}
+        {instituteId && !loadingPrograms && linkedPrograms.length > 0 && availablePrograms.length === 0 && (
+          <div className={`text-center py-4 rounded-lg ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}>
+            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+              ✅ All programs are already linked to this institute.
+            </p>
           </div>
         )}
 
         {/* Year and Session */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+            >
               Year *
             </label>
             <input
               type="number"
               value={year}
-              onChange={(e) => {
-                setYear(e.target.value);
-                setManualName(false);
-              }}
-              placeholder="e.g. 2026"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => setYear(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
               required
             />
           </div>
-
           <Select
             label="Session"
             value={session}
@@ -535,212 +885,56 @@ export default function EditAdmissionPage() {
           />
         </div>
 
-        {/* Name Field */}
+        {/* Admission Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+          >
             Admission Name *
           </label>
           <input
             type="text"
             value={name}
             onChange={handleNameChange}
-            placeholder="e.g. FAST NUCES Spring Admissions 2026"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Auto-generated from selection. Edit to customize.
-          </p>
         </div>
 
         {/* Slug Field */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Slug *
-          </label>
+          <div className="flex justify-between mb-1">
+            <label
+              className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+            >
+              Slug *
+            </label>
+          </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-500 text-sm">/admissions/</span>
-            <input
-              type="text"
-              value={slug}
-              onChange={handleSlugChange}
-              placeholder="fast-nuces-spring-admissions-2026"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-              required
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-1">
-            URL-friendly version. Auto-generated from name.
-          </p>
-        </div>
-
-        {/* SEO Section - Collapsible */}
-        <details className="border rounded-lg p-4">
-          <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-blue-600">
-            🔍 SEO Settings (Optional - Auto-generated)
-          </summary>
-          
-          <div className="mt-4 space-y-4">
-            {/* Auto-generate toggle */}
-            <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-              <span className="text-sm text-gray-700">Auto-generate SEO from admission data</span>
-              <button
-                type="button"
-                onClick={() => setAutoGenerateSeo(!autoGenerateSeo)}
-                className={`px-3 py-1 text-sm rounded ${
-                  autoGenerateSeo 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-              >
-                {autoGenerateSeo ? '✅ Auto ON' : 'Manual Mode'}
-              </button>
-            </div>
-            
-            {/* Meta Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Meta Title
-                <span className="text-xs text-gray-500 ml-2">(50-60 chars recommended)</span>
-              </label>
+            <span className="text-sm text-gray-500">/admissions/</span>
+            {autoGenerateSeo ? (
               <input
                 type="text"
-                value={metaTitle}
-                onChange={(e) => setMetaTitle(e.target.value)}
-                placeholder="SEO title for search engines"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                maxLength={70}
+                value={computedSlug}
+                readOnly
+                className="flex-1 px-3 py-2 border rounded-md bg-gray-100"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                {metaTitle.length}/70 characters
-              </p>
-            </div>
-            
-            {/* Meta Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Meta Description
-                <span className="text-xs text-gray-500 ml-2">(155-160 chars recommended)</span>
-              </label>
-              <textarea
-                value={metaDescription}
-                onChange={(e) => setMetaDescription(e.target.value)}
-                placeholder="SEO description for search results"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                maxLength={170}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {metaDescription.length}/170 characters
-              </p>
-            </div>
-            
-            {/* Canonical URL */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Canonical URL
-              </label>
-              <input
-                type="url"
-                value={canonicalUrl}
-                onChange={(e) => setCanonicalUrl(e.target.value)}
-                placeholder="https://www.nextid.pk/admissions/slug"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            {/* Robots */}
-            <Select
-              label="Robots"
-              value={robots}
-              onChange={(val: string) => setRobots(val)}
-              options={[
-                { value: "index, follow", label: "Index, Follow (Default)" },
-                { value: "noindex, follow", label: "No Index, Follow" },
-                { value: "index, nofollow", label: "Index, No Follow" },
-                { value: "noindex, nofollow", label: "No Index, No Follow" },
-              ]}
-            />
-            
-            {/* OG Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Social Media Title (OG Title)
-              </label>
+            ) : (
               <input
                 type="text"
-                value={ogTitle}
-                onChange={(e) => setOgTitle(e.target.value)}
-                placeholder="Title for Facebook/WhatsApp sharing"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={manualSlug}
+                onChange={handleSlugChange}
+                className="flex-1 px-3 py-2 border rounded-md"
               />
-            </div>
-            
-            {/* OG Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Social Media Description (OG Description)
-              </label>
-              <textarea
-                value={ogDescription}
-                onChange={(e) => setOgDescription(e.target.value)}
-                placeholder="Description for Facebook/WhatsApp sharing"
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            {/* OG Image */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Social Media Image URL (OG Image)
-              </label>
-              <input
-                type="url"
-                value={ogImage}
-                onChange={(e) => setOgImage(e.target.value)}
-                placeholder="https://www.nextid.pk/images/og/admission-default.jpg"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Recommended size: 1200x630 pixels
-              </p>
-            </div>
-          </div>
-        </details>
-
-        {/* Selected Programs Summary */}
-        {selectedProgramsList.length > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <p className="text-sm text-green-800 font-medium mb-1">Selected Programs:</p>
-            <ul className="text-sm text-green-700 list-disc list-inside">
-              {selectedProgramsList.map(program => (
-                <li key={program.id}>{program.name}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Preview */}
-        {slug && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-800">
-              <span className="font-medium">Preview URL:</span>{' '}
-              <span className="font-mono">https://www.nextid.pk/admissions/{slug}</span>
-            </p>
-            {slug !== originalSlug && (
-              <p className="text-xs text-yellow-600 mt-1">
-                ⚠️ Slug changed. Page will redirect to new URL after update.
-              </p>
             )}
           </div>
-        )}
+        </div>
 
         {/* Status */}
         <Select
           label="Status *"
           value={status}
-          onChange={(val: "Expected" | "Open" | "Closed") => setStatus(val)}
+          onChange={(val) => setStatus(val as "Expected" | "Open" | "Closed")}
           options={[
             { value: "Expected", label: "Expected" },
             { value: "Open", label: "Open" },
@@ -752,83 +946,320 @@ export default function EditAdmissionPage() {
         {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+            >
               Expected Open Date
             </label>
             <input
               type="date"
               value={expectedOpenDate}
               onChange={(e) => setExpectedOpenDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+            >
               Expected Close Date
             </label>
             <input
               type="date"
               value={expectedCloseDate}
               onChange={(e) => setExpectedCloseDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             />
           </div>
         </div>
 
         {/* Official Link */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+          >
             Official Link
           </label>
           <input
             type="url"
             value={officialLink}
             onChange={(e) => setOfficialLink(e.target.value)}
-            placeholder="e.g. https://university.edu.pk/admissions"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
           />
         </div>
 
         {/* Merit Information */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+          >
             Merit Information
           </label>
           <textarea
             value={meritInfo}
-            onChange={(e) => setMeritInfo(e.target.value)}
-            placeholder="Merit criteria, last merit, etc..."
+            onChange={handleMeritInfoChange}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
           />
         </div>
 
-        {/* Additional Notes with Rich Text Editor */}
+        {/* Additional Notes */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+          >
             Additional Notes
-            <span className="text-xs text-gray-500 ml-2">
-              (Supports HTML formatting - bold, italic, lists, links, headings)
-            </span>
           </label>
           <RichTextEditor
             value={note}
-            onChange={setNote}
-            placeholder="Add formatted notes, instructions, deadlines, or additional information..."
-            minHeight={200}
+            onChange={(value) => setNote(value as string)}
+            minHeight={150}
           />
         </div>
 
+        {/* SEO Section */}
+        <details
+          className={`border rounded-lg p-4 ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+        >
+          <summary
+            className={`text-sm font-medium cursor-pointer ${isDarkMode ? "text-gray-300 hover:text-blue-400" : "text-gray-700 hover:text-blue-600"}`}
+          >
+            🔍 SEO Settings
+          </summary>
+
+          <div className="mt-4 space-y-4">
+            <div
+              className={`flex items-center justify-between p-2 rounded ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
+            >
+              <span
+                className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+              >
+                Auto-generate SEO from admission data
+              </span>
+              <button
+                type="button"
+                onClick={() => setAutoGenerateSeo(!autoGenerateSeo)}
+                className={`px-3 py-1 text-sm rounded ${autoGenerateSeo ? (isDarkMode ? "bg-green-900 text-green-300" : "bg-green-100 text-green-700") : isDarkMode ? "bg-gray-600 text-gray-300" : "bg-gray-200 text-gray-700"}`}
+              >
+                {autoGenerateSeo ? "✅ Auto ON" : "Manual Mode"}
+              </button>
+            </div>
+
+            {autoGenerateSeo ? (
+              <>
+                <div
+                  className={`p-3 rounded border ${isDarkMode ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <label
+                    className={`block text-xs font-medium mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    Meta Title (Auto-generated)
+                  </label>
+                  <div
+                    className={`text-sm ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
+                  >
+                    {computedMetaTitle || "Will be auto-generated"}
+                  </div>
+                  <p
+                    className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
+                  >
+                    Length: {computedMetaTitle.length}/60 characters
+                  </p>
+                </div>
+                <div
+                  className={`p-3 rounded border ${isDarkMode ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <label
+                    className={`block text-xs font-medium mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    Meta Description (Auto-generated)
+                  </label>
+                  <div
+                    className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                  >
+                    {computedMetaDescription || "Will be auto-generated"}
+                  </div>
+                  <p
+                    className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
+                  >
+                    Length: {computedMetaDescription.length}/160 characters
+                  </p>
+                </div>
+                <div
+                  className={`p-3 rounded border ${isDarkMode ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <label
+                    className={`block text-xs font-medium mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    Canonical URL (Auto-generated)
+                  </label>
+                  <div
+                    className={`text-sm font-mono ${isDarkMode ? "text-green-400" : "text-green-600"}`}
+                  >
+                    {computedCanonicalUrl || "Will be auto-generated"}
+                  </div>
+                </div>
+                <div
+                  className={`p-3 rounded border ${isDarkMode ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <label
+                    className={`block text-xs font-medium mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    OG Title (Auto-generated)
+                  </label>
+                  <div
+                    className={`text-sm ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}
+                  >
+                    {computedOgTitle || "Will be auto-generated"}
+                  </div>
+                </div>
+                <div
+                  className={`p-3 rounded border ${isDarkMode ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <label
+                    className={`block text-xs font-medium mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    OG Description (Auto-generated)
+                  </label>
+                  <div
+                    className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                  >
+                    {computedOgDescription || "Will be auto-generated"}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  >
+                    Meta Title
+                  </label>
+                  <input
+                    type="text"
+                    value={manualMetaTitle}
+                    onChange={handleMetaTitleChange}
+                    className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  >
+                    Meta Description
+                  </label>
+                  <textarea
+                    value={manualMetaDescription}
+                    onChange={handleMetaDescriptionChange}
+                    rows={3}
+                    className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  >
+                    Canonical URL
+                  </label>
+                  <input
+                    type="url"
+                    value={manualCanonicalUrl}
+                    onChange={handleCanonicalUrlChange}
+                    className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  >
+                    OG Title
+                  </label>
+                  <input
+                    type="text"
+                    value={manualOgTitle}
+                    onChange={handleOgTitleChange}
+                    className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+                  />
+                </div>
+                <div>
+                  <label
+                    className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  >
+                    OG Description
+                  </label>
+                  <textarea
+                    value={manualOgDescription}
+                    onChange={handleOgDescriptionChange}
+                    rows={2}
+                    className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <Select
+                label="Robots"
+                value={robots}
+                onChange={(val: string) => setRobots(val)}
+                options={[
+                  { value: "index, follow", label: "Index, Follow (Default)" },
+                  { value: "noindex, follow", label: "No Index, Follow" },
+                  { value: "index, nofollow", label: "Index, No Follow" },
+                  { value: "noindex, nofollow", label: "No Index, No Follow" },
+                ]}
+              />
+            </div>
+
+            <div>
+              <label
+                className={`block text-sm font-medium mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+              >
+                Social Media Image URL (OG Image)
+              </label>
+              <input
+                type="url"
+                value={ogImage}
+                onChange={(e) => setOgImage(e.target.value)}
+                placeholder="https://www.nextid.pk/images/og/admission-default.jpg"
+                className={`w-full px-3 py-2 border rounded-md ${isDarkMode ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+              />
+              <p
+                className={`text-xs mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                Recommended size: 1200x630 pixels
+              </p>
+            </div>
+          </div>
+        </details>
+
+        {/* Selected Programs Summary */}
+        {selectedOfferingsList.length > 0 && (
+          <div className={`rounded-lg p-3 ${
+            isDarkMode ? "bg-green-950 border border-green-800" : "bg-green-50 border border-green-200"
+          }`}>
+            <p className={`text-sm font-medium mb-1 ${isDarkMode ? "text-green-300" : "text-green-800"}`}>
+              ✅ Selected Programs for Admission ({selectedOfferingsList.length}):
+            </p>
+            <ul className={`text-sm list-disc list-inside ${isDarkMode ? "text-green-300" : "text-green-700"}`}>
+              {selectedOfferingsList.map((program) => (
+                <li key={`selected-${program.offeringId}`}>
+                  {program.programName} ({program.degreeName})
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Form Actions */}
-        <div className="pt-4 flex items-center gap-3">
-          <PrimaryButton type="submit" disabled={loading}>
-            {loading ? "Updating..." : "Update Admission"}
+        <div className="flex gap-3 pt-4">
+          <PrimaryButton type="submit" disabled={singleLoading}>
+            {singleLoading ? "Updating..." : "Update Admission"}
           </PrimaryButton>
-          
           <Link
-            href={`/admin/admissions/${admissionId}`}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            href="/admin/admissions"
+            className={`px-4 py-2 border rounded-md ${isDarkMode ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
           >
             Cancel
           </Link>

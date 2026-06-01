@@ -1,7 +1,7 @@
 // app/api/admin/institutes/bulk/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { institutes } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { institutes } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {

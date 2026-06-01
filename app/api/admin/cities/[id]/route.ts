@@ -1,8 +1,8 @@
 // app/api/admin/cities/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { cities, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { cities, seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // GET - Fetch single city

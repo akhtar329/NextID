@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
+import { db } from "@/db/db";
 import {
   admissions,
   admissionOfferings,
   programOfferings,
   programs,
   institutes,
-} from "@/app/lib/schema";
+} from "@/db/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 

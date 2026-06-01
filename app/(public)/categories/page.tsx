@@ -1,7 +1,7 @@
 // app/(public)/categories/page.tsx (FULLY OPTIMIZED)
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
+import { db } from '@/db/db';
 import { 
   categories, 
   institutes, 
@@ -12,7 +12,7 @@ import {
   news, 
   programs, 
   degrees, 
-} from '@/app/lib/schema';
+} from '@/db/schema';
 import { eq, and, sql, inArray, isNotNull, count } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 

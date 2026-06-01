@@ -1,8 +1,8 @@
 // app/api/admin/programs/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { programs, categories, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { programs, categories, seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 // Helper to parse program ID safely
@@ -368,7 +368,7 @@ export async function DELETE(
       );
 
     // Delete program offerings (cascade should handle, but explicit for safety)
-    const { programOfferings } = await import("@/app/lib/schema");
+    const { programOfferings } = await import("@/db/schema");
     await db.delete(programOfferings).where(eq(programOfferings.programId, programId));
 
     // Delete program

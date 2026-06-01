@@ -1,41 +1,33 @@
-// app/(public)/date-sheets/page.tsx (COMPLETE WORKING VERSION)
+// app/(public)/date-sheets/page.tsx
+
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/app/lib/db';
-import { dateSheets, boards, institutes, cities } from '@/app/lib/schema';
-import { eq, desc, like, and, or, sql, SQL } from 'drizzle-orm';
+import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
-// ✅ SINGLE revalidate - 24 hours as requested
+// ✅ SINGLE revalidate - 24 hours
 export const revalidate = 86400;
 
 // ============================================
 // INTERFACE DEFINITIONS
 // ============================================
-interface DateSheetRow {
+interface DateSheetItem {
   id: number;
-  title: string;
   slug: string;
-  examType: string | null;
+  title: string;
+  examType: string;
   examDate: Date | null;
   year: number;
-  boardId: number | null;
-  instituteId: number | null;
-  viewCount: number | null;
-  isPopular: boolean | null;
+  boardName: string | null;
+  instituteName: string | null;
+  isPopular: boolean;
+  viewCount: number;
   officialLink: string | null;
   downloadLink: string | null;
-  boardName: string | null;
-  boardSlug: string | null;
-  instituteName: string | null;
-  instituteSlug: string | null;
-  cityId: number | null;
-  cityName: string | null;
-  citySlug: string | null;
 }
 
 interface DateSheetsResult {
-  dateSheets: DateSheetRow[];
+  dateSheets: DateSheetItem[];
   totalCount: number;
   totalPages: number;
   currentPage: number;
@@ -66,7 +58,6 @@ const ITEMS_PER_PAGE = 12;
 const BOARD_TYPES = [
   { slug: '', name: 'All Boards', icon: '📋', description: 'All educational boards in Pakistan' },
   { slug: 'bise', name: 'BISE Boards', icon: '🏛️', description: 'All BISE boards across Pakistan' },
-  { slug: 'fbise', name: 'FBISE', icon: '⭐', description: 'Federal Board of Intermediate and Secondary Education' },
   { slug: 'university', name: 'Universities', icon: '🎓', description: 'University date sheets' },
 ];
 
@@ -75,16 +66,12 @@ const EXAM_TYPES = [
   { value: 'Annual', label: 'Annual Exams' },
   { value: 'Supplementary', label: 'Supplementary Exams' },
   { value: 'Special', label: 'Special Exams' },
-  { value: 'Mid Term', label: 'Mid Term Exams' },
-  { value: 'Final Term', label: 'Final Term Exams' },
 ];
 
 export const metadata: Metadata = {
   title: 'Date Sheets 2026 in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk',
   description: 'Download all 2026 date sheets for BISE boards, FBISE, and universities in Pakistan. Check exam schedules, subject-wise dates, and official notifications.',
-  alternates: {
-    canonical: 'https://www.nextid.pk/date-sheets',
-  },
+  alternates: { canonical: 'https://www.nextid.pk/date-sheets' },
   openGraph: {
     title: 'Date Sheets 2026 in Pakistan – Download Exam Schedules',
     description: 'Download date sheets for Matric, Intermediate, and university exams 2026.',
@@ -94,140 +81,131 @@ export const metadata: Metadata = {
   },
 };
 
-type ConditionType = ReturnType<typeof eq> | ReturnType<typeof like> | ReturnType<typeof and> | ReturnType<typeof or> | SQL;
+// Helper function to safely extract meta values
+function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
+  if (!meta) return defaultValue;
+  const value = meta[key] as T;
+  return value !== undefined ? value : defaultValue;
+}
 
 // ============================================
 // DATA FETCHING FUNCTIONS (CACHED)
 // ============================================
 
 async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResult> {
-  const cacheKey = `date-sheets-${JSON.stringify(filters)}`;
+  const currentPage = filters.page || 1;
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
-  return unstable_cache(
-    async () => {
-      try {
-        const currentPage = filters.page || 1;
-        const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-        
-        const conditions: ConditionType[] = [];
-        conditions.push(eq(dateSheets.status, true));
-
-        if (filters.examType && filters.examType !== '') {
-          conditions.push(eq(dateSheets.examType, filters.examType));
-        }
-
-        if (filters.year && filters.year !== '') {
-          conditions.push(eq(dateSheets.year, parseInt(filters.year)));
-        }
-
-        if (filters.q) {
-          const words = filters.q.trim().split(/\s+/);
-          const searchConditions = words.flatMap(word => {
-            const term = `%${word}%`;
-            return [
-              like(dateSheets.title, term),
-              like(boards.name, term),
-              like(institutes.name, term),
-            ];
-          });
-          conditions.push(or(...searchConditions));
-        }
-
-        if (filters.board === 'bise') {
-          conditions.push(sql`${dateSheets.boardId} IS NOT NULL`);
-        } else if (filters.board === 'fbise') {
-          conditions.push(eq(boards.name, 'Federal Board of Intermediate and Secondary Education (FBISE)'));
-        } else if (filters.board === 'university') {
-          conditions.push(sql`${dateSheets.instituteId} IS NOT NULL`);
-        }
-
-        const whereClause = and(...conditions);
-
-        const dateSheetsList = await db
-          .select({
-            id: dateSheets.id,
-            title: dateSheets.title,
-            slug: dateSheets.slug,
-            examType: dateSheets.examType,
-            examDate: dateSheets.examDate,
-            year: dateSheets.year,
-            boardId: dateSheets.boardId,
-            instituteId: dateSheets.instituteId,
-            viewCount: dateSheets.viewCount,
-            isPopular: dateSheets.isPopular,
-            officialLink: dateSheets.officialLink,
-            downloadLink: dateSheets.downloadLink,
-            boardName: boards.name,
-            boardSlug: boards.slug,
-            instituteName: institutes.name,
-            instituteSlug: institutes.slug,
-            cityId: institutes.cityId,
-            cityName: cities.name,
-            citySlug: cities.slug,
-            totalCount: sql<number>`count(*) over()`.as("totalCount"),
-          })
-          .from(dateSheets)
-          .leftJoin(boards, eq(dateSheets.boardId, boards.id))
-          .leftJoin(institutes, eq(dateSheets.instituteId, institutes.id))
-          .leftJoin(cities, eq(institutes.cityId, cities.id))
-          .where(whereClause)
-          .orderBy(desc(dateSheets.isPopular), desc(dateSheets.year), desc(dateSheets.createdAt))
-          .limit(ITEMS_PER_PAGE)
-          .offset(offset);
-
-        const totalCount = dateSheetsList.length > 0 ? Number(dateSheetsList[0]?.totalCount) || 0 : 0;
-        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-        return { 
-          dateSheets: dateSheetsList as DateSheetRow[], 
-          totalCount, 
-          totalPages, 
-          currentPage 
-        };
-      } catch (error) {
-        console.error('[CACHE] Failed to fetch date sheets:', error);
-        return { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
-      }
-    },
-    [cacheKey],
-    {
-      revalidate: 86400,
-      tags: ['date-sheets'],
+  try {
+    // Get all date sheets first (posts service handles caching)
+    let allSheets = await postService.getPostsByType('date_sheet', 100);
+    
+    // Filter by search query
+    if (filters.q) {
+      const query = filters.q.toLowerCase();
+      allSheets = allSheets.filter(sheet => 
+        sheet.title.toLowerCase().includes(query) ||
+        getMetaValue(sheet.meta, 'boardName', '').toLowerCase().includes(query) ||
+        getMetaValue(sheet.meta, 'instituteName', '').toLowerCase().includes(query)
+      );
     }
-  )();
+    
+    // Filter by exam type
+    if (filters.examType) {
+      allSheets = allSheets.filter(sheet => 
+        getMetaValue(sheet.meta, 'examType', 'Annual') === filters.examType
+      );
+    }
+    
+    // Filter by year
+    if (filters.year) {
+      const yearInt = parseInt(filters.year);
+      allSheets = allSheets.filter(sheet => 
+        getMetaValue(sheet.meta, 'year', new Date().getFullYear()) === yearInt
+      );
+    }
+    
+    // Filter by board type
+    if (filters.board === 'bise') {
+      allSheets = allSheets.filter(sheet => 
+        getMetaValue(sheet.meta, 'boardName', null) !== null
+      );
+    } else if (filters.board === 'university') {
+      allSheets = allSheets.filter(sheet => 
+        getMetaValue(sheet.meta, 'instituteName', null) !== null
+      );
+    }
+    
+    // Transform to DateSheetItem
+    const dateSheets: DateSheetItem[] = allSheets.map(sheet => ({
+      id: sheet.id,
+      slug: sheet.slug,
+      title: sheet.title,
+      examType: getMetaValue(sheet.meta, 'examType', 'Annual'),
+      examDate: getMetaValue(sheet.meta, 'examDate', null) ? new Date(getMetaValue(sheet.meta, 'examDate', '')) : null,
+      year: getMetaValue(sheet.meta, 'year', new Date().getFullYear()),
+      boardName: getMetaValue(sheet.meta, 'boardName', null),
+      instituteName: getMetaValue(sheet.meta, 'instituteName', null),
+      isPopular: sheet.isPopular || false,
+      viewCount: sheet.viewCount || 0,
+      officialLink: getMetaValue(sheet.meta, 'officialLink', null),
+      downloadLink: getMetaValue(sheet.meta, 'downloadLink', null),
+    }));
+    
+    // Sort by popularity and date
+    const sortedSheets = dateSheets.sort((a, b) => {
+      if (a.isPopular && !b.isPopular) return -1;
+      if (!a.isPopular && b.isPopular) return 1;
+      return b.year - a.year;
+    });
+    
+    // Paginate
+    const paginatedSheets = sortedSheets.slice(offset, offset + ITEMS_PER_PAGE);
+    const totalCount = sortedSheets.length;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    
+    return { 
+      dateSheets: paginatedSheets, 
+      totalCount, 
+      totalPages, 
+      currentPage 
+    };
+  } catch (error) {
+    console.error('Failed to fetch date sheets:', error);
+    return { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
+  }
 }
 
 async function getStats(): Promise<StatsResult> {
   return unstable_cache(
     async () => {
       try {
-        const [totalSheets, popularSheets, biseSheets, universitySheets, totalViews, years] = await Promise.all([
-          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(eq(dateSheets.status, true)),
-          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), eq(dateSheets.isPopular, true))),
-          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), sql`${dateSheets.boardId} IS NOT NULL`)),
-          db.select({ count: sql<number>`count(*)` }).from(dateSheets).where(and(eq(dateSheets.status, true), sql`${dateSheets.instituteId} IS NOT NULL`)),
-          db.select({ sum: sql<number>`sum(${dateSheets.viewCount})` }).from(dateSheets).where(eq(dateSheets.status, true)),
-          db.select({ year: dateSheets.year }).from(dateSheets).where(eq(dateSheets.status, true)).groupBy(dateSheets.year).orderBy(desc(dateSheets.year))
-        ]);
-
+        const allSheets = await postService.getPostsByType('date_sheet', 100);
+        
+        const totalSheets = allSheets.length;
+        const popularSheets = allSheets.filter(s => s.isPopular).length;
+        const biseSheets = allSheets.filter(s => getMetaValue(s.meta, 'boardName', null) !== null).length;
+        const universitySheets = allSheets.filter(s => getMetaValue(s.meta, 'instituteName', null) !== null).length;
+        const totalViews = allSheets.reduce((sum, s) => sum + (s.viewCount || 0), 0);
+        
+        const years = [...new Set(allSheets.map(s => getMetaValue(s.meta, 'year', new Date().getFullYear())))];
+        years.sort((a, b) => b - a);
+        
         return { 
-          totalSheets: Number(totalSheets[0]?.count) || 0,
-          popularSheets: Number(popularSheets[0]?.count) || 0,
-          biseSheets: Number(biseSheets[0]?.count) || 0,
-          universitySheets: Number(universitySheets[0]?.count) || 0,
-          totalViews: Number(totalViews[0]?.sum) || 0,
-          availableYears: years.map(y => y.year),
+          totalSheets, 
+          popularSheets, 
+          biseSheets, 
+          universitySheets, 
+          totalViews, 
+          availableYears: years,
         };
       } catch (error) {
-        console.error('[CACHE] Failed to fetch stats:', error);
+        console.error('Failed to fetch stats:', error);
         return { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
       }
     },
     ['date-sheets-stats'],
-    {
-      revalidate: 86400,
-      tags: ['date-sheets-stats'],
-    }
+    { revalidate: 86400, tags: ['date-sheets-stats'] }
   )();
 }
 
@@ -294,7 +272,7 @@ function Pagination({ currentPage, totalPages, filters }: {
             href={buildPageUrl(page)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               page === currentPage
-                ? 'bg-blue-600 text-white'
+                ? 'bg-green-600 text-white'
                 : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
@@ -326,26 +304,6 @@ function Pagination({ currentPage, totalPages, filters }: {
   );
 }
 
-function ErrorState() {
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
-          <div className="text-6xl mb-4" aria-hidden="true">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unable to load date sheets</h2>
-          <p className="text-gray-600">Please try again later</p>
-          <Link
-            href="/"
-            className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-          >
-            Go to Homepage
-          </Link>
-        </div>
-      </div>
-    </main>
-  );
-}
-
 // ============================================
 // MAIN PAGE COMPONENT
 // ============================================
@@ -355,44 +313,22 @@ export default async function DateSheetsPage({
 }: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  // Initialize with default values
-  let dateSheetsResult: DateSheetsResult = { dateSheets: [], totalCount: 0, totalPages: 0, currentPage: 1 };
-  let stats: StatsResult = { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
-  let fetchError = false;
-  
-  try {
-    const params = await searchParams || {};
-    
-    const currentPage = typeof params.page === 'string' ? parseInt(params.page) : 1;
-    
-    const filters: DateSheetFilters = {
-      board: typeof params.board === 'string' ? params.board : '',
-      examType: typeof params.type === 'string' ? params.type : '',
-      year: typeof params.year === 'string' ? params.year : '',
-      q: typeof params.q === 'string' ? params.q : '',
-      page: currentPage,
-    };
-
-    [dateSheetsResult, stats] = await Promise.all([
-      getDateSheets(filters),
-      getStats(),
-    ]);
-  } catch (error) {
-    console.error('[PAGE] Failed to load date sheets:', error);
-    fetchError = true;
-  }
-
-  if (fetchError) {
-    return <ErrorState />;
-  }
-
   const params = await searchParams || {};
-  const filters = {
+  
+  const currentPage = typeof params.page === 'string' ? parseInt(params.page) : 1;
+  
+  const filters: DateSheetFilters = {
     board: typeof params.board === 'string' ? params.board : '',
     examType: typeof params.type === 'string' ? params.type : '',
     year: typeof params.year === 'string' ? params.year : '',
     q: typeof params.q === 'string' ? params.q : '',
+    page: currentPage,
   };
+
+  const [dateSheetsResult, stats] = await Promise.all([
+    getDateSheets(filters),
+    getStats(),
+  ]);
 
   const buildUrl = (key: string, value: string) => {
     const urlParams = new URLSearchParams();
@@ -404,21 +340,31 @@ export default async function DateSheetsPage({
     return urlParams.toString() ? `/date-sheets?${urlParams.toString()}` : '/date-sheets';
   };
 
+  function formatDate(date: Date | null): string {
+    if (!date) return 'TBA';
+    return new Date(date).toLocaleDateString('en-PK', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
       
+      {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
         <div className="container mx-auto px-4 py-16 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
               Date Sheets <span className="text-yellow-300">2026</span>
             </h1>
-            
             <p className="text-xl text-green-100 mb-10 max-w-3xl mx-auto leading-relaxed">
               Download exam schedules for Matric, Intermediate &amp; University exams
             </p>
             
+            {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-5 text-center">
                 <div className="text-3xl font-bold text-white">{stats.totalSheets}+</div>
@@ -442,6 +388,7 @@ export default async function DateSheetsPage({
               </div>
             </div>
 
+            {/* Search Form */}
             <div className="max-w-2xl mx-auto">
               <form action="/date-sheets" method="GET" className="flex gap-2">
                 <div className="flex-1 relative">
@@ -466,12 +413,15 @@ export default async function DateSheetsPage({
         </div>
       </div>
 
+      {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
+          {/* Sidebar Filters */}
           <aside className="lg:w-80 flex-shrink-0">
             <div className="sticky top-24 space-y-6">
               
+              {/* Board Type Filter */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
                   <h2 className="text-white font-semibold">Filter Date Sheets</h2>
@@ -497,6 +447,7 @@ export default async function DateSheetsPage({
                 </div>
               </div>
 
+              {/* Exam Type Filter */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                 <h3 className="font-semibold text-gray-700 mb-3 text-sm">Exam Type</h3>
                 <div className="flex flex-wrap gap-2">
@@ -522,6 +473,7 @@ export default async function DateSheetsPage({
                 </div>
               </div>
 
+              {/* Year Filter */}
               {stats.availableYears.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
                   <h3 className="font-semibold text-gray-700 mb-3 text-sm">Year</h3>
@@ -549,6 +501,7 @@ export default async function DateSheetsPage({
                 </div>
               )}
 
+              {/* Clear Filters */}
               {(filters.board || filters.examType || filters.year || filters.q) && (
                 <Link
                   href="/date-sheets"
@@ -560,6 +513,7 @@ export default async function DateSheetsPage({
             </div>
           </aside>
 
+          {/* Results Section */}
           <div className="flex-1">
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-6">
               <h2 className="text-2xl font-bold text-gray-800">
@@ -597,12 +551,14 @@ export default async function DateSheetsPage({
                         <div className="bg-gray-50 rounded-xl p-2.5">
                           <span className="text-gray-500 text-xs">Exam Type</span>
                           <div className="font-semibold text-gray-800 text-sm">
-                            {sheet.examType || 'Annual'}
+                            {sheet.examType}
                           </div>
                         </div>
                         <div className="bg-gray-50 rounded-xl p-2.5">
-                          <span className="text-gray-500 text-xs">Year</span>
-                          <div className="font-semibold text-gray-800 text-sm">{sheet.year}</div>
+                          <span className="text-gray-500 text-xs">Exam Date</span>
+                          <div className="font-semibold text-gray-800 text-sm">
+                            {formatDate(sheet.examDate)}
+                          </div>
                         </div>
                       </div>
                       

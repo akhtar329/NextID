@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import PrimaryButton from "@/app/component/ui/Button";
-import Input from "@/app/component/ui/Input";
+import PrimaryButton from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
 
 export default function EditCityPage() {
   const router = useRouter();

@@ -1,11 +1,11 @@
 // app/api/public/programs/route.ts
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
+import { db } from "@/db/db";
 import { 
   programs, 
   programOfferings, 
   institutes,
-} from "@/app/lib/schema";
+} from "@/db/schema";
 import { eq, asc, sql } from "drizzle-orm";
 
 interface ProgramWithInstitutes {

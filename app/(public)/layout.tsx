@@ -1,6 +1,6 @@
 // app/(public)/layout.tsx
-import Header from '@/app/component/layout/Header';
-import Footer from '@/app/component/layout/Footer';
+import Header from '@/components/layout/Header';
+import Footer from '@/components/layout/Footer';
 import type { Metadata } from 'next';
 
 import { Analytics } from "@vercel/analytics/react";

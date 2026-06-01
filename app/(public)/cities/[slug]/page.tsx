@@ -2,8 +2,8 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { db } from '@/app/lib/db';
-import { cities, institutes, admissions, results, news, seoMetadata } from '@/app/lib/schema';
+import { db } from '@/db/db';
+import { cities, institutes, admissions, results, news, seoMetadata } from '@/db/schema';
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
 import { unstable_cache } from 'next/cache';
 

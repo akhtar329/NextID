@@ -1,8 +1,8 @@
 // app/api/admin/boards/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { boards, cities, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { boards, cities, seoMetadata } from "@/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 
 export async function GET(request: Request) {

@@ -2,8 +2,8 @@
 //app/api/admin/admin-roles/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { adminRoles } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { adminRoles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // GET: fetch all roles

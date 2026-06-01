@@ -1,8 +1,8 @@
 // app/api/admin/categories/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { categories } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { categories } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // Next.js 15+ mein params ab Promise hai - isko await karna hoga
@@ -149,7 +149,7 @@ export async function DELETE(
     // Categories can be deleted freely now since programs have direct categoryId
     
     // Check if category is being used by any programs
-    const { programs } = await import("@/app/lib/schema");
+    const { programs } = await import("@/db/schema");
     const usedByPrograms = await db.select().from(programs).where(eq(programs.categoryId, categoryId));
     
     if (usedByPrograms.length > 0) {

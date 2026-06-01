@@ -1,6 +1,6 @@
 // app/api/auth/request-reset-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db, adminUsers } from "@/app/lib/db";
+import { db, adminUsers } from "@/db/db";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import nodemailer from "nodemailer";

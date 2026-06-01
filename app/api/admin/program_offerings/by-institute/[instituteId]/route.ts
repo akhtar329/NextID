@@ -1,19 +1,16 @@
-// app/api/admin/program-institutes/by-institute/[instituteId]/route.ts
+// app/api/admin/program_offerings/by-institute/[instituteId]/route.ts
 
-import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { programOfferings, programs } from "@/app/lib/schema";  // ✅ Changed: removed degrees, levels
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db/db";
+import { programOfferings, programs, degrees } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ instituteId: string }> }
 ) {
-  
   try {
-    // IMPORTANT: Await params
     const { instituteId } = await params;
-    
     const id = parseInt(instituteId);
 
     if (isNaN(id)) {
@@ -23,34 +20,33 @@ export async function GET(
       );
     }
     
-    // ✅ UPDATED: Get all programs offered by this institute through programOfferings
-    const programsList = await db
+    console.log("🔍 Fetching ONLY linked programs for institute:", id);
+    
+    // ✅ CRITICAL: This query should ONLY return records from program_offerings table
+    const offerings = await db
       .select({
-        id: programs.id,
-        name: programs.name,
-        slug: programs.slug,
-        shortDescription: programs.shortDescription,
-        typicalDuration: programs.typicalDuration,
-        typicalFeeRange: programs.typicalFeeRange,
-        isFeatured: programs.isFeatured,
+        id: programOfferings.id,
+        programId: programOfferings.programId,
+        programName: programs.name,
+        degreeName: degrees.name,
       })
       .from(programOfferings)
       .innerJoin(programs, eq(programOfferings.programId, programs.id))
-      .where(eq(programOfferings.instituteId, id));
+      .leftJoin(degrees, eq(programOfferings.degreeId, degrees.id))
+      .where(eq(programOfferings.instituteId, id));  // ✅ This filters to ONLY this institute
 
+    console.log(`✅ Found ${offerings.length} LINKED programs`);
+    
     return NextResponse.json({
       success: true,
-      programs: programsList,
+      programs: offerings,
+      count: offerings.length,
     });
-
+    
   } catch (error) {
-    console.error("❌ Error in API:", error);
+    console.error("❌ Error:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: "Failed to fetch programs",
-        details: error instanceof Error ? error.message : "Unknown error"
-      },
+      { success: false, error: "Failed to fetch linked programs" },
       { status: 500 }
     );
   }

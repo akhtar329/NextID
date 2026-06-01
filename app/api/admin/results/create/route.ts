@@ -1,8 +1,8 @@
 // app/api/admin/results/create/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { results } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { results } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: Request) {

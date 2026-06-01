@@ -1,7 +1,7 @@
 // proxy.ts (at root level)
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getRedirect } from './app/lib/redirects-config';
+import { getRedirect } from '@/services/redirects-config';
 
 // Paths that should NEVER redirect (always accessible)
 const ALLOWED_PATHS = [
@@ -16,7 +16,7 @@ const ALLOWED_PATHS = [
 ];
 
 function isMaintenanceMode(): boolean {
-  return process.env.MAINTENANCE_MODE === 'true';
+  return process.env.MAINTENANCE_MODE === 'false';
 }
 
 function isAllowedPath(pathname: string): boolean {

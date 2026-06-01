@@ -1,47 +1,83 @@
 // app/(public)/date-sheets/[slug]/page.tsx
+
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import Link from "next/link";
+import { postService } from '@/services/post/post.service';
 
 export const revalidate = 86400;
- 
-// remove dynamicparams= true
+
+// Types
+interface DateSheetDetail {
+  id: number;
+  slug: string;
+  title: string;
+  description: string | null;
+  examType: string;
+  examDate: Date | null;
+  year: number;
+  boardName: string | null;
+  boardSlug: string | null;
+  instituteName: string | null;
+  instituteSlug: string | null;
+  cityName: string | null;
+  province: string | null;
+  isPopular: boolean;
+  viewCount: number;
+  officialLink: string | null;
+  downloadLink: string | null;
+}
 
 interface DateSheetPageProps {
   params: Promise<{ slug: string }>;
 }
 
-async function getDateSheet(slug: string) {
+// Helper function to safely extract meta values
+function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
+  if (!meta) return defaultValue;
+  const value = meta[key] as T;
+  return value !== undefined ? value : defaultValue;
+}
+
+// Get date sheet detail from posts service
+async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const post = await postService.getPost(slug);
     
-    const apiUrl = `${baseUrl}/api/public/date-sheets?slug=${encodeURIComponent(slug)}`;
-    console.log('Fetching from:', apiUrl);
-    
-    const response = await fetch(apiUrl, {
-      next: { revalidate: 86400 },
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    if (!response.ok) {
-      console.log(`API returned ${response.status} for slug: ${slug}`);
+    if (!post || post.type !== 'date_sheet') {
       return null;
     }
     
-    const result = await response.json();
-    console.log('API response:', result);
+    const meta = post.meta;
     
-    return result.success ? result.data : null;
+    return {
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      description: post.content || post.excerpt,
+      examType: getMetaValue(meta, 'examType', 'Annual'),
+      examDate: getMetaValue(meta, 'examDate', null) ? new Date(getMetaValue(meta, 'examDate', '')) : null,
+      year: getMetaValue(meta, 'year', new Date().getFullYear()),
+      boardName: getMetaValue(meta, 'boardName', null),
+      boardSlug: getMetaValue(meta, 'boardSlug', null),
+      instituteName: getMetaValue(meta, 'instituteName', null),
+      instituteSlug: getMetaValue(meta, 'instituteSlug', null),
+      cityName: getMetaValue(meta, 'cityName', null),
+      province: getMetaValue(meta, 'province', null),
+      isPopular: post.isPopular || false,
+      viewCount: post.viewCount || 0,
+      officialLink: getMetaValue(meta, 'officialLink', null),
+      downloadLink: getMetaValue(meta, 'downloadLink', null),
+    };
   } catch (error) {
-    console.error('Error fetching date sheet:', error);
+    console.error('Error fetching date sheet detail:', error);
     return null;
   }
 }
 
 export async function generateMetadata({ params }: DateSheetPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const dateSheet = await getDateSheet(slug);
+  const dateSheet = await getDateSheetDetail(slug);
 
   if (!dateSheet) {
     return {
@@ -51,19 +87,15 @@ export async function generateMetadata({ params }: DateSheetPageProps): Promise<
     };
   }
 
-  const title = dateSheet.title;
-  const examType = dateSheet.examType || "Annual";
-  const year = dateSheet.year;
-
   return {
-    title: `${title} - Download ${examType} Exams Schedule ${year} | NextID.pk`,
-    description: `Download official ${title}. Complete ${examType} examinations date sheet for ${year}.`,
+    title: `${dateSheet.title} - Download ${dateSheet.examType} Exams Schedule ${dateSheet.year} | NextID.pk`,
+    description: `Download official ${dateSheet.title}. Complete ${dateSheet.examType} examinations date sheet for ${dateSheet.year}.`,
     alternates: {
       canonical: `https://www.nextid.pk/date-sheets/${slug}`,
     },
     openGraph: {
-      title: title,
-      description: `Download official ${title} for ${year}`,
+      title: dateSheet.title,
+      description: `Download official ${dateSheet.title} for ${dateSheet.year}`,
       url: `https://www.nextid.pk/date-sheets/${slug}`,
       siteName: "NextID.pk",
       type: "article",
@@ -71,17 +103,40 @@ export async function generateMetadata({ params }: DateSheetPageProps): Promise<
   };
 }
 
+// ============================================
+// Client Component for Share Button (Separate File)
+// ============================================
+
+// This component should be in a separate file: components/ShareButton.tsx
+// But for simplicity, we'll define it here with the data passed as JSON string
+
 export default async function DateSheetDetailPage({ params }: DateSheetPageProps) {
   const { slug } = await params;
-  const dateSheet = await getDateSheet(slug);
+  const dateSheet = await getDateSheetDetail(slug);
 
   if (!dateSheet) {
     notFound();
   }
 
-  const examDate = dateSheet.examDate ? new Date(dateSheet.examDate) : null;
-  const boardOrInstitute = dateSheet.board?.name || dateSheet.institute?.name;
+  const examDate = dateSheet.examDate;
+  const boardOrInstitute = dateSheet.boardName || dateSheet.instituteName;
   const currentUrl = `https://www.nextid.pk/date-sheets/${slug}`;
+
+  // Format date for display
+  function formatDate(date: Date | null): string {
+    if (!date) return 'TBA';
+    return date.toLocaleDateString('en-PK', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
+  // Serialize data for client component
+  const shareData = {
+    title: dateSheet.title,
+    url: currentUrl
+  };
 
   return (
     <>
@@ -99,9 +154,11 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
       />
       
       <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        {/* Hero Section */}
         <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
           <div className="container mx-auto px-4 py-12 relative z-10">
             <div className="max-w-4xl mx-auto">
+              {/* Breadcrumbs */}
               <nav className="flex items-center gap-2 text-sm text-green-100 mb-6">
                 <Link href="/" className="hover:text-white transition">Home</Link>
                 <span>›</span>
@@ -110,6 +167,7 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 <span className="text-white font-medium truncate">{dateSheet.title}</span>
               </nav>
 
+              {/* Popular Badge */}
               {dateSheet.isPopular && (
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 backdrop-blur-sm rounded-full mb-4">
                   <span className="text-yellow-300">⭐</span>
@@ -117,15 +175,18 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               )}
 
+              {/* Title */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
                 {dateSheet.title}
               </h1>
               
+              {/* Description */}
               <p className="text-lg text-green-100 mb-6">
-                Download official {dateSheet.examType || "Annual"} examinations date sheet for {dateSheet.year}.
+                Download official {dateSheet.examType} examinations date sheet for {dateSheet.year}.
                 {boardOrInstitute && ` Published by ${boardOrInstitute}.`}
               </p>
 
+              {/* Info Cards */}
               <div className="flex flex-wrap gap-4">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
                   <span className="text-green-200 text-sm">📅 Year</span>
@@ -133,21 +194,25 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
                   <span className="text-green-200 text-sm">📝 Exam Type</span>
-                  <div className="text-white font-semibold">{dateSheet.examType || "Annual"}</div>
+                  <div className="text-white font-semibold">{dateSheet.examType}</div>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
                   <span className="text-green-200 text-sm">👁️ Views</span>
-                  <div className="text-white font-semibold">{dateSheet.viewCount?.toLocaleString() || 0}</div>
+                  <div className="text-white font-semibold">{dateSheet.viewCount.toLocaleString()}</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Main Content */}
         <div className="container mx-auto px-4 py-12">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
+            {/* Left Column - Main Content */}
             <div className="lg:col-span-2 space-y-6">
+              
+              {/* Download Section */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
                   <h2 className="text-white font-semibold text-lg">📄 Download Date Sheet</h2>
@@ -178,6 +243,7 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               </div>
 
+              {/* Description Section */}
               {dateSheet.description && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100">
@@ -189,6 +255,7 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               )}
 
+              {/* Exam Schedule Section */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-xl font-bold text-gray-800">📅 Exam Schedule</h2>
@@ -198,7 +265,7 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                     <div className="bg-gray-50 rounded-xl p-4">
                       <div className="text-gray-500 text-sm">📝 Exam Type</div>
                       <div className="font-semibold text-gray-900 text-lg mt-1">
-                        {dateSheet.examType || "Annual Examinations"}
+                        {dateSheet.examType}
                       </div>
                     </div>
                     <div className="bg-gray-50 rounded-xl p-4">
@@ -209,7 +276,7 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                       <div className="bg-gray-50 rounded-xl p-4">
                         <div className="text-gray-500 text-sm">📆 Exam Date</div>
                         <div className="font-semibold text-gray-900 text-lg mt-1">
-                          {examDate.toLocaleDateString('en-PK')}
+                          {formatDate(examDate)}
                         </div>
                       </div>
                     )}
@@ -218,74 +285,68 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
               </div>
             </div>
 
+            {/* Right Column - Sidebar */}
             <div className="space-y-6">
-              {(dateSheet.board || dateSheet.institute) && (
+              
+              {/* Board/Institute Info Card */}
+              {boardOrInstitute && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
                   <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
                     <h3 className="text-white font-semibold">
-                      🏛️ {dateSheet.board ? "Board" : "Institute"} Information
+                      🏛️ {dateSheet.boardName ? "Board" : "Institute"} Information
                     </h3>
                   </div>
                   <div className="p-6 text-center">
-                    <div className="text-5xl mb-3">{dateSheet.board ? "🏛️" : "🎓"}</div>
+                    <div className="text-5xl mb-3">{dateSheet.boardName ? "🏛️" : "🎓"}</div>
                     <h4 className="font-bold text-gray-900 text-lg">
-                      {dateSheet.board?.name || dateSheet.institute?.name}
+                      {boardOrInstitute}
                     </h4>
-                    {dateSheet.city && (
+                    {dateSheet.cityName && (
                       <p className="text-sm text-gray-500 mt-2">
-                        📍 {dateSheet.city.name}, {dateSheet.city.province}
+                        📍 {dateSheet.cityName}{dateSheet.province ? `, ${dateSheet.province}` : ''}
                       </p>
                     )}
                   </div>
                 </div>
               )}
 
+              {/* Share Card - Inline Client Component */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <span>📢</span> Share This Date Sheet
                 </h3>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium share-button"
-                    data-title={dateSheet.title}
-                    data-url={currentUrl}
-                  >
-                    📋 Share Link
-                  </button>
-                </div>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: `
+                      <button type="button" id="shareButton" class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium flex items-center justify-center gap-2">
+                        📋 Share Link
+                      </button>
+                      <script>
+                        (function() {
+                          var button = document.getElementById('shareButton');
+                          if (button) {
+                            button.addEventListener('click', function() {
+                              var title = ${JSON.stringify(dateSheet.title)};
+                              var url = ${JSON.stringify(currentUrl)};
+                              if (navigator.share) {
+                                navigator.share({ title: title, text: 'Download ' + title, url: url }).catch(function(e) {});
+                              } else {
+                                navigator.clipboard.writeText(url).then(function() {
+                                  alert('Link copied to clipboard!');
+                                }).catch(function() {});
+                              }
+                            });
+                          }
+                        })();
+                      </script>
+                    `,
+                  }}
+                />
               </div>
             </div>
           </div>
         </div>
       </main>
-
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            document.addEventListener('DOMContentLoaded', function() {
-              var shareButtons = document.querySelectorAll('.share-button');
-              shareButtons.forEach(function(button) {
-                button.addEventListener('click', function() {
-                  var title = this.getAttribute('data-title');
-                  var url = this.getAttribute('data-url');
-                  if (navigator.share) {
-                    navigator.share({
-                      title: title,
-                      text: 'Download ' + title,
-                      url: url,
-                    }).catch(function(e) {});
-                  } else {
-                    navigator.clipboard.writeText(url).then(function() {
-                      alert('Link copied to clipboard!');
-                    }).catch(function() {});
-                  }
-                });
-              });
-            });
-          `,
-        }}
-      />
     </>
   );
 }

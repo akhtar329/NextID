@@ -1,8 +1,8 @@
 // app/api/admin/program-institutes/by-program/[programId]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { programOfferings, institutes, cities } from "@/app/lib/schema";  // ✅ Changed: programInstitutes → programOfferings
+import { db } from "@/db/db";
+import { programOfferings, institutes, cities } from "@/db/schema";  // ✅ Changed: programInstitutes → programOfferings
 import { eq } from "drizzle-orm";
 
 export async function GET(

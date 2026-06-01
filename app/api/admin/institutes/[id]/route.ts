@@ -1,8 +1,8 @@
 // app/api/admin/institutes/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { institutes, cities } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { institutes, cities } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // GET - Fetch single institute (EDIT PAGE KE LIYE YEH CHAHIYE)

@@ -1,7 +1,7 @@
 // app/api/admin/degrees/bulk/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { degrees } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { degrees } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {

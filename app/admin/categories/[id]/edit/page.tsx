@@ -4,8 +4,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import Input from "@/app/component/ui/Input";
-import Button from "@/app/component/ui/Button";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
 
 interface Category {
   id: number;

@@ -1,11 +1,11 @@
 // app/admin/news/[id]/page.tsx
 
-import { db } from "@/app/lib/db";
-import { news, programs, institutes, cities, seoMetadata } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { news, programs, institutes, cities, seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import PrimaryButton from "@/app/component/ui/Button";
+import PrimaryButton from "@/components/ui/Button";
 import {
   Calendar,
   User,

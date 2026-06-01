@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/app/lib/db';
-import { admissions, admissionOfferings, programOfferings, seoMetadata } from '@/app/lib/schema';
+import { revalidateTag } from 'next/cache';
+import { db } from '@/db/db';
+import { admissions, admissionOfferings, programOfferings, seoMetadata } from '@/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Ensure offeringIds is an array
-    const offeringIds = Array.isArray(body.offeringIds) ? body.offeringIds : [body.offeringIds];
+    const offeringIds: number[] = Array.isArray(body.offeringIds) ? body.offeringIds : [body.offeringIds];
     
     if (offeringIds.length === 0) {
       return NextResponse.json(
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ FIXED: Type the parameter properly
+    // Validate offerings exist
     const validOfferings = await db
       .select({ 
         id: programOfferings.id,
@@ -147,6 +148,12 @@ export async function POST(request: NextRequest) {
       return { newAdmission, junctionRecords, seoRecord };
     });
 
+    // ✅ CACHE CLEAR for Next.js 15
+    revalidateTag("admissions", request.url);
+    revalidateTag("admissions:stats", request.url);
+
+    console.log('✅ Cache cleared for tags: admissions, admissions:stats');
+
     return NextResponse.json({
       success: true,
       admission: {
@@ -158,15 +165,18 @@ export async function POST(request: NextRequest) {
       },
       offeringCount: result.junctionRecords.length,
       seo: result.seoRecord ? 'created' : 'skipped',
-      message: `Admission created successfully with ${result.junctionRecords.length} program offering(s)`
+      message: `Admission created successfully with ${result.junctionRecords.length} program offering(s)`,
+      cacheCleared: true
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Error creating admission:', error);
     
+    const err = error as { code?: string; message?: string };
+    
     // Handle unique constraint violation
-    if (error.code === '23505') {
-      if (error.message?.includes('admissions_slug_unique')) {
+    if (err.code === '23505') {
+      if (err.message?.includes('admissions_slug_unique')) {
         return NextResponse.json(
           { 
             error: 'Duplicate slug', 
@@ -175,7 +185,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (error.message?.includes('admission_offerings_admission_id_offering_id_unique')) {
+      if (err.message?.includes('admission_offerings_admission_id_offering_id_unique')) {
         return NextResponse.json(
           { 
             error: 'Duplicate offering', 
@@ -187,7 +197,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle foreign key violation
-    if (error.code === '23503') {
+    if (err.code === '23503') {
       return NextResponse.json(
         { 
           error: 'Invalid reference', 
@@ -201,8 +211,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Failed to create admission', 
-        details: error.message,
-        code: error.code 
+        details: err.message || 'Unknown error',
+        code: err.code 
       },
       { status: 500 }
     );

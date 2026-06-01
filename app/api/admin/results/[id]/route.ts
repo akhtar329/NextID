@@ -1,8 +1,8 @@
 // app/api/admin/results/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/app/lib/db";
-import { results, institutes } from "@/app/lib/schema";
+import { db } from "@/db/db";
+import { results, institutes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // GET - Fetch single result
