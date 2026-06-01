@@ -617,11 +617,11 @@ export default function EditNewsPage() {
               <div className="p-6">
                 {editorTab === "write" ? (
                   <RichTextEditor
-                    value={content}
-                    onChange={setContent}
-                    placeholder="Write your news content here..."
-                    minHeight={400}
-                  />
+  value={content}
+  onChange={(value) => setContent(typeof value === 'string' ? value : '')}
+  placeholder="Write your news content here..."
+  minHeight={400}
+/>
                 ) : (
                   <div className="prose max-w-none">
                     <h2 className="text-2xl font-bold mb-4">{title}</h2>
