@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface Post {
@@ -17,6 +17,7 @@ interface Post {
   viewCount: number | null;
   publishedAt: string | null;
   createdAt: string | null;
+  expiresAt: string | null;
   instituteName?: string | null;
   cityName?: string | null;
 }
@@ -24,6 +25,7 @@ interface Post {
 export default function AdminPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clearingCache, setClearingCache] = useState(false);
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   
@@ -36,8 +38,46 @@ export default function AdminPostsPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
 
-  // Fetch posts - wrapped in useCallback to avoid dependency issues
-  const fetchPosts = useCallback(async () => {
+  // ✅ Clear Cache Function
+  const clearCache = async () => {
+    setClearingCache(true);
+    try {
+      const res = await fetch('/api/admin/cache/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          tags: [
+            'homepage',
+            'posts-type-admission',
+            'posts-type-result',
+            'posts-type-news',
+            'posts-type-date_sheet',
+            'posts-type-scholarship',
+            'posts-type-job',
+            'posts-type-blog',
+            'posts-featured',
+            'posts-popular',
+            'posts-recent',
+          ]
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ Cache cleared successfully!');
+        await fetchPosts();
+      } else {
+        alert('❌ Failed to clear cache');
+      }
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+      alert('❌ Error clearing cache');
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
+  // ✅ Fetch posts - Simplified without useCallback to avoid React Compiler warning
+  const fetchPosts = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -59,15 +99,14 @@ export default function AdminPostsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterType, filterStatus, search, page, limit]);
+  };
 
+  // ✅ Use useEffect with dependency array - React Compiler friendly
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchPosts();
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [fetchPosts]);
+    // Skip initial mount if needed, or just fetch
+    fetchPosts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType, filterStatus, search, page, limit]);
 
   // Handle single delete
   const handleDelete = async (id: number, title: string) => {
@@ -80,9 +119,7 @@ export default function AdminPostsPage() {
       const data = await res.json();
       
       if (data.success) {
-        // Remove from selectedIds if present
         setSelectedIds(prev => prev.filter(pid => pid !== id));
-        // Refresh list
         fetchPosts();
       } else {
         alert(data.error || 'Failed to delete post');
@@ -116,12 +153,12 @@ export default function AdminPostsPage() {
     if (!confirm(`Delete ${selectedIds.length} post(s)? This action cannot be undone.`)) return;
     
     try {
-      // Delete one by one or use bulk API
       for (const id of selectedIds) {
         await fetch(`/api/admin/post/${id}`, { method: 'DELETE' });
       }
       setSelectedIds([]);
       fetchPosts();
+      alert(`✅ ${selectedIds.length} post(s) deleted successfully!`);
     } catch (error) {
       console.error('Error deleting posts:', error);
       alert('Failed to delete some posts');
@@ -172,7 +209,31 @@ export default function AdminPostsPage() {
           <p className="text-gray-500 mt-1">Create, edit, and manage all content</p>
         </div>
         <div className="flex gap-3">
-          {/* Refresh Button */}
+          {/* ✅ Clear Cache Button */}
+          <button
+            onClick={clearCache}
+            disabled={clearingCache}
+            className="px-4 py-2 border border-orange-300 rounded-lg hover:bg-orange-50 transition text-orange-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {clearingCache ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-orange-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Clearing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Cache
+              </>
+            )}
+          </button>
+          
+          {/* ✅ Refresh Button */}
           <button
             onClick={handleRefresh}
             disabled={loading}
@@ -198,7 +259,10 @@ export default function AdminPostsPage() {
             href="/admin/post/create"
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
           >
-            + Create New Post
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Create New Post
           </Link>
         </div>
       </div>
@@ -249,7 +313,7 @@ export default function AdminPostsPage() {
             />
           </div>
           
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               onClick={() => {
                 setFilterType('');
@@ -306,14 +370,14 @@ export default function AdminPostsPage() {
                   <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-2">Loading...</p>
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               ) : posts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                     No posts found
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               ) : (
                 posts.map((post) => (
                   <tr key={post.id} className="hover:bg-gray-50 transition">
@@ -324,34 +388,39 @@ export default function AdminPostsPage() {
                         onChange={() => toggleSelect(post.id)}
                         className="w-4 h-4 rounded border-gray-300"
                       />
-                    </td>
+                     </td>
                     <td className="px-4 py-3">
                       <div>
                         <Link
-                          href={`/admin/post/${post.id}`}
+                          href={`/admin/post/${post.id}/edit`}
                           className="font-medium text-gray-900 hover:text-blue-600 transition line-clamp-1"
                         >
                           {post.title}
                         </Link>
-                        <div className="text-xs text-gray-400 mt-1">/{post.slug}</div>
+                        <div className="text-xs text-gray-400 mt-1">/{post.type}/{post.slug}</div>
+                        {post.expiresAt && (
+                          <div className="text-xs text-orange-500 mt-1">
+                            Expires: {formatDate(post.expiresAt)}
+                          </div>
+                        )}
                       </div>
-                    </td>
+                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeBadge(post.type)}`}>
                         {post.type}
                       </span>
-                    </td>
+                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(post.status)}`}>
                         {post.status || 'draft'}
                       </span>
-                    </td>
+                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {post.viewCount || 0}
-                    </td>
+                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {formatDate(post.createdAt)}
-                    </td>
+                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Link
@@ -361,7 +430,7 @@ export default function AdminPostsPage() {
                           Edit
                         </Link>
                         <Link
-                          href={`/${post.type}s/${post.slug}`}
+                          href={`/${post.type}/${post.slug}`}
                           target="_blank"
                           className="text-green-600 hover:text-green-800 text-sm"
                         >
@@ -374,8 +443,8 @@ export default function AdminPostsPage() {
                           Delete
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                     </td>
+                   </tr>
                 ))
               )}
             </tbody>

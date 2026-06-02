@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // ✅ ENABLE CACHE COMPONENTS (Add this line)
+  cacheComponents: true,
+
   // ✅ Images configuration for external domains
   images: {
     remotePatterns: [
@@ -46,7 +49,6 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // ✅ ADDED: Blogger Images Domain
       {
         protocol: 'https',
         hostname: 'blogger.googleusercontent.com',
@@ -59,7 +61,6 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // ✅ Aap apni website ke local images ke liye
       {
         protocol: 'https',
         hostname: 'www.nextid.pk',

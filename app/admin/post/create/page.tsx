@@ -27,6 +27,9 @@ export default function CreatePostPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Calculate default dates
+  const today = new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     slug: '',
     type: 'news',
@@ -38,7 +41,8 @@ export default function CreatePostPage() {
     isFeatured: false,
     isPopular: false,
     isBreaking: false,
-    publishedAt: new Date().toISOString().split('T')[0],
+    publishedAt: today,
+    expiresAt: '', // Optional expiry date
     meta: {},
     tags: [],
   });
@@ -85,25 +89,6 @@ export default function CreatePostPage() {
     }
   };
 
-  // ✅ Function to clear cache after post creation
-  const clearCache = async (postType: string) => {
-    try {
-      // Call a cache clear API endpoint
-      const response = await fetch('/api/admin/cache/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          type: postType,
-          tags: ['home', `${postType}s-home`, 'sidebar-cities', 'sidebar-boards']
-        }),
-      });
-      const result = await response.json();
-      console.log('Cache cleared:', result);
-    } catch (error) {
-      console.error('Failed to clear cache:', error);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -125,21 +110,26 @@ export default function CreatePostPage() {
       const data = await res.json();
 
       if (data.success) {
-        // ✅ Clear cache after successful creation
-        await clearCache(formData.type);
-        
-        setSuccess('Post created successfully! Cache cleared. Redirecting...');
+        // ✅ NO CACHE CLEAR HERE - Manual cache clear later
+        setSuccess('Post created successfully! Redirecting...');
         setTimeout(() => {
           router.push('/admin/post');
         }, 1500);
       } else {
         setError(data.error || 'Failed to create post');
       }
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Set expiry date helper
+  const setExpiryDate = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    setFormData({ ...formData, expiresAt: date.toISOString().split('T')[0] });
   };
 
   return (
@@ -216,6 +206,10 @@ export default function CreatePostPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 text-sm bg-gray-100 px-2 py-1 rounded">/</span>
+                    <span className="text-gray-500 text-sm bg-gray-100 px-2 py-1 rounded">
+                      {formData.type}
+                    </span>
+                    <span className="text-gray-500 text-sm">/</span>
                     <input
                       type="text"
                       value={formData.slug}
@@ -232,7 +226,9 @@ export default function CreatePostPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-1">URL-friendly version of the title</p>
+              <p className="text-xs text-gray-400 mt-1">
+                URL: <span className="text-blue-600">https://www.nextid.pk/{formData.type}/{formData.slug || '...'}</span>
+              </p>
             </div>
 
             {/* Featured Image */}
@@ -247,7 +243,9 @@ export default function CreatePostPage() {
               />
               {formData.featuredImage && (
                 <div className="mt-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={formData.featuredImage} alt="Preview" className="h-20 w-auto rounded border" />
+                  <p className="text-xs text-gray-400 mt-1">⚠️ Use direct image URL (no base64)</p>
                 </div>
               )}
             </div>
@@ -267,19 +265,20 @@ export default function CreatePostPage() {
 
             {/* Content */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Content *</label>
               <textarea
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 rows={15}
+                required
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Write your content here (HTML supported)..."
               />
               <p className="text-xs text-gray-400 mt-1">HTML tags are supported (h1, p, ul, li, etc.)</p>
             </div>
 
-            {/* Status & Publish Date */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Status, Publish Date & Expiry Date */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select
@@ -303,6 +302,54 @@ export default function CreatePostPage() {
                   onChange={(e) => setFormData({ ...formData, publishedAt: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Expiry Date 
+                  <span className="text-xs text-gray-400 ml-1">(Optional)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={formData.expiresAt}
+                    onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
+                    className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(7)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +7 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(30)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +30 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(90)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +90 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, expiresAt: '' })}
+                    className="text-xs px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  After expiry date, post will not appear in listings
+                </p>
               </div>
             </div>
 
@@ -335,6 +382,22 @@ export default function CreatePostPage() {
                 />
                 <span className="text-sm text-gray-700">⚡ Breaking News</span>
               </label>
+            </div>
+
+            {/* Info Box */}
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-sm font-medium text-blue-800 mb-2">📌 Post URL Structure</h4>
+              <p className="text-sm text-blue-700">
+                Your post will be available at: <br />
+                <code className="bg-white px-2 py-1 rounded text-sm">
+                  https://www.nextid.pk/{formData.type}/{formData.slug || 'your-slug'}
+                </code>
+              </p>
+              {formData.expiresAt && (
+                <p className="text-sm text-orange-700 mt-2">
+                  ⚠️ This post will expire on: <strong>{new Date(formData.expiresAt).toLocaleDateString()}</strong>
+                </p>
+              )}
             </div>
 
             {/* Buttons */}

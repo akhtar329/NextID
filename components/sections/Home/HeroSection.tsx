@@ -1,10 +1,10 @@
-// app/component/sections/Home/HeroSection.tsx
+// app/components/sections/Home/HeroSection.tsx
 
 import Image from "next/image";
 import Link from "next/link";
 import { postService } from '@/services/post/post.service';
 import type { Post } from '@/repositories/post/post.repository';
-import { unstable_cache } from 'next/cache';
+import { cacheLife } from 'next/cache';
 
 // Types
 interface NewsItem {
@@ -17,66 +17,17 @@ interface NewsItem {
   isFeatured: boolean;
   publishedAt: Date | null;
   imageUrl?: string | null;
-  viewCount?: number;
 }
-
-// Helper to safely extract meta values
-function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
-  if (!meta) return defaultValue;
-  const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
-}
-
-// ✅ Get news from posts service
-async function getNewsFromPosts(): Promise<NewsItem[]> {
-  try {
-    // Get news posts from service (cached automatically)
-    const posts = await postService.getPostsByType('news', 20);
-    
-    // Transform posts to news format
-    const newsItems: NewsItem[] = posts.map((post: Post) => ({
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt,
-      content: post.content,
-      isBreaking: post.isBreaking || false,     // ✅ Direct column from posts table
-      isFeatured: post.isFeatured || false,     // ✅ Direct column from posts table
-      publishedAt: post.publishedAt,
-      imageUrl: post.featuredImage,
-      viewCount: post.viewCount || 0,
-    }));
-    
-    // Sort by published date (newest first)
-    return newsItems.sort((a, b) => {
-      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      return dateB - dateA;
-    });
-    
-  } catch (error) {
-    console.error("Error fetching news from posts:", error);
-    return [];
-  }
-}
-
-// ✅ CACHED version - 5 minutes (300 seconds)
-const getCachedNews = unstable_cache(
-  getNewsFromPosts,
-  ['home-news-posts'],
-  { revalidate: 300, tags: ['news-home'] }
-);
 
 // Format date for display
-function getTimeAgo(dateValue: Date | string | null): string {
+function getTimeAgo(dateValue: Date | string | null, currentDate: Date): string {
   if (!dateValue) return "Recently";
 
   const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-  const now = new Date();
-
+  
   if (isNaN(date.getTime())) return "Recently";
 
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = currentDate.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
@@ -99,20 +50,12 @@ function getContentPreview(content: string | null, maxLength: number = 80): stri
     : plainText.substring(0, maxLength) + "...";
 }
 
-function formatViews(views?: number): string {
-  if (!views) return "0 views";
-  if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
-  if (views >= 1000) return `${(views / 1000).toFixed(1)}K views`;
-  return `${views} views`;
-}
-
 // Component for Breaking News Card (Small)
-function BreakingNewsCard({ news }: { news: NewsItem }) {
+function BreakingNewsCard({ news, currentDate }: { news: NewsItem; currentDate: Date }) {
   return (
     <Link href={`/news/${news.slug}`} className="block group">
       <div className="p-4 border rounded-lg hover:shadow-lg transition-all duration-300 hover:border-red-300 hover:bg-gradient-to-r hover:from-red-50/50 hover:to-transparent">
         <div className="flex items-start gap-3">
-          {/* Small icon or image */}
           {news.imageUrl ? (
             <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden">
               <Image
@@ -133,15 +76,12 @@ function BreakingNewsCard({ news }: { news: NewsItem }) {
               <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-semibold">
                 Breaking
               </span>
-              <span className="text-xs text-gray-400">{getTimeAgo(news.publishedAt)}</span>
+              <span className="text-xs text-gray-400">{getTimeAgo(news.publishedAt, currentDate)}</span>
             </div>
             <h3 className="font-semibold text-sm line-clamp-2 group-hover:text-red-600 transition-colors">
               {news.title}
             </h3>
             <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <span>👁️</span> {formatViews(news.viewCount)}
-              </span>
               <span className="flex items-center gap-1">
                 <span>↗️</span> Read more
               </span>
@@ -154,14 +94,13 @@ function BreakingNewsCard({ news }: { news: NewsItem }) {
 }
 
 // Component for Featured News Item (Sidebar)
-function FeaturedNewsItem({ news, index }: { news: NewsItem; index: number }) {
+function FeaturedNewsItem({ news, index, currentDate }: { news: NewsItem; index: number; currentDate: Date }) {
   return (
     <Link
       href={`/news/${news.slug}`}
       className="block p-3 hover:bg-gradient-to-r hover:from-orange-50/50 hover:to-transparent transition-all duration-300 group border-l-2 border-transparent hover:border-orange-500"
     >
       <div className="flex items-start gap-3">
-        {/* Rank number */}
         <div className="flex-shrink-0 w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-sm">
           {index + 1}
         </div>
@@ -173,20 +112,15 @@ function FeaturedNewsItem({ news, index }: { news: NewsItem; index: number }) {
           
           <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
-              <span>🕒</span> {getTimeAgo(news.publishedAt)}
-            </span>
-            <span className="flex items-center gap-1">
-              <span>👁️</span> {formatViews(news.viewCount)}
+              <span>🕒</span> {getTimeAgo(news.publishedAt, currentDate)}
             </span>
           </div>
           
-          {/* Mini preview on hover */}
           <div className="hidden group-hover:block mt-2 text-xs text-gray-600 line-clamp-1">
             {getContentPreview(news.excerpt || news.content, 60)}
           </div>
         </div>
         
-        {/* Arrow icon */}
         <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-0 group-hover:translate-x-1">
           <span className="text-orange-500">→</span>
         </div>
@@ -195,10 +129,37 @@ function FeaturedNewsItem({ news, index }: { news: NewsItem; index: number }) {
   );
 }
 
+// ✅ MAIN COMPONENT WITH CACHE
 export default async function HeroSection() {
-  const newsData = await getCachedNews();
+  'use cache'
+  cacheLife('minutes') // Cache for 15 minutes
+  
+  const newsData = await postService.getPostsByType('news', 20);
+  
+  // Transform posts to news format (without viewCount)
+  const transformedNews: NewsItem[] = newsData.map((post: Post) => ({
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt,
+    content: post.content,
+    isBreaking: post.isBreaking || false,
+    isFeatured: post.isFeatured || false,
+    publishedAt: post.publishedAt,
+    imageUrl: post.featuredImage,
+  }));
+  
+  // Sort by published date (newest first)
+  const sortedNews = transformedNews.sort((a, b) => {
+    const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
-  if (!newsData.length) {
+  // Get current date inside cached component (allowed!)
+  const currentDate = new Date();
+
+  if (!sortedNews.length) {
     return (
       <section className="h-[400px] flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -210,7 +171,7 @@ export default async function HeroSection() {
   }
 
   // Breaking main (latest breaking news)
-  const breakingMain = newsData
+  const breakingMain = sortedNews
     .filter((n) => n.isBreaking)
     .sort((a, b) => {
       const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
@@ -219,12 +180,12 @@ export default async function HeroSection() {
     })[0];
 
   // Other breaking news (excluding the main one)
-  const breakingOthers = newsData
+  const breakingOthers = sortedNews
     .filter((n) => n.isBreaking && n.id !== breakingMain?.id)
     .slice(0, 3);
 
   // Featured news
-  const featuredNews = newsData
+  const featuredNews = sortedNews
     .filter((n) => n.isFeatured && !n.isBreaking)
     .slice(0, 4);
 
@@ -243,7 +204,6 @@ export default async function HeroSection() {
               <Link href={`/news/${breakingMain.slug}`} className="block group">
                 <article className="relative overflow-hidden rounded-2xl h-[350px] md:h-[450px] shadow-2xl hover:shadow-3xl transition-shadow duration-500">
 
-                  {/* Image with zoom effect */}
                   {breakingMain.imageUrl ? (
                     <Image
                       src={breakingMain.imageUrl}
@@ -258,19 +218,16 @@ export default async function HeroSection() {
                     <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-red-900" />
                   )}
 
-                  {/* Gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
                   <div className="absolute inset-0 bg-gradient-to-r from-red-900/40 to-transparent" />
 
-                  {/* Content */}
                   <div className="relative z-10 h-full flex flex-col justify-end px-6 pb-10 text-white">
-
                     <div className="flex items-center gap-2 mb-3">
                       <span className="bg-red-600 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
                         🔴 BREAKING
                       </span>
                       <span className="text-xs bg-black/50 backdrop-blur-sm px-2 py-1 rounded">
-                        {getTimeAgo(breakingMain.publishedAt)}
+                        {getTimeAgo(breakingMain.publishedAt, currentDate)}
                       </span>
                     </div>
 
@@ -285,11 +242,7 @@ export default async function HeroSection() {
                       )}
                     </p>
 
-                    {/* Stats row */}
                     <div className="flex items-center gap-4 text-xs opacity-80">
-                      <span className="flex items-center gap-1">
-                        <span>👁️</span> {formatViews(breakingMain.viewCount)}
-                      </span>
                       <span className="flex items-center gap-1">
                         <span>↗️</span> Click to read full story
                       </span>
@@ -304,7 +257,7 @@ export default async function HeroSection() {
             )}
           </div>
 
-          {/* RIGHT - FEATURED NEWS (with better UI) */}
+          {/* RIGHT - FEATURED NEWS */}
           <aside className="lg:col-span-1">
             <div className="bg-white rounded-2xl border shadow-lg overflow-hidden sticky top-24">
               <div className="p-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white">
@@ -320,7 +273,7 @@ export default async function HeroSection() {
               <div className="divide-y divide-gray-100">
                 {featuredNews.length > 0 ? (
                   featuredNews.map((news, idx) => (
-                    <FeaturedNewsItem key={news.id} news={news} index={idx} />
+                    <FeaturedNewsItem key={news.id} news={news} index={idx} currentDate={currentDate} />
                   ))
                 ) : (
                   <div className="p-6 text-center text-gray-400 text-sm">
@@ -329,7 +282,6 @@ export default async function HeroSection() {
                 )}
               </div>
               
-              {/* View all link */}
               <div className="p-3 bg-gray-50 text-center border-t">
                 <Link 
                   href="/news" 
@@ -343,7 +295,7 @@ export default async function HeroSection() {
           </aside>
         </div>
 
-        {/* BREAKING NEWS STRIP (Other breaking news) */}
+        {/* BREAKING NEWS STRIP */}
         {breakingOthers.length > 0 && (
           <div className="mt-8">
             <div className="flex items-center gap-2 mb-4">
@@ -354,7 +306,7 @@ export default async function HeroSection() {
             
             <div className="grid md:grid-cols-3 gap-4">
               {breakingOthers.map((news) => (
-                <BreakingNewsCard key={news.id} news={news} />
+                <BreakingNewsCard key={news.id} news={news} currentDate={currentDate} />
               ))}
             </div>
           </div>

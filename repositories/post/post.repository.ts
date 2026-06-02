@@ -15,7 +15,6 @@ export interface Post {
   isFeatured: boolean | null;
   isPopular: boolean | null;
   isBreaking: boolean | null;
-  viewCount: number | null;
   meta: Record<string, unknown> | null;
   tags: Record<string, unknown> | null;
   publishedAt: Date | null;
@@ -24,7 +23,8 @@ export interface Post {
 }
 
 class PostRepository {
-  // ✅ Sirf database query - NO CACHE
+  
+  // ✅ Get post by slug
   async getBySlug(slug: string): Promise<Post | null> {
     const [result] = await db
       .select()
@@ -33,29 +33,10 @@ class PostRepository {
       .limit(1);
     
     if (!result) return null;
-    
-    return {
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    };
+    return this.mapToPost(result);
   }
 
-  // ✅ Sirf database query (WITH PAGINATION SUPPORT)
+  // ✅ Get posts by type with pagination
   async getByType(type: string, limit: number = 10, offset: number = 0): Promise<Post[]> {
     const results = await db
       .select()
@@ -68,78 +49,31 @@ class PostRepository {
       .limit(limit)
       .offset(offset);
     
-    return results.map(result => ({
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
+    return results.map(result => this.mapToPost(result));
   }
 
-  // ✅ Sirf database query - multiple types ek saath (WORKING FIXED VERSION)
+  // ✅ Get multiple types (har type ke liye alag query)
   async getByTypes(types: string[], limitPerType: number = 5): Promise<Record<string, Post[]>> {
-    console.log("🔴 REPO: getByTypes called with types:", types);
-    
-    // Get all published posts - simpler approach
-    const limit = types.length * limitPerType;
-    
-    const results = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.status, "published"))
-      .orderBy(desc(posts.publishedAt))
-      .limit(limit * 2); // Get more to ensure we have enough for each type
-    
-    console.log("🔴 REPO: Total posts fetched:", results.length);
-    console.log("🔴 REPO: Types in results:", [...new Set(results.map(r => r.type))]);
-    
-    const grouped: Record<string, Post[]> = {};
+    const result: Record<string, Post[]> = {};
     
     for (const type of types) {
-      const filtered = results
-        .filter(p => p.type === type)
-        .slice(0, limitPerType)
-        .map(result => ({
-          id: result.id,
-          slug: result.slug,
-          type: result.type,
-          title: result.title,
-          content: result.content ?? null,
-          excerpt: result.excerpt ?? null,
-          featuredImage: result.featuredImage ?? null,
-          status: result.status,
-          isFeatured: result.isFeatured,
-          isPopular: result.isPopular,
-          isBreaking: result.isBreaking,
-          viewCount: result.viewCount,
-          meta: result.meta as Record<string, unknown> | null,
-          tags: result.tags as Record<string, unknown> | null,
-          publishedAt: result.publishedAt,
-          createdAt: result.createdAt,
-          updatedAt: result.updatedAt,
-        }));
+      const postsData = await db
+        .select()
+        .from(posts)
+        .where(and(
+          eq(posts.type, type),
+          eq(posts.status, "published")
+        ))
+        .orderBy(desc(posts.publishedAt))
+        .limit(limitPerType);
       
-      grouped[type] = filtered;
-      console.log(`🔴 REPO: grouped[${type}] = ${filtered.length}`);
+      result[type] = postsData.map(post => this.mapToPost(post));
     }
     
-    return grouped;
+    return result;
   }
 
-  // ✅ NEW: Get total count by type (for pagination)
+  // ✅ Get total count by type
   async getCountByType(type: string): Promise<number> {
     const [result] = await db
       .select({ count: sql<number>`count(*)` })
@@ -152,7 +86,7 @@ class PostRepository {
     return result?.count ?? 0;
   }
 
-  // ✅ NEW: Get featured posts
+  // ✅ Get featured posts
   async getFeatured(limit: number = 6): Promise<Post[]> {
     const results = await db
       .select()
@@ -164,28 +98,10 @@ class PostRepository {
       .orderBy(desc(posts.publishedAt))
       .limit(limit);
     
-    return results.map(result => ({
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
+    return results.map(result => this.mapToPost(result));
   }
 
-  // ✅ NEW: Get popular posts (most viewed)
+  // ✅ Get popular posts
   async getPopular(limit: number = 8): Promise<Post[]> {
     const results = await db
       .select()
@@ -194,28 +110,10 @@ class PostRepository {
       .orderBy(desc(posts.viewCount))
       .limit(limit);
     
-    return results.map(result => ({
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
+    return results.map(result => this.mapToPost(result));
   }
 
-  // ✅ NEW: Get recent posts
+  // ✅ Get recent posts
   async getRecent(limit: number = 10): Promise<Post[]> {
     const results = await db
       .select()
@@ -224,28 +122,10 @@ class PostRepository {
       .orderBy(desc(posts.publishedAt))
       .limit(limit);
     
-    return results.map(result => ({
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
+    return results.map(result => this.mapToPost(result));
   }
 
-  // ✅ NEW: Get related posts (same type, exclude current)
+  // ✅ Get related posts
   async getRelated(currentSlug: string, type: string, limit: number = 5): Promise<Post[]> {
     const results = await db
       .select()
@@ -258,33 +138,29 @@ class PostRepository {
       .orderBy(desc(posts.publishedAt))
       .limit(limit);
     
-    return results.map(result => ({
-      id: result.id,
-      slug: result.slug,
-      type: result.type,
-      title: result.title,
-      content: result.content ?? null,
-      excerpt: result.excerpt ?? null,
-      featuredImage: result.featuredImage ?? null,
-      status: result.status,
-      isFeatured: result.isFeatured,
-      isPopular: result.isPopular,
-      isBreaking: result.isBreaking,
-      viewCount: result.viewCount,
-      meta: result.meta as Record<string, unknown> | null,
-      tags: result.tags as Record<string, unknown> | null,
-      publishedAt: result.publishedAt,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
+    return results.map(result => this.mapToPost(result));
   }
 
-  // ✅ Increment view count
-  async incrementViewCount(slug: string): Promise<void> {
-    await db
-      .update(posts)
-      .set({ viewCount: sql`${posts.viewCount} + 1` })
-      .where(eq(posts.slug, slug));
+  // ✅ Helper method
+  private mapToPost(result: Record<string, unknown>): Post {
+    return {
+      id: result.id as number,
+      slug: result.slug as string,
+      type: result.type as string,
+      title: result.title as string,
+      content: (result.content as string | null) ?? null,
+      excerpt: (result.excerpt as string | null) ?? null,
+      featuredImage: (result.featuredImage as string | null) ?? null,
+      status: (result.status as string | null) ?? null,
+      isFeatured: (result.isFeatured as boolean | null) ?? null,
+      isPopular: (result.isPopular as boolean | null) ?? null,
+      isBreaking: (result.isBreaking as boolean | null) ?? null,
+      meta: (result.meta as Record<string, unknown> | null) ?? null,
+      tags: (result.tags as Record<string, unknown> | null) ?? null,
+      publishedAt: (result.publishedAt as Date | null) ?? null,
+      createdAt: (result.createdAt as Date | null) ?? null,
+      updatedAt: (result.updatedAt as Date | null) ?? null,
+    };
   }
 }
 

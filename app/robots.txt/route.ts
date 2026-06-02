@@ -4,13 +4,6 @@ import { NextResponse } from 'next/server';
 // ==================== SITEMAP URLs ====================
 const SITEMAPS = [
   '/sitemap.xml',
-  '/sitemaps/pages.xml',
-  '/sitemaps/admissions.xml',
-  '/sitemaps/results.xml',
-  '/sitemaps/news.xml',
-  '/sitemaps/date-sheets.xml',
-  '/sitemaps/scholarships.xml',
-  '/sitemaps/jobs.xml',
 ] as const;
 
 // ==================== AI BOTS TO BLOCK ====================
@@ -47,7 +40,6 @@ const AI_BOTS = [
 
 // ==================== BLOCKED PATHS ====================
 const BLOCKED_PATHS = [
-  // Admin & Auth
   '/admin/',
   '/login/',
   '/register/',
@@ -56,31 +48,9 @@ const BLOCKED_PATHS = [
   '/verify-email/',
   '/unauthorized/',
   '/error/',
-  
-  // API routes
   '/api/',
   '/api/auth/',
   '/api/admin/',
-  
-  // Old/deprecated paths (301 redirects will handle these)
-  '/programs/',
-  '/boards/',
-  '/cities/',
-  '/institutes',
-  '/universities/',
-  '/city/',
-  '/tutors/',
-  '/blogs/',
-  '/questions/',
-  
-  // Dynamic/filter pages (low SEO value)
-  '/*?page=',
-  '/*?sort=',
-  '/*?filter=',
-  '/*?degree=',
-  '/*?category=',
-  
-  // Static assets
   '/_next/static/media/',
   '/_next/static/chunks/',
   '/_next/image/',
@@ -91,15 +61,12 @@ const BLOCKED_PATHS = [
 const generateRobotsTxt = (baseUrl: string): string => {
   const sitemapEntries = SITEMAPS.map(sitemap => `Sitemap: ${baseUrl}${sitemap}`).join('\n');
   
-  // AI Bot rules
   const aiBotRules = AI_BOTS.map(bot => `User-agent: ${bot}\nDisallow: /`).join('\n\n');
   
-  // Blocked paths rules
   const blockedPathRules = BLOCKED_PATHS.map(path => `Disallow: ${path}`).join('\n');
   
   return `# robots.txt for NextID.pk
 # Generated: ${new Date().toISOString().split('T')[0]}
-# Purpose: Block AI training bots, optimize crawl budget
 
 # ============================================
 # AI TRAINING BOTS - FULLY BLOCKED
@@ -145,7 +112,7 @@ User-agent: Discordbot
 Allow: /
 
 # ============================================
-# DEFAULT RULE (All other crawlers)
+# DEFAULT RULE
 # ============================================
 User-agent: *
 Allow: /
@@ -173,7 +140,7 @@ const getBaseUrl = (): string => {
     : 'https://www.nextid.pk';
 };
 
-// ==================== MAIN HANDLER ====================
+// ==================== MAIN HANDLER - NO CACHE ====================
 export async function GET() {
   try {
     const baseUrl = getBaseUrl();
@@ -183,14 +150,13 @@ export async function GET() {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=43200', // 24 hour cache
+        // ❌ NO CACHE HEADERS - removed
       },
     });
     
   } catch (error) {
     console.error('Failed to generate robots.txt:', error);
     
-    // Fallback robots.txt
     const fallbackRobotsTxt = `User-agent: *
 Allow: /
 Disallow: /admin/
@@ -201,7 +167,6 @@ Sitemap: ${getBaseUrl()}/sitemap.xml`;
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'public, s-maxage=3600',
       },
     });
   }

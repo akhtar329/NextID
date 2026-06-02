@@ -1,7 +1,7 @@
-// app/components/GridFooter.tsx
+// app/components/Footer.tsx
 
 import Link from "next/link";
-import Image from "next/image";
+import { cacheLife } from "next/cache";
 
 // ==================== STATIC DATA (No DB calls) ====================
 const quickLinks = [
@@ -56,7 +56,11 @@ const socialLinks = [
 ];
 
 // ==================== FOOTER COMPONENT ====================
-export default async function GridFooter() {
+export default async function Footer() {
+  'use cache'
+  cacheLife('days') // Cache for 24 hours
+  
+  // ✅ Now new Date() is allowed inside cached component
   const currentYear = new Date().getFullYear();
 
   return (

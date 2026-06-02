@@ -43,6 +43,7 @@ export default function EditPostPage() {
     isPopular: false,
     isBreaking: false,
     publishedAt: '',
+    expiresAt: '', // ✅ Added expiry date
     meta: {},
     tags: [],
   });
@@ -68,13 +69,14 @@ export default function EditPostPage() {
             isPopular: post.isPopular || false,
             isBreaking: post.isBreaking || false,
             publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            expiresAt: post.expiresAt ? new Date(post.expiresAt).toISOString().split('T')[0] : '', // ✅ Load expiry date
             meta: post.meta || {},
             tags: post.tags || [],
           });
         } else {
           setError('Post not found');
         }
-      } catch (err) {
+      } catch {
         setError('Failed to fetch post');
       } finally {
         setFetching(false);
@@ -83,6 +85,13 @@ export default function EditPostPage() {
     
     fetchPost();
   }, [id]);
+
+  // Set expiry date helper
+  const setExpiryDate = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    setFormData({ ...formData, expiresAt: date.toISOString().split('T')[0] });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +108,7 @@ export default function EditPostPage() {
       const data = await res.json();
 
       if (data.success) {
+        // ✅ NO CACHE CLEAR - Manual cache clear later
         setSuccess('Post updated successfully! Redirecting...');
         setTimeout(() => {
           router.push('/admin/post');
@@ -106,7 +116,7 @@ export default function EditPostPage() {
       } else {
         setError(data.error || 'Failed to update post');
       }
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
@@ -157,7 +167,7 @@ export default function EditPostPage() {
               Cancel
             </Link>
             <Link
-              href={`/${formData.type}s/${formData.slug}`}
+              href={`/${formData.type}/${formData.slug}`}
               target="_blank"
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
             >
@@ -228,7 +238,9 @@ export default function EditPostPage() {
                 </div>
                 <span className="text-xs text-gray-400">Slug cannot be changed after creation</span>
               </div>
-              <p className="text-xs text-gray-400 mt-1">URL-friendly version of the title (permanently set)</p>
+              <p className="text-xs text-gray-400 mt-1">
+                URL: <span className="text-blue-600">https://www.nextid.pk/{formData.type}/{formData.slug}</span>
+              </p>
             </div>
 
             {/* Featured Image */}
@@ -243,7 +255,9 @@ export default function EditPostPage() {
               />
               {formData.featuredImage && (
                 <div className="mt-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={formData.featuredImage} alt="Preview" className="h-20 w-auto rounded border" />
+                  <p className="text-xs text-gray-400 mt-1">⚠️ Use direct image URL (no base64)</p>
                 </div>
               )}
             </div>
@@ -263,19 +277,20 @@ export default function EditPostPage() {
 
             {/* Content */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Content *</label>
               <textarea
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 rows={15}
+                required
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Write your content here (HTML supported)..."
               />
               <p className="text-xs text-gray-400 mt-1">HTML tags are supported (h1, p, ul, li, etc.)</p>
             </div>
 
-            {/* Status & Publish Date */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Status, Publish Date & Expiry Date */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select
@@ -299,6 +314,54 @@ export default function EditPostPage() {
                   onChange={(e) => setFormData({ ...formData, publishedAt: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Expiry Date 
+                  <span className="text-xs text-gray-400 ml-1">(Optional)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={formData.expiresAt}
+                    onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
+                    className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(7)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +7 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(30)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +30 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpiryDate(90)}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    +90 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, expiresAt: '' })}
+                    className="text-xs px-2 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  After expiry date, post will not appear in listings
+                </p>
               </div>
             </div>
 
@@ -333,9 +396,18 @@ export default function EditPostPage() {
               </label>
             </div>
 
+            {/* Expiry Warning */}
+            {formData.expiresAt && (
+              <div className="mb-6 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-sm text-orange-700">
+                  ⚠️ This post will expire on: <strong>{new Date(formData.expiresAt).toLocaleDateString()}</strong>
+                </p>
+              </div>
+            )}
+
             {/* Post ID Info */}
             <div className="mb-6 p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-4 text-sm flex-wrap">
                 <span className="text-gray-500">Post ID:</span>
                 <span className="font-mono text-gray-700">{id}</span>
                 <span className="text-gray-300">|</span>

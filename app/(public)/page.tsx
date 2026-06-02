@@ -13,8 +13,8 @@ import ScholarshipsSection from "@/components/sections/Home/ScholarshipsSection"
 import SidebarWidgets from "@/components/sections/Home/SidebarWidgets";
 import JobsSection from "@/components/sections/Home/JobsSection";
 
-// ✅ SINGLE revalidate - 24 hours
-export const revalidate = 86400;
+// ❌ REMOVE THIS LINE - Not compatible with cacheComponents
+// export const revalidate = 86400;
 
 // ==================== SEO ====================
 export const metadata: Metadata = generateSEOClient({
@@ -43,9 +43,6 @@ const organizationSchema = {
 export default async function HomePage() {
   return (
     <>
-      {/* SEO Cache Header */}
-      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
-      
       {/* Schema */}
       <script
         type="application/ld+json"
