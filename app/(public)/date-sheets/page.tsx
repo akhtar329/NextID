@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 86400;
 
 // ============================================
 // INTERFACE DEFINITIONS
