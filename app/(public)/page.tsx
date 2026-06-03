@@ -1,7 +1,6 @@
 // app/(public)/page.tsx
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import OnScrollLoad from "@/components/OnScrollLoad/OnScrollLoad";
 import { postService } from "@/services/post/post.service";
@@ -266,70 +265,6 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* SEO CONTENT - On scroll load */}
-        <OnScrollLoad rootMargin="200px">
-          <section className="bg-white py-12 border-t border-gray-200 mt-8">
-            <div className="max-w-6xl mx-auto px-4">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">Find & Compare Study Programs & Universities</h2>
-                <div className="flex flex-wrap justify-center gap-3">
-                  <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-full">Art & Design</span>
-                  <span className="px-4 py-2 bg-green-100 text-green-700 rounded-full">Engineering</span>
-                  <span className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full">Business & Management</span>
-                  <span className="px-4 py-2 bg-orange-100 text-orange-700 rounded-full">Computer Science & IT</span>
-                  <span className="px-4 py-2 bg-red-100 text-red-700 rounded-full">Medical & Pharmacy</span>
-                  <span className="px-4 py-2 bg-teal-100 text-teal-700 rounded-full">Education & Training</span>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Latest Admissions Links */}
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="text-blue-600">📝</span> Latest Admissions</h3>
-                  <ul className="space-y-2 text-sm">
-                    {admissionsList.slice(0, 4).map((item: SchemaListItem, idx: number) => (
-                      <li key={idx}><Link href={item.url} className="text-gray-600 hover:text-blue-600 line-clamp-1">{item.name}</Link></li>
-                    ))}
-                    <li className="pt-2"><Link href="/admissions" className="text-blue-600 text-xs font-medium hover:underline">View All Admissions →</Link></li>
-                  </ul>
-                </div>
-                
-                {/* Latest Results Links */}
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="text-green-600">📊</span> Latest Results</h3>
-                  <ul className="space-y-2 text-sm">
-                    {resultsList.slice(0, 4).map((item: SchemaListItem, idx: number) => (
-                      <li key={idx}><Link href={item.url} className="text-gray-600 hover:text-blue-600 line-clamp-1">{item.name}</Link></li>
-                    ))}
-                    <li className="pt-2"><Link href="/results" className="text-blue-600 text-xs font-medium hover:underline">View All Results →</Link></li>
-                  </ul>
-                </div>
-                
-                {/* Latest Date Sheets Links */}
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="text-orange-600">📅</span> Latest Date Sheets</h3>
-                  <ul className="space-y-2 text-sm">
-                    {dateSheetsList.slice(0, 4).map((item: SchemaListItem, idx: number) => (
-                      <li key={idx}><Link href={item.url} className="text-gray-600 hover:text-blue-600 line-clamp-1">{item.name}</Link></li>
-                    ))}
-                    <li className="pt-2"><Link href="/date-sheets" className="text-blue-600 text-xs font-medium hover:underline">View All Date Sheets →</Link></li>
-                  </ul>
-                </div>
-                
-                {/* Latest Scholarships Links */}
-                <div>
-                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><span className="text-purple-600">💰</span> Latest Scholarships</h3>
-                  <ul className="space-y-2 text-sm">
-                    {scholarshipsList.slice(0, 4).map((item: SchemaListItem, idx: number) => (
-                      <li key={idx}><Link href={item.url} className="text-gray-600 hover:text-blue-600 line-clamp-1">{item.name}</Link></li>
-                    ))}
-                    <li className="pt-2"><Link href="/scholarships" className="text-blue-600 text-xs font-medium hover:underline">View All Scholarships →</Link></li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </section>
-        </OnScrollLoad>
       </div>
     </>
   );

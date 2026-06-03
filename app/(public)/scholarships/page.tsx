@@ -2,6 +2,7 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
@@ -99,7 +100,6 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
     let scholarshipsList: ScholarshipItem[] = allScholarships.map(post => {
       const meta = post.meta || {};
       
-      // Parse date safely
       let deadline: Date | null = null;
       const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
       if (deadlineRaw && typeof deadlineRaw === 'string') {
@@ -124,9 +124,9 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
         deadline: deadline,
         provider: getMetaValue(meta, 'organizationName', getMetaValue(meta, 'provider', 'Various')),
         amount: getMetaValue(meta, 'amount', null),
-        isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
-        isPopular: getMetaValue(meta, 'isPopular', false),    // ✅ Fixed: from meta
-        viewCount: getMetaValue(meta, 'viewCount', 0),        // ✅ Fixed: from meta
+        isFeatured: getMetaValue(meta, 'isFeatured', false),
+        isPopular: getMetaValue(meta, 'isPopular', false),
+        viewCount: getMetaValue(meta, 'viewCount', 0),
       };
     });
     
@@ -192,17 +192,14 @@ async function getStats(): Promise<Stats> {
         const allScholarships = await postService.getPostsByType('scholarship', 500);
         
         const total = allScholarships.length;
-        
         const featured = allScholarships.filter(s => {
           const meta = s.meta || {};
           return getMetaValue(meta, 'isFeatured', false);
         }).length;
-        
         const abroad = allScholarships.filter(s => {
           const meta = s.meta || {};
           return getMetaValue(meta, 'location', '').toLowerCase() === 'abroad';
         }).length;
-        
         const fullyFunded = allScholarships.filter(s => {
           const meta = s.meta || {};
           return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
@@ -219,149 +216,43 @@ async function getStats(): Promise<Stats> {
   )();
 }
 
-// ============ COMPONENTS ============
-function FilterSidebar({ filters, buildUrl }: { filters: Filters; buildUrl: (key: string, value: string) => string }) {
+// ============ LOADING COMPONENT ============
+function ScholarshipsLoading() {
   return (
-    <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
-      <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-        <span className="w-1.5 h-6 bg-teal-600 rounded-full"></span>
-        Filter Scholarships
-      </h2>
-      
-      <div className="mb-6">
-        <form action="/scholarships" method="GET" className="relative">
-          <input
-            type="text"
-            name="q"
-            defaultValue={filters.q}
-            placeholder="Search scholarships..."
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-        </form>
-      </div>
-
-      <div className="mb-6">
-        <h3 className="font-semibold text-gray-700 mb-3">Study Level</h3>
-        <div className="space-y-1">
-          {STUDY_LEVELS.map(level => (
-            <Link
-              key={level.slug}
-              href={buildUrl('level', level.slug)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                filters.level === level.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <span>{level.icon}</span>
-              <span>{level.name}</span>
-            </Link>
-          ))}
+    <div className="flex flex-col lg:flex-row gap-8">
+      <div className="lg:w-80 shrink-0">
+        <div className="bg-white rounded-xl p-5 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded mb-4"></div>
+          <div className="h-10 bg-gray-200 rounded mb-6"></div>
+          <div className="space-y-3">
+            <div className="h-10 bg-gray-200 rounded"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+          </div>
         </div>
       </div>
-
-      <div className="mb-6">
-        <h3 className="font-semibold text-gray-700 mb-3">Scholarship Type</h3>
-        <div className="space-y-1">
-          {SCHOLARSHIP_TYPES.map(type => (
-            <Link
-              key={type.slug}
-              href={buildUrl('type', type.slug)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                filters.type === type.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <span>{type.icon}</span>
-              <span>{type.name}</span>
-            </Link>
-          ))}
-        </div>
+      <div className="flex-1">
+        <div className="bg-white rounded-xl p-4 mb-4 animate-pulse"><div className="h-8 bg-gray-200 rounded w-48"></div></div>
+        {[1, 2, 3].map(i => (
+          <div key={i} className="bg-white rounded-xl p-5 mb-4 animate-pulse">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
+                <div className="flex gap-2"><div className="h-6 bg-gray-200 rounded w-20"></div><div className="h-6 bg-gray-200 rounded w-20"></div></div>
+              </div>
+              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        ))}
       </div>
-
-      <div className="mb-6">
-        <h3 className="font-semibold text-gray-700 mb-3">Location</h3>
-        <div className="space-y-1">
-          {LOCATIONS.map(loc => (
-            <Link
-              key={loc.slug}
-              href={buildUrl('location', loc.slug)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                filters.location === loc.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <span>{loc.icon}</span>
-              <span>{loc.name}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {(filters.level || filters.type || filters.location || filters.q) && (
-        <Link href="/scholarships" className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t">
-          Clear all filters
-        </Link>
-      )}
     </div>
   );
 }
 
-function ScholarshipCard({ scholarship }: { scholarship: ScholarshipItem }) {
-  const daysLeft = getDaysLeft(scholarship.deadline);
-  const isOpen = daysLeft !== null && daysLeft > 0;
-  const isUrgent = daysLeft !== null && daysLeft <= 7;
-  
-  return (
-    <article className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-teal-300 overflow-hidden group">
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              {scholarship.isFeatured && (
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">⭐ Featured</span>
-              )}
-              {scholarship.isPopular && (
-                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">🔥 Popular</span>
-              )}
-              {isUrgent && isOpen && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium animate-pulse">🔴 Urgent</span>
-              )}
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
-              <Link href={`/scholarships/${scholarship.slug}`}>{scholarship.title}</Link>
-            </h3>
-            <p className="text-sm text-gray-500 mb-3">{scholarship.provider}</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{scholarship.studyLevel}</span>
-              <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{scholarship.type}</span>
-              <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{scholarship.location}</span>
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-              <div>
-                <div className="text-xs text-gray-500">Deadline</div>
-                <div className="text-sm font-semibold text-gray-900">{formatDate(scholarship.deadline)}</div>
-              </div>
-              {daysLeft && (
-                <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
-                  <div className="text-lg font-bold">{daysLeft}</div>
-                  <div className="text-[10px]">days left</div>
-                </div>
-              )}
-            </div>
-          </div>
-          <Link
-            href={`/scholarships/${scholarship.slug}`}
-            className="flex-shrink-0 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium"
-          >
-            View Details →
-          </Link>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-// ============ MAIN PAGE ============
-export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const params = await searchParams || {};
+// ============ SCHOLARSHIPS CONTENT COMPONENT ============
+async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const params = await searchParamsPromise;
   
   const filters: Filters = {
     level: typeof params.level === 'string' ? params.level : '',
@@ -386,91 +277,178 @@ export default async function ScholarshipsPage({ searchParams }: { searchParams?
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
+    <>
+      {/* Hero Stats - Moved inside ScholarshipsContent */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-2xl font-bold">{stats.total}+</div>
+          <div className="text-sm text-teal-200">Scholarships</div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-2xl font-bold">{stats.featured}</div>
+          <div className="text-sm text-teal-200">Featured</div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-2xl font-bold">{stats.abroad}</div>
+          <div className="text-sm text-teal-200">Abroad</div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
+          <div className="text-2xl font-bold">{stats.fullyFunded}</div>
+          <div className="text-sm text-teal-200">Fully Funded</div>
+        </div>
+      </div>
 
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Sidebar */}
+        <aside className="lg:w-80 flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-teal-600 rounded-full"></span>
+              Filter Scholarships
+            </h2>
+            
+            <div className="mb-6">
+              <form action="/scholarships" method="GET" className="relative">
+                <input type="text" name="q" defaultValue={filters.q} placeholder="Search scholarships..." className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+              </form>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3">Study Level</h3>
+              <div className="space-y-1">
+                {STUDY_LEVELS.map(level => (
+                  <Link key={level.slug} href={buildUrl('level', level.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.level === level.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
+                    <span>{level.icon}</span>
+                    <span>{level.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3">Scholarship Type</h3>
+              <div className="space-y-1">
+                {SCHOLARSHIP_TYPES.map(type => (
+                  <Link key={type.slug} href={buildUrl('type', type.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.type === type.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
+                    <span>{type.icon}</span>
+                    <span>{type.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3">Location</h3>
+              <div className="space-y-1">
+                {LOCATIONS.map(loc => (
+                  <Link key={loc.slug} href={buildUrl('location', loc.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.location === loc.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
+                    <span>{loc.icon}</span>
+                    <span>{loc.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {(filters.level || filters.type || filters.location || filters.q) && (
+              <Link href="/scholarships" className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t">Clear all filters</Link>
+            )}
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <div className="flex-1">
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">{scholarships.length} Scholarships Found</h2>
+            {filters.level && <p className="text-sm text-gray-500 mt-1">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>}
+            {filters.type && <p className="text-sm text-gray-500">Type: {SCHOLARSHIP_TYPES.find(t => t.slug === filters.type)?.name}</p>}
+          </div>
+
+          <div className="space-y-4">
+            {scholarships.length > 0 ? (
+              scholarships.map((s) => {
+                const daysLeft = getDaysLeft(s.deadline);
+                const isOpen = daysLeft !== null && daysLeft > 0;
+                const isUrgent = daysLeft !== null && daysLeft <= 7;
+                return (
+                  <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-teal-300 overflow-hidden group">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {s.isFeatured && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">⭐ Featured</span>}
+                            {s.isPopular && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">🔥 Popular</span>}
+                            {isUrgent && isOpen && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium animate-pulse">🔴 Urgent</span>}
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
+                            <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
+                          </h3>
+                          <p className="text-sm text-gray-500 mb-3">{s.provider}</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.studyLevel}</span>
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.type}</span>
+                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.location}</span>
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <div>
+                              <div className="text-xs text-gray-500">Deadline</div>
+                              <div className="text-sm font-semibold text-gray-900">{formatDate(s.deadline)}</div>
+                            </div>
+                            {daysLeft && (
+                              <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
+                                <div className="text-lg font-bold">{daysLeft}</div>
+                                <div className="text-[10px]">days left</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Link href={`/scholarships/${s.slug}`} className="flex-shrink-0 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium">View Details →</Link>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
+                <div className="text-6xl mb-4">🎓</div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
+                <p className="text-gray-500">Try adjusting your filters</p>
+                <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">View All Scholarships</Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  return (
+    <main className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-teal-700 via-teal-800 to-emerald-900 text-white relative overflow-hidden">
         <div className="container mx-auto px-4 py-12 relative">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Scholarships <span className="text-yellow-400">2026</span>
-            </h1>
-            <p className="text-xl text-teal-100 mb-8">
-              Find fully funded, partial, and merit-based scholarships for Pakistani students
-            </p>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                <div className="text-2xl font-bold">{stats.total}+</div>
-                <div className="text-sm text-teal-200">Scholarships</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                <div className="text-2xl font-bold">{stats.featured}</div>
-                <div className="text-sm text-teal-200">Featured</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                <div className="text-2xl font-bold">{stats.abroad}</div>
-                <div className="text-sm text-teal-200">Abroad</div>
-              </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                <div className="text-2xl font-bold">{stats.fullyFunded}</div>
-                <div className="text-sm text-teal-200">Fully Funded</div>
-              </div>
-            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">Scholarships <span className="text-yellow-400">2026</span></h1>
+            <p className="text-xl text-teal-100 mb-8">Find fully funded, partial, and merit-based scholarships for Pakistani students</p>
 
             <div className="max-w-2xl mx-auto">
               <form action="/scholarships" method="GET" className="relative">
-                <input
-                  type="text"
-                  name="q"
-                  defaultValue={filters.q}
-                  placeholder="Search by name, provider, or study level..."
-                  className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg"
-                />
+                <input type="text" name="q" placeholder="Search by name, provider, or study level..." className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" />
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl">🔍</span>
-                <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition">
-                  Search
-                </button>
+                <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition">Search</button>
               </form>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          
-          <aside className="lg:w-80 flex-shrink-0">
-            <FilterSidebar filters={filters} buildUrl={buildUrl} />
-          </aside>
-
-          <div className="flex-1">
-            <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {scholarships.length} Scholarships Found
-              </h2>
-              {filters.level && <p className="text-sm text-gray-500 mt-1">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>}
-              {filters.type && <p className="text-sm text-gray-500">Type: {SCHOLARSHIP_TYPES.find(t => t.slug === filters.type)?.name}</p>}
-            </div>
-
-            <div className="space-y-4">
-              {scholarships.length > 0 ? (
-                scholarships.map((s) => <ScholarshipCard key={s.id} scholarship={s} />)
-              ) : (
-                <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-                  <div className="text-6xl mb-4">🎓</div>
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
-                  <p className="text-gray-500">Try adjusting your filters</p>
-                  <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">
-                    View All Scholarships
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={<ScholarshipsLoading />}>
+          <ScholarshipsContent searchParamsPromise={searchParams || Promise.resolve({})} />
+        </Suspense>
       </div>
     </main>
   );

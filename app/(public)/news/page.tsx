@@ -3,6 +3,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { Suspense } from "react";
 import { 
   Newspaper, 
   TrendingUp, 
@@ -32,21 +33,6 @@ interface NewsItem {
   publishedAt: Date | null;
   createdAt: Date | null;
   authorName: string | null;
-}
-
-interface PaginationInfo {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  itemsPerPage: number;
-}
-
-interface NewsPageProps {
-  searchParams: Promise<{
-    page?: string;
-    search?: string;
-    category?: string;
-  }>;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -96,12 +82,10 @@ export const metadata = {
 };
 
 // ============ DATA FETCHING ============
-async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: PaginationInfo }> {
+async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
   try {
-    // Get all news posts
     const allNews = await postService.getPostsByType('news', 200);
     
-    // Transform to NewsItem format
     let newsList: NewsItem[] = allNews.map(post => {
       const meta = post.meta || {};
       return {
@@ -113,9 +97,9 @@ async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: s
         featuredImage: post.featuredImage,
         category: getMetaValue(meta, 'category', 'General'),
         tags: getMetaValue(meta, 'tags', null),
-        isFeatured: getMetaValue(meta, 'isFeatured', false),     // ✅ Fixed: from meta
-        isBreaking: getMetaValue(meta, 'isBreaking', false),     // ✅ Fixed: from meta
-        viewCount: getMetaValue(meta, 'viewCount', 0),           // ✅ Fixed: from meta
+        isFeatured: getMetaValue(meta, 'isFeatured', false),
+        isBreaking: getMetaValue(meta, 'isBreaking', false),
+        viewCount: getMetaValue(meta, 'viewCount', 0),
         publishedAt: post.publishedAt,
         createdAt: post.createdAt,
         authorName: getMetaValue(meta, 'authorName', null),
@@ -173,9 +157,18 @@ async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: s
   }
 }
 
-// ============ MAIN PAGE COMPONENT ============
-export default async function NewsPage({ searchParams }: NewsPageProps) {
-  const params = await searchParams;
+// ============ LOADING COMPONENT ============
+function NewsLoading() {
+  return (
+    <div className="flex justify-center items-center py-20">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+    </div>
+  );
+}
+
+// ============ NEWS CONTENT COMPONENT ============
+async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ page?: string; search?: string; category?: string }> }) {
+  const params = await searchParamsPromise;
   const page = params.page ? parseInt(params.page) : 1;
   const searchQuery = params.search || undefined;
   const selectedCategory = params.category || "";
@@ -592,5 +585,14 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
         
       </div>
     </div>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function NewsPage({ searchParams }: { searchParams: Promise<{ page?: string; search?: string; category?: string }> }) {
+  return (
+    <Suspense fallback={<NewsLoading />}>
+      <NewsContent searchParamsPromise={searchParams} />
+    </Suspense>
   );
 }
