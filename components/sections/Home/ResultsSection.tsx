@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { FileText, Calendar, Eye } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 
+// ✅ Static year (build time pe fix)
+const CURRENT_YEAR = 2026;
+
 // Helper function
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -34,7 +37,7 @@ export default async function ResultsSection() {
       title: post.title,
       boardName: getMetaValue(meta, 'boardName', null),
       instituteName: getMetaValue(meta, 'universityName', null),
-      year: getMetaValue(meta, 'year', new Date().getFullYear()),
+      year: getMetaValue(meta, 'year', CURRENT_YEAR), // ✅ Fixed: static year
       resultDate: resultDate,
       isPopular: getMetaValue(meta, 'isPopular', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
