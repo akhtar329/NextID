@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 86400;
-
 // ============ TYPES ============
 interface ResultDetail {
   id: number;
@@ -41,7 +39,7 @@ interface RelatedResult {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -70,7 +68,21 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       return null;
     }
     
-    const meta = post.meta;
+    const meta = post.meta || {};
+    
+    // Parse date safely
+    let resultDate: Date | null = null;
+    const resultDateRaw = getMetaValue(meta, 'resultDate', null);
+    if (resultDateRaw && typeof resultDateRaw === 'string') {
+      try {
+        const parsed = new Date(resultDateRaw);
+        if (!isNaN(parsed.getTime())) {
+          resultDate = parsed;
+        }
+      } catch {
+        resultDate = null;
+      }
+    }
     
     return {
       id: post.id,
@@ -79,16 +91,16 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       content: post.content,
       excerpt: post.excerpt,
       year: getMetaValue(meta, 'year', new Date().getFullYear()),
-      resultDate: getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null,
+      resultDate: resultDate,
       boardName: getMetaValue(meta, 'boardName', null),
       boardSlug: getMetaValue(meta, 'boardSlug', null),
-      instituteName: getMetaValue(meta, 'universityName', null),
-      instituteSlug: getMetaValue(meta, 'universitySlug', null),
+      instituteName: getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null)),
+      instituteSlug: getMetaValue(meta, 'universitySlug', getMetaValue(meta, 'instituteSlug', null)),
       cityName: getMetaValue(meta, 'cityName', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
-      isPopular: post.isPopular || false,
-      status: true,
-      viewCount: post.viewCount || 0,
+      isPopular: getMetaValue(meta, 'isPopular', false),  // ✅ Fixed: from meta
+      status: getMetaValue(meta, 'status', true),
+      viewCount: getMetaValue(meta, 'viewCount', 0),      // ✅ Fixed: from meta
     };
   } catch (error) {
     console.error('Error fetching result detail:', error);
@@ -104,14 +116,29 @@ async function getRelatedResults(currentResult: ResultDetail): Promise<RelatedRe
       .filter(post => post.slug !== currentResult.slug)
       .slice(0, 5)
       .map(post => {
-        const meta = post.meta;
+        const meta = post.meta || {};
+        
+        // Parse date safely
+        let resultDate: Date | null = null;
+        const resultDateRaw = getMetaValue(meta, 'resultDate', null);
+        if (resultDateRaw && typeof resultDateRaw === 'string') {
+          try {
+            const parsed = new Date(resultDateRaw);
+            if (!isNaN(parsed.getTime())) {
+              resultDate = parsed;
+            }
+          } catch {
+            resultDate = null;
+          }
+        }
+        
         return {
           id: post.id,
           slug: post.slug,
           title: post.title,
           year: getMetaValue(meta, 'year', new Date().getFullYear()),
-          resultDate: getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null,
-          instituteName: getMetaValue(meta, 'universityName', null),
+          resultDate: resultDate,
+          instituteName: getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null)),
           boardName: getMetaValue(meta, 'boardName', null),
         };
       });
@@ -214,9 +241,13 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
               {institutionName && (
                 <div className="flex items-center gap-1">
                   <span>🏛️</span>
-                  <Link href={`/${institutionType}/${institutionSlug}`} className="hover:text-white">
-                    {institutionName}
-                  </Link>
+                  {institutionSlug ? (
+                    <Link href={`/${institutionType}/${institutionSlug}`} className="hover:text-white">
+                      {institutionName}
+                    </Link>
+                  ) : (
+                    <span>{institutionName}</span>
+                  )}
                 </div>
               )}
               {result.cityName && (

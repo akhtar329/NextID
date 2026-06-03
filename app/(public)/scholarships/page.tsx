@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
-export const revalidate = 86400;
-
 // ============ TYPES ============
 interface ScholarshipItem {
   id: number;
@@ -66,7 +64,7 @@ const LOCATIONS = [
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -99,10 +97,21 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
     const allScholarships = await postService.getPostsByType('scholarship', 200);
     
     let scholarshipsList: ScholarshipItem[] = allScholarships.map(post => {
-      const meta = post.meta;
-      const deadline = getMetaValue(meta, 'applicationDeadline', null) 
-        ? new Date(getMetaValue(meta, 'applicationDeadline', '')) 
-        : null;
+      const meta = post.meta || {};
+      
+      // Parse date safely
+      let deadline: Date | null = null;
+      const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
+      if (deadlineRaw && typeof deadlineRaw === 'string') {
+        try {
+          const parsed = new Date(deadlineRaw);
+          if (!isNaN(parsed.getTime())) {
+            deadline = parsed;
+          }
+        } catch {
+          deadline = null;
+        }
+      }
       
       return {
         id: post.id,
@@ -115,9 +124,9 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
         deadline: deadline,
         provider: getMetaValue(meta, 'organizationName', getMetaValue(meta, 'provider', 'Various')),
         amount: getMetaValue(meta, 'amount', null),
-        isFeatured: post.isFeatured || false,
-        isPopular: post.isPopular || false,
-        viewCount: post.viewCount || 0,
+        isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
+        isPopular: getMetaValue(meta, 'isPopular', false),    // ✅ Fixed: from meta
+        viewCount: getMetaValue(meta, 'viewCount', 0),        // ✅ Fixed: from meta
       };
     });
     
@@ -131,8 +140,16 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
     
     // Filter by study level
     if (filters.level && filters.level !== '') {
-      scholarshipsList = scholarshipsList.filter(s => 
-        s.studyLevel.toLowerCase().includes(filters.level!.toLowerCase())
+      const levelMap: Record<string, string[]> = {
+        'matric': ['matric', 'ssc', 'secondary'],
+        'inter': ['inter', 'intermediate', 'hssc', 'fa', 'fsc', 'ics'],
+        'bs': ['bs', 'bachelor', 'bscs', 'bit', 'bba'],
+        'ms': ['ms', 'master', 'masters', 'mphil', 'm.phil'],
+        'phd': ['phd', 'doctorate', 'doctoral'],
+      };
+      const keywords = levelMap[filters.level] || [filters.level];
+      scholarshipsList = scholarshipsList.filter(s =>
+        keywords.some(kw => s.studyLevel.toLowerCase().includes(kw))
       );
     }
     
@@ -144,13 +161,12 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       });
     }
     
-    // Filter by location - FIXED
-  if (filters.location && filters.location !== '') {
-  const locationFilter = filters.location as string;
-  scholarshipsList = scholarshipsList.filter(s => 
-    s.location.toLowerCase() === locationFilter.toLowerCase()
-  );
-}
+    // Filter by location
+    if (filters.location && filters.location !== '') {
+      scholarshipsList = scholarshipsList.filter(s => 
+        s.location.toLowerCase() === filters.location!.toLowerCase()
+      );
+    }
     
     // Filter by search query
     if (filters.q) {
@@ -176,18 +192,25 @@ async function getStats(): Promise<Stats> {
         const allScholarships = await postService.getPostsByType('scholarship', 500);
         
         const total = allScholarships.length;
-        const featured = allScholarships.filter(s => s.isFeatured).length;
-        const abroad = allScholarships.filter(s => {
-          const meta = s.meta;
-          return getMetaValue<string>(meta, 'location', '') === 'abroad';
+        
+        const featured = allScholarships.filter(s => {
+          const meta = s.meta || {};
+          return getMetaValue(meta, 'isFeatured', false);
         }).length;
+        
+        const abroad = allScholarships.filter(s => {
+          const meta = s.meta || {};
+          return getMetaValue(meta, 'location', '').toLowerCase() === 'abroad';
+        }).length;
+        
         const fullyFunded = allScholarships.filter(s => {
-          const meta = s.meta;
-          return getMetaValue<string>(meta, 'type', '').toLowerCase().includes('full');
+          const meta = s.meta || {};
+          return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
         }).length;
         
         return { total, featured, abroad, fullyFunded };
-      } catch {
+      } catch (error) {
+        console.error('Error fetching stats:', error);
         return { total: 0, featured: 0, abroad: 0, fullyFunded: 0 };
       }
     },
@@ -294,6 +317,9 @@ function ScholarshipCard({ scholarship }: { scholarship: ScholarshipItem }) {
             <div className="flex items-center gap-2 mb-2">
               {scholarship.isFeatured && (
                 <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">⭐ Featured</span>
+              )}
+              {scholarship.isPopular && (
+                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">🔥 Popular</span>
               )}
               {isUrgent && isOpen && (
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium animate-pulse">🔴 Urgent</span>

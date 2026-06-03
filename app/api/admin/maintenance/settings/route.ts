@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 // In-memory store
-let maintenanceConfig = {
+const maintenanceConfig = {
   isEnabled: process.env.MAINTENANCE_MODE === 'true',
   title: process.env.MAINTENANCE_TITLE || 'Site Under Maintenance',
   message: process.env.MAINTENANCE_MESSAGE || 'We are currently performing scheduled maintenance. Please check back soon.',

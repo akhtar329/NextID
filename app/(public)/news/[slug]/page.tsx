@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 86400;
 
 // ============ TYPES ============
 interface NewsDetail {
@@ -80,7 +79,7 @@ function getReadTime(content: string | null): number {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 // ============ DATA FETCHING ============
@@ -92,7 +91,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       return null;
     }
     
-    const meta = post.meta;
+    const meta = post.meta || {};
     
     return {
       id: post.id,
@@ -103,9 +102,9 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       featuredImage: post.featuredImage,
       source: getMetaValue(meta, 'source', null),
       authorName: getMetaValue(meta, 'authorName', null),
-      isFeatured: post.isFeatured || false,
-      isBreaking: post.isBreaking || false,
-      viewCount: post.viewCount || 0,
+      isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
+      isBreaking: getMetaValue(meta, 'isBreaking', false),  // ✅ Fixed: from meta
+      viewCount: getMetaValue(meta, 'viewCount', 0),       // ✅ Fixed: from meta
       publishedAt: post.publishedAt,
       createdAt: post.createdAt,
       category: getMetaValue(meta, 'category', 'General'),
@@ -122,19 +121,22 @@ async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ rela
     // Get all news posts
     const allNews = await postService.getPostsByType('news', 100);
     
-    // Transform to NewsItem format
-    const newsList = allNews.map(post => ({
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt,
-      featuredImage: post.featuredImage,
-      publishedAt: post.publishedAt,
-      isBreaking: post.isBreaking || false,
-      viewCount: post.viewCount || 0,
-    }));
+    // Transform to NewsItem format with meta values
+    const newsList = allNews.map(post => {
+      const meta = post.meta || {};
+      return {
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        excerpt: post.excerpt,
+        featuredImage: post.featuredImage,
+        publishedAt: post.publishedAt,
+        isBreaking: getMetaValue(meta, 'isBreaking', false),
+        viewCount: getMetaValue(meta, 'viewCount', 0),
+      };
+    });
     
-    // Filter related by category (excluding current)
+    // Filter related (excluding current)
     const relatedNews = newsList
       .filter(n => n.id !== currentNews.id)
       .slice(0, 6)
@@ -165,15 +167,6 @@ async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ rela
   } catch (error) {
     console.error('Error fetching related news:', error);
     return { relatedNews: [], popularNews: [] };
-  }
-}
-
-async function incrementViewCount(id: number): Promise<void> {
-  try {
-    // Fire and forget - don't await
-    postService.trackView(String(id));
-  } catch {
-    // Silent fail
   }
 }
 
@@ -441,9 +434,6 @@ async function getPageData(slug: string) {
     return { newsItem: null, relatedNews: [], popularNews: [] };
   }
   
-  // Increment view count (fire and forget)
-  incrementViewCount(newsItem.id);
-  
   const { relatedNews, popularNews } = await getRelatedAndPopularNews(newsItem);
   
   return { newsItem, relatedNews, popularNews };
@@ -583,7 +573,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
                 <Link href="/news" className="text-sm text-red-600 hover:underline">Education News</Link>
                 <span className="text-gray-300">|</span>
                 <Link href="/news" className="text-sm text-red-600 hover:underline">Pakistan</Link>
-                {newsItem.category && (
+                {newsItem.category && newsItem.category !== 'General' && (
                   <>
                     <span className="text-gray-300">|</span>
                     <Link href={`/news?category=${newsItem.category}`} className="text-sm text-red-600 hover:underline">

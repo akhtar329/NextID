@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
-export const revalidate = 86400;
-
 // ============ TYPES ============
 interface JobItem {
   id: number;
@@ -72,7 +70,7 @@ const EXPERIENCE_LEVELS = [
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -112,7 +110,7 @@ async function getJobs(filters: Filters): Promise<JobItem[]> {
     const allJobs = await postService.getPostsByType('job', 200);
     
     let jobsList: JobItem[] = allJobs.map(post => {
-      const meta = post.meta;
+      const meta = post.meta || {};
       const deadline = getMetaValue(meta, 'deadline', null) 
         ? new Date(getMetaValue(meta, 'deadline', '')) 
         : null;
@@ -131,9 +129,9 @@ async function getJobs(filters: Filters): Promise<JobItem[]> {
         salary: getMetaValue(meta, 'salary', null),
         experience: getMetaValue(meta, 'experience', null),
         deadline: deadline,
-        isFeatured: post.isFeatured || false,
+        isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
         isUrgent: urgency === 'urgent',
-        viewCount: post.viewCount || 0,
+        viewCount: getMetaValue(meta, 'viewCount', 0),  // ✅ Fixed: from meta
       };
     });
     
@@ -204,11 +202,16 @@ async function getStats(): Promise<Stats> {
         const allJobs = await postService.getPostsByType('job', 500);
         
         const total = allJobs.length;
-        const featured = allJobs.filter(j => j.isFeatured).length;
+        
+        // Calculate featured jobs (from meta)
+        const featured = allJobs.filter(j => {
+          const meta = j.meta || {};
+          return getMetaValue(meta, 'isFeatured', false);
+        }).length;
         
         // Calculate urgent jobs (deadline within 7 days)
         const urgent = allJobs.filter(j => {
-          const meta = j.meta;
+          const meta = j.meta || {};
           const deadline = getMetaValue(meta, 'deadline', null);
           if (!deadline) return false;
           const daysLeft = getDaysLeft(new Date(deadline));
@@ -216,18 +219,19 @@ async function getStats(): Promise<Stats> {
         }).length;
         
         const fullTime = allJobs.filter(j => {
-          const meta = j.meta;
+          const meta = j.meta || {};
           return getMetaValue(meta, 'jobType', '').toLowerCase().includes('full');
         }).length;
         
         const remote = allJobs.filter(j => {
-          const meta = j.meta;
+          const meta = j.meta || {};
           return getMetaValue(meta, 'jobType', '').toLowerCase().includes('remote') ||
                  getMetaValue(meta, 'location', '').toLowerCase() === 'remote';
         }).length;
         
         return { total, featured, urgent, fullTime, remote };
-      } catch {
+      } catch (error) {
+        console.error('Error fetching stats:', error);
         return { total: 0, featured: 0, urgent: 0, fullTime: 0, remote: 0 };
       }
     },

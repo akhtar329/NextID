@@ -1,10 +1,68 @@
 // app/api/admin/profile/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { db } from '@/db/db';
 import { adminUsers, adminRoles } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
+// Types
+interface JWTPayload {
+  id: number;
+  email?: string;
+  name?: string;
+  role?: string;
+  iat?: number;
+  exp?: number;
+}
+
+interface ProfileResponse {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  roleId: number | null;
+  lastLogin: Date;
+  joinDate: Date;
+  permissions: string[];
+}
+
+// Helper function to get permissions based on role
+function getPermissionsForRole(roleName: string): string[] {
+  const permissionsMap: Record<string, string[]> = {
+    'Super Admin': [
+      'full_access',
+      'user_management',
+      'content_management',
+      'analytics_view',
+      'settings_manage',
+      'role_management',
+    ],
+    'Admin': [
+      'content_management',
+      'analytics_view',
+      'user_view',
+    ],
+    'Editor': [
+      'content_management',
+      'analytics_view',
+    ],
+    'Viewer': [
+      'analytics_view',
+    ],
+  };
+
+  return permissionsMap[roleName] || permissionsMap['Viewer'];
+}
+
+// Helper to get JWT secret
+function getJWTSecret(): string {
+  return process.env.JWT_SECRET || 'your-secret-key-change-this';
+}
+
+// ============================================
+// GET - Fetch user profile
+// ============================================
 export async function GET(request: NextRequest) {
   try {
     // ✅ Get token from cookie (custom auth)
@@ -17,11 +75,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ✅ Verify JWT token
-    let decoded: any;
+    // ✅ Verify JWT token - Fixed: removed 'any' type
+    let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this');
-    } catch (jwtError) {
+      decoded = jwt.verify(token, getJWTSecret()) as JWTPayload;
+    } catch {
+      // Silent catch - jwtError not needed
       return NextResponse.json(
         { success: false, error: 'Unauthorized - Invalid token' },
         { status: 401 }
@@ -29,6 +88,13 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = decoded.id;
+    
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Invalid token payload' },
+        { status: 401 }
+      );
+    }
     
     // ✅ Fetch user from database
     const user = await db
@@ -76,27 +142,30 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ✅ Define permissions based on role (customize as needed)
+    // ✅ Define permissions based on role
     const permissions = getPermissionsForRole(roleName);
 
-    // ✅ Update last login time
-    await db
+    // ✅ Update last login time (async - don't await)
+    db
       .update(adminUsers)
       .set({ lastLogin: new Date() })
-      .where(eq(adminUsers.id, userId));
+      .where(eq(adminUsers.id, userId))
+      .catch(err => console.error('Failed to update last login:', err));
+
+    const profile: ProfileResponse = {
+      id: userData.id.toString(),
+      name: userData.name,
+      email: userData.email,
+      role: roleName,
+      roleId: userData.roleId,
+      lastLogin: userData.lastLogin || new Date(),
+      joinDate: userData.createdAt || new Date(),
+      permissions: permissions,
+    };
 
     return NextResponse.json({
       success: true,
-      profile: {
-        id: userData.id.toString(),
-        name: userData.name,
-        email: userData.email,
-        role: roleName,
-        roleId: userData.roleId,
-        lastLogin: userData.lastLogin || new Date(),
-        joinDate: userData.createdAt || new Date(),
-        permissions: permissions,
-      },
+      profile,
     });
 
   } catch (error) {
@@ -108,7 +177,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ✅ PUT method for updating profile
+// ============================================
+// PUT - Update user profile
+// ============================================
 export async function PUT(request: NextRequest) {
   try {
     const token = request.cookies.get('authToken')?.value;
@@ -120,10 +191,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let decoded: any;
+    // ✅ Fixed: removed 'any' type
+    let decoded: JWTPayload;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-this');
-    } catch (jwtError) {
+      decoded = jwt.verify(token, getJWTSecret()) as JWTPayload;
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
@@ -131,8 +203,38 @@ export async function PUT(request: NextRequest) {
     }
 
     const userId = decoded.id;
+    
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid token payload' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { name, email } = body;
+
+    // Validate input
+    if (!name || !email) {
+      return NextResponse.json(
+        { success: false, error: 'Name and email are required' },
+        { status: 400 }
+      );
+    }
+
+    // Check if email already exists for another user
+    const existingUser = await db
+      .select({ id: adminUsers.id })
+      .from(adminUsers)
+      .where(eq(adminUsers.email, email))
+      .limit(1);
+
+    if (existingUser.length > 0 && existingUser[0].id !== userId) {
+      return NextResponse.json(
+        { success: false, error: 'Email already exists' },
+        { status: 409 }
+      );
+    }
 
     // Update user profile
     await db
@@ -187,21 +289,24 @@ export async function PUT(request: NextRequest) {
         name: updatedUser[0].name,
         role: roleName
       },
-      process.env.JWT_SECRET || 'your-secret-key-change-this',
+      getJWTSecret(),
       { expiresIn: '7d' }
     );
 
+    const profile: ProfileResponse = {
+      id: updatedUser[0].id.toString(),
+      name: updatedUser[0].name,
+      email: updatedUser[0].email,
+      role: roleName,
+      roleId: updatedUser[0].roleId,
+      joinDate: updatedUser[0].createdAt || new Date(),
+      lastLogin: updatedUser[0].lastLogin || new Date(),
+      permissions: getPermissionsForRole(roleName),
+    };
+
     const response = NextResponse.json({
       success: true,
-      profile: {
-        id: updatedUser[0].id.toString(),
-        name: updatedUser[0].name,
-        email: updatedUser[0].email,
-        role: roleName,
-        joinDate: updatedUser[0].createdAt || new Date(),
-        lastLogin: updatedUser[0].lastLogin || new Date(),
-        permissions: getPermissionsForRole(roleName),
-      },
+      profile,
     });
 
     // Set new cookie with updated data
@@ -222,32 +327,4 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Helper function to get permissions based on role
-function getPermissionsForRole(roleName: string): string[] {
-  const permissionsMap: Record<string, string[]> = {
-    'Super Admin': [
-      'full_access',
-      'user_management',
-      'content_management',
-      'analytics_view',
-      'settings_manage',
-      'role_management',
-    ],
-    'Admin': [
-      'content_management',
-      'analytics_view',
-      'user_view',
-    ],
-    'Editor': [
-      'content_management',
-      'analytics_view',
-    ],
-    'Viewer': [
-      'analytics_view',
-    ],
-  };
-
-  return permissionsMap[roleName] || permissionsMap['Viewer'];
 }

@@ -1,9 +1,16 @@
 // app/login/page.tsx
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { toast } from "sonner";
+
+// ✅ Client component for dynamic year
+function Copyright() {
+  const [year] = useState(new Date().getFullYear());
+  return <span>© {year} NextID.pk</span>;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -56,15 +63,20 @@ export default function LoginPage() {
 
           {/* Logo + Header */}
           <div className="text-center mb-6">
-            {/* Logo */}
-            <img
-              src="/images/logo.png" // Fixed path (remove ../public/)
-              alt="NextID Logo"
-              className="mx-auto h-12 w-auto mb-3"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'; // Hide if logo doesn't exist
-              }}
-            />
+            {/* ✅ Fixed: Using Next.js Image component */}
+            <div className="relative w-12 h-12 mx-auto mb-3">
+              <Image
+                src="/images/logo.png"
+                alt="NextID Logo"
+                fill
+                className="object-contain"
+                onError={(e) => {
+                  // Hide parent div if image fails to load
+                  const parent = e.currentTarget.parentElement;
+                  if (parent) parent.style.display = 'none';
+                }}
+              />
+            </div>
             <h1 className="text-3xl font-bold text-gray-800">Admin Panel</h1>
             <p className="text-gray-500 text-sm mt-1">Login to continue</p>
           </div>
@@ -126,9 +138,11 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Footer */}
+        {/* Footer - ✅ Fixed: Suspense boundary */}
         <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} NextID.pk
+          <Suspense fallback={<span>© NextID.pk</span>}>
+            <Copyright />
+          </Suspense>
         </p>
       </div>
     </div>

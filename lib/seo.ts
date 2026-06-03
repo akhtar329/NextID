@@ -1,9 +1,10 @@
 // app/lib/seo.ts
+
 import type { Metadata } from "next";
 import { db } from "@/db/db";
 import { seoMetadata } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { unstable_cache } from 'next/cache';
+import { cacheTag } from 'next/cache';
 
 const BASE_URL = "https://www.nextid.pk";
 const SITE_NAME = "NextID";
@@ -25,7 +26,7 @@ type SEOProps = {
   path?: string;
   image?: string;
   noIndex?: boolean;
-  keywords?: string[];  
+  keywords?: string[];
   alternates?: {
     canonical?: string;
   };
@@ -35,7 +36,6 @@ type SEOProps = {
   twitter?: Metadata['twitter'];
 };
 
-// ✅ Structured Data Types
 type JsonLdType =
   | "WebSite"
   | "WebPage"
@@ -55,10 +55,8 @@ type JsonLdProps = {
   breadcrumbs?: { name: string; url: string }[];
 };
 
-const DEFAULT_TITLE =
-  "Latest Education News, Results & Admissions in Pakistan | NextID";
-const DEFAULT_DESCRIPTION =
-  "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.";
+const DEFAULT_TITLE = "Latest Education News, Results & Admissions in Pakistan | NextID";
+const DEFAULT_DESCRIPTION = "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.";
 const DEFAULT_IMAGE = "/og-image.png";
 const DEFAULT_KEYWORDS = [
   "Pakistan education",
@@ -68,43 +66,31 @@ const DEFAULT_KEYWORDS = [
   "NextID",
 ];
 
-// ─────────────────────────────────────────────
-// ✅ Fetch SEO from DB
-// ─────────────────────────────────────────────
-const fetchSeoMetadata = unstable_cache(
-  async (entityType: EntityType, entityId: number) => {
-    try {
-      const [metadata] = await db
-        .select()
-        .from(seoMetadata)
-        .where(
-          and(
-            eq(seoMetadata.entityType, entityType),
-            eq(seoMetadata.entityId, entityId)
-          )
+// ✅ Fetch SEO from DB - Using 'use cache' instead of unstable_cache
+async function fetchSeoMetadata(entityType: EntityType, entityId: number) {
+  'use cache';
+  cacheTag('seo');
+  
+  try {
+    const [metadata] = await db
+      .select()
+      .from(seoMetadata)
+      .where(
+        and(
+          eq(seoMetadata.entityType, entityType),
+          eq(seoMetadata.entityId, entityId)
         )
-        .limit(1);
+      )
+      .limit(1);
 
-      return metadata || null;
-    } catch (error) {
-      console.error(
-        `Error fetching SEO metadata for ${entityType}/${entityId}:`,
-        error
-      );
-      return null;
-    }
-  },
-  ['seo-metadata'], // Cache key
-  {
-    revalidate: 86400, // 24 hours cache
-    tags: ['seo'], // For on-demand revalidation
+    return metadata || null;
+  } catch (error) {
+    console.error(`Error fetching SEO metadata for ${entityType}/${entityId}:`, error);
+    return null;
   }
-);
+}
 
-// ─────────────────────────────────────────────
 // ✅ Parse robots string safely
-// "noindex, nofollow" → { index: false, follow: false }
-// ─────────────────────────────────────────────
 function parseRobotsString(robots: string) {
   const noIndex = /\bnoindex\b/i.test(robots);
   const noFollow = /\bnofollow\b/i.test(robots);
@@ -114,9 +100,7 @@ function parseRobotsString(robots: string) {
   };
 }
 
-// ─────────────────────────────────────────────
 // ✅ Generate JSON-LD Structured Data
-// ─────────────────────────────────────────────
 export function generateJsonLd({
   type,
   title,
@@ -147,7 +131,6 @@ export function generateJsonLd({
     },
   };
 
-  // ✅ BreadcrumbList — Google rich results ke liye
   if (breadcrumbs && breadcrumbs.length > 0) {
     return {
       ...base,
@@ -166,9 +149,7 @@ export function generateJsonLd({
   return base;
 }
 
-// ─────────────────────────────────────────────
-// ✅ Website-level JSON-LD (Home page ke liye)
-// ─────────────────────────────────────────────
+// ✅ Website-level JSON-LD
 export function generateWebsiteJsonLd(): object {
   return {
     "@context": "https://schema.org",
@@ -201,9 +182,7 @@ export function generateWebsiteJsonLd(): object {
   };
 }
 
-// ─────────────────────────────────────────────
-// ✅ Async generateSEO — DB se data + props
-// ─────────────────────────────────────────────
+// ✅ Async generateSEO
 export async function generateSEO({
   title,
   description,
@@ -233,7 +212,7 @@ export async function generateSEO({
       finalCanonical = dbSeo.canonicalUrl || path;
 
       if (dbSeo.robots) {
-        finalRobots = parseRobotsString(dbSeo.robots); // ✅ Fixed parsing
+        finalRobots = parseRobotsString(dbSeo.robots);
       }
     }
   }
@@ -244,16 +223,14 @@ export async function generateSEO({
   return {
     title: finalTitle,
     description: finalDescription,
-    keywords: finalKeywords,                            // ✅ Added
+    keywords: finalKeywords,
     metadataBase: new URL(BASE_URL),
-
     alternates: {
       canonical: url,
     },
-
     robots: {
       ...finalRobots,
-      googleBot: {                                      // ✅ Added
+      googleBot: {
         index: finalRobots.index,
         follow: finalRobots.follow,
         "max-image-preview": "large",
@@ -261,7 +238,6 @@ export async function generateSEO({
         "max-video-preview": -1,
       },
     },
-
     openGraph: {
       type: "website",
       url,
@@ -278,21 +254,18 @@ export async function generateSEO({
         },
       ],
     },
-
     twitter: {
       card: "summary_large_image",
       title: finalTitle,
       description: finalDescription,
       images: [`${BASE_URL}${finalImage}`],
-      site: "@nextidpk",                               // ✅ Added
-      creator: "@nextidpk",                            // ✅ Added
+      site: "@nextidpk",
+      creator: "@nextidpk",
     },
   };
 }
 
-// ─────────────────────────────────────────────
-// ✅ Sync generateSEOClient — Static pages ke liye
-// ─────────────────────────────────────────────
+// ✅ Sync generateSEOClient
 export function generateSEOClient({
   title,
   description,
@@ -309,17 +282,15 @@ export function generateSEOClient({
   return {
     title: finalTitle,
     description: finalDescription,
-    keywords: finalKeywords,                            // ✅ Added
+    keywords: finalKeywords,
     metadataBase: new URL(BASE_URL),
-
     alternates: {
       canonical: url,
     },
-
     robots: {
       index: !noIndex,
       follow: !noIndex,
-      googleBot: {                                      // ✅ Added
+      googleBot: {
         index: !noIndex,
         follow: !noIndex,
         "max-image-preview": "large",
@@ -327,7 +298,6 @@ export function generateSEOClient({
         "max-video-preview": -1,
       },
     },
-
     openGraph: {
       type: "website",
       url,
@@ -344,21 +314,18 @@ export function generateSEOClient({
         },
       ],
     },
-
     twitter: {
       card: "summary_large_image",
       title: finalTitle,
       description: finalDescription,
       images: [`${BASE_URL}${image}`],
-      site: "@nextidpk",                               // ✅ Added
-      creator: "@nextidpk",                            // ✅ Added
+      site: "@nextidpk",
+      creator: "@nextidpk",
     },
   };
 }
 
-// ─────────────────────────────────────────────
 // ✅ Save SEO to DB
-// ─────────────────────────────────────────────
 export async function saveSeoMetadata(
   entityType: EntityType,
   entityId: number,
@@ -403,10 +370,12 @@ export async function saveSeoMetadata(
       return created;
     }
   } catch (error) {
-    console.error(
-      `Error saving SEO metadata for ${entityType}/${entityId}:`,
-      error
-    );
+    console.error(`Error saving SEO metadata for ${entityType}/${entityId}:`, error);
     return null;
   }
+}
+
+// ✅ Add cacheLife helper if not already defined
+declare module 'next/cache' {
+  export function cacheLife(profile: 'days' | 'hours' | 'minutes' | 'seconds'): void;
 }

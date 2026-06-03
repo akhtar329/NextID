@@ -5,7 +5,6 @@ import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
-import { postCache } from "@/cache/post/post.cache";
 
 // Type for update data
 type UpdateData = {
@@ -25,6 +24,12 @@ type UpdateData = {
   updatedAt?: Date;
 };
 
+// PostgreSQL error type
+interface PostgresError {
+  code: string;
+  message: string;
+}
+
 /* =========================
    Helper: Parse ID Safely
 ========================= */
@@ -35,14 +40,13 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
   return numericId;
 }
 
-// Helper function to clear cache
-async function clearPostCache(slug: string, type: string) {
+// Helper function to revalidate cache (Next.js 15+)
+async function revalidatePostCache(slug: string, type: string) {
   try {
-    postCache.delete(`post:${slug}`);
-    postCache.deletePattern(`posts:type:${type}`);
-    postCache.deletePattern("homepage");
-    revalidateTag("home", "default");
+    // ✅ Fixed: revalidateTag now takes 2 arguments (tag, profile)
+    revalidateTag(`post-${slug}`, "default");
     revalidateTag(`posts-type-${type}`, "default");
+    revalidateTag("homepage", "default");
     
     const typeLower = type.toLowerCase();
     if (typeLower === 'admission') revalidateTag("admissions-home", "default");
@@ -52,9 +56,9 @@ async function clearPostCache(slug: string, type: string) {
     else if (typeLower === 'scholarship') revalidateTag("scholarships-home", "default");
     else if (typeLower === 'job') revalidateTag("jobs-home", "default");
     
-    console.log(`✅ Cache cleared for post: ${slug}`);
+    console.log(`✅ Cache revalidated for post: ${slug}`);
   } catch (cacheError) {
-    console.error("Error clearing cache:", cacheError);
+    console.error("Error revalidating cache:", cacheError);
   }
 }
 
@@ -178,14 +182,15 @@ export async function PUT(
       );
     }
 
-    // Clear cache
-    await clearPostCache(existing.slug, existing.type);
+    // Revalidate cache
+    await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ success: true, post: updated[0] });
-  } catch (err: any) {
+  } catch (err) {
     console.error("❌ PUT error:", err);
-
-    if (err.code === "23505") {
+    
+    const pgError = err as PostgresError;
+    if (pgError.code === "23505") {
       return NextResponse.json(
         { success: false, error: "Slug already exists" },
         { status: 409 }
@@ -284,14 +289,15 @@ export async function PATCH(
       );
     }
 
-    // Clear cache
-    await clearPostCache(existing.slug, existing.type);
+    // Revalidate cache
+    await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ success: true, post: updated[0] });
-  } catch (err: any) {
+  } catch (err) {
     console.error("❌ PATCH error:", err);
-
-    if (err.code === "23505") {
+    
+    const pgError = err as PostgresError;
+    if (pgError.code === "23505") {
       return NextResponse.json(
         { success: false, error: "Slug already exists" },
         { status: 409 }
@@ -343,8 +349,8 @@ export async function DELETE(
       })
       .where(eq(posts.id, numericId));
 
-    // Clear cache
-    await clearPostCache(existing.slug, existing.type);
+    // Revalidate cache
+    await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({
       success: true,

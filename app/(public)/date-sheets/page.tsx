@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
-// ✅ SINGLE revalidate - 24 hours
-export const revalidate = 86400;
+
 
 // ============================================
 // INTERFACE DEFINITIONS
@@ -85,7 +84,7 @@ export const metadata: Metadata = {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 // ============================================
@@ -98,7 +97,7 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
   
   try {
     // Get all date sheets first (posts service handles caching)
-    let allSheets = await postService.getPostsByType('date_sheet', 100);
+    let allSheets = await postService.getPostsByType('date_sheet', 1000);
     
     // Filter by search query
     if (filters.q) {
@@ -137,20 +136,38 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
     }
     
     // Transform to DateSheetItem
-    const dateSheets: DateSheetItem[] = allSheets.map(sheet => ({
-      id: sheet.id,
-      slug: sheet.slug,
-      title: sheet.title,
-      examType: getMetaValue(sheet.meta, 'examType', 'Annual'),
-      examDate: getMetaValue(sheet.meta, 'examDate', null) ? new Date(getMetaValue(sheet.meta, 'examDate', '')) : null,
-      year: getMetaValue(sheet.meta, 'year', new Date().getFullYear()),
-      boardName: getMetaValue(sheet.meta, 'boardName', null),
-      instituteName: getMetaValue(sheet.meta, 'instituteName', null),
-      isPopular: sheet.isPopular || false,
-      viewCount: sheet.viewCount || 0,
-      officialLink: getMetaValue(sheet.meta, 'officialLink', null),
-      downloadLink: getMetaValue(sheet.meta, 'downloadLink', null),
-    }));
+    const dateSheets: DateSheetItem[] = allSheets.map(sheet => {
+      const meta = sheet.meta || {};
+      
+      // Parse date safely
+      let examDate: Date | null = null;
+      const examDateRaw = getMetaValue(meta, 'examDate', null);
+      if (examDateRaw && typeof examDateRaw === 'string') {
+        try {
+          const parsed = new Date(examDateRaw);
+          if (!isNaN(parsed.getTime())) {
+            examDate = parsed;
+          }
+        } catch {
+          examDate = null;
+        }
+      }
+      
+      return {
+        id: sheet.id,
+        slug: sheet.slug,
+        title: sheet.title,
+        examType: getMetaValue(meta, 'examType', 'Annual'),
+        examDate: examDate,
+        year: getMetaValue(meta, 'year', new Date().getFullYear()),
+        boardName: getMetaValue(meta, 'boardName', null),
+        instituteName: getMetaValue(meta, 'instituteName', null),
+        isPopular: getMetaValue(meta, 'isPopular', false),
+        viewCount: getMetaValue(meta, 'viewCount', 0),
+        officialLink: getMetaValue(meta, 'officialLink', null),
+        downloadLink: getMetaValue(meta, 'downloadLink', null),
+      };
+    });
     
     // Sort by popularity and date
     const sortedSheets = dateSheets.sort((a, b) => {
@@ -180,13 +197,13 @@ async function getStats(): Promise<StatsResult> {
   return unstable_cache(
     async () => {
       try {
-        const allSheets = await postService.getPostsByType('date_sheet', 100);
+        const allSheets = await postService.getPostsByType('date_sheet', 1000);
         
         const totalSheets = allSheets.length;
-        const popularSheets = allSheets.filter(s => s.isPopular).length;
+        const popularSheets = allSheets.filter(s => getMetaValue(s.meta, 'isPopular', false)).length;
         const biseSheets = allSheets.filter(s => getMetaValue(s.meta, 'boardName', null) !== null).length;
         const universitySheets = allSheets.filter(s => getMetaValue(s.meta, 'instituteName', null) !== null).length;
-        const totalViews = allSheets.reduce((sum, s) => sum + (s.viewCount || 0), 0);
+        const totalViews = allSheets.reduce((sum, s) => sum + getMetaValue(s.meta, 'viewCount', 0), 0);
         
         const years = [...new Set(allSheets.map(s => getMetaValue(s.meta, 'year', new Date().getFullYear())))];
         years.sort((a, b) => b - a);
@@ -351,8 +368,6 @@ export default async function DateSheetsPage({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <meta httpEquiv="Cache-Control" content="public, s-maxage=86400, stale-while-revalidate=86400" />
-      
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
         <div className="container mx-auto px-4 py-16 relative z-10">

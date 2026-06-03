@@ -16,8 +16,6 @@ import {
 } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 3600;
-
 // ============ TYPES ============
 interface NewsItem {
   id: number;
@@ -75,7 +73,7 @@ function formatDate(date: Date | null): string {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 // ============ CATEGORY OPTIONS ============
@@ -101,25 +99,28 @@ export const metadata = {
 async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: PaginationInfo }> {
   try {
     // Get all news posts
-    const allNews = await postService.getPostsByType('news', 100);
+    const allNews = await postService.getPostsByType('news', 200);
     
     // Transform to NewsItem format
-    let newsList: NewsItem[] = allNews.map(post => ({
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      content: post.content,
-      excerpt: post.excerpt,
-      featuredImage: post.featuredImage,
-      category: getMetaValue(post.meta, 'category', 'General'),
-      tags: getMetaValue(post.meta, 'tags', null),
-      isFeatured: post.isFeatured || false,
-      isBreaking: post.isBreaking || false,
-      viewCount: post.viewCount || 0,
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
-      authorName: getMetaValue(post.meta, 'authorName', null),
-    }));
+    let newsList: NewsItem[] = allNews.map(post => {
+      const meta = post.meta || {};
+      return {
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        content: post.content,
+        excerpt: post.excerpt,
+        featuredImage: post.featuredImage,
+        category: getMetaValue(meta, 'category', 'General'),
+        tags: getMetaValue(meta, 'tags', null),
+        isFeatured: getMetaValue(meta, 'isFeatured', false),     // ✅ Fixed: from meta
+        isBreaking: getMetaValue(meta, 'isBreaking', false),     // ✅ Fixed: from meta
+        viewCount: getMetaValue(meta, 'viewCount', 0),           // ✅ Fixed: from meta
+        publishedAt: post.publishedAt,
+        createdAt: post.createdAt,
+        authorName: getMetaValue(meta, 'authorName', null),
+      };
+    });
     
     // Sort by published date (newest first)
     newsList.sort((a, b) => {

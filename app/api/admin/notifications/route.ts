@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       .orderBy(notifications.createdAt);
 
     return NextResponse.json({ success: true, notifications: userNotifications });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch' }, { status: 500 });
   }
 }
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, error: 'Failed to process' }, { status: 500 });
   }
 }

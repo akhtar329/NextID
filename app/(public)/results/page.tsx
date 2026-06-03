@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 
-export const revalidate = 86400;
 
 // ============ TYPES ============
 interface ResultItem {
@@ -64,7 +63,7 @@ const BOARDS = [
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -95,20 +94,35 @@ async function getResults(filters: Filters): Promise<ResultItem[]> {
     
     // Transform to ResultItem format
     let resultsList: ResultItem[] = allResults.map(post => {
-      const meta = post.meta;
+      const meta = post.meta || {};
+      
+      // Parse date safely
+      let resultDate: Date | null = null;
+      const resultDateRaw = getMetaValue(meta, 'resultDate', null);
+      if (resultDateRaw && typeof resultDateRaw === 'string') {
+        try {
+          const parsed = new Date(resultDateRaw);
+          if (!isNaN(parsed.getTime())) {
+            resultDate = parsed;
+          }
+        } catch {
+          resultDate = null;
+        }
+      }
+      
       return {
         id: post.id,
         slug: post.slug,
         title: post.title,
         year: getMetaValue(meta, 'year', new Date().getFullYear()),
-        resultDate: getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null,
+        resultDate: resultDate,
         boardName: getMetaValue(meta, 'boardName', null),
         boardSlug: getMetaValue(meta, 'boardSlug', null),
-        instituteName: getMetaValue(meta, 'universityName', null),
-        instituteSlug: getMetaValue(meta, 'universitySlug', null),
+        instituteName: getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null)),
+        instituteSlug: getMetaValue(meta, 'universitySlug', getMetaValue(meta, 'instituteSlug', null)),
         cityName: getMetaValue(meta, 'cityName', null),
-        isPopular: post.isPopular || false,
-        viewCount: post.viewCount || 0,
+        isPopular: getMetaValue(meta, 'isPopular', false),  // ✅ Fixed: from meta
+        viewCount: getMetaValue(meta, 'viewCount', 0),      // ✅ Fixed: from meta
       };
     });
     
@@ -169,15 +183,27 @@ async function getStats(): Promise<Stats> {
         const allResults = await postService.getPostsByType('result', 500);
         
         const totalResults = allResults.length;
+        
         const recentResults = allResults.filter(r => {
-          const resultDate = getMetaValue(r.meta, 'resultDate', null);
-          if (!resultDate) return false;
+          const meta = r.meta || {};
+          const resultDateRaw = getMetaValue(meta, 'resultDate', null);
+          if (!resultDateRaw || typeof resultDateRaw !== 'string') return false;
           const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-          return new Date(resultDate).getTime() > thirtyDaysAgo;
+          try {
+            return new Date(resultDateRaw).getTime() > thirtyDaysAgo;
+          } catch {
+            return false;
+          }
         }).length;
         
-        const years = [...new Set(allResults.map(r => getMetaValue(r.meta, 'year', new Date().getFullYear())))];
-        years.sort((a, b) => b - a);
+        const yearsSet = new Set<number>();
+        allResults.forEach(r => {
+          const meta = r.meta || {};
+          const year = getMetaValue(meta, 'year', null);
+          if (year) yearsSet.add(year);
+        });
+        
+        const years = Array.from(yearsSet).sort((a, b) => b - a);
         
         return {
           totalResults,
@@ -357,8 +383,8 @@ function ResultCard({ result }: { result: ResultItem }) {
                     </span>
                   )}
                   <span className="text-gray-500 flex items-center gap-1">
-                        📚 Year: {result.year}
-                      </span>
+                    📚 Year: {result.year}
+                  </span>
                   <div className="flex gap-2">
                     {result.isPopular && (
                       <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">

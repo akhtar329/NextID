@@ -5,7 +5,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 86400;
+
 
 // Types
 interface DateSheetDetail {
@@ -36,7 +36,43 @@ interface DateSheetPageProps {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
+}
+
+// Share Button Component (defined outside render)
+function ShareButton({ title, url }: { title: string; url: string }) {
+  'use client';
+  
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: title,
+          text: `Download ${title}`,
+          url: url,
+        });
+      } catch (err) {
+        console.log('Error sharing:', err);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+      } catch (err) {
+        console.log('Error copying:', err);
+        alert('Failed to copy link');
+      }
+    }
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium flex items-center justify-center gap-2"
+    >
+      📋 Share Link
+    </button>
+  );
 }
 
 // Get date sheet detail from posts service
@@ -48,7 +84,21 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       return null;
     }
     
-    const meta = post.meta;
+    const meta = post.meta || {};
+    
+    // Parse date safely
+    let examDate: Date | null = null;
+    const examDateRaw = getMetaValue(meta, 'examDate', null);
+    if (examDateRaw && typeof examDateRaw === 'string') {
+      try {
+        const parsed = new Date(examDateRaw);
+        if (!isNaN(parsed.getTime())) {
+          examDate = parsed;
+        }
+      } catch {
+        examDate = null;
+      }
+    }
     
     return {
       id: post.id,
@@ -56,7 +106,7 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       title: post.title,
       description: post.content || post.excerpt,
       examType: getMetaValue(meta, 'examType', 'Annual'),
-      examDate: getMetaValue(meta, 'examDate', null) ? new Date(getMetaValue(meta, 'examDate', '')) : null,
+      examDate: examDate,
       year: getMetaValue(meta, 'year', new Date().getFullYear()),
       boardName: getMetaValue(meta, 'boardName', null),
       boardSlug: getMetaValue(meta, 'boardSlug', null),
@@ -64,8 +114,8 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       instituteSlug: getMetaValue(meta, 'instituteSlug', null),
       cityName: getMetaValue(meta, 'cityName', null),
       province: getMetaValue(meta, 'province', null),
-      isPopular: post.isPopular || false,
-      viewCount: post.viewCount || 0,
+      isPopular: getMetaValue(meta, 'isPopular', false),
+      viewCount: getMetaValue(meta, 'viewCount', 0),
       officialLink: getMetaValue(meta, 'officialLink', null),
       downloadLink: getMetaValue(meta, 'downloadLink', null),
     };
@@ -103,13 +153,6 @@ export async function generateMetadata({ params }: DateSheetPageProps): Promise<
   };
 }
 
-// ============================================
-// Client Component for Share Button (Separate File)
-// ============================================
-
-// This component should be in a separate file: components/ShareButton.tsx
-// But for simplicity, we'll define it here with the data passed as JSON string
-
 export default async function DateSheetDetailPage({ params }: DateSheetPageProps) {
   const { slug } = await params;
   const dateSheet = await getDateSheetDetail(slug);
@@ -131,12 +174,6 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
       year: 'numeric'
     });
   }
-
-  // Serialize data for client component
-  const shareData = {
-    title: dateSheet.title,
-    url: currentUrl
-  };
 
   return (
     <>
@@ -310,38 +347,12 @@ export default async function DateSheetDetailPage({ params }: DateSheetPageProps
                 </div>
               )}
 
-              {/* Share Card - Inline Client Component */}
+              {/* Share Card */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                 <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
                   <span>📢</span> Share This Date Sheet
                 </h3>
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: `
-                      <button type="button" id="shareButton" class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium flex items-center justify-center gap-2">
-                        📋 Share Link
-                      </button>
-                      <script>
-                        (function() {
-                          var button = document.getElementById('shareButton');
-                          if (button) {
-                            button.addEventListener('click', function() {
-                              var title = ${JSON.stringify(dateSheet.title)};
-                              var url = ${JSON.stringify(currentUrl)};
-                              if (navigator.share) {
-                                navigator.share({ title: title, text: 'Download ' + title, url: url }).catch(function(e) {});
-                              } else {
-                                navigator.clipboard.writeText(url).then(function() {
-                                  alert('Link copied to clipboard!');
-                                }).catch(function() {});
-                              }
-                            });
-                          }
-                        })();
-                      </script>
-                    `,
-                  }}
-                />
+                <ShareButton title={dateSheet.title} url={currentUrl} />
               </div>
             </div>
           </div>

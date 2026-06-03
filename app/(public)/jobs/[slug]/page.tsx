@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { postService } from '@/services/post/post.service';
 
-export const revalidate = 86400;
-
 // ============ TYPES ============
 interface JobDetail {
   id: number;
@@ -44,7 +42,7 @@ interface RelatedJob {
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 function formatDate(date: Date | null): string {
@@ -82,7 +80,7 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
       return null;
     }
     
-    const meta = post.meta;
+    const meta = post.meta || {};
     const deadline = getMetaValue(meta, 'deadline', null) 
       ? new Date(getMetaValue(meta, 'deadline', '')) 
       : null;
@@ -106,9 +104,9 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
       industry: getMetaValue(meta, 'industry', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
       applicationLink: getMetaValue(meta, 'applicationLink', null),
-      isFeatured: post.isFeatured || false,
+      isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
       isUrgent: daysLeft !== null && daysLeft <= 7 && daysLeft > 0,
-      viewCount: post.viewCount || 0,
+      viewCount: getMetaValue(meta, 'viewCount', 0),
     };
   } catch (error) {
     console.error('Error fetching job detail:', error);
@@ -124,7 +122,7 @@ async function getRelatedJobs(currentSlug: string): Promise<RelatedJob[]> {
       .filter(post => post.slug !== currentSlug)
       .slice(0, 5)
       .map(post => {
-        const meta = post.meta;
+        const meta = post.meta || {};
         const deadline = getMetaValue(meta, 'deadline', null) 
           ? new Date(getMetaValue(meta, 'deadline', '')) 
           : null;
@@ -191,6 +189,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
     if (t.includes('full')) return 'bg-green-100 text-green-700';
     if (t.includes('part')) return 'bg-orange-100 text-orange-700';
     if (t.includes('remote')) return 'bg-purple-100 text-purple-700';
+    if (t.includes('contract')) return 'bg-yellow-100 text-yellow-700';
+    if (t.includes('intern')) return 'bg-pink-100 text-pink-700';
     return 'bg-gray-100 text-gray-700';
   };
 
@@ -221,7 +221,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
               {!isOpen && job.deadline && (
                 <span className="px-3 py-1 bg-gray-500 text-white rounded-full text-sm font-medium">Closed</span>
               )}
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(job.jobType)} text-gray-800`}>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(job.jobType)}`}>
                 {job.jobType}
               </span>
             </div>
@@ -382,7 +382,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
                 <div className="space-y-3">
                   {relatedJobs.map((rel) => (
                     <Link key={rel.id} href={`/jobs/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition">
-                      <p className="font-medium text-gray-800 text-sm">{rel.title}</p>
+                      <p className="font-medium text-gray-800 text-sm line-clamp-2">{rel.title}</p>
                       <p className="text-xs text-gray-500 mt-1">{rel.company} • {rel.location}</p>
                       <p className="text-xs text-gray-400 mt-1">{rel.jobType}</p>
                     </Link>
@@ -402,7 +402,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
             "@context": "https://schema.org",
             "@type": "JobPosting",
             "title": job.title,
-            "description": job.description,
+            "description": job.description?.substring(0, 500),
             "hiringOrganization": {
               "@type": "Organization",
               "name": job.company
@@ -416,7 +416,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
               }
             },
             "employmentType": job.jobType,
-            "datePosted": job.deadline?.toISOString(),
+            "datePosted": new Date().toISOString(),
             "validThrough": job.deadline?.toISOString(),
             "url": `https://www.nextid.pk/jobs/${job.slug}`
           })

@@ -5,6 +5,44 @@ import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+// Types
+interface TransformedPost {
+  id: number;
+  slug: string;
+  type: string;
+  title: string;
+  content: string | null;
+  excerpt: string | null;
+  featuredImage: string | null;
+  status: string | null;
+  isFeatured: boolean | null;
+  isPopular: boolean | null;
+  isBreaking: boolean | null;
+  viewCount: number | null;
+  publishedAt: Date | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  meta: Record<string, unknown> | null;
+  instituteName: string | null;
+  cityName: string | null;
+  boardName: string | null;
+  company: string | null;
+  organizationName: string | null;
+}
+
+// Helper function to safely get meta value
+function getMetaValue(meta: unknown, key: string): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const value = (meta as Record<string, unknown>)[key];
+  return value && typeof value === 'string' ? value : null;
+}
+
+// Helper function to safely cast meta to Record
+function getMetaObject(meta: unknown): Record<string, unknown> | null {
+  if (!meta || typeof meta !== 'object') return null;
+  return meta as Record<string, unknown>;
+}
+
 // ============================================
 // GET - Fetch all posts
 // ============================================
@@ -49,30 +87,34 @@ export async function GET(request: NextRequest) {
     const total = filteredPosts.length;
     const paginatedPosts = filteredPosts.slice(offset, offset + limit);
     
-    // Transform posts
-    const transformedPosts = paginatedPosts.map((post) => ({
-      id: post.id,
-      slug: post.slug,
-      type: post.type,
-      title: post.title,
-      content: post.content,
-      excerpt: post.excerpt,
-      featuredImage: post.featuredImage,
-      status: post.status,
-      isFeatured: post.isFeatured,
-      isPopular: post.isPopular,
-      isBreaking: post.isBreaking,
-      viewCount: post.viewCount,
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      meta: post.meta,
-      instituteName: post.meta && typeof post.meta === 'object' ? (post.meta as any).instituteName || null : null,
-      cityName: post.meta && typeof post.meta === 'object' ? (post.meta as any).cityName || null : null,
-      boardName: post.meta && typeof post.meta === 'object' ? (post.meta as any).boardName || null : null,
-      company: post.meta && typeof post.meta === 'object' ? (post.meta as any).company || null : null,
-      organizationName: post.meta && typeof post.meta === 'object' ? (post.meta as any).organizationName || null : null,
-    }));
+    // Transform posts - ✅ Fixed: Properly handle meta type
+    const transformedPosts: TransformedPost[] = paginatedPosts.map((post) => {
+      const metaObj = getMetaObject(post.meta);
+      
+      return {
+        id: post.id,
+        slug: post.slug,
+        type: post.type,
+        title: post.title,
+        content: post.content,
+        excerpt: post.excerpt,
+        featuredImage: post.featuredImage,
+        status: post.status,
+        isFeatured: post.isFeatured,
+        isPopular: post.isPopular,
+        isBreaking: post.isBreaking,
+        viewCount: post.viewCount,
+        publishedAt: post.publishedAt,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        meta: metaObj,
+        instituteName: getMetaValue(post.meta, 'instituteName'),
+        cityName: getMetaValue(post.meta, 'cityName'),
+        boardName: getMetaValue(post.meta, 'boardName'),
+        company: getMetaValue(post.meta, 'company'),
+        organizationName: getMetaValue(post.meta, 'organizationName'),
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -97,25 +139,45 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const ids = searchParams.get("ids")?.split(",") || [];
-
-    if (ids.length === 0) {
+    const idsParam = searchParams.get("ids");
+    
+    if (!idsParam) {
       return NextResponse.json(
         { success: false, error: "No post IDs provided" },
         { status: 400 }
       );
     }
+    
+    const ids = idsParam.split(",").filter(Boolean);
+    
+    if (ids.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "No valid post IDs provided" },
+        { status: 400 }
+      );
+    }
 
-    for (const id of ids) {
+    // Validate all IDs are numbers
+    const numericIds = ids.map(Number).filter(id => !isNaN(id));
+    
+    if (numericIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Invalid post IDs provided" },
+        { status: 400 }
+      );
+    }
+
+    // Bulk archive posts
+    for (const id of numericIds) {
       await db
         .update(posts)
         .set({ status: "archived", updatedAt: new Date() })
-        .where(eq(posts.id, Number(id)));
+        .where(eq(posts.id, id));
     }
 
     return NextResponse.json({
       success: true,
-      message: `${ids.length} post(s) archived successfully`,
+      message: `${numericIds.length} post(s) archived successfully`,
     });
 
   } catch (error) {

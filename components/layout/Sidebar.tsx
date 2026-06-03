@@ -6,21 +6,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Newspaper,
-  GraduationCap,
-  FileText,
-  Calendar,
-  MapPin,
-  Settings,
   ChevronLeft,
   ChevronRight,
-  Wrench,
-  RefreshCw,
   FileEdit,
   List,
   PlusCircle,
-  Eye,
+  Settings,
   Users,
+  RefreshCw,
+  Wrench,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -35,20 +29,6 @@ const navItems = [
   { name: "Posts", href: "/admin/post", icon: FileEdit, divider: true },
   { name: "All Posts", href: "/admin/post", icon: List },
   { name: "Create Post", href: "/admin/post/create", icon: PlusCircle },
-  
-  // ==================== CONTENT TYPES (Legacy/Reference) ====================
-  { name: "Content", href: "#", icon: FileText, divider: true },
-  { name: "Admissions", href: "/admin/admissions", icon: GraduationCap },
-  { name: "Results", href: "/admin/results", icon: FileText },
-  { name: "Date Sheets", href: "/admin/date-sheets", icon: Calendar },
-  { name: "News", href: "/admin/news", icon: Newspaper },
-  
-  // ==================== REFERENCE DATA ====================
-  { name: "Reference", href: "#", icon: MapPin, divider: true },
-  { name: "Cities", href: "/admin/cities", icon: MapPin },
-  { name: "Boards", href: "/admin/boards", icon: MapPin },
-  { name: "Institutes", href: "/admin/institutes", icon: MapPin },
-  { name: "Programs", href: "/admin/programs", icon: MapPin },
   
   // ==================== SYSTEM ====================
   { name: "System", href: "#", icon: Settings, divider: true },
@@ -120,7 +100,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">
         <div className="space-y-1 px-2">
-          {navItems.map((item, index) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             

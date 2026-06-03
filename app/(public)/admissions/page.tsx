@@ -27,6 +27,12 @@ import { generateSEO } from "@/lib/seo";
 import { postService } from "@/services/post/post.service";
 
 // Types
+interface Program {
+  id: number;
+  name: string;
+  slug: string;
+}
+
 interface AdmissionItem {
   id: number;
   slug: string;
@@ -38,7 +44,7 @@ interface AdmissionItem {
   status: string;
   openDate: Date | null;
   closeDate: Date | null;
-  programs: Array<{ id: number; name: string }>;
+  programs: Program[];
   meta: Record<string, unknown> | null;
 }
 
@@ -50,11 +56,27 @@ interface ProgramType {
   count: number;
 }
 
+// Post type from the service
+interface PostFromService {
+  id: number;
+  slug: string;
+  title: string;
+  type: string;
+  content: string | null;
+  excerpt: string | null;
+  featuredImage: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  status: string | null;
+  publishedAt: Date | null;
+}
+
 // Helper function to safely get meta values
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
-  return value !== undefined ? value : defaultValue;
+  return value !== undefined && value !== null ? value : defaultValue;
 }
 
 // Helper function to get days left
@@ -95,15 +117,74 @@ export default async function AdmissionsPage({
   const level = typeof params.level === "string" ? params.level : "";
   const searchQuery = typeof params.q === "string" ? params.q : "";
   
-  const { posts, total, totalPages } = await postService.getPostsByTypePaginated(
-    "admission",
-    page,
-    limit
-  );
+  // Fetch all admissions first
+  const allAdmissionsData = await postService.getPostsByType("admission", 1000);
+  
+  // Filter admissions based on search query
+  let filteredAdmissions: PostFromService[] = allAdmissionsData;
+  
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    filteredAdmissions = filteredAdmissions.filter((post: PostFromService) => 
+      post.title.toLowerCase().includes(query) ||
+      getMetaValue(post.meta, 'instituteName', '').toLowerCase().includes(query) ||
+      getMetaValue(post.meta, 'cityName', '').toLowerCase().includes(query)
+    );
+  }
+  
+  if (city) {
+    filteredAdmissions = filteredAdmissions.filter((post: PostFromService) => 
+      getMetaValue(post.meta, 'cityName', '').toLowerCase() === city.toLowerCase()
+    );
+  }
+  
+  if (level) {
+    filteredAdmissions = filteredAdmissions.filter((post: PostFromService) => 
+      getMetaValue(post.meta, 'level', '').toLowerCase() === level.toLowerCase()
+    );
+  }
+  
+  const total = filteredAdmissions.length;
+  const totalPages = Math.ceil(total / limit);
+  const startIndex = (page - 1) * limit;
+  const paginatedAdmissions = filteredAdmissions.slice(startIndex, startIndex + limit);
   
   // Transform posts to admission format
-  const admissions: AdmissionItem[] = posts.map(post => {
-    const meta = post.meta;
+  const admissions: AdmissionItem[] = paginatedAdmissions.map((post: PostFromService) => {
+    const meta = post.meta || {};
+    const programsRaw = getMetaValue(meta, 'programs', []) as Array<{ id: number; name: string; slug: string }>;
+    
+    const programs: Program[] = programsRaw.map((p: { id: number; name: string; slug: string }) => ({
+      id: p.id || Date.now(),
+      name: p.name || '',
+      slug: p.slug || ''
+    })).filter(p => p.name);
+    
+    // Safely parse dates
+    let openDate: Date | null = null;
+    let closeDate: Date | null = null;
+    
+    const openDateRaw = getMetaValue(meta, 'openDate', null);
+    const closeDateRaw = getMetaValue(meta, 'closeDate', null);
+    
+    if (openDateRaw && typeof openDateRaw === 'string') {
+      try {
+        const parsedDate = new Date(openDateRaw);
+        if (!isNaN(parsedDate.getTime())) openDate = parsedDate;
+      } catch {
+        openDate = null;
+      }
+    }
+    
+    if (closeDateRaw && typeof closeDateRaw === 'string') {
+      try {
+        const parsedDate = new Date(closeDateRaw);
+        if (!isNaN(parsedDate.getTime())) closeDate = parsedDate;
+      } catch {
+        closeDate = null;
+      }
+    }
+    
     return {
       id: post.id,
       slug: post.slug,
@@ -113,26 +194,28 @@ export default async function AdmissionsPage({
       instituteLogo: null,
       cityName: getMetaValue(meta, 'cityName', 'Pakistan'),
       status: getMetaValue(meta, 'status', 'Open'),
-      openDate: getMetaValue(meta, 'openDate', null) ? new Date(getMetaValue(meta, 'openDate', '')) : null,
-      closeDate: getMetaValue(meta, 'closeDate', null) ? new Date(getMetaValue(meta, 'closeDate', '')) : null,
-      programs: getMetaValue(meta, 'programs', []),
+      openDate: openDate,
+      closeDate: closeDate,
+      programs: programs,
       meta: post.meta,
     };
   });
 
-  // Get stats from posts service
-  const allAdmissions = await postService.getPostsByType("admission", 1000);
-  
+  // Get stats from all admissions
   const stats = {
-    total: allAdmissions.length,
-    closingSoon: allAdmissions.filter(a => {
-      const closeDate = a.meta?.closeDate as string | undefined;
+    total: allAdmissionsData.length,
+    closingSoon: allAdmissionsData.filter((post: PostFromService) => {
+      const closeDate = post.meta?.closeDate as string | undefined;
       if (!closeDate) return false;
-      const daysLeft = getDaysLeft(new Date(closeDate));
-      return daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
+      try {
+        const daysLeft = getDaysLeft(new Date(closeDate));
+        return daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
+      } catch {
+        return false;
+      }
     }).length,
-    universities: new Set(allAdmissions.map(a => a.meta?.instituteName as string).filter(Boolean)).size,
-    cities: new Set(allAdmissions.map(a => a.meta?.cityName as string).filter(Boolean)).size,
+    universities: new Set(allAdmissionsData.map((post: PostFromService) => post.meta?.instituteName as string).filter(Boolean)).size,
+    cities: new Set(allAdmissionsData.map((post: PostFromService) => post.meta?.cityName as string).filter(Boolean)).size,
   };
 
   const buildUrl = (key: string, value: string) => {
@@ -140,16 +223,16 @@ export default async function AdmissionsPage({
     if (city && key !== "city") url.set("city", city);
     if (level && key !== "level") url.set("level", level);
     if (searchQuery && key !== "q") url.set("q", searchQuery);
-    if (value) url.set(key, value);
+    if (value && value !== "") url.set(key, value);
     return `/admissions?${url.toString()}`;
   };
 
   const programTypes: ProgramType[] = [
-    { slug: "", name: "All Programs", icon: GraduationCap, count: allAdmissions.length },
-    { slug: "matric", name: "Matriculation", icon: BookOpen, count: allAdmissions.filter(a => a.meta?.level === "matric").length },
-    { slug: "inter", name: "Intermediate", icon: BookOpen, count: allAdmissions.filter(a => a.meta?.level === "inter").length },
-    { slug: "bs", name: "Bachelor", icon: GraduationCap, count: allAdmissions.filter(a => a.meta?.level === "bs").length },
-    { slug: "ms", name: "Masters", icon: Award, count: allAdmissions.filter(a => a.meta?.level === "ms").length },
+    { slug: "", name: "All Programs", icon: GraduationCap, count: allAdmissionsData.length },
+    { slug: "matric", name: "Matriculation", icon: BookOpen, count: allAdmissionsData.filter((post: PostFromService) => post.meta?.level === "matric").length },
+    { slug: "inter", name: "Intermediate", icon: BookOpen, count: allAdmissionsData.filter((post: PostFromService) => post.meta?.level === "inter").length },
+    { slug: "bs", name: "Bachelor", icon: GraduationCap, count: allAdmissionsData.filter((post: PostFromService) => post.meta?.level === "bs").length },
+    { slug: "ms", name: "Masters", icon: Award, count: allAdmissionsData.filter((post: PostFromService) => post.meta?.level === "ms").length },
   ];
 
   const heroStats = [
@@ -160,7 +243,7 @@ export default async function AdmissionsPage({
   ];
 
   const activeFiltersCount = [city, level, searchQuery].filter(Boolean).length;
-  const startItem = (page - 1) * limit + 1;
+  const startItem = total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, total);
 
   return (
@@ -293,9 +376,9 @@ export default async function AdmissionsPage({
                   <h3 className="font-semibold text-gray-900">Need Help?</h3>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">Get personalized admission guidance from our experts.</p>
-                <button className="w-full px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all">
+                <Link href="/contact" className="block w-full text-center px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all">
                   Contact Us
-                </button>
+                </Link>
               </div>
             </div>
           </aside>
@@ -306,11 +389,13 @@ export default async function AdmissionsPage({
             <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {total} Admissions Available
+                  {total} Admission{total !== 1 ? 's' : ''} Available
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Showing {startItem} to {endItem} of {total} results
-                </p>
+                {total > 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    Showing {startItem} to {endItem} of {total} results
+                  </p>
+                )}
               </div>
             </div>
 
@@ -389,13 +474,13 @@ export default async function AdmissionsPage({
                                   {item.openDate && (
                                     <span className="flex items-center gap-1.5">
                                       <Calendar className="w-3.5 h-3.5" />
-                                      Starts: {new Date(item.openDate).toLocaleDateString()}
+                                      Starts: {item.openDate.toLocaleDateString()}
                                     </span>
                                   )}
                                   {item.closeDate && (
                                     <span className="flex items-center gap-1.5">
                                       <Clock className="w-3.5 h-3.5" />
-                                      Deadline: {new Date(item.closeDate).toLocaleDateString()}
+                                      Deadline: {item.closeDate.toLocaleDateString()}
                                     </span>
                                   )}
                                 </div>
@@ -428,23 +513,31 @@ export default async function AdmissionsPage({
             {totalPages > 1 && (
               <div className="mt-10 flex justify-center">
                 <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 p-1 shadow-sm">
-                  <Link
-                    href={buildUrl("page", String(Math.max(1, page - 1)))}
-                    className={`px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1 ${
-                      page === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Prev
-                  </Link>
+                  {page > 1 && (
+                    <Link
+                      href={buildUrl("page", String(page - 1))}
+                      className="px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1 text-gray-600 hover:bg-gray-50"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Prev
+                    </Link>
+                  )}
                   
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum = i + 1;
-                    if (totalPages > 5 && page > 3) {
-                      pageNum = Math.min(totalPages - 4 + i, totalPages);
+                  {(() => {
+                    const pages: number[] = [];
+                    const maxVisible = 5;
+                    let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+                    const endPage = Math.min(totalPages, startPage + maxVisible - 1);
+                    
+                    if (endPage - startPage + 1 < maxVisible) {
+                      startPage = Math.max(1, endPage - maxVisible + 1);
                     }
-                    if (pageNum < 1) return null;
-                    return (
+                    
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(i);
+                    }
+                    
+                    return pages.map((pageNum) => (
                       <Link
                         key={pageNum}
                         href={buildUrl("page", String(pageNum))}
@@ -456,16 +549,18 @@ export default async function AdmissionsPage({
                       >
                         {pageNum}
                       </Link>
-                    );
-                  })}
+                    ));
+                  })()}
                   
-                  <Link
-                    href={buildUrl("page", String(Math.min(totalPages, page + 1)))}
-                    className="px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1 text-gray-600 hover:bg-gray-50"
-                  >
-                    Next
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
+                  {page < totalPages && (
+                    <Link
+                      href={buildUrl("page", String(page + 1))}
+                      className="px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1 text-gray-600 hover:bg-gray-50"
+                    >
+                      Next
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  )}
                 </div>
               </div>
             )}

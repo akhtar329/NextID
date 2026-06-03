@@ -18,12 +18,19 @@ export async function DELETE(request: NextRequest) {
     }
 
     // ✅ Verify JWT token
-    let decoded: any;
+    let decoded: jwt.JwtPayload | string;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-    } catch (jwtError) {
+    } catch {
       return NextResponse.json(
         { success: false, error: "Unauthorized - Invalid token" },
+        { status: 401 }
+      );
+    }
+
+    if (typeof decoded === "string" || !decoded?.id) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized - Invalid token payload" },
         { status: 401 }
       );
     }

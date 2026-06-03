@@ -1,12 +1,13 @@
 // app/(public)/layout.tsx
-import Header from '@/components/layout/Header';
-import Footer from '@/components/layout/Footer';
-import type { Metadata } from 'next';
+
+import { Suspense } from "react";
+import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
+import type { Metadata } from "next";
 
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-// ==================== METADATA ====================
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
   description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
@@ -49,7 +50,6 @@ export const metadata: Metadata = {
   },
 };
 
-// ==================== LAYOUT ====================
 export default function PublicLayout({
   children,
 }: {
@@ -57,8 +57,10 @@ export default function PublicLayout({
 }) {
   return (
     <>
-      <Header />
-      <main className="min-h-screen">
+      <Suspense fallback={<div className="h-16 bg-transparent" />}>
+        <Header />
+      </Suspense>
+      <main className="min-h-screen pt-16">
         {children}
       </main>
       <Footer />

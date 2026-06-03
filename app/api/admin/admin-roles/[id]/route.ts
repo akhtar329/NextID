@@ -79,7 +79,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: Partial<{
+      name: string;
+      description: string;
+      status: boolean;
+      updatedAt: Date;
+    }> = { updatedAt: new Date() };
     if (body.name !== undefined) updateData.name = body.name;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.status !== undefined) updateData.status = Boolean(body.status);
