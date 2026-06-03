@@ -2,6 +2,7 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Search, Calendar, Briefcase, GraduationCap, Award, FileText, Clock } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 
@@ -139,13 +140,18 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
 
 import React from 'react';
 
-// Main Page Component
-export default async function SearchPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
-  const params = await searchParams;
+// ============ LOADING COMPONENT ============
+function SearchLoading() {
+  return (
+    <div className="flex justify-center items-center py-20">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  );
+}
+
+// ============ SEARCH CONTENT COMPONENT ============
+async function SearchContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ q?: string; page?: string }> }) {
+  const params = await searchParamsPromise;
   const query = params.q || '';
   const page = parseInt(params.page || '1');
   const limit = 20;
@@ -183,7 +189,7 @@ export default async function SearchPage({
   }
   
   return (
-    <main className="min-h-screen bg-gray-50">
+    <>
       <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
         <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl mx-auto text-center">
@@ -245,6 +251,21 @@ export default async function SearchPage({
           </>
         )}
       </div>
+    </>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <Suspense fallback={<SearchLoading />}>
+        <SearchContent searchParamsPromise={searchParams} />
+      </Suspense>
     </main>
   );
 }
