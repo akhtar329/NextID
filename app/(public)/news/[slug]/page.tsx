@@ -4,8 +4,8 @@ import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
-
 
 // ============ TYPES ============
 interface NewsDetail {
@@ -102,9 +102,9 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       featuredImage: post.featuredImage,
       source: getMetaValue(meta, 'source', null),
       authorName: getMetaValue(meta, 'authorName', null),
-      isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
-      isBreaking: getMetaValue(meta, 'isBreaking', false),  // ✅ Fixed: from meta
-      viewCount: getMetaValue(meta, 'viewCount', 0),       // ✅ Fixed: from meta
+      isFeatured: getMetaValue(meta, 'isFeatured', false),
+      isBreaking: getMetaValue(meta, 'isBreaking', false),
+      viewCount: getMetaValue(meta, 'viewCount', 0),
       publishedAt: post.publishedAt,
       createdAt: post.createdAt,
       category: getMetaValue(meta, 'category', 'General'),
@@ -118,10 +118,8 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
 
 async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ relatedNews: RelatedNews[]; popularNews: PopularNewsItem[] }> {
   try {
-    // Get all news posts
     const allNews = await postService.getPostsByType('news', 100);
     
-    // Transform to NewsItem format with meta values
     const newsList = allNews.map(post => {
       const meta = post.meta || {};
       return {
@@ -136,7 +134,6 @@ async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ rela
       };
     });
     
-    // Filter related (excluding current)
     const relatedNews = newsList
       .filter(n => n.id !== currentNews.id)
       .slice(0, 6)
@@ -150,7 +147,6 @@ async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ rela
         isBreaking: n.isBreaking,
       }));
     
-    // Get popular news (by view count)
     const popularNews = [...newsList]
       .filter(n => n.id !== currentNews.id)
       .sort((a, b) => b.viewCount - a.viewCount)
@@ -203,252 +199,29 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ============ COMPONENTS ============
-function Breadcrumbs({ title }: { title: string }) {
+// ============ LOADING COMPONENT ============
+function NewsLoading() {
   return (
-    <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-      <Link href="/" className="hover:text-red-600 transition-colors">Home</Link>
-      <span className="text-gray-400">/</span>
-      <Link href="/news" className="hover:text-red-600 transition-colors">News</Link>
-      <span className="text-gray-400">/</span>
-      <span className="text-gray-800 font-medium line-clamp-1">{title}</span>
-    </nav>
-  );
-}
-
-function AuthorCard({ author, publishedAt, readTime }: { author: string | null; publishedAt: Date | null; readTime: number }) {
-  return (
-    <div className="flex items-center justify-between py-4 border-y border-gray-200 mb-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-          {author ? author.charAt(0).toUpperCase() : 'N'}
-        </div>
-        <div>
-          <p className="font-medium text-gray-900">{author || 'NextID Team'}</p>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>{formatDate(publishedAt)}</span>
-            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-            <span>{readTime} min read</span>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading news...</p>
       </div>
     </div>
   );
 }
 
-function ShareButtons({ title, slug }: { title: string; slug: string }) {
-  const url = `https://www.nextid.pk/news/${slug}`;
-  
-  const shareLinks = [
-    { name: 'Twitter', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`, bg: 'bg-black hover:bg-gray-800' },
-    { name: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, bg: 'bg-blue-700 hover:bg-blue-800' },
-    { name: 'LinkedIn', href: `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`, bg: 'bg-blue-600 hover:bg-blue-700' },
-    { name: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(title + ' ' + url)}`, bg: 'bg-green-600 hover:bg-green-700' },
-  ];
-  
-  return (
-    <div className="bg-gray-50 rounded-xl p-5 mb-6">
-      <h3 className="font-semibold text-gray-900 mb-3">Share this article</h3>
-      <div className="flex flex-wrap gap-2">
-        {shareLinks.map((link) => (
-          <a
-            key={link.name}
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`px-4 py-2 ${link.bg} text-white text-sm rounded-lg transition-all hover:shadow-md`}
-          >
-            {link.name}
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RelatedNewsMagazine({ relatedNews }: { relatedNews: RelatedNews[] }) {
-  if (relatedNews.length === 0) return null;
-  
-  const midIndex = Math.ceil(relatedNews.length / 2);
-  const leftColumn = relatedNews.slice(0, midIndex);
-  const rightColumn = relatedNews.slice(midIndex);
-  
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3 flex items-center justify-between">
-        <div>
-          <h3 className="font-bold text-white text-lg">Related News</h3>
-          <p className="text-white/70 text-xs">More from NextID</p>
-        </div>
-        <Link href="/news" className="text-white/80 hover:text-white text-sm flex items-center gap-1">
-          View All
-          <span className="text-lg">→</span>
-        </Link>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-        <div className="p-4 space-y-4">
-          {leftColumn.map((item) => (
-            <Link key={item.id} href={`/news/${item.slug}`} className="group block">
-              <div className="flex gap-3">
-                {item.featuredImage ? (
-                  <div className="relative w-20 h-20 flex-shrink-0">
-                    <Image 
-                      src={item.featuredImage} 
-                      alt={item.title} 
-                      fill
-                      className="object-cover rounded-lg"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <span className="text-2xl text-gray-400">N</span>
-                  </div>
-                )}
-                <div className="flex-1">
-                  {item.isBreaking && (
-                    <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">
-                      BREAKING
-                    </span>
-                  )}
-                  <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">
-                    {item.title}
-                  </h4>
-                  <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                    <span className="text-gray-400">📅</span>
-                    {formatShortDate(item.publishedAt)}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-        
-        {rightColumn.length > 0 && (
-          <div className="p-4 space-y-4">
-            {rightColumn.map((item) => (
-              <Link key={item.id} href={`/news/${item.slug}`} className="group block">
-                <div className="flex gap-3">
-                  {item.featuredImage ? (
-                    <div className="relative w-20 h-20 flex-shrink-0">
-                      <Image 
-                        src={item.featuredImage} 
-                        alt={item.title} 
-                        fill
-                        className="object-cover rounded-lg"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl text-gray-400">N</span>
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    {item.isBreaking && (
-                      <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">
-                        BREAKING
-                      </span>
-                    )}
-                    <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                      <span className="text-gray-400">📅</span>
-                      {formatShortDate(item.publishedAt)}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PopularNews({ popularNews }: { popularNews: PopularNewsItem[] }) {
-  if (popularNews.length === 0) return null;
-  
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
-        <h3 className="font-bold text-white">Most Popular</h3>
-      </div>
-      <div className="p-4">
-        <div className="space-y-3">
-          {popularNews.map((item, index) => (
-            <Link
-              key={item.id}
-              href={`/news/${item.slug}`}
-              className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group"
-            >
-              <span className="flex-shrink-0 w-6 h-6 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-bold">
-                {index + 1}
-              </span>
-              <div className="flex-1">
-                <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
-                  {item.title}
-                </h4>
-                <p className="text-xs text-gray-500 mt-1">
-                  {formatShortDate(item.publishedAt)} • {formatViews(item.viewCount)} views
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NewsletterSignup() {
-  return (
-    <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-5 text-white">
-      <h3 className="font-bold text-lg mb-2">Subscribe to Newsletter</h3>
-      <p className="text-gray-300 text-sm mb-4">Get the latest education news delivered to your inbox</p>
-      <form action="/api/newsletter" method="POST" className="flex gap-2">
-        <input
-          type="email"
-          name="email"
-          placeholder="Your email address"
-          className="flex-1 px-3 py-2 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-          required
-        />
-        <button
-          type="submit"
-          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
-        >
-          Subscribe
-        </button>
-      </form>
-      <p className="text-gray-400 text-xs mt-2">No spam, unsubscribe anytime.</p>
-    </div>
-  );
-}
-
-async function getPageData(slug: string) {
+// ============ NEWS CONTENT COMPONENT ============
+async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
+  const slug = await slugPromise;
   const newsItem = await getNewsBySlug(slug);
-  
-  if (!newsItem) {
-    return { newsItem: null, relatedNews: [], popularNews: [] };
-  }
-  
-  const { relatedNews, popularNews } = await getRelatedAndPopularNews(newsItem);
-  
-  return { newsItem, relatedNews, popularNews };
-}
-
-// ============ MAIN PAGE COMPONENT ============
-export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const { newsItem, relatedNews, popularNews } = await getPageData(slug);
   
   if (!newsItem) {
     notFound();
   }
-
+  
   const readTime = getReadTime(newsItem.content);
+  const { relatedNews, popularNews } = await getRelatedAndPopularNews(newsItem);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -460,7 +233,14 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
         </div>
         <div className="container mx-auto px-4 py-12 relative">
           <div className="max-w-4xl mx-auto">
-            <Breadcrumbs title={newsItem.title} />
+            {/* Breadcrumbs */}
+            <nav className="flex items-center gap-2 text-sm text-gray-300 mb-6">
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <span className="text-gray-400">/</span>
+              <Link href="/news" className="hover:text-white transition-colors">News</Link>
+              <span className="text-gray-400">/</span>
+              <span className="text-white font-medium line-clamp-1">{newsItem.title}</span>
+            </nav>
             
             {newsItem.isBreaking && (
               <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full mb-4">
@@ -584,27 +364,79 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
               </div>
             </div>
 
-            <AuthorCard 
-              author={newsItem.authorName} 
-              publishedAt={newsItem.publishedAt} 
-              readTime={readTime} 
-            />
+            {/* Author Card */}
+            <div className="flex items-center justify-between py-4 border-y border-gray-200 my-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                  {newsItem.authorName ? newsItem.authorName.charAt(0).toUpperCase() : 'N'}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">{newsItem.authorName || 'NextID Team'}</p>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>{formatDate(newsItem.publishedAt)}</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <span>{readTime} min read</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <ShareButtons title={newsItem.title} slug={newsItem.slug} />
+            {/* Share Buttons */}
+            <div className="bg-gray-50 rounded-xl p-5 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Share this article</h3>
+              <div className="flex flex-wrap gap-2">
+                <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(newsItem.title)}&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-black hover:bg-gray-800 text-white text-sm rounded-lg transition-all">Twitter</a>
+                <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded-lg transition-all">Facebook</a>
+                <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-all">LinkedIn</a>
+                <a href={`https://wa.me/?text=${encodeURIComponent(newsItem.title + ' ' + 'https://www.nextid.pk/news/' + newsItem.slug)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-all">WhatsApp</a>
+              </div>
+            </div>
           </article>
 
           {/* Right Sidebar */}
           <aside className="lg:w-80">
             <div className="space-y-6 sticky top-24">
               
-              <PopularNews popularNews={popularNews} />
+              {/* Popular News */}
+              {popularNews.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
+                    <h3 className="font-bold text-white">Most Popular</h3>
+                  </div>
+                  <div className="p-4">
+                    <div className="space-y-3">
+                      {popularNews.map((item, index) => (
+                        <Link key={item.id} href={`/news/${item.slug}`} className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group">
+                          <span className="flex-shrink-0 w-6 h-6 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-bold">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
+                              {item.title}
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatShortDate(item.publishedAt)} • {formatViews(item.viewCount)} views
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <NewsletterSignup />
+              {/* Newsletter */}
+              <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-5 text-white">
+                <h3 className="font-bold text-lg mb-2">Subscribe to Newsletter</h3>
+                <p className="text-gray-300 text-sm mb-4">Get the latest education news delivered to your inbox</p>
+                <form action="/api/newsletter" method="POST" className="flex gap-2">
+                  <input type="email" name="email" placeholder="Your email address" className="flex-1 px-3 py-2 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" required />
+                  <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">Subscribe</button>
+                </form>
+                <p className="text-gray-400 text-xs mt-2">No spam, unsubscribe anytime.</p>
+              </div>
 
-              <Link 
-                href="/news"
-                className="block bg-white border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition group"
-              >
+              <Link href="/news" className="block bg-white border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition group">
                 <span className="text-gray-700 group-hover:text-red-600">← Back to all news</span>
               </Link>
             </div>
@@ -612,9 +444,68 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
         </div>
         
         {/* Related News Section */}
-        <div className="max-w-6xl mx-auto mt-10">
-          <RelatedNewsMagazine relatedNews={relatedNews} />
-        </div>
+        {relatedNews.length > 0 && (
+          <div className="max-w-6xl mx-auto mt-10">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-white text-lg">Related News</h3>
+                  <p className="text-white/70 text-xs">More from NextID</p>
+                </div>
+                <Link href="/news" className="text-white/80 hover:text-white text-sm flex items-center gap-1">View All <span className="text-lg">→</span></Link>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                <div className="p-4 space-y-4">
+                  {relatedNews.slice(0, Math.ceil(relatedNews.length / 2)).map((item) => (
+                    <Link key={item.id} href={`/news/${item.slug}`} className="group block">
+                      <div className="flex gap-3">
+                        {item.featuredImage ? (
+                          <div className="relative w-20 h-20 flex-shrink-0">
+                            <Image src={item.featuredImage} alt={item.title} fill className="object-cover rounded-lg" />
+                          </div>
+                        ) : (
+                          <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <span className="text-2xl text-gray-400">N</span>
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          {item.isBreaking && <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">BREAKING</span>}
+                          <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">{item.title}</h4>
+                          <p className="text-xs text-gray-500 mt-1">{formatShortDate(item.publishedAt)}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                {relatedNews.length > Math.ceil(relatedNews.length / 2) && (
+                  <div className="p-4 space-y-4">
+                    {relatedNews.slice(Math.ceil(relatedNews.length / 2)).map((item) => (
+                      <Link key={item.id} href={`/news/${item.slug}`} className="group block">
+                        <div className="flex gap-3">
+                          {item.featuredImage ? (
+                            <div className="relative w-20 h-20 flex-shrink-0">
+                              <Image src={item.featuredImage} alt={item.title} fill className="object-cover rounded-lg" />
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <span className="text-2xl text-gray-400">N</span>
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            {item.isBreaking && <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">BREAKING</span>}
+                            <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">{item.title}</h4>
+                            <p className="text-xs text-gray-500 mt-1">{formatShortDate(item.publishedAt)}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Schema Markup */}
@@ -627,27 +518,25 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
             "headline": newsItem.title,
             "description": newsItem.excerpt,
             "image": newsItem.featuredImage,
-            "author": {
-              "@type": "Person",
-              "name": newsItem.authorName || "NextID Team"
-            },
-            "publisher": {
-              "@type": "Organization",
-              "name": "NextID.pk",
-              "logo": {
-                "@type": "ImageObject",
-                "url": "https://www.nextid.pk/logo.png"
-              }
-            },
-            "mainEntityOfPage": {
-              "@type": "WebPage",
-              "@id": `https://www.nextid.pk/news/${newsItem.slug}`
-            },
+            "author": { "@type": "Person", "name": newsItem.authorName || "NextID Team" },
+            "publisher": { "@type": "Organization", "name": "NextID.pk", "logo": { "@type": "ImageObject", "url": "https://www.nextid.pk/logo.png" } },
+            "mainEntityOfPage": { "@type": "WebPage", "@id": `https://www.nextid.pk/news/${newsItem.slug}` },
             "articleSection": "Education",
             "keywords": newsItem.tags?.join(', ') || "education news, Pakistan"
           })
         }}
       />
     </main>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const slugPromise = params.then(p => p.slug);
+  
+  return (
+    <Suspense fallback={<NewsLoading />}>
+      <NewsContent slugPromise={slugPromise} />
+    </Suspense>
   );
 }

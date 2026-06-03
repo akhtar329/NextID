@@ -3,6 +3,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 
 // ============ TYPES ============
@@ -25,15 +26,6 @@ interface ScholarshipDetail {
   isFeatured: boolean;
   isPopular: boolean;
   viewCount: number;
-}
-
-interface RelatedScholarship {
-  id: number;
-  slug: string;
-  title: string;
-  studyLevel: string;
-  deadline: Date | null;
-  provider: string;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -69,6 +61,14 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
+function generateMetaTitle(scholarship: ScholarshipDetail): string {
+  return `${scholarship.title} - ${scholarship.studyLevel} Scholarship | NextID.pk`;
+}
+
+function generateMetaDescription(scholarship: ScholarshipDetail): string {
+  return `Apply for ${scholarship.title} offered by ${scholarship.provider}. ${scholarship.type} scholarship for ${scholarship.studyLevel} students. Deadline: ${formatShortDate(scholarship.deadline)}.`;
+}
+
 // ============ DATA FETCHING ============
 async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | null> {
   try {
@@ -80,7 +80,6 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
     
     const meta = post.meta || {};
     
-    // Parse date safely
     let deadline: Date | null = null;
     const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
     if (deadlineRaw && typeof deadlineRaw === 'string') {
@@ -110,9 +109,9 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
       coverage: getMetaValue(meta, 'coverage', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
       applicationLink: getMetaValue(meta, 'applicationLink', null),
-      isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
-      isPopular: getMetaValue(meta, 'isPopular', false),    // ✅ Fixed: from meta
-      viewCount: getMetaValue(meta, 'viewCount', 0),        // ✅ Fixed: from meta
+      isFeatured: getMetaValue(meta, 'isFeatured', false),
+      isPopular: getMetaValue(meta, 'isPopular', false),
+      viewCount: getMetaValue(meta, 'viewCount', 0),
     };
   } catch (error) {
     console.error('Error fetching scholarship detail:', error);
@@ -120,7 +119,7 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
   }
 }
 
-async function getRelatedScholarships(currentSlug: string): Promise<RelatedScholarship[]> {
+async function getRelatedScholarships(currentSlug: string) {
   try {
     const allScholarships = await postService.getPostsByType('scholarship', 20);
     
@@ -130,7 +129,6 @@ async function getRelatedScholarships(currentSlug: string): Promise<RelatedSchol
       .map(post => {
         const meta = post.meta || {};
         
-        // Parse date safely
         let deadline: Date | null = null;
         const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
         if (deadlineRaw && typeof deadlineRaw === 'string') {
@@ -162,14 +160,6 @@ async function getRelatedScholarships(currentSlug: string): Promise<RelatedSchol
 }
 
 // ============ METADATA ============
-function generateMetaTitle(scholarship: ScholarshipDetail): string {
-  return `${scholarship.title} - ${scholarship.studyLevel} Scholarship | NextID.pk`;
-}
-
-function generateMetaDescription(scholarship: ScholarshipDetail): string {
-  return `Apply for ${scholarship.title} offered by ${scholarship.provider}. ${scholarship.type} scholarship for ${scholarship.studyLevel} students. Deadline: ${formatShortDate(scholarship.deadline)}.`;
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const scholarship = await getScholarshipBySlug(slug);
@@ -190,9 +180,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ============ MAIN PAGE ============
-export default async function ScholarshipDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+// ============ LOADING COMPONENT ============
+function ScholarshipLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading scholarship details...</p>
+      </div>
+    </div>
+  );
+}
+
+// ============ SCHOLARSHIP CONTENT COMPONENT ============
+async function ScholarshipContent({ slugPromise }: { slugPromise: Promise<string> }) {
+  const slug = await slugPromise;
   const scholarship = await getScholarshipBySlug(slug);
   
   if (!scholarship) {
@@ -439,5 +441,16 @@ export default async function ScholarshipDetailPage({ params }: { params: Promis
         }}
       />
     </main>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function ScholarshipDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const slugPromise = params.then(p => p.slug);
+  
+  return (
+    <Suspense fallback={<ScholarshipLoading />}>
+      <ScholarshipContent slugPromise={slugPromise} />
+    </Suspense>
   );
 }

@@ -3,6 +3,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 
 // ============ TYPES ============
@@ -23,16 +24,6 @@ interface ResultDetail {
   isPopular: boolean;
   status: boolean;
   viewCount: number;
-}
-
-interface RelatedResult {
-  id: number;
-  slug: string;
-  title: string;
-  year: number;
-  resultDate: Date | null;
-  instituteName: string | null;
-  boardName: string | null;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -59,6 +50,24 @@ function formatShortDate(date: Date | null): string {
   });
 }
 
+function generateMetaTitle(result: ResultDetail): string {
+  const institutionName = result.instituteName || result.boardName || 'Board';
+  const year = result.year;
+  return `${institutionName} Result ${year} | Check Online | NextID.pk`;
+}
+
+function generateMetaDescription(result: ResultDetail): string {
+  const institutionName = result.instituteName || result.boardName || 'board';
+  const year = result.year;
+  const resultDate = result.resultDate ? formatShortDate(result.resultDate) : 'TBA';
+  return `Check ${institutionName} result ${year} online. Result date: ${resultDate}. Download marksheet at NextID.pk.`;
+}
+
+function getStatusBadge(status: boolean) {
+  if (status) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
+  return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
+}
+
 // ============ DATA FETCHING ============
 async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
   try {
@@ -70,7 +79,6 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
     
     const meta = post.meta || {};
     
-    // Parse date safely
     let resultDate: Date | null = null;
     const resultDateRaw = getMetaValue(meta, 'resultDate', null);
     if (resultDateRaw && typeof resultDateRaw === 'string') {
@@ -98,9 +106,9 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       instituteSlug: getMetaValue(meta, 'universitySlug', getMetaValue(meta, 'instituteSlug', null)),
       cityName: getMetaValue(meta, 'cityName', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
-      isPopular: getMetaValue(meta, 'isPopular', false),  // ✅ Fixed: from meta
+      isPopular: getMetaValue(meta, 'isPopular', false),
       status: getMetaValue(meta, 'status', true),
-      viewCount: getMetaValue(meta, 'viewCount', 0),      // ✅ Fixed: from meta
+      viewCount: getMetaValue(meta, 'viewCount', 0),
     };
   } catch (error) {
     console.error('Error fetching result detail:', error);
@@ -108,7 +116,7 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
   }
 }
 
-async function getRelatedResults(currentResult: ResultDetail): Promise<RelatedResult[]> {
+async function getRelatedResults(currentResult: ResultDetail) {
   try {
     const allResults = await postService.getPostsByType('result', 20);
     
@@ -118,7 +126,6 @@ async function getRelatedResults(currentResult: ResultDetail): Promise<RelatedRe
       .map(post => {
         const meta = post.meta || {};
         
-        // Parse date safely
         let resultDate: Date | null = null;
         const resultDateRaw = getMetaValue(meta, 'resultDate', null);
         if (resultDateRaw && typeof resultDateRaw === 'string') {
@@ -151,19 +158,6 @@ async function getRelatedResults(currentResult: ResultDetail): Promise<RelatedRe
 }
 
 // ============ METADATA ============
-function generateMetaTitle(result: ResultDetail): string {
-  const institutionName = result.instituteName || result.boardName || 'Board';
-  const year = result.year;
-  return `${institutionName} Result ${year} | Check Online | NextID.pk`;
-}
-
-function generateMetaDescription(result: ResultDetail): string {
-  const institutionName = result.instituteName || result.boardName || 'board';
-  const year = result.year;
-  const resultDate = result.resultDate ? formatShortDate(result.resultDate) : 'TBA';
-  return `Check ${institutionName} result ${year} online. Result date: ${resultDate}. Download marksheet at NextID.pk.`;
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const result = await getResultBySlug(slug);
@@ -185,14 +179,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-function getStatusBadge(status: boolean) {
-  if (status) return { bg: 'bg-green-100', text: 'text-green-700', label: 'Result Published', icon: '✅' };
-  return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Result Pending', icon: '⏳' };
+// ============ LOADING COMPONENT ============
+function ResultLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading result details...</p>
+      </div>
+    </div>
+  );
 }
 
-// ============ MAIN PAGE ============
-export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+// ============ RESULT CONTENT COMPONENT ============
+async function ResultContent({ slugPromise }: { slugPromise: Promise<string> }) {
+  const slug = await slugPromise;
   const result = await getResultBySlug(slug);
   
   if (!result) {
@@ -399,5 +400,16 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
         }}
       />
     </main>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const slugPromise = params.then(p => p.slug);
+  
+  return (
+    <Suspense fallback={<ResultLoading />}>
+      <ResultContent slugPromise={slugPromise} />
+    </Suspense>
   );
 }
