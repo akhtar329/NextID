@@ -1,5 +1,3 @@
-// app/(public)/admissions/[slug]/page.tsx
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -28,7 +26,33 @@ interface FeeStructure {
   tuitionFee?: number;
 }
 
-// Status config type
+interface Admission {
+  id: number;
+  slug: string;
+  title: string;
+  content: string | null;
+  excerpt: string | null;
+  status: string;
+  year: number;
+  session: string | null;
+  openDate: Date | null;
+  closeDate: Date | null;
+  instituteName: string;
+  instituteSlug: string;
+  cityName: string;
+  citySlug: string;
+  eligibility: string | null;
+  howToApply: string | null;
+  requiredDocuments: string[];
+  feeStructure: FeeStructure | null;
+  meritInfo: string | null;
+  note: string | null;
+  officialLink: string | null;
+  applicationLink: string | null;
+  featuredImage: string | null;
+  programs: Program[];
+}
+
 interface StatusConfig {
   bg: string;
   text: string;
@@ -52,33 +76,21 @@ function formatDate(date: Date | null): string {
 function getStatusConfig(status: string): StatusConfig {
   const configs: Record<string, StatusConfig> = {
     'Open': { 
-      bg: 'bg-green-100', 
-      text: 'text-green-700', 
-      label: 'Applications Open', 
-      icon: CheckCircle, 
-      border: 'border-green-200' 
+      bg: 'bg-green-100', text: 'text-green-700', label: 'Applications Open', 
+      icon: CheckCircle, border: 'border-green-200' 
     },
     'Closed': { 
-      bg: 'bg-red-100', 
-      text: 'text-red-700', 
-      label: 'Applications Closed', 
-      icon: XCircle, 
-      border: 'border-red-200' 
+      bg: 'bg-red-100', text: 'text-red-700', label: 'Applications Closed', 
+      icon: XCircle, border: 'border-red-200' 
     },
     'Expected': { 
-      bg: 'bg-yellow-100', 
-      text: 'text-yellow-700', 
-      label: 'Opening Soon', 
-      icon: Clock, 
-      border: 'border-yellow-200' 
+      bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Opening Soon', 
+      icon: Clock, border: 'border-yellow-200' 
     },
   };
   return configs[status] || { 
-    bg: 'bg-gray-100', 
-    text: 'text-gray-700', 
-    label: status, 
-    icon: AlertCircle, 
-    border: 'border-gray-200' 
+    bg: 'bg-gray-100', text: 'text-gray-700', label: status, 
+    icon: AlertCircle, border: 'border-gray-200' 
   };
 }
 
@@ -148,10 +160,107 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   
   return {
     title: `${admission.title} | ${admission.instituteName} Admissions ${admission.year} | NextID.pk`,
-    description: `${admission.instituteName} admissions ${admission.year}. ${admission.programs.length} programs offered. Last date: ${formatDate(admission.closeDate)}`,
+    description: `${admission.instituteName} admissions ${admission.year}. ${admission.programs.length} programs offered.`,
     alternates: { canonical: `https://www.nextid.pk/admissions/${admission.slug}` },
   };
 }
+
+// ============ CLIENT COMPONENT FOR DETAILS ============
+function AdmissionDetails({ admissionPromise }: { admissionPromise: Promise<Admission | null> }) {
+  // ✅ This component awaits the promise inside Suspense
+  const admission = React.use(admissionPromise);
+  
+  if (!admission) return null;
+  
+  const statusConfig = getStatusConfig(admission.status);
+  const StatusIcon = statusConfig.icon;
+  const effectiveCloseDate = admission.closeDate;
+  
+  let daysRemaining: number | null = null;
+  if (effectiveCloseDate) {
+    const today = new Date();
+    daysRemaining = Math.ceil((effectiveCloseDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900">
+        <div className="container mx-auto px-4 py-12 lg:py-16 relative">
+          <div className="text-sm text-indigo-200 mb-6 flex items-center gap-2 flex-wrap">
+            <Link href="/" className="hover:text-white">Home</Link>
+            <span>/</span>
+            <Link href="/admissions" className="hover:text-white">Admissions</Link>
+            <span>/</span>
+            <span className="text-white">{admission.instituteName}</span>
+          </div>
+          
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium mb-5 ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border} border`}>
+            <StatusIcon className="w-4 h-4" />
+            <span>{statusConfig.label}</span>
+            {daysRemaining && statusConfig.label === 'Applications Open' && daysRemaining > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                {daysRemaining} days left
+              </span>
+            )}
+          </div>
+          
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">{admission.title}</h1>
+          
+          <div className="flex flex-wrap gap-4 text-indigo-200">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="w-4 h-4" />
+              <Link href={`/cities/${admission.citySlug}`} className="hover:text-white">{admission.cityName}</Link>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4" />
+              <span>Session: {admission.session || `Fall ${admission.year}`}</span>
+            </div>
+            {effectiveCloseDate && (
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                <span>Last Date: {formatDate(effectiveCloseDate)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8 lg:py-12">
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1 space-y-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
+                Admission Quick Info
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-xl">
+                  <p className="text-2xl font-bold text-blue-600">{admission.programs.length}</p>
+                  <p className="text-xs text-gray-600">Programs</p>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-xl">
+                  <p className="text-2xl font-bold text-green-600">{admission.year}</p>
+                  <p className="text-xs text-gray-600">Session Year</p>
+                </div>
+                <div className="text-center p-3 bg-purple-50 rounded-xl">
+                  <p className="text-2xl font-bold text-purple-600">{admission.cityName}</p>
+                  <p className="text-xs text-gray-600">Location</p>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-xl">
+                  <p className="text-2xl font-bold text-orange-600">{statusConfig.label === 'Applications Open' ? 'Active' : 'Closed'}</p>
+                  <p className="text-xs text-gray-600">Status</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ✅ Add React import for `use`
+import React from 'react';
 
 // ============ LOADING COMPONENT ============
 function AdmissionLoading() {
@@ -167,103 +276,19 @@ function AdmissionLoading() {
 
 // ============ MAIN PAGE ============
 export default async function AdmissionDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const admission = await getAdmissionDetail(slug);
+  // ✅ Get slug without awaiting
+  const slugPromise = params.then(p => p.slug);
   
-  if (!admission) notFound();
+  // ✅ Create data promise
+  const dataPromise = slugPromise.then(async (slug) => {
+    const admission = await getAdmissionDetail(slug);
+    if (!admission) notFound();
+    return admission;
+  });
   
-  const statusConfig = getStatusConfig(admission.status);
-  const StatusIcon = statusConfig.icon;
-  const effectiveCloseDate = admission.closeDate;
-  
-  // ✅ Fixed: Calculate days remaining without Date.now() during render
-  let daysRemaining: number | null = null;
-  if (effectiveCloseDate) {
-    const today = new Date();
-    daysRemaining = Math.ceil((effectiveCloseDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
   return (
     <Suspense fallback={<AdmissionLoading />}>
-      <main className="min-h-screen bg-gray-50">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900">
-          <div className="container mx-auto px-4 py-12 lg:py-16 relative">
-            <div className="text-sm text-indigo-200 mb-6 flex items-center gap-2 flex-wrap">
-              <Link href="/" className="hover:text-white transition">Home</Link>
-              <span>/</span>
-              <Link href="/admissions" className="hover:text-white transition">Admissions</Link>
-              <span>/</span>
-              <span className="text-white">{admission.instituteName}</span>
-            </div>
-            
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium mb-5 ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border} border`}>
-              <StatusIcon className="w-4 h-4" />
-              <span>{statusConfig.label}</span>
-              {daysRemaining && statusConfig.label === 'Applications Open' && daysRemaining > 0 && (
-                <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                  {daysRemaining} days left
-                </span>
-              )}
-            </div>
-            
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 leading-tight">
-              {admission.title}
-            </h1>
-            
-            <div className="flex flex-wrap gap-4 text-indigo-200">
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4" />
-                <Link href={`/cities/${admission.citySlug}`} className="hover:text-white transition">
-                  {admission.cityName}
-                </Link>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" />
-                <span>Session: {admission.session || `Fall ${admission.year}`}</span>
-              </div>
-              {effectiveCloseDate && (
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4" />
-                  <span>Last Date: {formatDate(effectiveCloseDate)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Info Cards */}
-        <div className="container mx-auto px-4 py-8 lg:py-12">
-          <div className="flex flex-col lg:flex-row gap-8">
-            <div className="flex-1 space-y-6">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <ClipboardList className="w-5 h-5 text-indigo-600" />
-                  Admission Quick Info
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-3 bg-blue-50 rounded-xl">
-                    <p className="text-2xl font-bold text-blue-600">{admission.programs.length}</p>
-                    <p className="text-xs text-gray-600">Programs</p>
-                  </div>
-                  <div className="text-center p-3 bg-green-50 rounded-xl">
-                    <p className="text-2xl font-bold text-green-600">{admission.year}</p>
-                    <p className="text-xs text-gray-600">Session Year</p>
-                  </div>
-                  <div className="text-center p-3 bg-purple-50 rounded-xl">
-                    <p className="text-2xl font-bold text-purple-600">{admission.cityName}</p>
-                    <p className="text-xs text-gray-600">Location</p>
-                  </div>
-                  <div className="text-center p-3 bg-orange-50 rounded-xl">
-                    <p className="text-2xl font-bold text-orange-600">{statusConfig.label === 'Applications Open' ? 'Active' : 'Closed'}</p>
-                    <p className="text-xs text-gray-600">Status</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
+      <AdmissionDetails admissionPromise={dataPromise} />
     </Suspense>
   );
 }
