@@ -3,6 +3,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 
 // ============ TYPES ============
@@ -26,16 +27,6 @@ interface JobDetail {
   isFeatured: boolean;
   isUrgent: boolean;
   viewCount: number;
-}
-
-interface RelatedJob {
-  id: number;
-  slug: string;
-  title: string;
-  company: string;
-  location: string;
-  jobType: string;
-  deadline: Date | null;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -104,7 +95,7 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
       industry: getMetaValue(meta, 'industry', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
       applicationLink: getMetaValue(meta, 'applicationLink', null),
-      isFeatured: getMetaValue(meta, 'isFeatured', false),  // ✅ Fixed: from meta
+      isFeatured: getMetaValue(meta, 'isFeatured', false),
       isUrgent: daysLeft !== null && daysLeft <= 7 && daysLeft > 0,
       viewCount: getMetaValue(meta, 'viewCount', 0),
     };
@@ -114,7 +105,7 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
   }
 }
 
-async function getRelatedJobs(currentSlug: string): Promise<RelatedJob[]> {
+async function getRelatedJobs(currentSlug: string): Promise<JobDetail[]> {
   try {
     const allJobs = await postService.getPostsByType('job', 10);
     
@@ -130,10 +121,22 @@ async function getRelatedJobs(currentSlug: string): Promise<RelatedJob[]> {
           id: post.id,
           slug: post.slug,
           title: post.title,
+          content: post.content,
+          excerpt: post.excerpt,
           company: getMetaValue(meta, 'company', 'Company'),
           location: getMetaValue(meta, 'location', 'Pakistan'),
           jobType: getMetaValue(meta, 'jobType', 'Full Time'),
+          salary: getMetaValue(meta, 'salary', null),
+          experience: getMetaValue(meta, 'experience', null),
           deadline: deadline,
+          description: post.content,
+          qualification: getMetaValue(meta, 'qualification', null),
+          industry: getMetaValue(meta, 'industry', null),
+          officialLink: getMetaValue(meta, 'officialLink', null),
+          applicationLink: getMetaValue(meta, 'applicationLink', null),
+          isFeatured: getMetaValue(meta, 'isFeatured', false),
+          isUrgent: false,
+          viewCount: getMetaValue(meta, 'viewCount', 0),
         };
       });
   } catch {
@@ -170,16 +173,27 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// ============ MAIN PAGE ============
-export default async function JobDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+// ============ LOADING COMPONENT ============
+function JobLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading job details...</p>
+      </div>
+    </div>
+  );
+}
+
+// ============ JOB CONTENT COMPONENT ============
+async function JobContent({ slugPromise }: { slugPromise: Promise<string> }) {
+  const slug = await slugPromise;
   const job = await getJobBySlug(slug);
   
   if (!job) {
     notFound();
   }
   
-  const relatedJobs = await getRelatedJobs(slug);
   const daysLeft = getDaysLeft(job.deadline);
   const isOpen = daysLeft !== null && daysLeft > 0;
   const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
@@ -193,6 +207,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
     if (t.includes('intern')) return 'bg-pink-100 text-pink-700';
     return 'bg-gray-100 text-gray-700';
   };
+
+  const relatedJobs = await getRelatedJobs(slug);
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -265,7 +281,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Left Column */}
+          {/* Left Column - Job Details */}
           <div className="flex-1">
             <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Job Details</h2>
@@ -310,6 +326,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
                 </div>
               </div>
 
+              {/* Job Description */}
               {job.description && (
                 <div className="border-t border-gray-200 pt-4">
                   <h3 className="font-semibold text-gray-900 mb-3">Job Description</h3>
@@ -320,6 +337,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
                 </div>
               )}
 
+              {/* Application Links */}
               {(job.applicationLink || job.officialLink) && (
                 <div className="border-t border-gray-200 pt-4 mt-2">
                   <h3 className="font-semibold text-gray-900 mb-3">How to Apply</h3>
@@ -376,6 +394,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
               </ol>
             </div>
 
+            {/* Related Jobs */}
             {relatedJobs.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
                 <h3 className="font-bold text-gray-900 mb-3">Related Jobs</h3>
@@ -416,12 +435,23 @@ export default async function JobDetailPage({ params }: { params: Promise<{ slug
               }
             },
             "employmentType": job.jobType,
-            "datePosted": new Date().toISOString(),
+            "datePosted": job.deadline?.toISOString() || new Date().toISOString(),
             "validThrough": job.deadline?.toISOString(),
             "url": `https://www.nextid.pk/jobs/${job.slug}`
           })
         }}
       />
     </main>
+  );
+}
+
+// ============ MAIN PAGE ============
+export default async function JobDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const slugPromise = params.then(p => p.slug);
+  
+  return (
+    <Suspense fallback={<JobLoading />}>
+      <JobContent slugPromise={slugPromise} />
+    </Suspense>
   );
 }
