@@ -7,6 +7,20 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import ImageUpload from '@/components/Image/ImageUpload';
 
+// ✅ Helper function to get correct URL folder name
+const getUrlFolder = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'scholarship': 'scholarships',
+    'admission': 'admissions',
+    'result': 'results',
+    'job': 'jobs',
+    'date_sheet': 'date-sheets',
+    'news': 'news',
+    'blog': 'blog'
+  };
+  return typeMap[type] || type;
+};
+
 const POST_TYPES = [
   { value: 'admission', label: 'Admission', icon: '🎓', color: 'blue' },
   { value: 'result', label: 'Result', icon: '📊', color: 'green' },
@@ -87,7 +101,7 @@ export default function EditPostPage() {
     fetchPost();
   }, [id]);
 
-  // ✅ Handle image selection
+  // Handle image selection
   const handleImageSelect = (url: string, alt: string) => {
     setFormData({ ...formData, featuredImage: url });
   };
@@ -169,8 +183,9 @@ export default function EditPostPage() {
             >
               Cancel
             </Link>
+            {/* ✅ FIXED: View Post button with correct URL */}
             <Link
-              href={`/${formData.type}/${formData.slug}`}
+              href={`/${getUrlFolder(formData.type)}/${formData.slug}`}
               target="_blank"
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
             >
@@ -241,12 +256,13 @@ export default function EditPostPage() {
                 </div>
                 <span className="text-xs text-gray-400">Slug cannot be changed after creation</span>
               </div>
+              {/* ✅ FIXED: URL preview with correct folder name */}
               <p className="text-xs text-gray-400 mt-1">
-                URL: <span className="text-blue-600">https://www.nextid.pk/{formData.type}/{formData.slug}</span>
+                URL: <span className="text-blue-600">https://www.nextid.pk/{getUrlFolder(formData.type)}/{formData.slug}</span>
               </p>
             </div>
 
-            {/* ✅ Featured Image - Using ImageUpload Component */}
+            {/* Featured Image - Using ImageUpload Component */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image</label>
               <ImageUpload
@@ -254,6 +270,7 @@ export default function EditPostPage() {
                 currentImage={formData.featuredImage}
                 postSlug={formData.slug}
                 postTitle={formData.title}
+                postType={formData.type}
               />
               <p className="text-xs text-gray-400 mt-2">
                 Image will be auto-compressed to WebP format. Upload new image to replace existing.

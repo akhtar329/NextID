@@ -7,6 +7,20 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ImageUpload from '@/components/Image/ImageUpload';
 
+// ✅ Helper function to get correct URL folder name
+const getUrlFolder = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'scholarship': 'scholarships',
+    'admission': 'admissions',
+    'result': 'results',
+    'job': 'jobs',
+    'date_sheet': 'date-sheets',
+    'news': 'news',
+    'blog': 'blog'
+  };
+  return typeMap[type] || type;
+};
+
 const POST_TYPES = [
   { value: 'admission', label: 'Admission', icon: '🎓', color: 'blue' },
   { value: 'result', label: 'Result', icon: '📊', color: 'green' },
@@ -207,8 +221,9 @@ export default function CreatePostPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 text-sm bg-gray-100 px-2 py-1 rounded">/</span>
+                    {/* ✅ FIXED: Show correct folder name in slug preview */}
                     <span className="text-gray-500 text-sm bg-gray-100 px-2 py-1 rounded">
-                      {formData.type}
+                      {getUrlFolder(formData.type)}
                     </span>
                     <span className="text-gray-500 text-sm">/</span>
                     <input
@@ -227,8 +242,9 @@ export default function CreatePostPage() {
                   </span>
                 )}
               </div>
+              {/* ✅ FIXED: URL preview with correct folder name */}
               <p className="text-xs text-gray-400 mt-1">
-                URL: <span className="text-blue-600">https://www.nextid.pk/{formData.type}/{formData.slug || '...'}</span>
+                URL: <span className="text-blue-600">https://www.nextid.pk/{getUrlFolder(formData.type)}/{formData.slug || '...'}</span>
               </p>
             </div>
 
@@ -240,6 +256,7 @@ export default function CreatePostPage() {
                 currentImage={formData.featuredImage}
                 postSlug={formData.slug}
                 postTitle={formData.title}
+                postType={formData.type}
               />
               <p className="text-xs text-gray-400 mt-2">
                 Image will be auto-compressed to WebP format and named as: <strong>{formData.slug || 'post-slug'}.webp</strong>
@@ -377,13 +394,13 @@ export default function CreatePostPage() {
               </label>
             </div>
 
-            {/* Info Box */}
+            {/* ✅ FIXED: Info Box with correct URL */}
             <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h4 className="text-sm font-medium text-blue-800 mb-2">📌 Post Information</h4>
               <p className="text-sm text-blue-700">
                 Your post will be available at:
                 <code className="block bg-white px-2 py-1 rounded text-sm mt-1 font-mono">
-                  https://www.nextid.pk/{formData.type}/{formData.slug || 'your-slug'}
+                  https://www.nextid.pk/{getUrlFolder(formData.type)}/{formData.slug || 'your-slug'}
                 </code>
               </p>
               <p className="text-sm text-green-700 mt-2">

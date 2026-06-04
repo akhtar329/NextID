@@ -109,7 +109,7 @@ export const metadata: Metadata = {
 // ============ DATA FETCHING ============
 async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
   try {
-    const allScholarships = await postService.getPostsByType('scholarship', 200);
+    const allScholarships = await postService.getPostsByType('scholarships', 200);
     
     let scholarshipsList: ScholarshipItem[] = allScholarships.map(post => {
       const meta = post.meta || {};
@@ -198,7 +198,7 @@ async function getStats(): Promise<Stats> {
   return unstable_cache(
     async () => {
       try {
-        const allScholarships = await postService.getPostsByType('scholarship', 500);
+        const allScholarships = await postService.getPostsByType('scholarships', 500);
         
         const total = allScholarships.length;
         const featured = allScholarships.filter(s => {

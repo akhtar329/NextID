@@ -19,6 +19,20 @@ import {
   ChevronDown
 } from 'lucide-react';
 
+// ✅ Helper function to get correct URL folder name
+const getUrlFolder = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'scholarship': 'scholarships',
+    'admission': 'admissions',
+    'result': 'results',
+    'job': 'jobs',
+    'date_sheet': 'date-sheets',
+    'news': 'news',
+    'blog': 'blog'
+  };
+  return typeMap[type] || type;
+};
+
 // Cache groups configuration
 const CACHE_GROUPS = [
   { 
@@ -128,7 +142,7 @@ export default function AdminPostsPage() {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  // ✅ Selective Cache Clear Function
+  // Selective Cache Clear Function
   const clearCache = async (cacheGroup: typeof CACHE_GROUPS[0]) => {
     setClearingCache(true);
     setClearDropdownOpen(false);
@@ -329,7 +343,7 @@ export default function AdminPostsPage() {
             <p className="text-gray-500 mt-1">Create, edit, and manage all content across the platform</p>
           </div>
           <div className="flex gap-3">
-            {/* ✅ Selective Clear Cache Dropdown Button */}
+            {/* Selective Clear Cache Dropdown Button */}
             <div className="relative">
               <button
                 onClick={() => setClearDropdownOpen(!clearDropdownOpen)}
@@ -530,7 +544,7 @@ export default function AdminPostsPage() {
                     >
                       Create your first post →
                     </Link>
-                   </td>
+                    </td>
                  </tr>
               ) : (
                 posts.map((post) => {
@@ -556,7 +570,8 @@ export default function AdminPostsPage() {
                           >
                             {post.title}
                           </Link>
-                          <div className="text-xs text-gray-400 mt-0.5">/{post.type}/{post.slug}</div>
+                          {/* ✅ FIXED: Show correct URL in table */}
+                          <div className="text-xs text-gray-400 mt-0.5">/{getUrlFolder(post.type)}/{post.slug}</div>
                           {isExpired && (
                             <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" />
@@ -592,8 +607,9 @@ export default function AdminPostsPage() {
                           >
                             <Edit className="w-4 h-4" />
                           </Link>
+                          {/* ✅ FIXED: View button with correct URL */}
                           <Link
-                            href={`/${post.type}/${post.slug}`}
+                            href={`/${getUrlFolder(post.type)}/${post.slug}`}
                             target="_blank"
                             className="text-green-600 hover:text-green-800"
                             title="View"
