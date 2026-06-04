@@ -1,8 +1,9 @@
 // app/login/page.tsx
+
 "use client";
 
-import { useState, FormEvent, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useState, FormEvent, Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
 
@@ -12,13 +13,31 @@ function Copyright() {
   return <span>© {year} NextID.pk</span>;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectPath = searchParams.get('redirect') || '/admin';
+
+  // Check if already logged in
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch('/api/admin/check-auth');
+        const data = await res.json();
+        if (data.authenticated) {
+          router.push(redirectPath);
+        }
+      } catch {
+        // Not logged in, stay on login page
+      }
+    };
+    checkAuth();
+  }, [router, redirectPath]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,7 +60,7 @@ export default function LoginPage() {
 
       if (response.ok && data.success) {
         toast.success("Welcome back 👋");
-        router.push("/admin");
+        router.push(redirectPath);
         router.refresh();
       } else {
         toast.error(data.error || "Invalid email or password");
@@ -57,13 +76,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 px-4">
       <div className="w-full max-w-md">
-
         {/* Card */}
         <div className="bg-white/80 backdrop-blur-xl border border-gray-200 shadow-xl rounded-3xl p-8">
-
           {/* Logo + Header */}
           <div className="text-center mb-6">
-            {/* ✅ Fixed: Using Next.js Image component */}
             <div className="relative w-12 h-12 mx-auto mb-3">
               <Image
                 src="/images/logo.png"
@@ -71,7 +87,6 @@ export default function LoginPage() {
                 fill
                 className="object-contain"
                 onError={(e) => {
-                  // Hide parent div if image fails to load
                   const parent = e.currentTarget.parentElement;
                   if (parent) parent.style.display = 'none';
                 }}
@@ -82,7 +97,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-
             {/* Email */}
             <div>
               <label className="text-sm text-gray-600">Email</label>
@@ -106,7 +120,6 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -129,16 +142,26 @@ export default function LoginPage() {
 
             {/* Button */}
             <button
+              type="submit"
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-medium transition active:scale-[0.98] disabled:opacity-60"
             >
-              {loading ? "Signing in..." : "Login"}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Signing in...
+                </span>
+              ) : (
+                "Login"
+              )}
             </button>
-
           </form>
         </div>
 
-        {/* Footer - ✅ Fixed: Suspense boundary */}
+        {/* Footer */}
         <p className="text-center text-xs text-gray-400 mt-6">
           <Suspense fallback={<span>© NextID.pk</span>}>
             <Copyright />
@@ -146,5 +169,18 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// ✅ Wrap in Suspense for useSearchParams
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 px-4">
+        <div className="text-center">Loading...</div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

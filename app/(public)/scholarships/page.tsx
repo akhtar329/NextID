@@ -5,6 +5,20 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
+import { 
+  GraduationCap, 
+  Calendar, 
+  TrendingUp, 
+  Search,
+  ChevronRight,
+  Award,
+  MapPin,
+  Clock,
+  Zap,
+  DollarSign,
+  Globe
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface ScholarshipItem {
@@ -130,7 +144,6 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       };
     });
     
-    // Sort by deadline (closest first)
     scholarshipsList.sort((a, b) => {
       if (!a.deadline && !b.deadline) return 0;
       if (!a.deadline) return 1;
@@ -138,7 +151,6 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       return a.deadline.getTime() - b.deadline.getTime();
     });
     
-    // Filter by study level
     if (filters.level && filters.level !== '') {
       const levelMap: Record<string, string[]> = {
         'matric': ['matric', 'ssc', 'secondary'],
@@ -153,7 +165,6 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       );
     }
     
-    // Filter by type
     if (filters.type && filters.type !== '') {
       scholarshipsList = scholarshipsList.filter(s => {
         const typeSlug = s.type.toLowerCase().replace(/ /g, '-');
@@ -161,14 +172,12 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       });
     }
     
-    // Filter by location
     if (filters.location && filters.location !== '') {
       scholarshipsList = scholarshipsList.filter(s => 
         s.location.toLowerCase() === filters.location!.toLowerCase()
       );
     }
     
-    // Filter by search query
     if (filters.q) {
       const query = filters.q.toLowerCase();
       scholarshipsList = scholarshipsList.filter(s =>
@@ -220,9 +229,9 @@ async function getStats(): Promise<Stats> {
 function ScholarshipsLoading() {
   return (
     <div className="flex flex-col lg:flex-row gap-8">
-      <div className="lg:w-80 shrink-0">
+      <div className="lg:w-72 shrink-0">
         <div className="bg-white rounded-xl p-5 animate-pulse">
-          <div className="h-8 bg-gray-200 rounded mb-4"></div>
+          <div className="h-6 bg-gray-200 rounded w-24 mb-4"></div>
           <div className="h-10 bg-gray-200 rounded mb-6"></div>
           <div className="space-y-3">
             <div className="h-10 bg-gray-200 rounded"></div>
@@ -232,16 +241,16 @@ function ScholarshipsLoading() {
         </div>
       </div>
       <div className="flex-1">
-        <div className="bg-white rounded-xl p-4 mb-4 animate-pulse"><div className="h-8 bg-gray-200 rounded w-48"></div></div>
+        <div className="bg-white rounded-xl p-4 mb-4 animate-pulse"><div className="h-6 bg-gray-200 rounded w-48"></div></div>
         {[1, 2, 3].map(i => (
           <div key={i} className="bg-white rounded-xl p-5 mb-4 animate-pulse">
             <div className="flex gap-4">
               <div className="flex-1">
-                <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-5 bg-gray-200 rounded w-3/4 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
                 <div className="flex gap-2"><div className="h-6 bg-gray-200 rounded w-20"></div><div className="h-6 bg-gray-200 rounded w-20"></div></div>
               </div>
-              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+              <div className="w-24 h-8 bg-gray-200 rounded"></div>
             </div>
           </div>
         ))}
@@ -277,149 +286,230 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
   };
 
   return (
-    <>
-      {/* Hero Stats - Moved inside ScholarshipsContent */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-          <div className="text-2xl font-bold">{stats.total}+</div>
-          <div className="text-sm text-teal-200">Scholarships</div>
-        </div>
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-          <div className="text-2xl font-bold">{stats.featured}</div>
-          <div className="text-sm text-teal-200">Featured</div>
-        </div>
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-          <div className="text-2xl font-bold">{stats.abroad}</div>
-          <div className="text-sm text-teal-200">Abroad</div>
-        </div>
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-          <div className="text-2xl font-bold">{stats.fullyFunded}</div>
-          <div className="text-sm text-teal-200">Fully Funded</div>
-        </div>
-      </div>
+    <div className="flex flex-col lg:flex-row gap-8">
+      
+      {/* LEFT SIDEBAR - Filters */}
+      <aside className="lg:w-72 flex-shrink-0">
+        <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
+          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <div className="w-1 h-5 bg-gradient-to-b from-teal-500 to-emerald-500 rounded-full"></div>
+            Filter Scholarships
+          </h2>
+          
+          {/* Search */}
+          <div className="mb-6">
+            <form action="/scholarships" method="GET" className="relative">
+              <input 
+                type="text" 
+                name="q" 
+                defaultValue={filters.q} 
+                placeholder="Search scholarships..." 
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            </form>
+          </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar */}
-        <aside className="lg:w-80 flex-shrink-0">
-          <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
-            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-teal-600 rounded-full"></span>
-              Filter Scholarships
+          {/* Study Level */}
+          <div className="mb-6">
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Study Level</h3>
+            <div className="space-y-1">
+              {STUDY_LEVELS.map(level => (
+                <Link 
+                  key={level.slug} 
+                  href={buildUrl('level', level.slug)} 
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    filters.level === level.slug 
+                      ? 'bg-teal-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span>{level.icon}</span>
+                  <span>{level.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Scholarship Type */}
+          <div className="mb-6">
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Scholarship Type</h3>
+            <div className="space-y-1">
+              {SCHOLARSHIP_TYPES.map(type => (
+                <Link 
+                  key={type.slug} 
+                  href={buildUrl('type', type.slug)} 
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    filters.type === type.slug 
+                      ? 'bg-teal-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span>{type.icon}</span>
+                  <span>{type.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="mb-6">
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Location</h3>
+            <div className="space-y-1">
+              {LOCATIONS.map(loc => (
+                <Link 
+                  key={loc.slug} 
+                  href={buildUrl('location', loc.slug)} 
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    filters.location === loc.slug 
+                      ? 'bg-teal-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span>{loc.icon}</span>
+                  <span>{loc.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Clear Filters */}
+          {(filters.level || filters.type || filters.location || filters.q) && (
+            <Link 
+              href="/scholarships" 
+              className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t border-gray-100"
+            >
+              Clear all filters
+            </Link>
+          )}
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1">
+        
+        {/* Stats Bar */}
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Award className="w-5 h-5 text-teal-500" />
+              {scholarships.length} Scholarships Found
             </h2>
-            
-            <div className="mb-6">
-              <form action="/scholarships" method="GET" className="relative">
-                <input type="text" name="q" defaultValue={filters.q} placeholder="Search scholarships..." className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-              </form>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
+              <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {stats.abroad} Abroad</span>
+              <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {stats.fullyFunded} Fully Funded</span>
             </div>
-
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3">Study Level</h3>
-              <div className="space-y-1">
-                {STUDY_LEVELS.map(level => (
-                  <Link key={level.slug} href={buildUrl('level', level.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.level === level.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
-                    <span>{level.icon}</span>
-                    <span>{level.name}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3">Scholarship Type</h3>
-              <div className="space-y-1">
-                {SCHOLARSHIP_TYPES.map(type => (
-                  <Link key={type.slug} href={buildUrl('type', type.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.type === type.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
-                    <span>{type.icon}</span>
-                    <span>{type.name}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3">Location</h3>
-              <div className="space-y-1">
-                {LOCATIONS.map(loc => (
-                  <Link key={loc.slug} href={buildUrl('location', loc.slug)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${filters.location === loc.slug ? 'bg-teal-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
-                    <span>{loc.icon}</span>
-                    <span>{loc.name}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            {(filters.level || filters.type || filters.location || filters.q) && (
-              <Link href="/scholarships" className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t">Clear all filters</Link>
-            )}
           </div>
-        </aside>
+          {filters.level && (
+            <p className="text-sm text-gray-500 mt-2">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>
+          )}
+        </div>
 
-        {/* Main Content */}
-        <div className="flex-1">
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800">{scholarships.length} Scholarships Found</h2>
-            {filters.level && <p className="text-sm text-gray-500 mt-1">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>}
-            {filters.type && <p className="text-sm text-gray-500">Type: {SCHOLARSHIP_TYPES.find(t => t.slug === filters.type)?.name}</p>}
-          </div>
-
-          <div className="space-y-4">
-            {scholarships.length > 0 ? (
-              scholarships.map((s) => {
-                const daysLeft = getDaysLeft(s.deadline);
-                const isOpen = daysLeft !== null && daysLeft > 0;
-                const isUrgent = daysLeft !== null && daysLeft <= 7;
-                return (
-                  <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-teal-300 overflow-hidden group">
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            {s.isFeatured && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">⭐ Featured</span>}
-                            {s.isPopular && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">🔥 Popular</span>}
-                            {isUrgent && isOpen && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium animate-pulse">🔴 Urgent</span>}
-                          </div>
-                          <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
-                            <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
-                          </h3>
-                          <p className="text-sm text-gray-500 mb-3">{s.provider}</p>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.studyLevel}</span>
-                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.type}</span>
-                            <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{s.location}</span>
-                          </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                            <div>
-                              <div className="text-xs text-gray-500">Deadline</div>
-                              <div className="text-sm font-semibold text-gray-900">{formatDate(s.deadline)}</div>
-                            </div>
-                            {daysLeft && (
-                              <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
-                                <div className="text-lg font-bold">{daysLeft}</div>
-                                <div className="text-[10px]">days left</div>
-                              </div>
-                            )}
-                          </div>
+        {/* Scholarships List */}
+        <div className="space-y-4">
+          {scholarships.length > 0 ? (
+            scholarships.map((s) => {
+              const daysLeft = getDaysLeft(s.deadline);
+              const isOpen = daysLeft !== null && daysLeft > 0;
+              const isUrgent = daysLeft !== null && daysLeft <= 7;
+              return (
+                <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-teal-200 transition-all overflow-hidden group">
+                  <div className="p-5">
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                      <div className="flex-1">
+                        {/* Badges */}
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {s.isFeatured && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3" /> Featured
+                            </span>
+                          )}
+                          {s.isPopular && (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                              <Zap className="w-3 h-3" /> Popular
+                            </span>
+                          )}
+                          {isUrgent && isOpen && (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
+                              <Clock className="w-3 h-3" /> Urgent
+                            </span>
+                          )}
                         </div>
-                        <Link href={`/scholarships/${s.slug}`} className="flex-shrink-0 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium">View Details →</Link>
+                        
+                        {/* Title */}
+                        <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
+                          <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
+                        </h3>
+                        
+                        {/* Provider */}
+                        <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          {s.provider}
+                        </p>
+                        
+                        {/* Tags */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.studyLevel}</span>
+                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.type}</span>
+                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> {s.location}
+                          </span>
+                          {s.amount && (
+                            <span className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium flex items-center gap-1">
+                              <DollarSign className="w-3 h-3" /> {s.amount}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Deadline */}
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>Deadline: <span className="font-medium text-gray-700">{formatDate(s.deadline)}</span></span>
+                          </div>
+                          {daysLeft && (
+                            <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
+                              <div className="text-xs font-bold">{daysLeft} days left</div>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                      
+                      {/* Action Button */}
+                      <Link 
+                        href={`/scholarships/${s.slug}`} 
+                        className="flex-shrink-0 px-5 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium inline-flex items-center gap-2"
+                      >
+                        View Details
+                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+                      </Link>
                     </div>
-                  </article>
-                );
-              })
-            ) : (
-              <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
-                <div className="text-6xl mb-4">🎓</div>
-                <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
-                <p className="text-gray-500">Try adjusting your filters</p>
-                <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">View All Scholarships</Link>
-              </div>
-            )}
-          </div>
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
+              <div className="text-6xl mb-4">🎓</div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
+              <p className="text-gray-500">Try adjusting your filters to see more results</p>
+              <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">
+                View All Scholarships
+              </Link>
+            </div>
+          )}
         </div>
       </div>
-    </>
+      
+      {/* RIGHT SIDEBAR - Widgets */}
+      <aside className="lg:w-72 flex-shrink-0">
+        <div className="sticky top-24">
+          <SidebarWidgets />
+        </div>
+      </aside>
+      
+    </div>
   );
 }
 
@@ -427,25 +517,46 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
 export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
   return (
     <main className="min-h-screen bg-gray-50">
+      
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-teal-700 via-teal-800 to-emerald-900 text-white relative overflow-hidden">
-        <div className="container mx-auto px-4 py-12 relative">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Scholarships <span className="text-yellow-400">2026</span></h1>
-            <p className="text-xl text-teal-100 mb-8">Find fully funded, partial, and merit-based scholarships for Pakistani students</p>
-
-            <div className="max-w-2xl mx-auto">
+      <div className="relative bg-gradient-to-r from-teal-600 to-emerald-600 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="relative container mx-auto px-4 py-16">
+          <div className="max-w-3xl text-center mx-auto">
+            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
+              <Award className="w-4 h-4" />
+              <span className="text-sm font-medium">Scholarships 2026</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Scholarships <span className="text-yellow-300">2026</span>
+            </h1>
+            <p className="text-lg text-teal-100">
+              Find fully funded, partial, and merit-based scholarships for Pakistani students
+            </p>
+            
+            {/* Hero Search */}
+            <div className="max-w-2xl mx-auto mt-8">
               <form action="/scholarships" method="GET" className="relative">
-                <input type="text" name="q" placeholder="Search by name, provider, or study level..." className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl">🔍</span>
-                <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition">Search</button>
+                <input 
+                  type="text" 
+                  name="q" 
+                  placeholder="Search by name, provider, or study level..." 
+                  className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" 
+                />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <button 
+                  type="submit" 
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition"
+                >
+                  Search
+                </button>
               </form>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         <Suspense fallback={<ScholarshipsLoading />}>
           <ScholarshipsContent searchParamsPromise={searchParams || Promise.resolve({})} />
         </Suspense>

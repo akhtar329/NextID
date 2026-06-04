@@ -5,6 +5,16 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
+import { 
+  FileText, 
+  Calendar, 
+  TrendingUp, 
+  Search,
+  ChevronRight,
+  Award,
+  Clock
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface ResultItem {
@@ -83,7 +93,7 @@ function isResultRecent(resultDate: Date | null): boolean {
 
 // ============ METADATA ============
 export const metadata: Metadata = {
-  title: 'All Exam Results 2026 Pakistan | Board & University Results | NextID.pk',
+  title: 'Exam Results 2026 Pakistan | Board & University Results | NextID.pk',
   description: 'Check latest board and university results 2026 in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results.',
 };
 
@@ -225,9 +235,9 @@ async function getStats(): Promise<Stats> {
 function ResultsLoading() {
   return (
     <div className="flex flex-col lg:flex-row gap-8">
-      <div className="lg:w-80 shrink-0">
+      <div className="lg:w-72 shrink-0">
         <div className="bg-white rounded-xl p-5 animate-pulse">
-          <div className="h-8 bg-gray-200 rounded mb-4"></div>
+          <div className="h-6 bg-gray-200 rounded w-24 mb-4"></div>
           <div className="h-10 bg-gray-200 rounded mb-6"></div>
           <div className="space-y-3">
             <div className="h-10 bg-gray-200 rounded"></div>
@@ -237,16 +247,16 @@ function ResultsLoading() {
         </div>
       </div>
       <div className="flex-1">
-        <div className="bg-white rounded-xl p-4 mb-4 animate-pulse"><div className="h-8 bg-gray-200 rounded w-48"></div></div>
+        <div className="bg-white rounded-xl p-4 mb-4 animate-pulse"><div className="h-6 bg-gray-200 rounded w-48"></div></div>
         {[1, 2, 3].map(i => (
           <div key={i} className="bg-white rounded-xl p-5 mb-4 animate-pulse">
             <div className="flex gap-4">
               <div className="flex-1">
-                <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+                <div className="h-5 bg-gray-200 rounded w-3/4 mb-2"></div>
                 <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
                 <div className="flex gap-2"><div className="h-6 bg-gray-200 rounded w-20"></div><div className="h-6 bg-gray-200 rounded w-20"></div></div>
               </div>
-              <div className="w-24 h-10 bg-gray-200 rounded"></div>
+              <div className="w-24 h-8 bg-gray-200 rounded"></div>
             </div>
           </div>
         ))}
@@ -282,44 +292,78 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
     return urlParams.toString() ? `/results?${urlParams.toString()}` : '/results';
   };
 
-  // Stats are available in `stats`
-
   return (
     <div className="flex flex-col lg:flex-row gap-8">
-      {/* Sidebar */}
-      <aside className="lg:w-80 flex-shrink-0">
-        <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-200">
+      
+      {/* LEFT SIDEBAR - Filters */}
+      <aside className="lg:w-72 flex-shrink-0">
+        <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
           <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-green-600 rounded-full"></span>
+            <div className="w-1 h-5 bg-gradient-to-b from-green-500 to-teal-500 rounded-full"></div>
             Filter Results
           </h2>
           
+          {/* Search */}
           <div className="mb-6">
             <form action="/results" method="GET" className="relative">
-              <input type="text" name="q" defaultValue={filters.q} placeholder="Search results..." className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+              <input 
+                type="text" 
+                name="q" 
+                defaultValue={filters.q} 
+                placeholder="Search results..." 
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" 
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             </form>
           </div>
 
+          {/* Result Type */}
           <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3">Result Type</h3>
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Result Type</h3>
             <div className="space-y-1">
               {RESULT_TYPES.map(t => (
-                <Link key={t.slug} href={buildUrl('level', t.slug)} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filters.level === t.slug ? 'bg-green-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
-                  <span className="flex items-center gap-2"><span>{t.icon}</span>{t.name}</span>
+                <Link 
+                  key={t.slug} 
+                  href={buildUrl('level', t.slug)} 
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                    filters.level === t.slug 
+                      ? 'bg-green-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>{t.icon}</span>
+                    <span>{t.name}</span>
+                  </span>
                 </Link>
               ))}
             </div>
           </div>
 
+          {/* Boards */}
           <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3">Education Boards</h3>
+            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Education Boards</h3>
             <div className="space-y-1 max-h-60 overflow-y-auto">
-              <Link href={buildUrl('board', '')} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${!filters.board ? 'bg-green-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
+              <Link 
+                href={buildUrl('board', '')} 
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                  !filters.board 
+                    ? 'bg-green-600 text-white' 
+                    : 'hover:bg-gray-50 text-gray-600'
+                }`}
+              >
                 <span>All Boards</span>
               </Link>
               {BOARDS.map(b => (
-                <Link key={b.slug} href={buildUrl('board', b.slug)} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filters.board === b.slug ? 'bg-green-600 text-white' : 'hover:bg-gray-100 text-gray-700'}`}>
+                <Link 
+                  key={b.slug} 
+                  href={buildUrl('board', b.slug)} 
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                    filters.board === b.slug 
+                      ? 'bg-green-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
                   <span>{b.name}</span>
                   <span className="text-xs text-gray-400">{b.city}</span>
                 </Link>
@@ -327,74 +371,126 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
             </div>
           </div>
 
+          {/* Year */}
           {stats.years.length > 0 && (
             <div className="mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3">Year</h3>
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Year</h3>
               <div className="flex flex-wrap gap-2">
-                <Link href={buildUrl('year', '')} className={`px-3 py-1.5 rounded-full text-xs font-medium ${!filters.year ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>All</Link>
+                <Link 
+                  href={buildUrl('year', '')} 
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                    !filters.year 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  All
+                </Link>
                 {stats.years.slice(0, 6).map(y => (
-                  <Link key={y} href={buildUrl('year', y.toString())} className={`px-3 py-1.5 rounded-full text-xs font-medium ${filters.year === y.toString() ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>{y}</Link>
+                  <Link 
+                    key={y} 
+                    href={buildUrl('year', y.toString())} 
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                      filters.year === y.toString() 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {y}
+                  </Link>
                 ))}
               </div>
             </div>
           )}
 
+          {/* Clear Filters */}
           {(filters.board || filters.year || filters.level || filters.q) && (
-            <Link href="/results" className="block text-center text-sm text-green-600 hover:text-green-700 mt-4 pt-3 border-t">Clear all filters</Link>
+            <Link 
+              href="/results" 
+              className="block text-center text-sm text-green-600 hover:text-green-700 mt-4 pt-3 border-t border-gray-100"
+            >
+              Clear all filters
+            </Link>
           )}
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* MAIN CONTENT */}
       <div className="flex-1">
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">{resultsData.length} Results Found</h2>
-          {filters.level && <p className="text-sm text-gray-500 mt-1">Type: {RESULT_TYPES.find(l => l.slug === filters.level)?.name}</p>}
+        
+        {/* Stats Bar */}
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-green-500" />
+              {resultsData.length} Results Found
+            </h2>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><Award className="w-3 h-3" /> {stats.totalResults} Total</span>
+              <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-green-500" /> {stats.recentResults} Recent</span>
+            </div>
+          </div>
+          {filters.level && (
+            <p className="text-sm text-gray-500 mt-2">
+              Type: {RESULT_TYPES.find(l => l.slug === filters.level)?.name}
+            </p>
+          )}
         </div>
 
-        <nav className="text-sm text-gray-500 mb-4">
-          <ol className="flex flex-wrap items-center gap-2">
-            <li><Link href="/" className="hover:text-green-600">Home</Link></li>
-            <li className="text-gray-400">/</li>
-            <li className="text-gray-700 font-medium">Results</li>
-            {filters.board && <><li className="text-gray-400">/</li><li className="text-gray-700">{filters.board}</li></>}
-            {filters.year && <><li className="text-gray-400">/</li><li className="text-gray-700">{filters.year}</li></>}
-          </ol>
-        </nav>
-
+        {/* Results List */}
         <div className="space-y-4">
           {resultsData.length > 0 ? (
             resultsData.map((r) => {
               const isRecent = isResultRecent(r.resultDate);
               const institutionName = r.boardName || r.instituteName || 'Education Board';
               return (
-                <article key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all hover:border-green-300 overflow-hidden group">
+                <article key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-green-200 transition-all overflow-hidden group">
                   <div className="p-5">
                     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-xl">📄</div>
+                          <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-green-600" />
+                          </div>
                           <div className="flex-1">
                             <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
                               <Link href={`/results/${r.slug}`}>{r.title}</Link>
                             </h3>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 mb-2">
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-2">
                               <span className="font-medium text-green-600">{institutionName}</span>
                             </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs">
-                              {r.resultDate && <span className="text-gray-500 flex items-center gap-1">📅 {formatDate(r.resultDate)}</span>}
-                              <span className="text-gray-500 flex items-center gap-1">📚 Year: {r.year}</span>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                              {r.resultDate && (
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {formatDate(r.resultDate)}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                Year: {r.year}
+                              </span>
                               <div className="flex gap-2">
-                                {r.isPopular && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">Popular</span>}
-                                {isRecent && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">New</span>}
+                                {r.isPopular && (
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                    <TrendingUp className="w-3 h-3" /> Popular
+                                  </span>
+                                )}
+                                {isRecent && (
+                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                    New
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <Link href={`/results/${r.slug}`} className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2">
-                        <span>Check Result</span>
-                        <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
+                      <Link 
+                        href={`/results/${r.slug}`} 
+                        className="flex-shrink-0 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2"
+                      >
+                        Check Result
+                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
                       </Link>
                     </div>
                   </div>
@@ -402,15 +498,25 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               );
             })
           ) : (
-            <div className="bg-white rounded-xl shadow-sm p-12 text-center border border-gray-200">
+            <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
               <div className="text-6xl mb-4">📭</div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
-              <p className="text-gray-500">Try adjusting your filters</p>
-              <Link href="/results" className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">View All Results</Link>
+              <p className="text-gray-500">Try adjusting your filters to see more results</p>
+              <Link href="/results" className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                View All Results
+              </Link>
             </div>
           )}
         </div>
       </div>
+      
+      {/* RIGHT SIDEBAR - Widgets */}
+      <aside className="lg:w-72 flex-shrink-0">
+        <div className="sticky top-24">
+          <SidebarWidgets />
+        </div>
+      </aside>
+      
     </div>
   );
 }
@@ -419,25 +525,46 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
 export default async function ResultsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
   return (
     <main className="min-h-screen bg-gray-50">
+      
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-green-700 via-green-800 to-emerald-900 text-white relative overflow-hidden">
-        <div className="container mx-auto px-4 py-12 relative">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Exam Results <span className="text-yellow-400">Pakistan</span></h1>
-            <p className="text-xl text-green-100 mb-8">Board & University Results • Matric to Masters • Latest Announcements</p>
+      <div className="relative bg-gradient-to-r from-green-600 to-teal-600 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="relative container mx-auto px-4 py-16">
+          <div className="max-w-3xl text-center mx-auto">
+            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
+              <FileText className="w-4 h-4" />
+              <span className="text-sm font-medium">Exam Results 2026</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Exam Results <span className="text-yellow-300">Pakistan</span>
+            </h1>
+            <p className="text-lg text-green-100">
+              Board & University Results • Matric to Masters • Latest Announcements
+            </p>
             
-            <div className="max-w-2xl mx-auto">
+            {/* Hero Search */}
+            <div className="max-w-2xl mx-auto mt-8">
               <form action="/results" method="GET" className="relative">
-                <input type="text" name="q" placeholder="Search by board, university or result name..." className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl">🔍</span>
-                <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition">Search</button>
+                <input 
+                  type="text" 
+                  name="q" 
+                  placeholder="Search by board, university or result name..." 
+                  className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" 
+                />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <button 
+                  type="submit" 
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition"
+                >
+                  Search
+                </button>
               </form>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         <Suspense fallback={<ResultsLoading />}>
           <ResultsContent searchParamsPromise={searchParams || Promise.resolve({})} />
         </Suspense>

@@ -1,9 +1,91 @@
-// app/admin/post/page.tsx
+// app/admin/post/page.tsx (Updated with selective cache clearing)
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { 
+  Plus, 
+  RefreshCw, 
+  Trash2, 
+  Edit, 
+  Eye, 
+  Search,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  CheckCircle,
+  ChevronDown
+} from 'lucide-react';
+
+// Cache groups configuration
+const CACHE_GROUPS = [
+  { 
+    id: 'all', 
+    name: 'All Cache', 
+    description: 'Clear entire website cache',
+    icon: '🗑️',
+    tags: ['homepage', 'posts-type-admission', 'posts-type-result', 'posts-type-news', 'posts-type-date_sheet', 'posts-type-scholarship', 'posts-type-job', 'posts-type-blog', 'posts-featured', 'posts-popular', 'posts-recent'],
+    paths: ['/', '/news', '/admissions', '/results', '/jobs', '/scholarships', '/date-sheets']
+  },
+  { 
+    id: 'admissions', 
+    name: 'Admissions', 
+    description: 'Clear admissions related cache',
+    icon: '🎓',
+    tags: ['posts-type-admission', 'posts-featured', 'homepage'],
+    paths: ['/', '/admissions']
+  },
+  { 
+    id: 'results', 
+    name: 'Results', 
+    description: 'Clear results related cache',
+    icon: '📊',
+    tags: ['posts-type-result', 'posts-featured', 'homepage'],
+    paths: ['/', '/results']
+  },
+  { 
+    id: 'news', 
+    name: 'News', 
+    description: 'Clear news related cache',
+    icon: '📰',
+    tags: ['posts-type-news', 'posts-featured', 'homepage'],
+    paths: ['/', '/news']
+  },
+  { 
+    id: 'date-sheets', 
+    name: 'Date Sheets', 
+    description: 'Clear date sheets related cache',
+    icon: '📅',
+    tags: ['posts-type-date_sheet', 'homepage'],
+    paths: ['/', '/date-sheets']
+  },
+  { 
+    id: 'scholarships', 
+    name: 'Scholarships', 
+    description: 'Clear scholarships related cache',
+    icon: '💰',
+    tags: ['posts-type-scholarship', 'posts-featured', 'homepage'],
+    paths: ['/', '/scholarships']
+  },
+  { 
+    id: 'jobs', 
+    name: 'Jobs', 
+    description: 'Clear jobs related cache',
+    icon: '💼',
+    tags: ['posts-type-job', 'posts-featured', 'homepage'],
+    paths: ['/', '/jobs']
+  },
+  { 
+    id: 'homepage', 
+    name: 'Homepage Only', 
+    description: 'Clear only homepage cache',
+    icon: '🏠',
+    tags: ['homepage'],
+    paths: ['/']
+  },
+];
 
 interface Post {
   id: number;
@@ -26,8 +108,10 @@ export default function AdminPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearingCache, setClearingCache] = useState(false);
+  const [clearDropdownOpen, setClearDropdownOpen] = useState(false);
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Filters
   const [filterType, setFilterType] = useState('');
@@ -38,46 +122,57 @@ export default function AdminPostsPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
 
-  // ✅ Clear Cache Function
-  const clearCache = async () => {
+  // Show temporary message
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  // ✅ Selective Cache Clear Function
+  const clearCache = async (cacheGroup: typeof CACHE_GROUPS[0]) => {
     setClearingCache(true);
+    setClearDropdownOpen(false);
+    setMessage(null);
+    
     try {
       const res = await fetch('/api/admin/cache/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          tags: [
-            'homepage',
-            'posts-type-admission',
-            'posts-type-result',
-            'posts-type-news',
-            'posts-type-date_sheet',
-            'posts-type-scholarship',
-            'posts-type-job',
-            'posts-type-blog',
-            'posts-featured',
-            'posts-popular',
-            'posts-recent',
-          ]
+          tags: cacheGroup.tags,
+          paths: cacheGroup.paths,
+          groupId: cacheGroup.id,
+          groupName: cacheGroup.name
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ Cache cleared successfully!');
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        console.log('API response issue');
+        showMessage('success', `✅ ${cacheGroup.name} cache cleared! (Manual refresh may be needed)`);
+        await fetchPosts();
+        setClearingCache(false);
+        return;
+      }
+      
+      if (data?.success) {
+        showMessage('success', `✅ ${cacheGroup.name} cache cleared successfully!`);
         await fetchPosts();
       } else {
-        alert('❌ Failed to clear cache');
+        showMessage('error', data?.error || `❌ Failed to clear ${cacheGroup.name} cache`);
       }
     } catch (error) {
       console.error('Failed to clear cache:', error);
-      alert('❌ Error clearing cache');
+      showMessage('error', `❌ Error clearing ${cacheGroup.name} cache`);
     } finally {
       setClearingCache(false);
     }
   };
 
-  // ✅ Fetch posts - Simplified without useCallback to avoid React Compiler warning
-  const fetchPosts = async () => {
+  // Fetch posts
+  const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -93,20 +188,20 @@ export default function AdminPostsPage() {
       if (data.success) {
         setPosts(data.posts);
         setTotal(data.total);
+      } else {
+        showMessage('error', 'Failed to fetch posts');
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
+      showMessage('error', 'Error fetching posts');
     } finally {
       setLoading(false);
     }
-  };
-
-  // ✅ Use useEffect with dependency array - React Compiler friendly
-  useEffect(() => {
-    // Skip initial mount if needed, or just fetch
-    fetchPosts();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterType, filterStatus, search, page, limit]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
 
   // Handle single delete
   const handleDelete = async (id: number, title: string) => {
@@ -120,13 +215,14 @@ export default function AdminPostsPage() {
       
       if (data.success) {
         setSelectedIds(prev => prev.filter(pid => pid !== id));
-        fetchPosts();
+        await fetchPosts();
+        showMessage('success', `✅ "${title}" deleted successfully`);
       } else {
-        alert(data.error || 'Failed to delete post');
+        showMessage('error', data.error || 'Failed to delete post');
       }
     } catch (error) {
       console.error('Error deleting post:', error);
-      alert('Something went wrong');
+      showMessage('error', 'Something went wrong');
     }
   };
 
@@ -152,44 +248,54 @@ export default function AdminPostsPage() {
   const handleBulkDelete = async () => {
     if (!confirm(`Delete ${selectedIds.length} post(s)? This action cannot be undone.`)) return;
     
+    let successCount = 0;
+    let failCount = 0;
+    
     try {
       for (const id of selectedIds) {
-        await fetch(`/api/admin/post/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/admin/post/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
       }
+      
       setSelectedIds([]);
-      fetchPosts();
-      alert(`✅ ${selectedIds.length} post(s) deleted successfully!`);
+      await fetchPosts();
+      
+      if (failCount === 0) {
+        showMessage('success', `✅ ${successCount} post(s) deleted successfully!`);
+      } else {
+        showMessage('error', `⚠️ ${successCount} deleted, ${failCount} failed`);
+      }
     } catch (error) {
       console.error('Error deleting posts:', error);
-      alert('Failed to delete some posts');
+      showMessage('error', 'Failed to delete some posts');
     }
   };
 
-  // Handle manual refresh
-  const handleRefresh = async () => {
-    await fetchPosts();
-  };
-
-  // Get type badge color
+  // Get type badge
   const getTypeBadge = (type: string) => {
-    const colors: Record<string, string> = {
-      admission: 'bg-blue-100 text-blue-700',
-      result: 'bg-green-100 text-green-700',
-      news: 'bg-red-100 text-red-700',
-      date_sheet: 'bg-purple-100 text-purple-700',
-      scholarship: 'bg-yellow-100 text-yellow-700',
-      job: 'bg-indigo-100 text-indigo-700',
-      blog: 'bg-gray-100 text-gray-700',
+    const config: Record<string, { color: string; icon: string }> = {
+      admission: { color: 'bg-blue-100 text-blue-700', icon: '🎓' },
+      result: { color: 'bg-green-100 text-green-700', icon: '📊' },
+      news: { color: 'bg-red-100 text-red-700', icon: '📰' },
+      date_sheet: { color: 'bg-orange-100 text-orange-700', icon: '📅' },
+      scholarship: { color: 'bg-teal-100 text-teal-700', icon: '💰' },
+      job: { color: 'bg-indigo-100 text-indigo-700', icon: '💼' },
+      blog: { color: 'bg-purple-100 text-purple-700', icon: '✍️' },
     };
-    return colors[type] || 'bg-gray-100 text-gray-700';
+    return config[type] || { color: 'bg-gray-100 text-gray-700', icon: '📄' };
   };
 
   // Get status badge
   const getStatusBadge = (status: string | null) => {
-    if (status === 'published') return 'bg-green-100 text-green-700';
-    if (status === 'draft') return 'bg-yellow-100 text-yellow-700';
-    if (status === 'archived') return 'bg-gray-100 text-gray-700';
-    return 'bg-gray-100 text-gray-700';
+    if (status === 'published') return { color: 'bg-green-100 text-green-700', icon: '✅' };
+    if (status === 'draft') return { color: 'bg-yellow-100 text-yellow-700', icon: '📝' };
+    if (status === 'archived') return { color: 'bg-gray-100 text-gray-700', icon: '📦' };
+    return { color: 'bg-gray-100 text-gray-700', icon: '❓' };
   };
 
   // Format date
@@ -201,81 +307,114 @@ export default function AdminPostsPage() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Manage Posts</h1>
-          <p className="text-gray-500 mt-1">Create, edit, and manage all content</p>
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Message Toast */}
+      {message && (
+        <div className={`fixed top-20 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg animate-in slide-in-from-top-2 ${
+          message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+        }`}>
+          {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          <span className="text-sm">{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-4 hover:opacity-80">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex gap-3">
-          {/* ✅ Clear Cache Button */}
-          <button
-            onClick={clearCache}
-            disabled={clearingCache}
-            className="px-4 py-2 border border-orange-300 rounded-lg hover:bg-orange-50 transition text-orange-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {clearingCache ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-orange-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Clearing...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Clear Cache
-              </>
-            )}
-          </button>
-          
-          {/* ✅ Refresh Button */}
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg 
-              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
+      )}
+
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Manage Posts</h1>
+            <p className="text-gray-500 mt-1">Create, edit, and manage all content across the platform</p>
+          </div>
+          <div className="flex gap-3">
+            {/* ✅ Selective Clear Cache Dropdown Button */}
+            <div className="relative">
+              <button
+                onClick={() => setClearDropdownOpen(!clearDropdownOpen)}
+                disabled={clearingCache}
+                className="px-4 py-2 border border-orange-300 rounded-lg hover:bg-orange-50 transition text-orange-700 flex items-center gap-2 disabled:opacity-50"
+              >
+                {clearingCache ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Clear Cache
+                    <ChevronDown className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+              
+              {/* Dropdown Menu */}
+              {clearDropdownOpen && !clearingCache && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setClearDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50">
+                      <p className="text-xs text-gray-500 font-medium">Select cache to clear</p>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {CACHE_GROUPS.map((group) => (
+                        <button
+                          key={group.id}
+                          onClick={() => clearCache(group)}
+                          className="w-full text-left px-4 py-3 hover:bg-gray-50 transition flex items-center gap-3 group"
+                        >
+                          <div className="text-2xl">{group.icon}</div>
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800 text-sm">{group.name}</div>
+                            <div className="text-xs text-gray-400">{group.description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t border-gray-100 bg-gray-50 text-center">
+                      <p className="text-xs text-gray-400">Select specific cache type for faster clearing</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Refresh Button */}
+            <button
+              onClick={() => fetchPosts()}
+              disabled={loading}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2 disabled:opacity-50"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-              />
-            </svg>
-            {loading ? 'Refreshing...' : 'Refresh'}
-          </button>
-          
-          <Link
-            href="/admin/post/create"
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Create New Post
-          </Link>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            
+            {/* Create Button */}
+            <Link
+              href="/admin/post/create"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create New Post
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Post Type</label>
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">All Types</option>
               <option value="admission">Admissions</option>
@@ -292,8 +431,8 @@ export default function AdminPostsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">All Status</option>
               <option value="published">Published</option>
@@ -304,16 +443,19 @@ export default function AdminPostsPage() {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by title or slug..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search by title or slug..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
           </div>
           
-          <div className="flex items-end gap-2">
+          <div className="flex items-end">
             <button
               onClick={() => {
                 setFilterType('');
@@ -321,8 +463,9 @@ export default function AdminPostsPage() {
                 setSearch('');
                 setPage(1);
               }}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
             >
+              <X className="w-4 h-4" />
               Clear Filters
             </button>
           </div>
@@ -331,19 +474,23 @@ export default function AdminPostsPage() {
 
       {/* Bulk Actions */}
       {selectedIds.length > 0 && (
-        <div className="bg-red-50 rounded-lg p-3 mb-4 flex items-center justify-between">
-          <span className="text-sm text-red-700">{selectedIds.length} post(s) selected</span>
+        <div className="bg-red-50 rounded-lg p-3 mb-4 flex items-center justify-between border border-red-200">
+          <span className="text-sm text-red-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            {selectedIds.length} post(s) selected
+          </span>
           <button
             onClick={handleBulkDelete}
-            className="px-3 py-1 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition"
+            className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition flex items-center gap-2"
           >
+            <Trash2 className="w-4 h-4" />
             Delete Selected
           </button>
         </div>
       )}
 
       {/* Posts Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -367,88 +514,107 @@ export default function AdminPostsPage() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-2">Loading...</p>
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-500" />
+                    <p>Loading posts...</p>
                    </td>
                  </tr>
               ) : posts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    No posts found
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <div className="text-5xl mb-3">📭</div>
+                    <p>No posts found</p>
+                    <Link
+                      href="/admin/post/create"
+                      className="inline-block mt-3 text-blue-600 hover:text-blue-700"
+                    >
+                      Create your first post →
+                    </Link>
                    </td>
                  </tr>
               ) : (
-                posts.map((post) => (
-                  <tr key={post.id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(post.id)}
-                        onChange={() => toggleSelect(post.id)}
-                        className="w-4 h-4 rounded border-gray-300"
-                      />
-                     </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <Link
-                          href={`/admin/post/${post.id}/edit`}
-                          className="font-medium text-gray-900 hover:text-blue-600 transition line-clamp-1"
-                        >
-                          {post.title}
-                        </Link>
-                        <div className="text-xs text-gray-400 mt-1">/{post.type}/{post.slug}</div>
-                        {post.expiresAt && (
-                          <div className="text-xs text-orange-500 mt-1">
-                            Expires: {formatDate(post.expiresAt)}
-                          </div>
-                        )}
-                      </div>
-                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeBadge(post.type)}`}>
-                        {post.type}
-                      </span>
-                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(post.status)}`}>
-                        {post.status || 'draft'}
-                      </span>
-                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {post.viewCount || 0}
-                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {formatDate(post.createdAt)}
-                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/post/${post.id}/edit`}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                        >
-                          Edit
-                        </Link>
-                        <Link
-                          href={`/${post.type}/${post.slug}`}
-                          target="_blank"
-                          className="text-green-600 hover:text-green-800 text-sm"
-                        >
-                          View
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(post.id, post.title)}
-                          className="text-red-600 hover:text-red-800 text-sm"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                     </td>
-                   </tr>
-                ))
+                posts.map((post) => {
+                  const typeConfig = getTypeBadge(post.type);
+                  const statusConfig = getStatusBadge(post.status);
+                  const isExpired = post.expiresAt && new Date(post.expiresAt) < new Date();
+                  
+                  return (
+                    <tr key={post.id} className="hover:bg-gray-50 transition">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(post.id)}
+                          onChange={() => toggleSelect(post.id)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                       </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <Link
+                            href={`/admin/post/${post.id}/edit`}
+                            className="font-medium text-gray-900 hover:text-blue-600 transition line-clamp-1"
+                          >
+                            {post.title}
+                          </Link>
+                          <div className="text-xs text-gray-400 mt-0.5">/{post.type}/{post.slug}</div>
+                          {isExpired && (
+                            <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              Expired: {formatDate(post.expiresAt)}
+                            </div>
+                          )}
+                        </div>
+                       </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig.color}`}>
+                          <span className="mr-1">{typeConfig.icon}</span>
+                          {post.type}
+                        </span>
+                       </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
+                          <span className="mr-1">{statusConfig.icon}</span>
+                          {post.status || 'draft'}
+                        </span>
+                       </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {post.viewCount?.toLocaleString() || 0}
+                       </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {formatDate(post.createdAt)}
+                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/admin/post/${post.id}/edit`}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Link>
+                          <Link
+                            href={`/${post.type}/${post.slug}`}
+                            target="_blank"
+                            className="text-green-600 hover:text-green-800"
+                            title="View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(post.id, post.title)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                       </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
-           </table>
+          </table>
         </div>
       </div>
 
@@ -458,22 +624,29 @@ export default function AdminPostsPage() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-3 py-1 border rounded-lg disabled:opacity-50 hover:bg-gray-50"
+            className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50 transition flex items-center gap-1"
           >
+            <ChevronLeft className="w-4 h-4" />
             Previous
           </button>
-          <span className="px-3 py-1 text-sm">
+          <span className="px-3 py-1.5 text-sm text-gray-600">
             Page {page} of {totalPages}
           </span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1 border rounded-lg disabled:opacity-50 hover:bg-gray-50"
+            className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50 transition flex items-center gap-1"
           >
             Next
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
+
+      {/* Stats Footer */}
+      <div className="mt-6 text-center text-sm text-gray-400">
+        Total {total} post(s) • Showing {posts.length} on page {page}
+      </div>
     </div>
   );
 }

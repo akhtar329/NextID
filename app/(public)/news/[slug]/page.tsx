@@ -6,6 +6,19 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
+import { 
+  Calendar, 
+  User, 
+  Clock, 
+  Eye, 
+  ChevronLeft,
+  Newspaper,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface NewsDetail {
@@ -34,14 +47,6 @@ interface RelatedNews {
   featuredImage: string | null;
   publishedAt: Date | null;
   isBreaking: boolean;
-}
-
-interface PopularNewsItem {
-  id: number;
-  title: string;
-  slug: string;
-  viewCount: number;
-  publishedAt: Date | null;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -116,53 +121,28 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   }
 }
 
-async function getRelatedAndPopularNews(currentNews: NewsDetail): Promise<{ relatedNews: RelatedNews[]; popularNews: PopularNewsItem[] }> {
+async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
   try {
-    const allNews = await postService.getPostsByType('news', 100);
+    const allNews = await postService.getPostsByType('news', 50);
     
-    const newsList = allNews.map(post => {
-      const meta = post.meta || {};
-      return {
-        id: post.id,
-        title: post.title,
-        slug: post.slug,
-        excerpt: post.excerpt,
-        featuredImage: post.featuredImage,
-        publishedAt: post.publishedAt,
-        isBreaking: getMetaValue(meta, 'isBreaking', false),
-        viewCount: getMetaValue(meta, 'viewCount', 0),
-      };
-    });
-    
-    const relatedNews = newsList
-      .filter(n => n.id !== currentNews.id)
-      .slice(0, 6)
-      .map(n => ({
-        id: n.id,
-        title: n.title,
-        slug: n.slug,
-        excerpt: n.excerpt,
-        featuredImage: n.featuredImage,
-        publishedAt: n.publishedAt,
-        isBreaking: n.isBreaking,
-      }));
-    
-    const popularNews = [...newsList]
-      .filter(n => n.id !== currentNews.id)
-      .sort((a, b) => b.viewCount - a.viewCount)
-      .slice(0, 5)
-      .map(n => ({
-        id: n.id,
-        title: n.title,
-        slug: n.slug,
-        viewCount: n.viewCount,
-        publishedAt: n.publishedAt,
-      }));
-    
-    return { relatedNews, popularNews };
+    return allNews
+      .filter(post => post.id !== currentId)
+      .slice(0, 4)
+      .map(post => {
+        const meta = post.meta || {};
+        return {
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          excerpt: post.excerpt,
+          featuredImage: post.featuredImage,
+          publishedAt: post.publishedAt,
+          isBreaking: getMetaValue(meta, 'isBreaking', false),
+        };
+      });
   } catch (error) {
     console.error('Error fetching related news:', error);
-    return { relatedNews: [], popularNews: [] };
+    return [];
   }
 }
 
@@ -178,20 +158,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const title = newsItem.isBreaking 
-    ? `BREAKING: ${newsItem.title} | NextID.pk`
-    : `${newsItem.title} | Education News Pakistan | NextID.pk`;
-    
-  const description = newsItem.excerpt || `Read latest education news. Updated on ${formatShortDate(newsItem.publishedAt)}.`;
-
   return {
-    title,
-    description,
+    title: newsItem.isBreaking ? `BREAKING: ${newsItem.title} | NextID.pk` : `${newsItem.title} | NextID.pk`,
+    description: newsItem.excerpt || `Read latest education news. Updated on ${formatShortDate(newsItem.publishedAt)}.`,
     openGraph: {
       title: newsItem.title,
-      description: newsItem.excerpt || description,
+      description: newsItem.excerpt || '',
       type: 'article',
-      images: newsItem.featuredImage ? [newsItem.featuredImage] : ['/images/news-og.jpg'],
+      images: newsItem.featuredImage ? [newsItem.featuredImage] : [],
     },
     alternates: {
       canonical: `https://www.nextid.pk/news/${newsItem.slug}`,
@@ -211,6 +185,48 @@ function NewsLoading() {
   );
 }
 
+// ============ SHARE BUTTONS COMPONENT ============
+function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const url = `https://www.nextid.pk/news/${slug}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a
+        href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition"
+      >
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a
+        href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition"
+      >
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a
+        href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition"
+      >
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a
+        href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition"
+      >
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
+
 // ============ NEWS CONTENT COMPONENT ============
 async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
   const slug = await slugPromise;
@@ -221,96 +237,76 @@ async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
   }
   
   const readTime = getReadTime(newsItem.content);
-  const { relatedNews, popularNews } = await getRelatedAndPopularNews(newsItem);
+  const relatedNews = await getRelatedNews(newsItem.id);
 
   return (
     <main className="min-h-screen bg-gray-50">
       
       {/* Hero Section */}
-      <div className={`${newsItem.isBreaking ? 'bg-gradient-to-r from-red-700 via-red-600 to-red-500' : 'bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900'} text-white relative overflow-hidden`}>
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
-        </div>
-        <div className="container mx-auto px-4 py-12 relative">
+      <div className={`${newsItem.isBreaking ? 'bg-gradient-to-r from-red-600 to-red-700' : 'bg-gradient-to-r from-gray-800 to-gray-900'} text-white`}>
+        <div className="container mx-auto px-4 py-12">
           <div className="max-w-4xl mx-auto">
-            {/* Breadcrumbs */}
-            <nav className="flex items-center gap-2 text-sm text-gray-300 mb-6">
-              <Link href="/" className="hover:text-white transition-colors">Home</Link>
-              <span className="text-gray-400">/</span>
-              <Link href="/news" className="hover:text-white transition-colors">News</Link>
-              <span className="text-gray-400">/</span>
-              <span className="text-white font-medium line-clamp-1">{newsItem.title}</span>
-            </nav>
             
-            {newsItem.isBreaking && (
-              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-1.5 rounded-full mb-4">
-                <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
-                <span className="text-xs font-bold uppercase tracking-wider">Breaking News</span>
-              </div>
-            )}
+            {/* Back Button */}
+            <Link 
+              href="/news" 
+              className="inline-flex items-center gap-1 text-white/70 hover:text-white transition mb-6 group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
+              Back to News
+            </Link>
             
+            {/* Badges */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {newsItem.isBreaking && (
+                <span className="inline-flex items-center gap-1 bg-red-500 px-3 py-1 rounded-full text-xs font-medium">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                  BREAKING
+                </span>
+              )}
+              <span className="bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-medium">
+                {newsItem.category}
+              </span>
+            </div>
+            
+            {/* Title */}
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
               {newsItem.title}
             </h1>
             
+            {/* Meta Info */}
             <div className="flex flex-wrap items-center gap-4 text-sm text-white/70">
-              <div className="flex items-center gap-2">
-                <span>By</span>
-                <span className="font-medium text-white">{newsItem.authorName || 'NextID Team'}</span>
-              </div>
-              <div className="w-1 h-1 bg-white/30 rounded-full"></div>
-              <div className="flex items-center gap-2">
-                <span>{formatDate(newsItem.publishedAt)}</span>
-              </div>
-              <div className="w-1 h-1 bg-white/30 rounded-full"></div>
-              <div className="flex items-center gap-2">
-                <span>{readTime} min read</span>
-              </div>
+              <span className="flex items-center gap-1.5">
+                <User className="w-4 h-4" />
+                {newsItem.authorName || 'NextID Team'}
+              </span>
+              <span className="w-1 h-1 bg-white/30 rounded-full"></span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4" />
+                {formatDate(newsItem.publishedAt)}
+              </span>
+              <span className="w-1 h-1 bg-white/30 rounded-full"></span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4" />
+                {readTime} min read
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Eye className="w-4 h-4" />
+                {formatViews(newsItem.viewCount)} views
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-8 max-w-6xl mx-auto">
           
-          {/* Side Social Icons */}
-          <aside className="lg:w-16 flex-shrink-0">
-            <div className="sticky top-24 flex lg:flex-col gap-2 justify-center">
-              <a
-                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(newsItem.title)}&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
-                title="Share on Twitter"
-              >
-                𝕏
-              </a>
-              <a
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 bg-blue-700 hover:bg-blue-800 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
-                title="Share on Facebook"
-              >
-                f
-              </a>
-              <a
-                href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-all hover:scale-110"
-                title="Share on LinkedIn"
-              >
-                in
-              </a>
-            </div>
-          </aside>
-          
-          {/* Article Content */}
-          <article className="flex-1">
+          {/* Main Article */}
+          <article className="lg:w-2/3">
             
+            {/* Featured Image */}
             {newsItem.featuredImage && (
               <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video">
                 <Image 
@@ -321,21 +317,23 @@ async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
                   priority
                 />
                 {newsItem.source && (
-                  <p className="text-xs text-gray-500 mt-2 text-center absolute bottom-2 right-2 bg-black/50 px-2 py-1 rounded">
+                  <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded">
                     Source: {newsItem.source}
-                  </p>
+                  </div>
                 )}
               </div>
             )}
 
+            {/* Excerpt */}
             {newsItem.excerpt && (
               <div className="bg-red-50 border-l-4 border-red-600 p-5 mb-8 rounded-r-lg">
-                <p className="text-gray-800 font-medium leading-relaxed">
+                <p className="text-gray-800 font-medium leading-relaxed italic">
                   {newsItem.excerpt}
                 </p>
               </div>
             )}
 
+            {/* Content */}
             <div 
               className="prose prose-lg max-w-none 
                 prose-headings:text-gray-900 prose-headings:font-bold 
@@ -347,185 +345,92 @@ async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
               dangerouslySetInnerHTML={{ __html: newsItem.content || '' }}
             />
 
+            {/* Tags */}
             <div className="border-t border-gray-200 mt-8 pt-6">
-              <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-500">Tags:</span>
-                <Link href="/news" className="text-sm text-red-600 hover:underline">Education News</Link>
-                <span className="text-gray-300">|</span>
-                <Link href="/news" className="text-sm text-red-600 hover:underline">Pakistan</Link>
-                {newsItem.category && newsItem.category !== 'General' && (
-                  <>
-                    <span className="text-gray-300">|</span>
-                    <Link href={`/news?category=${newsItem.category}`} className="text-sm text-red-600 hover:underline">
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-sm text-gray-500 font-medium">Tags:</span>
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/news" className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition">
+                    Education
+                  </Link>
+                  <Link href="/news" className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition">
+                    Pakistan
+                  </Link>
+                  {newsItem.category !== 'General' && (
+                    <Link href={`/news?category=${newsItem.category}`} className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100 transition">
                       {newsItem.category}
                     </Link>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Author Card */}
-            <div className="flex items-center justify-between py-4 border-y border-gray-200 my-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {newsItem.authorName ? newsItem.authorName.charAt(0).toUpperCase() : 'N'}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{newsItem.authorName || 'NextID Team'}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{formatDate(newsItem.publishedAt)}</span>
-                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                    <span>{readTime} min read</span>
+            {/* Share Section */}
+            <div className="bg-gray-50 rounded-xl p-5 mt-8">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                    {newsItem.authorName ? newsItem.authorName.charAt(0).toUpperCase() : 'N'}
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{newsItem.authorName || 'NextID Team'}</p>
+                    <p className="text-xs text-gray-500">Author</p>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Share Buttons */}
-            <div className="bg-gray-50 rounded-xl p-5 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Share this article</h3>
-              <div className="flex flex-wrap gap-2">
-                <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(newsItem.title)}&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-black hover:bg-gray-800 text-white text-sm rounded-lg transition-all">Twitter</a>
-                <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-sm rounded-lg transition-all">Facebook</a>
-                <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(`https://www.nextid.pk/news/${newsItem.slug}`)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-all">LinkedIn</a>
-                <a href={`https://wa.me/?text=${encodeURIComponent(newsItem.title + ' ' + 'https://www.nextid.pk/news/' + newsItem.slug)}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-all">WhatsApp</a>
+                <ShareButtons title={newsItem.title} slug={newsItem.slug} />
               </div>
             </div>
           </article>
 
           {/* Right Sidebar */}
-          <aside className="lg:w-80">
-            <div className="space-y-6 sticky top-24">
+          <aside className="lg:w-1/3">
+            <div className="sticky top-24 space-y-6">
               
-              {/* Popular News */}
-              {popularNews.length > 0 && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3">
-                    <h3 className="font-bold text-white">Most Popular</h3>
-                  </div>
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      {popularNews.map((item, index) => (
-                        <Link key={item.id} href={`/news/${item.slug}`} className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition group">
-                          <span className="flex-shrink-0 w-6 h-6 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-bold">
-                            {index + 1}
-                          </span>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-medium text-gray-900 group-hover:text-red-600 line-clamp-2">
-                              {item.title}
-                            </h4>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {formatShortDate(item.publishedAt)} • {formatViews(item.viewCount)} views
-                            </p>
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Newsletter */}
-              <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-5 text-white">
-                <h3 className="font-bold text-lg mb-2">Subscribe to Newsletter</h3>
-                <p className="text-gray-300 text-sm mb-4">Get the latest education news delivered to your inbox</p>
-                <form action="/api/newsletter" method="POST" className="flex gap-2">
-                  <input type="email" name="email" placeholder="Your email address" className="flex-1 px-3 py-2 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" required />
-                  <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">Subscribe</button>
-                </form>
-                <p className="text-gray-400 text-xs mt-2">No spam, unsubscribe anytime.</p>
-              </div>
-
-              <Link href="/news" className="block bg-white border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition group">
-                <span className="text-gray-700 group-hover:text-red-600">← Back to all news</span>
-              </Link>
-            </div>
-          </aside>
-        </div>
-        
-        {/* Related News Section */}
-        {relatedNews.length > 0 && (
-          <div className="max-w-6xl mx-auto mt-10">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-gradient-to-r from-red-600 to-red-500 px-5 py-3 flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-white text-lg">Related News</h3>
-                  <p className="text-white/70 text-xs">More from NextID</p>
-                </div>
-                <Link href="/news" className="text-white/80 hover:text-white text-sm flex items-center gap-1">View All <span className="text-lg">→</span></Link>
-              </div>
+              {/* Sidebar Widgets */}
+              <SidebarWidgets />
               
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-                <div className="p-4 space-y-4">
-                  {relatedNews.slice(0, Math.ceil(relatedNews.length / 2)).map((item) => (
-                    <Link key={item.id} href={`/news/${item.slug}`} className="group block">
-                      <div className="flex gap-3">
+              {/* Related News */}
+              {relatedNews.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                  <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                    <Newspaper className="w-4 h-4 text-red-600" />
+                    <h3 className="font-bold text-gray-800">Related News</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {relatedNews.map((item) => (
+                      <Link key={item.id} href={`/news/${item.slug}`} className="flex gap-3 group">
                         {item.featuredImage ? (
-                          <div className="relative w-20 h-20 flex-shrink-0">
-                            <Image src={item.featuredImage} alt={item.title} fill className="object-cover rounded-lg" />
+                          <div className="relative w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg">
+                            <Image 
+                              src={item.featuredImage} 
+                              alt={item.title}
+                              fill
+                              className="object-cover group-hover:scale-105 transition duration-300"
+                            />
                           </div>
                         ) : (
-                          <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <span className="text-2xl text-gray-400">N</span>
+                          <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <Newspaper className="w-6 h-6 text-gray-400" />
                           </div>
                         )}
                         <div className="flex-1">
-                          {item.isBreaking && <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">BREAKING</span>}
-                          <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">{item.title}</h4>
-                          <p className="text-xs text-gray-500 mt-1">{formatShortDate(item.publishedAt)}</p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-                {relatedNews.length > Math.ceil(relatedNews.length / 2) && (
-                  <div className="p-4 space-y-4">
-                    {relatedNews.slice(Math.ceil(relatedNews.length / 2)).map((item) => (
-                      <Link key={item.id} href={`/news/${item.slug}`} className="group block">
-                        <div className="flex gap-3">
-                          {item.featuredImage ? (
-                            <div className="relative w-20 h-20 flex-shrink-0">
-                              <Image src={item.featuredImage} alt={item.title} fill className="object-cover rounded-lg" />
-                            </div>
-                          ) : (
-                            <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <span className="text-2xl text-gray-400">N</span>
-                            </div>
+                          {item.isBreaking && (
+                            <span className="inline-block text-xs text-red-600 font-semibold">BREAKING</span>
                           )}
-                          <div className="flex-1">
-                            {item.isBreaking && <span className="inline-block px-1.5 py-0.5 bg-red-600 text-white text-xs font-bold rounded mb-1">BREAKING</span>}
-                            <h4 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2 text-sm">{item.title}</h4>
-                            <p className="text-xs text-gray-500 mt-1">{formatShortDate(item.publishedAt)}</p>
-                          </div>
+                          <h4 className="text-sm font-medium text-gray-800 group-hover:text-red-600 transition line-clamp-2">
+                            {item.title}
+                          </h4>
+                          <p className="text-xs text-gray-400 mt-1">{formatShortDate(item.publishedAt)}</p>
                         </div>
                       </Link>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          </aside>
+        </div>
       </div>
-
-      {/* Schema Markup */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "NewsArticle",
-            "headline": newsItem.title,
-            "description": newsItem.excerpt,
-            "image": newsItem.featuredImage,
-            "author": { "@type": "Person", "name": newsItem.authorName || "NextID Team" },
-            "publisher": { "@type": "Organization", "name": "NextID.pk", "logo": { "@type": "ImageObject", "url": "https://www.nextid.pk/logo.png" } },
-            "mainEntityOfPage": { "@type": "WebPage", "@id": `https://www.nextid.pk/news/${newsItem.slug}` },
-            "articleSection": "Education",
-            "keywords": newsItem.tags?.join(', ') || "education news, Pakistan"
-          })
-        }}
-      />
     </main>
   );
 }

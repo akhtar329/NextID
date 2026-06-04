@@ -1,4 +1,5 @@
 // app/api/auth/login/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/db';
 import { adminUsers, adminRoles } from '@/db/schema';
@@ -25,8 +26,6 @@ export async function POST(request: NextRequest) {
       .where(sql`LOWER(${adminUsers.email}) = ${cleanEmail}`)
       .limit(1);
 
-    console.log("LOGIN ATTEMPT:", { cleanEmail, found: users.length });
-
     if (users.length === 0) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
@@ -43,12 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("PASSWORD CHECK START");
-    console.log("DB CONNECTED URL:", process.env.DATABASE_URL);
-
     const isValid = await compare(password, user.password);
-
-    console.log("PASSWORD RESULT:", isValid);
 
     if (!isValid) {
       return NextResponse.json(
@@ -92,12 +86,14 @@ export async function POST(request: NextRequest) {
       { expiresIn: '7d' }
     );
 
+    // Update last login (don't await)
     db
       .update(adminUsers)
       .set({ lastLogin: new Date() })
       .where(eq(adminUsers.id, user.id))
       .catch(() => {});
 
+    // ✅ Create response with cookie
     const response = NextResponse.json({
       success: true,
       user: {
@@ -109,11 +105,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // ✅ Set cookie properly
     response.cookies.set('authToken', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
       path: '/',
     });
 
@@ -123,7 +120,6 @@ export async function POST(request: NextRequest) {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-
     return NextResponse.json(
       { error: 'Authentication failed' },
       { status: 500 }

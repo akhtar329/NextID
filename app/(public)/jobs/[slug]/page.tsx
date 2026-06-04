@@ -4,7 +4,26 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import React from 'react';
 import { postService } from '@/services/post/post.service';
+import { 
+  Briefcase, 
+  MapPin, 
+  Calendar, 
+  DollarSign, 
+  Clock, 
+  Building2,
+  GraduationCap,
+  FileText,
+  ExternalLink,
+  ChevronLeft,
+  TrendingUp,
+  Zap,
+  CheckCircle,
+  Users,
+  Mail
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface JobDetail {
@@ -34,15 +53,6 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   if (!meta) return defaultValue;
   const value = meta[key] as T;
   return value !== undefined && value !== null ? value : defaultValue;
-}
-
-function formatDate(date: Date | null): string {
-  if (!date) return 'TBA';
-  return new Date(date).toLocaleDateString('en-PK', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
 }
 
 function formatShortDate(date: Date | null): string {
@@ -105,52 +115,9 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
   }
 }
 
-async function getRelatedJobs(currentSlug: string): Promise<JobDetail[]> {
-  try {
-    const allJobs = await postService.getPostsByType('job', 10);
-    
-    return allJobs
-      .filter(post => post.slug !== currentSlug)
-      .slice(0, 5)
-      .map(post => {
-        const meta = post.meta || {};
-        const deadline = getMetaValue(meta, 'deadline', null) 
-          ? new Date(getMetaValue(meta, 'deadline', '')) 
-          : null;
-        return {
-          id: post.id,
-          slug: post.slug,
-          title: post.title,
-          content: post.content,
-          excerpt: post.excerpt,
-          company: getMetaValue(meta, 'company', 'Company'),
-          location: getMetaValue(meta, 'location', 'Pakistan'),
-          jobType: getMetaValue(meta, 'jobType', 'Full Time'),
-          salary: getMetaValue(meta, 'salary', null),
-          experience: getMetaValue(meta, 'experience', null),
-          deadline: deadline,
-          description: post.content,
-          qualification: getMetaValue(meta, 'qualification', null),
-          industry: getMetaValue(meta, 'industry', null),
-          officialLink: getMetaValue(meta, 'officialLink', null),
-          applicationLink: getMetaValue(meta, 'applicationLink', null),
-          isFeatured: getMetaValue(meta, 'isFeatured', false),
-          isUrgent: false,
-          viewCount: getMetaValue(meta, 'viewCount', 0),
-        };
-      });
-  } catch {
-    return [];
-  }
-}
-
 // ============ METADATA ============
 function generateMetaTitle(job: JobDetail): string {
   return `${job.title} at ${job.company} - ${job.location} | NextID.pk`;
-}
-
-function generateMetaDescription(job: JobDetail): string {
-  return `Apply for ${job.title} position at ${job.company} in ${job.location}. ${job.jobType} position. ${job.experience ? `Experience: ${job.experience}. ` : ''}Deadline: ${formatShortDate(job.deadline)}.`;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -163,13 +130,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   return {
     title: generateMetaTitle(job),
-    description: generateMetaDescription(job),
+    description: job.excerpt || `Apply for ${job.title} position at ${job.company} in ${job.location}.`,
     alternates: { canonical: `https://www.nextid.pk/jobs/${job.slug}` },
-    openGraph: {
-      title: job.title,
-      description: generateMetaDescription(job),
-      type: 'article',
-    },
   };
 }
 
@@ -178,7 +140,7 @@ function JobLoading() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
         <p className="text-gray-600">Loading job details...</p>
       </div>
     </div>
@@ -203,42 +165,46 @@ async function JobContent({ slugPromise }: { slugPromise: Promise<string> }) {
     if (t.includes('full')) return 'bg-green-100 text-green-700';
     if (t.includes('part')) return 'bg-orange-100 text-orange-700';
     if (t.includes('remote')) return 'bg-purple-100 text-purple-700';
-    if (t.includes('contract')) return 'bg-yellow-100 text-yellow-700';
+    if (t.includes('contract')) return 'bg-amber-100 text-amber-700';
     if (t.includes('intern')) return 'bg-pink-100 text-pink-700';
     return 'bg-gray-100 text-gray-700';
   };
 
-  const relatedJobs = await getRelatedJobs(slug);
-
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 text-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl">
-            {/* Breadcrumbs */}
-            <div className="text-sm text-blue-200 mb-4">
-              <Link href="/" className="hover:text-white">Home</Link>
-              {' / '}
-              <Link href="/jobs" className="hover:text-white">Jobs</Link>
-              {' / '}
-              <span className="text-white">{job.title}</span>
-            </div>
+      {/* Hero Section - Professional */}
+      <div className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="relative container mx-auto px-4 py-12 md:py-16">
+          <div className="max-w-4xl mx-auto">
+            
+            {/* Back Button */}
+            <Link 
+              href="/jobs" 
+              className="inline-flex items-center gap-1 text-indigo-200 hover:text-white transition mb-6 group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
+              Back to Jobs
+            </Link>
             
             {/* Status Badges */}
             <div className="flex flex-wrap gap-2 mb-4">
               {job.isFeatured && (
-                <span className="px-3 py-1 bg-amber-500 text-white rounded-full text-sm font-medium">⭐ Featured</span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-full text-xs font-medium">
+                  <TrendingUp className="w-3 h-3" /> Featured
+                </span>
               )}
               {isUrgent && isOpen && (
-                <span className="px-3 py-1 bg-red-500 text-white rounded-full text-sm font-medium animate-pulse">🔴 Urgent Hiring</span>
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded-full text-xs font-medium animate-pulse">
+                  <Zap className="w-3 h-3" /> Urgent Hiring
+                </span>
               )}
               {!isOpen && job.deadline && (
-                <span className="px-3 py-1 bg-gray-500 text-white rounded-full text-sm font-medium">Closed</span>
+                <span className="px-3 py-1 bg-gray-500 text-white rounded-full text-xs font-medium">Closed</span>
               )}
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTypeColor(job.jobType)}`}>
-                {job.jobType}
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${getTypeColor(job.jobType)}`}>
+                <Briefcase className="w-3 h-3" /> {job.jobType}
               </span>
             </div>
             
@@ -247,29 +213,46 @@ async function JobContent({ slugPromise }: { slugPromise: Promise<string> }) {
               {job.title}
             </h1>
             
-            {/* Company */}
-            <p className="text-xl text-blue-200 mb-4">
-              at {job.company} • {job.location}
-            </p>
+            {/* Company & Location */}
+            <div className="flex flex-wrap gap-4 text-indigo-200 mb-6">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                <span>{job.company}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                <span>{job.location}</span>
+              </div>
+            </div>
             
-            {/* Meta Info */}
-            <div className="flex flex-wrap gap-4 text-blue-200">
+            {/* Info Cards */}
+            <div className="flex flex-wrap gap-4">
               {job.salary && (
-                <div className="flex items-center gap-1">
-                  <span>💰</span>
-                  <span>{job.salary}</span>
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                  <div className="text-indigo-200 text-xs">Salary</div>
+                  <div className="text-white font-semibold flex items-center gap-1">
+                    <DollarSign className="w-4 h-4" />
+                    {job.salary}
+                  </div>
                 </div>
               )}
               {job.experience && (
-                <div className="flex items-center gap-1">
-                  <span>📅</span>
-                  <span>Experience: {job.experience}</span>
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                  <div className="text-indigo-200 text-xs">Experience</div>
+                  <div className="text-white font-semibold flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    {job.experience}
+                  </div>
                 </div>
               )}
-              {job.industry && (
-                <div className="flex items-center gap-1">
-                  <span>🏢</span>
-                  <span>{job.industry}</span>
+              {job.deadline && (
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
+                  <div className="text-indigo-200 text-xs">Deadline</div>
+                  <div className={`font-semibold flex items-center gap-1 ${isUrgent && isOpen ? 'text-yellow-300' : 'text-white'}`}>
+                    <Calendar className="w-4 h-4" />
+                    {formatShortDate(job.deadline)}
+                    {daysLeft && isOpen && <span className="text-xs">({daysLeft} days left)</span>}
+                  </div>
                 </div>
               )}
             </div>
@@ -278,137 +261,152 @@ async function JobContent({ slugPromise }: { slugPromise: Promise<string> }) {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Left Column - Job Details */}
-          <div className="flex-1">
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Job Details</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Company</p>
-                  <p className="font-semibold text-gray-900">{job.company}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Location</p>
-                  <p className="font-semibold text-gray-900">{job.location}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Job Type</p>
-                  <p className="font-semibold text-gray-900">{job.jobType}</p>
-                </div>
-                {job.salary && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Salary</p>
-                    <p className="font-semibold text-gray-900">{job.salary}</p>
-                  </div>
-                )}
-                {job.experience && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Experience Required</p>
-                    <p className="font-semibold text-gray-900">{job.experience}</p>
-                  </div>
-                )}
-                {job.qualification && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Qualification</p>
-                    <p className="font-semibold text-gray-900">{job.qualification}</p>
-                  </div>
-                )}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Application Deadline</p>
-                  <p className={`font-semibold ${isUrgent && isOpen ? 'text-red-600' : 'text-gray-900'}`}>
-                    {formatDate(job.deadline)}
-                    {daysLeft && isOpen && <span className="ml-2 text-sm">({daysLeft} days left)</span>}
-                  </p>
-                </div>
+          {/* LEFT COLUMN - Main Content */}
+          <div className="lg:w-2/3 space-y-6">
+            
+            {/* Job Details Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-indigo-500" />
+                  Job Details
+                </h2>
               </div>
-
-              {/* Job Description */}
-              {job.description && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">Job Description</h3>
-                  <div 
-                    className="prose prose-sm max-w-none text-gray-600"
-                    dangerouslySetInnerHTML={{ __html: job.description }}
-                  />
-                </div>
-              )}
-
-              {/* Application Links */}
-              {(job.applicationLink || job.officialLink) && (
-                <div className="border-t border-gray-200 pt-4 mt-2">
-                  <h3 className="font-semibold text-gray-900 mb-3">How to Apply</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {job.applicationLink && (
-                      <a 
-                        href={job.applicationLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-                      >
-                        Apply Now →
-                      </a>
-                    )}
-                    {job.officialLink && (
-                      <a 
-                        href={job.officialLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-                      >
-                        Company Website
-                      </a>
-                    )}
+              
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Company</div>
+                    <div className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-indigo-500" />
+                      {job.company}
+                    </div>
                   </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Location</div>
+                    <div className="font-semibold text-gray-900 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-indigo-500" />
+                      {job.location}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Job Type</div>
+                    <div className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-indigo-500" />
+                      {job.jobType}
+                    </div>
+                  </div>
+                  {job.industry && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-gray-500 text-xs mb-1">Industry</div>
+                      <div className="font-semibold text-gray-900 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-indigo-500" />
+                        {job.industry}
+                      </div>
+                    </div>
+                  )}
+                  {job.qualification && (
+                    <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                      <div className="text-gray-500 text-xs mb-1">Qualification</div>
+                      <div className="font-semibold text-gray-900 flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4 text-indigo-500" />
+                        {job.qualification}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Job Description */}
+                {job.description && (
+                  <div className="border-t border-gray-100 pt-6">
+                    <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-500" />
+                      Job Description
+                    </h3>
+                    <div 
+                      className="prose prose-sm max-w-none text-gray-600"
+                      dangerouslySetInnerHTML={{ __html: job.description }}
+                    />
+                  </div>
+                )}
+
+                {/* Application Links */}
+                {(job.applicationLink || job.officialLink) && (
+                  <div className="border-t border-gray-100 pt-6 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-indigo-500" />
+                      How to Apply
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {job.applicationLink && (
+                        <a 
+                          href={job.applicationLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold group"
+                        >
+                          Apply Now
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        </a>
+                      )}
+                      {job.officialLink && (
+                        <a 
+                          href={job.officialLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition group"
+                        >
+                          Company Website
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <aside className="lg:w-80">
-            <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
-              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span>📝</span> Application Tips
-              </h3>
-              <ol className="space-y-3 text-sm text-gray-600">
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                  <span>Read the job description carefully</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                  <span>Update your CV/Resume</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                  <span>Write a tailored cover letter</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                  <span>Submit before the deadline</span>
-                </li>
-              </ol>
-            </div>
-
-            {/* Related Jobs */}
-            {relatedJobs.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-                <h3 className="font-bold text-gray-900 mb-3">Related Jobs</h3>
-                <div className="space-y-3">
-                  {relatedJobs.map((rel) => (
-                    <Link key={rel.id} href={`/jobs/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition">
-                      <p className="font-medium text-gray-800 text-sm line-clamp-2">{rel.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">{rel.company} • {rel.location}</p>
-                      <p className="text-xs text-gray-400 mt-1">{rel.jobType}</p>
-                    </Link>
-                  ))}
+          {/* RIGHT SIDEBAR */}
+          <aside className="lg:w-1/3">
+            <div className="sticky top-24 space-y-6">
+              
+              {/* Application Tips */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-3">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Application Tips
+                  </h3>
+                </div>
+                <div className="p-5">
+                  <ol className="space-y-3 text-sm text-gray-600">
+                    <li className="flex gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                      <span>Read the job description carefully</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                      <span>Update your CV/Resume</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                      <span>Write a tailored cover letter</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                      <span>Submit before the deadline</span>
+                    </li>
+                  </ol>
                 </div>
               </div>
-            )}
+              
+              {/* Sidebar Widgets */}
+              <SidebarWidgets />
+            </div>
           </aside>
         </div>
       </div>
@@ -435,7 +433,7 @@ async function JobContent({ slugPromise }: { slugPromise: Promise<string> }) {
               }
             },
             "employmentType": job.jobType,
-            "datePosted": job.deadline?.toISOString() || new Date().toISOString(),
+            "datePosted": new Date().toISOString(),
             "validThrough": job.deadline?.toISOString(),
             "url": `https://www.nextid.pk/jobs/${job.slug}`
           })

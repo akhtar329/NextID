@@ -1,13 +1,9 @@
 // components/sections/Home/ResultsSection.tsx
 
 import Link from 'next/link';
-import { FileText, Calendar, Eye } from 'lucide-react';
+import {  ChevronRight} from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 
-// ✅ Static year (build time pe fix)
-const CURRENT_YEAR = 2026;
-
-// Helper function
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
@@ -26,7 +22,6 @@ function formatDate(date: Date | null): string {
 export default async function ResultsSection() {
   const results = await postService.getPostsByType('result', 5);
   
-  // Transform data
   const items = results.map(post => {
     const meta = post.meta || {};
     const resultDate = getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null;
@@ -35,72 +30,66 @@ export default async function ResultsSection() {
       id: post.id,
       slug: post.slug,
       title: post.title,
-      boardName: getMetaValue(meta, 'boardName', null),
-      instituteName: getMetaValue(meta, 'universityName', null),
-      year: getMetaValue(meta, 'year', CURRENT_YEAR), // ✅ Fixed: static year
+      boardName: getMetaValue(meta, 'boardName', getMetaValue(meta, 'board', 'Board')),
+      examType: getMetaValue(meta, 'examType', getMetaValue(meta, 'type', 'Annual')),
       resultDate: resultDate,
-      isPopular: getMetaValue(meta, 'isPopular', false),
-      viewCount: getMetaValue(meta, 'viewCount', 0),
+      isFeatured: post.isFeatured || getMetaValue(meta, 'isFeatured', false),
     };
   });
 
   if (items.length === 0) return null;
 
-  const institutionName = (item: typeof items[0]) => item.boardName || item.instituteName || 'Board/University';
-
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-green-600 to-green-500 px-5 py-3 flex items-center justify-between">
-        <div>
-          <h2 className="font-bold text-white text-lg flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            Latest Results
-          </h2>
-          <p className="text-white/70 text-xs">Board & university results</p>
+    <div className="w-full">
+      {/* Section Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-5 bg-gradient-to-b from-green-500 to-teal-500 rounded-full"></div>
+          <h2 className="text-xl font-bold text-gray-800">Results</h2>
+          <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">Latest</span>
         </div>
-        <Link href="/results" className="text-white/80 hover:text-white text-sm">
-          View All →
+        <Link href="/results" className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1">
+          View All <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
-      
-      <div className="divide-y divide-gray-100">
-        {items.map((item) => (
-          <Link key={item.id} href={`/results/${item.slug}`} className="block p-4 hover:bg-green-50 transition group">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {item.isPopular && (
-                    <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Popular</span>
-                  )}
-                </div>
-                <h3 className="font-semibold text-gray-800 group-hover:text-green-600 transition line-clamp-1">
-                  {item.title}
-                </h3>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    {institutionName(item)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    📅 Year: {item.year}
-                  </span>
+
+      {/* Simple List */}
+      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="divide-y divide-gray-100">
+          {items.map((item, index) => (
+            <Link key={item.id} href={`/results/${item.slug}`} className="block hover:bg-green-50/30 transition group">
+              <div className="p-4">
+                <div className="flex items-center gap-3">
+                  {/* Rank/Number */}
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm">
+                    {index + 1}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-800">{item.boardName}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-500">{item.examType}</span>
+                      {item.isFeatured && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">⭐</span>
+                      )}
+                    </div>
+                    <h3 className="text-sm text-gray-600 group-hover:text-green-600 transition line-clamp-1">
+                      {item.title}
+                    </h3>
+                  </div>
+                  
                   {item.resultDate && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {formatDate(item.resultDate)}
-                    </span>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">{formatDate(item.resultDate)}</div>
+                      <div className="text-xs text-green-600 group-hover:opacity-100 opacity-0 transition">Check →</div>
+                    </div>
                   )}
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" />
-                    {item.viewCount.toLocaleString()} views
-                  </span>
                 </div>
               </div>
-              <div className="shrink-0 text-green-600 group-hover:translate-x-1 transition">
-                →
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -4,7 +4,9 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import React from 'react';
 import { postService } from '@/services/post/post.service';
+import { Calendar, Clock, MapPin, Building2, Eye, Download, ExternalLink, FileText } from 'lucide-react';
 
 // Types
 interface DateSheetDetail {
@@ -93,7 +95,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 
   return {
-    title: `${dateSheet.title} - Download ${dateSheet.examType} Exams Schedule ${dateSheet.year} | NextID.pk`,
+    title: `${dateSheet.title} - Download ${dateSheet.examType} Schedule ${dateSheet.year} | NextID.pk`,
     description: `Download official ${dateSheet.title}. Complete ${dateSheet.examType} examinations date sheet for ${dateSheet.year}.`,
     alternates: { canonical: `https://www.nextid.pk/date-sheets/${dateSheet.slug}` },
   };
@@ -104,7 +106,7 @@ function DateSheetLoading() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
         <p className="text-gray-600">Loading date sheet details...</p>
       </div>
     </div>
@@ -113,20 +115,23 @@ function DateSheetLoading() {
 
 // Date Sheet Details Client Component
 function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<DateSheetDetail | null> }) {
-  // ✅ This component awaits the promise inside Suspense
   const dateSheet = React.use(dateSheetPromise);
   
   if (!dateSheet) return null;
   
   const boardOrInstitute = dateSheet.boardName || dateSheet.instituteName;
+  const hasDownloadLinks = dateSheet.officialLink || dateSheet.downloadLink;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <main className="min-h-screen bg-gray-50">
+      
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-green-700 via-green-600 to-teal-800">
-        <div className="container mx-auto px-4 py-12 relative z-10">
+      <div className="relative bg-gradient-to-r from-orange-600 to-amber-600 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="relative container mx-auto px-4 py-12 md:py-16">
           <div className="max-w-4xl mx-auto">
-            <div className="text-sm text-green-100 mb-6 flex items-center gap-2 flex-wrap">
+            {/* Breadcrumbs */}
+            <div className="text-sm text-orange-100 mb-6 flex items-center gap-2 flex-wrap">
               <Link href="/" className="hover:text-white transition">Home</Link>
               <span>›</span>
               <Link href="/date-sheets" className="hover:text-white transition">Date Sheets</Link>
@@ -134,34 +139,47 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
               <span className="text-white font-medium truncate">{dateSheet.title}</span>
             </div>
 
+            {/* Popular Badge */}
             {dateSheet.isPopular && (
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-500/20 backdrop-blur-sm rounded-full mb-4">
-                <span className="text-yellow-300">⭐</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full mb-4">
+                <span className="text-yellow-300">🔥</span>
                 <span className="text-sm font-medium text-white">Popular Date Sheet</span>
               </div>
             )}
 
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
+            {/* Title */}
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
               {dateSheet.title}
             </h1>
             
-            <p className="text-lg text-green-100 mb-6">
+            {/* Description */}
+            <p className="text-lg text-orange-100 mb-6">
               Download official {dateSheet.examType} examinations date sheet for {dateSheet.year}.
               {boardOrInstitute && ` Published by ${boardOrInstitute}.`}
             </p>
 
+            {/* Info Cards */}
             <div className="flex flex-wrap gap-4">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
-                <span className="text-green-200 text-sm">📅 Year</span>
-                <div className="text-white font-semibold">{dateSheet.year}</div>
+                <div className="text-orange-200 text-xs">Year</div>
+                <div className="text-white font-semibold flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  {dateSheet.year}
+                </div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
-                <span className="text-green-200 text-sm">📝 Exam Type</span>
-                <div className="text-white font-semibold">{dateSheet.examType}</div>
+                <div className="text-orange-200 text-xs">Exam Type</div>
+                <div className="text-white font-semibold flex items-center gap-1">
+                  <FileText className="w-4 h-4" />
+                  {dateSheet.examType}
+                </div>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
-                <span className="text-green-200 text-sm">👁️ Views</span>
-                <div className="text-white font-semibold">{dateSheet.viewCount.toLocaleString()}</div>
+                <div className="text-orange-200 text-xs">Views</div>
+                <div className="text-white font-semibold flex items-center gap-1">
+                  <Eye className="w-4 h-4" />
+                  {dateSheet.viewCount.toLocaleString()}
+                </div>
               </div>
             </div>
           </div>
@@ -172,60 +190,87 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column */}
+          {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6">
+            
             {/* Download Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
-                <h2 className="text-white font-semibold text-lg">📄 Download Date Sheet</h2>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {dateSheet.officialLink && (
-                    <a href={dateSheet.officialLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium">
-                      🌐 Official Website
-                    </a>
-                  )}
-                  {dateSheet.downloadLink && (
-                    <a href={dateSheet.downloadLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition font-medium">
-                      📥 Download PDF
-                    </a>
-                  )}
+            {hasDownloadLinks && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+                  <h2 className="text-white font-semibold text-lg flex items-center gap-2">
+                    <Download className="w-5 h-5" />
+                    Download Date Sheet
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {dateSheet.officialLink && (
+                      <a 
+                        href={dateSheet.officialLink} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium group"
+                      >
+                        <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        Official Website
+                      </a>
+                    )}
+                    {dateSheet.downloadLink && (
+                      <a 
+                        href={dateSheet.downloadLink} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition font-medium group"
+                      >
+                        <Download className="w-4 h-4 group-hover:-translate-y-0.5 transition" />
+                        Download PDF
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Description Section */}
             {dateSheet.description && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
-                  <h2 className="text-xl font-bold text-gray-800">📖 About This Date Sheet</h2>
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-orange-500" />
+                    About This Date Sheet
+                  </h2>
                 </div>
-                <div className="p-6 prose prose-green max-w-none">
+                <div className="p-6 prose prose-sm max-w-none text-gray-700">
                   <div dangerouslySetInnerHTML={{ __html: dateSheet.description }} />
                 </div>
               </div>
             )}
 
             {/* Exam Schedule Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
-                <h2 className="text-xl font-bold text-gray-800">📅 Exam Schedule</h2>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-orange-500" />
+                  Exam Schedule Details
+                </h2>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <div className="text-gray-500 text-sm">📝 Exam Type</div>
-                    <div className="font-semibold text-gray-900 text-lg mt-1">{dateSheet.examType}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-orange-50 rounded-xl p-4">
+                    <div className="text-orange-500 text-xs font-medium">Exam Type</div>
+                    <div className="font-semibold text-gray-900 text-base mt-1">{dateSheet.examType}</div>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <div className="text-gray-500 text-sm">📅 Year</div>
-                    <div className="font-semibold text-gray-900 text-lg mt-1">{dateSheet.year}</div>
+                  <div className="bg-orange-50 rounded-xl p-4">
+                    <div className="text-orange-500 text-xs font-medium">Year</div>
+                    <div className="font-semibold text-gray-900 text-base mt-1">{dateSheet.year}</div>
                   </div>
                   {dateSheet.examDate && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <div className="text-gray-500 text-sm">📆 Exam Date</div>
-                      <div className="font-semibold text-gray-900 text-lg mt-1">{formatDate(dateSheet.examDate)}</div>
+                    <div className="bg-orange-50 rounded-xl p-4 md:col-span-2">
+                      <div className="text-orange-500 text-xs font-medium">Exam Date</div>
+                      <div className="font-semibold text-gray-900 text-base mt-1 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-orange-500" />
+                        {formatDate(dateSheet.examDate)}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -236,21 +281,46 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
           {/* Right Sidebar */}
           <aside className="space-y-6">
             {boardOrInstitute && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
-                <div className="bg-gradient-to-r from-green-500 to-teal-500 px-6 py-4">
-                  <h3 className="text-white font-semibold">
-                    🏛️ {dateSheet.boardName ? "Board" : "Institute"} Information
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    {dateSheet.boardName ? "Board Information" : "Institute Information"}
                   </h3>
                 </div>
                 <div className="p-6 text-center">
                   <div className="text-5xl mb-3">{dateSheet.boardName ? "🏛️" : "🎓"}</div>
                   <h4 className="font-bold text-gray-900 text-lg">{boardOrInstitute}</h4>
                   {dateSheet.cityName && (
-                    <p className="text-sm text-gray-500 mt-2">📍 {dateSheet.cityName}{dateSheet.province ? `, ${dateSheet.province}` : ''}</p>
+                    <p className="text-sm text-gray-500 mt-2 flex items-center justify-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {dateSheet.cityName}{dateSheet.province ? `, ${dateSheet.province}` : ''}
+                    </p>
                   )}
                 </div>
               </div>
             )}
+
+            {/* Help Section */}
+            <div className="bg-blue-50 rounded-xl p-5 border border-blue-100">
+              <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                <span>💡</span> Need Help?
+              </h3>
+              <p className="text-sm text-blue-700 mb-3">
+                Having trouble downloading? Visit the official website directly.
+              </p>
+              {dateSheet.officialLink && (
+                <a 
+                  href={dateSheet.officialLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                >
+                  Go to Official Website
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
           </aside>
         </div>
       </div>
@@ -258,14 +328,10 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
   );
 }
 
-import React from 'react';
-
 // ============ MAIN PAGE ============
 export default async function DateSheetDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  // ✅ Get slug without awaiting
   const slugPromise = params.then(p => p.slug);
   
-  // ✅ Create data promise
   const dataPromise = slugPromise.then(async (slug) => {
     const dateSheet = await getDateSheetDetail(slug);
     if (!dateSheet) notFound();

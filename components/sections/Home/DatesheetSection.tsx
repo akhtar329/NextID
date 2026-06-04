@@ -1,10 +1,9 @@
 // components/sections/Home/DatesheetSection.tsx
 
 import Link from 'next/link';
-import { Calendar, Eye, Clock } from 'lucide-react';
+import { Calendar, ChevronRight, FileText, Clock, ExternalLink } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 
-// Helper function
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
@@ -20,71 +19,132 @@ function formatDate(date: Date | null): string {
   });
 }
 
-export default async function DatesheetSection() {
-  const dateSheets = await postService.getPostsByType('date_sheet', 6);
+export default async function DateSheetSection() {
+  const dateSheets = await postService.getPostsByType('date_sheet', 5);
   
-  // Transform data
-  const items = dateSheets.map(post => ({
-    id: post.id,
-    slug: post.slug,
-    title: post.title,
-    examType: getMetaValue(post.meta, 'examType', 'Annual'),
-    examDate: getMetaValue(post.meta, 'examDate', null) ? new Date(getMetaValue(post.meta, 'examDate', '')) : null,
-    boardName: getMetaValue(post.meta, 'boardName', null),
-    instituteName: getMetaValue(post.meta, 'instituteName', null),
-    officialLink: getMetaValue(post.meta, 'officialLink', null),
-    isPopular: getMetaValue(post.meta, 'isPopular', false),      // ✅ Fixed: from meta
-    viewCount: getMetaValue(post.meta, 'viewCount', 0),          // ✅ Fixed: from meta
-  }));
+  const items = dateSheets.map(post => {
+    const meta = post.meta || {};
+    const examStartDate = getMetaValue(meta, 'examStartDate', null) ? new Date(getMetaValue(meta, 'examStartDate', '')) : null;
+    const examEndDate = getMetaValue(meta, 'examEndDate', null) ? new Date(getMetaValue(meta, 'examEndDate', '')) : null;
+    
+    // External URL for redirection
+    const externalUrl = getMetaValue(meta, 'externalUrl', '') || 
+                        getMetaValue(meta, 'officialUrl', '') ||
+                        getMetaValue(meta, 'boardWebsite', '') ||
+                        getMetaValue(meta, 'redirectUrl', '');
+    
+    return {
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      boardName: getMetaValue(meta, 'boardName', getMetaValue(meta, 'board', 'Board')),
+      examType: getMetaValue(meta, 'examType', getMetaValue(meta, 'type', 'Annual')),
+      className: getMetaValue(meta, 'className', getMetaValue(meta, 'class', '')),
+      examStartDate: examStartDate,
+      examEndDate: examEndDate,
+      externalUrl: externalUrl,
+      isReleased: getMetaValue(meta, 'isReleased', true),
+    };
+  });
 
   if (items.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div className="bg-gradient-to-r from-orange-600 to-orange-500 px-5 py-3 flex items-center justify-between">
-        <div>
-          <h2 className="font-bold text-white text-lg flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Exam Date Sheets
-          </h2>
-          <p className="text-white/70 text-xs">Latest exam schedules</p>
+    <div className="w-full">
+      {/* Section Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-5 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full"></div>
+          <h2 className="text-xl font-bold text-gray-800">Date Sheets</h2>
+          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Official</span>
         </div>
-        <Link href="/date-sheets" className="text-white/80 hover:text-white text-sm">
-          View All →
+        <Link href="/date-sheets" className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1">
+          View All <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
+
+      {/* Date Sheet List - External Redirect */}
+      <div className="space-y-3">
+        {items.map((item) => {
+          // Use external URL if available, otherwise go to internal page
+          const redirectUrl = item.externalUrl || `/date-sheets/${item.slug}`;
+          const isExternal = !!item.externalUrl;
+          
+          return (
+            <a
+              key={item.id}
+              href={redirectUrl}
+              target={isExternal ? "_blank" : undefined}
+              rel={isExternal ? "noopener noreferrer" : undefined}
+              className="block group cursor-pointer"
+            >
+              <div className="bg-white rounded-lg p-4 border border-gray-100 hover:border-orange-200 hover:shadow-md transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  {/* PDF Icon */}
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 flex flex-col items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-orange-600" />
+                    <span className="text-[10px] font-bold text-orange-600 mt-0.5">PDF</span>
+                  </div>
+                  
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-800">{item.boardName}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-500">{item.examType}</span>
+                      {item.className && (
+                        <>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs font-medium text-orange-600">{item.className}</span>
+                        </>
+                      )}
+                    </div>
+                    
+                    <h3 className="font-medium text-gray-700 group-hover:text-orange-600 transition line-clamp-1">
+                      {item.title}
+                    </h3>
+                    
+                    {(item.examStartDate || item.examEndDate) && (
+                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                        {item.examStartDate && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            From: {formatDate(item.examStartDate)}
+                          </span>
+                        )}
+                        {item.examEndDate && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            To: {formatDate(item.examEndDate)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* View/Redirect Button */}
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1 bg-orange-500 text-white px-3 py-1.5 rounded-lg group-hover:bg-orange-600 transition">
+                      <span className="text-sm font-medium">View on Website</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </div>
+                    {isExternal && (
+                      <span className="text-xs text-gray-400">Official Board Website</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </a>
+          );
+        })}
+      </div>
       
-      <div className="divide-y divide-gray-100">
-        {items.map((item) => (
-          <Link key={item.id} href={`/date-sheets/${item.slug}`} className="block p-4 hover:bg-orange-50 transition group">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {item.isPopular && (
-                    <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">Popular</span>
-                  )}
-                  <span className="text-xs text-gray-500">{item.examType}</span>
-                </div>
-                <h3 className="font-semibold text-gray-800 group-hover:text-orange-600 transition line-clamp-1">
-                  {item.title}
-                </h3>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatDate(item.examDate)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" />
-                    {item.viewCount.toLocaleString()} views
-                  </span>
-                </div>
-              </div>
-              <div className="shrink-0 text-orange-600 group-hover:translate-x-1 transition">
-                →
-              </div>
-            </div>
-          </Link>
-        ))}
+      {/* Note for users */}
+      <div className="mt-3 text-center">
+        <p className="text-xs text-gray-400 flex items-center justify-center gap-1">
+          <ExternalLink className="w-3 h-3" />
+          Click to view on official board website
+        </p>
       </div>
     </div>
   );

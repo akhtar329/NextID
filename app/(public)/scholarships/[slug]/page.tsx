@@ -5,6 +5,21 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
+import { 
+  Calendar, 
+  GraduationCap, 
+  MapPin, 
+  Eye, 
+  CheckCircle, 
+  Clock,
+  ChevronLeft,
+  Award,
+  DollarSign,
+  ExternalLink,
+  TrendingUp,
+  Zap
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface ScholarshipDetail {
@@ -61,14 +76,6 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-function generateMetaTitle(scholarship: ScholarshipDetail): string {
-  return `${scholarship.title} - ${scholarship.studyLevel} Scholarship | NextID.pk`;
-}
-
-function generateMetaDescription(scholarship: ScholarshipDetail): string {
-  return `Apply for ${scholarship.title} offered by ${scholarship.provider}. ${scholarship.type} scholarship for ${scholarship.studyLevel} students. Deadline: ${formatShortDate(scholarship.deadline)}.`;
-}
-
 // ============ DATA FETCHING ============
 async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | null> {
   try {
@@ -119,46 +126,6 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
   }
 }
 
-async function getRelatedScholarships(currentSlug: string) {
-  try {
-    const allScholarships = await postService.getPostsByType('scholarship', 20);
-    
-    const related = allScholarships
-      .filter(post => post.slug !== currentSlug)
-      .slice(0, 5)
-      .map(post => {
-        const meta = post.meta || {};
-        
-        let deadline: Date | null = null;
-        const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
-        if (deadlineRaw && typeof deadlineRaw === 'string') {
-          try {
-            const parsed = new Date(deadlineRaw);
-            if (!isNaN(parsed.getTime())) {
-              deadline = parsed;
-            }
-          } catch {
-            deadline = null;
-          }
-        }
-        
-        return {
-          id: post.id,
-          slug: post.slug,
-          title: post.title,
-          studyLevel: getMetaValue(meta, 'studyLevel', 'Various'),
-          deadline: deadline,
-          provider: getMetaValue(meta, 'organizationName', getMetaValue(meta, 'provider', 'Various')),
-        };
-      });
-    
-    return related;
-  } catch (error) {
-    console.error('Error fetching related scholarships:', error);
-    return [];
-  }
-}
-
 // ============ METADATA ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -169,14 +136,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 
   return {
-    title: generateMetaTitle(scholarship),
-    description: generateMetaDescription(scholarship),
+    title: `${scholarship.title} - ${scholarship.studyLevel} Scholarship | NextID.pk`,
+    description: scholarship.excerpt || `Apply for ${scholarship.title} offered by ${scholarship.provider}. Deadline: ${formatShortDate(scholarship.deadline)}.`,
     alternates: { canonical: `https://www.nextid.pk/scholarships/${scholarship.slug}` },
-    openGraph: {
-      title: scholarship.title,
-      description: generateMetaDescription(scholarship),
-      type: 'article',
-    },
   };
 }
 
@@ -201,7 +163,6 @@ async function ScholarshipContent({ slugPromise }: { slugPromise: Promise<string
     notFound();
   }
   
-  const relatedScholarships = await getRelatedScholarships(slug);
   const daysLeft = getDaysLeft(scholarship.deadline);
   const isOpen = daysLeft !== null && daysLeft > 0;
   const isUrgent = daysLeft !== null && daysLeft <= 7;
@@ -210,31 +171,44 @@ async function ScholarshipContent({ slugPromise }: { slugPromise: Promise<string
     <main className="min-h-screen bg-gray-50">
       
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-teal-700 to-emerald-800 text-white">
-        <div className="container mx-auto px-4 py-12">
-          <div className="max-w-4xl">
-            {/* Breadcrumbs */}
-            <div className="text-sm text-teal-200 mb-4">
-              <Link href="/" className="hover:text-white">Home</Link>
-              {' / '}
-              <Link href="/scholarships" className="hover:text-white">Scholarships</Link>
-              {' / '}
-              <span className="text-white">{scholarship.title}</span>
-            </div>
+      <div className="relative bg-gradient-to-r from-teal-600 to-emerald-600 text-white overflow-hidden">
+        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="relative container mx-auto px-4 py-12 md:py-16">
+          <div className="max-w-4xl mx-auto">
+            
+            {/* Back Button */}
+            <Link 
+              href="/scholarships" 
+              className="inline-flex items-center gap-1 text-teal-200 hover:text-white transition mb-6 group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
+              Back to Scholarships
+            </Link>
             
             {/* Status Badges */}
             <div className="flex flex-wrap gap-2 mb-4">
               {scholarship.isFeatured && (
-                <span className="px-3 py-1 bg-amber-500 text-white rounded-full text-sm font-medium">⭐ Featured</span>
+                <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-xs px-3 py-1 rounded-full">
+                  <TrendingUp className="w-3 h-3" />
+                  Featured
+                </span>
               )}
               {scholarship.isPopular && (
-                <span className="px-3 py-1 bg-yellow-500 text-white rounded-full text-sm font-medium">🔥 Popular</span>
+                <span className="inline-flex items-center gap-1 bg-yellow-500 text-white text-xs px-3 py-1 rounded-full">
+                  <Zap className="w-3 h-3" />
+                  Popular
+                </span>
               )}
               {isOpen && isUrgent && (
-                <span className="px-3 py-1 bg-red-500 text-white rounded-full text-sm font-medium animate-pulse">🔴 Urgent - Apply Soon</span>
+                <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1 rounded-full animate-pulse">
+                  <Clock className="w-3 h-3" />
+                  Urgent - Apply Soon
+                </span>
               )}
               {!isOpen && scholarship.deadline && (
-                <span className="px-3 py-1 bg-gray-500 text-white rounded-full text-sm font-medium">Closed</span>
+                <span className="inline-flex items-center gap-1 bg-gray-500 text-white text-xs px-3 py-1 rounded-full">
+                  Closed
+                </span>
               )}
             </div>
             
@@ -244,178 +218,209 @@ async function ScholarshipContent({ slugPromise }: { slugPromise: Promise<string
             </h1>
             
             {/* Provider */}
-            <p className="text-xl text-teal-200 mb-4">
+            <p className="text-xl text-teal-200 mb-4 flex items-center gap-2">
+              <Award className="w-5 h-5" />
               Offered by {scholarship.provider}
             </p>
             
             {/* Meta Info */}
             <div className="flex flex-wrap gap-4 text-teal-200">
-              <div className="flex items-center gap-1">
-                <span>📚</span>
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4" />
                 <span>{scholarship.studyLevel}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span>💰</span>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
                 <span>{scholarship.type}</span>
               </div>
-              <div className="flex items-center gap-1">
-                <span>📍</span>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
                 <span>{scholarship.location}</span>
               </div>
               {scholarship.amount && (
-                <div className="flex items-center gap-1">
-                  <span>💵</span>
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4" />
                   <span>{scholarship.amount}</span>
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4" />
+                <span>{scholarship.viewCount.toLocaleString()} views</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Left Column */}
-          <div className="flex-1">
-            <div className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Scholarship Details</h2>
+          {/* MAIN CONTENT */}
+          <div className="lg:w-2/3">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Provider</p>
-                  <p className="font-semibold text-gray-900">{scholarship.provider}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Study Level</p>
-                  <p className="font-semibold text-gray-900">{scholarship.studyLevel}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Scholarship Type</p>
-                  <p className="font-semibold text-gray-900">{scholarship.type}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Location</p>
-                  <p className="font-semibold text-gray-900">{scholarship.location}</p>
-                </div>
-                {scholarship.amount && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-sm text-gray-500">Award Amount</p>
-                    <p className="font-semibold text-gray-900">{scholarship.amount}</p>
+              {/* Content */}
+              <div className="p-6">
+                
+                {/* Excerpt */}
+                {scholarship.excerpt && (
+                  <div className="mb-6 p-4 bg-teal-50 rounded-lg border-l-4 border-teal-500">
+                    <p className="text-teal-800 text-base leading-relaxed">{scholarship.excerpt}</p>
                   </div>
                 )}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-sm text-gray-500">Application Deadline</p>
-                  <p className={`font-semibold ${isUrgent && isOpen ? 'text-red-600' : 'text-gray-900'}`}>
-                    {formatDate(scholarship.deadline)}
-                    {daysLeft && isOpen && <span className="ml-2 text-sm">({daysLeft} days left)</span>}
-                  </p>
-                </div>
-              </div>
-
-              {scholarship.eligibility && (
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">Eligibility Criteria</h3>
-                  <div 
-                    className="prose prose-sm max-w-none text-gray-600"
-                    dangerouslySetInnerHTML={{ __html: scholarship.eligibility }}
-                  />
-                </div>
-              )}
-
-              {scholarship.coverage && (
-                <div className="border-t border-gray-200 pt-4 mt-2">
-                  <h3 className="font-semibold text-gray-900 mb-3">Coverage</h3>
-                  <div 
-                    className="prose prose-sm max-w-none text-gray-600"
-                    dangerouslySetInnerHTML={{ __html: scholarship.coverage }}
-                  />
-                </div>
-              )}
-
-              {scholarship.content && (
-                <div className="border-t border-gray-200 pt-4 mt-2">
-                  <h3 className="font-semibold text-gray-900 mb-3">Additional Information</h3>
-                  <div 
-                    className="prose prose-sm max-w-none text-gray-600"
-                    dangerouslySetInnerHTML={{ __html: scholarship.content }}
-                  />
-                </div>
-              )}
-
-              {(scholarship.applicationLink || scholarship.officialLink) && (
-                <div className="border-t border-gray-200 pt-4 mt-2">
-                  <h3 className="font-semibold text-gray-900 mb-3">Apply Now</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {scholarship.applicationLink && (
-                      <a 
-                        href={scholarship.applicationLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-semibold"
-                      >
-                        Apply Online →
-                      </a>
-                    )}
-                    {scholarship.officialLink && (
-                      <a 
-                        href={scholarship.officialLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-                      >
-                        Official Website
-                      </a>
-                    )}
+                
+                {/* Scholarship Details */}
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-teal-500" />
+                  Scholarship Details
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Provider</div>
+                    <div className="font-semibold text-gray-900 flex items-center gap-2">
+                      <GraduationCap className="w-4 h-4 text-teal-500" />
+                      {scholarship.provider}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Study Level</div>
+                    <div className="font-semibold text-gray-900">{scholarship.studyLevel}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Scholarship Type</div>
+                    <div className="font-semibold text-gray-900">{scholarship.type}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Location</div>
+                    <div className="font-semibold text-gray-900 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-teal-500" />
+                      {scholarship.location}
+                    </div>
+                  </div>
+                  {scholarship.amount && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-gray-500 text-xs mb-1">Award Amount</div>
+                      <div className="font-semibold text-gray-900 flex items-center gap-2">
+                        <DollarSign className="w-4 h-4 text-green-500" />
+                        {scholarship.amount}
+                      </div>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="text-gray-500 text-xs mb-1">Application Deadline</div>
+                    <div className={`font-semibold flex items-center gap-2 ${isUrgent && isOpen ? 'text-red-600' : 'text-gray-900'}`}>
+                      <Calendar className="w-4 h-4" />
+                      {formatDate(scholarship.deadline)}
+                      {daysLeft && isOpen && <span className="text-sm">({daysLeft} days left)</span>}
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Eligibility Criteria */}
+                {scholarship.eligibility && (
+                  <div className="border-t border-gray-100 pt-6">
+                    <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-teal-500" />
+                      Eligibility Criteria
+                    </h3>
+                    <div 
+                      className="prose prose-sm max-w-none text-gray-600"
+                      dangerouslySetInnerHTML={{ __html: scholarship.eligibility }}
+                    />
+                  </div>
+                )}
+
+                {/* Coverage */}
+                {scholarship.coverage && (
+                  <div className="border-t border-gray-100 pt-6 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3">Coverage</h3>
+                    <div 
+                      className="prose prose-sm max-w-none text-gray-600"
+                      dangerouslySetInnerHTML={{ __html: scholarship.coverage }}
+                    />
+                  </div>
+                )}
+
+                {/* Additional Content */}
+                {scholarship.content && (
+                  <div className="border-t border-gray-100 pt-6 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3">Additional Information</h3>
+                    <div 
+                      className="prose prose-sm max-w-none text-gray-600"
+                      dangerouslySetInnerHTML={{ __html: scholarship.content }}
+                    />
+                  </div>
+                )}
+
+                {/* Apply Links */}
+                {(scholarship.applicationLink || scholarship.officialLink) && (
+                  <div className="border-t border-gray-100 pt-6 mt-4">
+                    <h3 className="font-semibold text-gray-900 mb-3">Apply Now</h3>
+                    <div className="flex flex-wrap gap-3">
+                      {scholarship.applicationLink && (
+                        <a 
+                          href={scholarship.applicationLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-semibold group"
+                        >
+                          Apply Online
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        </a>
+                      )}
+                      {scholarship.officialLink && (
+                        <a 
+                          href={scholarship.officialLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition group"
+                        >
+                          Official Website
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <aside className="lg:w-80">
-            <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border border-gray-200 sticky top-24">
-              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span>📝</span> How to Apply?
-              </h3>
-              <ol className="space-y-3 text-sm text-gray-600">
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                  <span>Click the &quot;Apply Online&quot; button above</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                  <span>Fill the application form</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                  <span>Upload required documents</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                  <span>Submit before deadline</span>
-                </li>
-              </ol>
-            </div>
-
-            {relatedScholarships.length > 0 && (
-              <div className="bg-white rounded-xl shadow-sm p-5 border border-gray-200">
-                <h3 className="font-bold text-gray-900 mb-3">Related Scholarships</h3>
-                <div className="space-y-3">
-                  {relatedScholarships.map((rel) => (
-                    <Link key={rel.id} href={`/scholarships/${rel.slug}`} className="block p-3 bg-gray-50 rounded-lg hover:bg-teal-50 transition">
-                      <p className="font-medium text-gray-800 text-sm line-clamp-2">{rel.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">{rel.provider} • {rel.studyLevel}</p>
-                      {rel.deadline && (
-                        <p className="text-xs text-gray-400 mt-1">Deadline: {formatShortDate(rel.deadline)}</p>
-                      )}
-                    </Link>
-                  ))}
-                </div>
+          {/* RIGHT SIDEBAR */}
+          <aside className="lg:w-1/3">
+            <div className="sticky top-24 space-y-6">
+              
+              {/* How to Apply Guide */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-teal-500" />
+                  How to Apply?
+                </h3>
+                <ol className="space-y-3 text-sm text-gray-600">
+                  <li className="flex gap-2">
+                    <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                    <span>Click the &quot;Apply Online&quot; button above</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                    <span>Fill the application form</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+                    <span>Upload required documents</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+                    <span>Submit before deadline</span>
+                  </li>
+                </ol>
               </div>
-            )}
+              
+              {/* Sidebar Widgets */}
+              <SidebarWidgets />
+            </div>
           </aside>
         </div>
       </div>
