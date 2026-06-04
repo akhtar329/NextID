@@ -17,11 +17,22 @@ export const postService = {
     const post = await postRepository.getBySlug(slug);
     
     if (post) {
+      // ✅ FIX: Blogger URLs ko allow karo, local images ko handle karo
+      let imageUrl = post.featuredImage;
+      
+      // Agar image URL hai (blogger ya external) to waisay hi rakho
+      // Agar local path hai to usay bhi waisay hi rakho
+      if (imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('/uploads'))) {
+        // Already valid URL - no change needed
+      } else if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        // Local image path fix karo
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      
       return {
         ...post,
-        // ✅ FIX: Use database value, don't generate virtual URL
-        featuredImage: post.featuredImage,
-        actualImage: post.featuredImage  // Keep as backup
+        featuredImage: imageUrl,
+        actualImage: imageUrl
       };
     }
     
@@ -35,19 +46,18 @@ export const postService = {
     
     const posts = await postRepository.getByType(type, limit, offset);
     
-    return posts.map(post => ({
-      ...post,
-      // ✅ FIX: Use database value
-      featuredImage: post.featuredImage,
-      actualImage: post.featuredImage
-    }));
-  },
-
-  async getTotalCountByType(type: string): Promise<number> {
-    'use cache'
-    cacheLife('days')
-    cacheTag(`posts-count-${type}`)
-    return await postRepository.getCountByType(type);
+    return posts.map(post => {
+      let imageUrl = post.featuredImage;
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      
+      return {
+        ...post,
+        featuredImage: imageUrl,
+        actualImage: imageUrl
+      };
+    });
   },
 
   async getHomepageData(): Promise<{
@@ -64,13 +74,18 @@ export const postService = {
     const types = ["admission", "result", "news", "date_sheet", "scholarship"];
     const grouped = await postRepository.getByTypes(types, 5);
     
-    // ✅ FIX: Use database values
     const addImages = (posts: Post[]) => 
-      posts.map(post => ({
-        ...post,
-        featuredImage: post.featuredImage,
-        actualImage: post.featuredImage
-      }));
+      posts.map(post => {
+        let imageUrl = post.featuredImage;
+        if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+          imageUrl = `/uploads/${imageUrl}`;
+        }
+        return {
+          ...post,
+          featuredImage: imageUrl,
+          actualImage: imageUrl
+        };
+      });
     
     return {
       admissions: addImages(grouped["admission"] || []),
@@ -81,16 +96,23 @@ export const postService = {
     };
   },
 
+  // Baki methods bhi same pattern follow karein
   async getFeaturedPosts(limit: number = 6): Promise<ExtendedPost[]> {
     'use cache'
     cacheLife('days')
     cacheTag('posts-featured')
     const posts = await postRepository.getFeatured(limit);
-    return posts.map(post => ({
-      ...post,
-      featuredImage: post.featuredImage,
-      actualImage: post.featuredImage
-    }));
+    return posts.map(post => {
+      let imageUrl = post.featuredImage;
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      return {
+        ...post,
+        featuredImage: imageUrl,
+        actualImage: imageUrl
+      };
+    });
   },
 
   async getPopularPosts(limit: number = 8): Promise<ExtendedPost[]> {
@@ -98,11 +120,17 @@ export const postService = {
     cacheLife('days')
     cacheTag('posts-popular')
     const posts = await postRepository.getPopular(limit);
-    return posts.map(post => ({
-      ...post,
-      featuredImage: post.featuredImage,
-      actualImage: post.featuredImage
-    }));
+    return posts.map(post => {
+      let imageUrl = post.featuredImage;
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      return {
+        ...post,
+        featuredImage: imageUrl,
+        actualImage: imageUrl
+      };
+    });
   },
 
   async getRecentPosts(limit: number = 10): Promise<ExtendedPost[]> {
@@ -110,11 +138,17 @@ export const postService = {
     cacheLife('days')
     cacheTag('posts-recent')
     const posts = await postRepository.getRecent(limit);
-    return posts.map(post => ({
-      ...post,
-      featuredImage: post.featuredImage,
-      actualImage: post.featuredImage
-    }));
+    return posts.map(post => {
+      let imageUrl = post.featuredImage;
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      return {
+        ...post,
+        featuredImage: imageUrl,
+        actualImage: imageUrl
+      };
+    });
   },
 
   async getRelatedPosts(currentSlug: string, type: string, limit: number = 5): Promise<ExtendedPost[]> {
@@ -122,14 +156,20 @@ export const postService = {
     cacheLife('days')
     cacheTag(`posts-related-${type}`)
     const posts = await postRepository.getRelated(currentSlug, type, limit);
-    return posts.map(post => ({
-      ...post,
-      featuredImage: post.featuredImage,
-      actualImage: post.featuredImage
-    }));
+    return posts.map(post => {
+      let imageUrl = post.featuredImage;
+      if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/')) {
+        imageUrl = `/uploads/${imageUrl}`;
+      }
+      return {
+        ...post,
+        featuredImage: imageUrl,
+        actualImage: imageUrl
+      };
+    });
   },
 
-  // Cache clear methods remain same
+  // Cache clear methods (same rahenge)
   async clearPostCache(slug: string): Promise<void> {
     'use server'
     // @ts-expect-error Next.js 16.1.8 revalidateTag type issue
