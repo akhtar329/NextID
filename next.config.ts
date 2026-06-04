@@ -1,70 +1,63 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ✅ ENABLE CACHE COMPONENTS (Add this line)
+  // ✅ ENABLE CACHE COMPONENTS
   cacheComponents: true,
 
-  // ✅ Images configuration for external domains
+  // ✅ Images configuration
   images: {
+    // Add unoptimized for local uploads
+    unoptimized: process.env.NODE_ENV === 'development', // Optional: for dev only
+    
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'encrypted-tbn0.gstatic.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'cdn.pixabay.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'res.cloudinary.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: '**.gstatic.com',
-        port: '',
+        hostname: '*.gstatic.com',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: '**.googleapis.com',
-        port: '',
+        hostname: '*.googleapis.com',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: '**.googleusercontent.com',
-        port: '',
+        hostname: '*.googleusercontent.com',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'blogger.googleusercontent.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'www.nextid.pk',
-        port: '',
         pathname: '/**',
       },
       {
@@ -73,7 +66,21 @@ const nextConfig: NextConfig = {
         port: '3000',
         pathname: '/**',
       },
+      // ✅ Add for uploaded images
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3000',
+        pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.vercel.app',
+        pathname: '/uploads/**',
+      },
     ],
+    // ✅ Allow local uploads folder
+    domains: ['localhost'],
   },
 
   async redirects() {
@@ -102,6 +109,16 @@ const nextConfig: NextConfig = {
       {
         source: "/manifest.json",
         headers: [{ key: "X-Robots-Tag", value: "noindex" }],
+      },
+      // ✅ Add cache headers for uploads
+      {
+        source: "/uploads/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
       },
     ];
   },

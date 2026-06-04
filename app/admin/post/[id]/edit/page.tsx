@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import ImageUpload from '@/components/Image/ImageUpload';
 
 const POST_TYPES = [
   { value: 'admission', label: 'Admission', icon: '🎓', color: 'blue' },
@@ -43,7 +44,7 @@ export default function EditPostPage() {
     isPopular: false,
     isBreaking: false,
     publishedAt: '',
-    expiresAt: '', // ✅ Added expiry date
+    expiresAt: '',
     meta: {},
     tags: [],
   });
@@ -69,7 +70,7 @@ export default function EditPostPage() {
             isPopular: post.isPopular || false,
             isBreaking: post.isBreaking || false,
             publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-            expiresAt: post.expiresAt ? new Date(post.expiresAt).toISOString().split('T')[0] : '', // ✅ Load expiry date
+            expiresAt: post.expiresAt ? new Date(post.expiresAt).toISOString().split('T')[0] : '',
             meta: post.meta || {},
             tags: post.tags || [],
           });
@@ -86,7 +87,11 @@ export default function EditPostPage() {
     fetchPost();
   }, [id]);
 
-  // Set expiry date helper
+  // ✅ Handle image selection
+  const handleImageSelect = (url: string, alt: string) => {
+    setFormData({ ...formData, featuredImage: url });
+  };
+
   const setExpiryDate = (days: number) => {
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -108,7 +113,6 @@ export default function EditPostPage() {
       const data = await res.json();
 
       if (data.success) {
-        // ✅ NO CACHE CLEAR - Manual cache clear later
         setSuccess('Post updated successfully! Redirecting...');
         setTimeout(() => {
           router.push('/admin/post');
@@ -147,7 +151,6 @@ export default function EditPostPage() {
     );
   }
 
-  // Get current post type display
   const currentType = POST_TYPES.find(t => t.value === formData.type);
 
   return (
@@ -243,23 +246,18 @@ export default function EditPostPage() {
               </p>
             </div>
 
-            {/* Featured Image */}
+            {/* ✅ Featured Image - Using ImageUpload Component */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image URL</label>
-              <input
-                type="text"
-                value={formData.featuredImage}
-                onChange={(e) => setFormData({ ...formData, featuredImage: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://example.com/image.jpg"
+              <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image</label>
+              <ImageUpload
+                onImageSelect={handleImageSelect}
+                currentImage={formData.featuredImage}
+                postSlug={formData.slug}
+                postTitle={formData.title}
               />
-              {formData.featuredImage && (
-                <div className="mt-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={formData.featuredImage} alt="Preview" className="h-20 w-auto rounded border" />
-                  <p className="text-xs text-gray-400 mt-1">⚠️ Use direct image URL (no base64)</p>
-                </div>
-              )}
+              <p className="text-xs text-gray-400 mt-2">
+                Image will be auto-compressed to WebP format. Upload new image to replace existing.
+              </p>
             </div>
 
             {/* Excerpt */}
@@ -405,17 +403,16 @@ export default function EditPostPage() {
               </div>
             )}
 
-            {/* Post ID Info */}
-            <div className="mb-6 p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-4 text-sm flex-wrap">
-                <span className="text-gray-500">Post ID:</span>
-                <span className="font-mono text-gray-700">{id}</span>
-                <span className="text-gray-300">|</span>
-                <span className="text-gray-500">Type:</span>
-                <span className="font-medium text-gray-700">{formData.type}</span>
-                <span className="text-gray-300">|</span>
-                <span className="text-gray-500">Slug:</span>
-                <span className="font-mono text-gray-700">{formData.slug}</span>
+            {/* Info Box */}
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-sm font-medium text-blue-800 mb-2">📌 Post Information</h4>
+              <div className="flex flex-col gap-1 text-sm text-blue-700">
+                <p>Post ID: <code className="bg-white px-2 py-0.5 rounded">{id}</code></p>
+                <p>Type: <strong>{formData.type}</strong></p>
+                <p>Slug: <strong>{formData.slug}</strong></p>
+                <p className="text-green-700 mt-1">
+                  📸 Image will be saved as: <strong>{formData.slug}.webp</strong>
+                </p>
               </div>
             </div>
 

@@ -57,6 +57,13 @@
       "when": 1780396003047,
       "tag": "0007_worthless_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780565288937,
+      "tag": "0008_wild_hellion",
+      "breakpoints": true
     }
   ]
 }

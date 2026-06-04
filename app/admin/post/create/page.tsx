@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ImageUpload from '@/components/Image/ImageUpload';
 
 const POST_TYPES = [
   { value: 'admission', label: 'Admission', icon: '🎓', color: 'blue' },
@@ -27,7 +28,6 @@ export default function CreatePostPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Calculate default dates
   const today = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
@@ -42,14 +42,13 @@ export default function CreatePostPage() {
     isPopular: false,
     isBreaking: false,
     publishedAt: today,
-    expiresAt: '', // Optional expiry date
+    expiresAt: '',
     meta: {},
     tags: [],
   });
 
   const [slugCheck, setSlugCheck] = useState({ available: true, checking: false, message: '' });
 
-  // Generate slug from title
   const generateSlug = (title: string) => {
     return title
       .toLowerCase()
@@ -89,6 +88,10 @@ export default function CreatePostPage() {
     }
   };
 
+  const handleImageSelect = (url: string, alt: string) => {
+    setFormData({ ...formData, featuredImage: url });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -110,7 +113,6 @@ export default function CreatePostPage() {
       const data = await res.json();
 
       if (data.success) {
-        // ✅ NO CACHE CLEAR HERE - Manual cache clear later
         setSuccess('Post created successfully! Redirecting...');
         setTimeout(() => {
           router.push('/admin/post');
@@ -125,7 +127,6 @@ export default function CreatePostPage() {
     }
   };
 
-  // Set expiry date helper
   const setExpiryDate = (days: number) => {
     const date = new Date();
     date.setDate(date.getDate() + days);
@@ -231,36 +232,31 @@ export default function CreatePostPage() {
               </p>
             </div>
 
-            {/* Featured Image */}
+            {/* Featured Image - ImageUpload Component */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image URL</label>
-              <input
-                type="text"
-                value={formData.featuredImage}
-                onChange={(e) => setFormData({ ...formData, featuredImage: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="https://example.com/image.jpg"
+              <label className="block text-sm font-medium text-gray-700 mb-2">Featured Image</label>
+              <ImageUpload
+                onImageSelect={handleImageSelect}
+                currentImage={formData.featuredImage}
+                postSlug={formData.slug}
+                postTitle={formData.title}
               />
-              {formData.featuredImage && (
-                <div className="mt-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={formData.featuredImage} alt="Preview" className="h-20 w-auto rounded border" />
-                  <p className="text-xs text-gray-400 mt-1">⚠️ Use direct image URL (no base64)</p>
-                </div>
-              )}
+              <p className="text-xs text-gray-400 mt-2">
+                Image will be auto-compressed to WebP format and named as: <strong>{formData.slug || 'post-slug'}.webp</strong>
+              </p>
             </div>
 
             {/* Excerpt */}
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Excerpt (Short Description)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Excerpt</label>
               <textarea
                 value={formData.excerpt}
                 onChange={(e) => setFormData({ ...formData, excerpt: e.target.value })}
                 rows={3}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Brief summary of the post..."
+                placeholder="Brief summary of the post (will appear in listings)..."
               />
-              <p className="text-xs text-gray-400 mt-1">This will appear in listings and search results</p>
+              <p className="text-xs text-gray-400 mt-1">Recommended: 150-160 characters for SEO</p>
             </div>
 
             {/* Content */}
@@ -274,7 +270,7 @@ export default function CreatePostPage() {
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Write your content here (HTML supported)..."
               />
-              <p className="text-xs text-gray-400 mt-1">HTML tags are supported (h1, p, ul, li, etc.)</p>
+              <p className="text-xs text-gray-400 mt-1">HTML tags supported: h1, p, ul, li, a, strong, em, etc.</p>
             </div>
 
             {/* Status, Publish Date & Expiry Date */}
@@ -347,9 +343,6 @@ export default function CreatePostPage() {
                     Clear
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  After expiry date, post will not appear in listings
-                </p>
               </div>
             </div>
 
@@ -386,12 +379,15 @@ export default function CreatePostPage() {
 
             {/* Info Box */}
             <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="text-sm font-medium text-blue-800 mb-2">📌 Post URL Structure</h4>
+              <h4 className="text-sm font-medium text-blue-800 mb-2">📌 Post Information</h4>
               <p className="text-sm text-blue-700">
-                Your post will be available at: <br />
-                <code className="bg-white px-2 py-1 rounded text-sm">
+                Your post will be available at:
+                <code className="block bg-white px-2 py-1 rounded text-sm mt-1 font-mono">
                   https://www.nextid.pk/{formData.type}/{formData.slug || 'your-slug'}
                 </code>
+              </p>
+              <p className="text-sm text-green-700 mt-2">
+                📸 Image will be saved as: <strong>{formData.slug || 'post-slug'}.webp</strong>
               </p>
               {formData.expiresAt && (
                 <p className="text-sm text-orange-700 mt-2">
@@ -415,9 +411,9 @@ export default function CreatePostPage() {
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                     Creating...
                   </span>

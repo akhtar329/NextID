@@ -309,13 +309,11 @@ async function NewsContent({ slugPromise }: { slugPromise: Promise<string> }) {
             {/* Featured Image */}
             {newsItem.featuredImage && (
               <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video">
-                <Image 
-                  src={newsItem.featuredImage} 
-                  alt={newsItem.title}
-                  fill
-                  className="object-cover"
-                  priority
-                />
+                <img
+  src={newsItem.featuredImage}
+  alt={newsItem.title}
+  className="w-full h-full object-cover"
+/>
                 {newsItem.source && (
                   <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded">
                     Source: {newsItem.source}

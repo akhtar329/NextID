@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "actual_image" varchar(500);

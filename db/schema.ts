@@ -1,4 +1,4 @@
-// app/lib/schema.ts
+// db/schema.ts
 
 import {
   pgTable,
@@ -11,7 +11,7 @@ import {
   boolean,
   unique,
   index,
-  decimal,  // ✅ YEH ADD KARO - missing tha
+  decimal,
 } from "drizzle-orm/pg-core";
 
 /* =========================
@@ -145,6 +145,7 @@ export const posts = pgTable(
     
     // Media
     featuredImage: varchar("featured_image", { length: 500 }),
+    actualImage: varchar("actual_image", { length: 500 }), // ✅ Added for image mapping
     galleryImages: jsonb("gallery_images"),
     
     // SEO
