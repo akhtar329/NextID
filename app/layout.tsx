@@ -1,5 +1,3 @@
-// app/layout.tsx
-
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
@@ -22,6 +20,23 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        {/* ✅ PRECONNECT & DNS-PREFETCH — IMPROVES LCP */}
+        <link 
+          rel="preconnect" 
+          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech" 
+        />
+        <link 
+          rel="dns-prefetch" 
+          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech" 
+        />
+        <link rel="preconnect" href="https://www.nextid.pk" />
+        <link rel="dns-prefetch" href="https://www.nextid.pk" />
+        
+        {/* ✅ PRECONNECT FOR GOOGLE ADS (non-blocking) */}
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
+      </head>
       <body className={`${inter.className} antialiased`}>
         {/* MAIN CONTENT FIRST (IMPORTANT FOR LCP) */}
         {children}

@@ -175,3 +175,24 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+
+img, video, iframe, [width], [height] {
+  aspect-ratio: attr(width) / attr(height);
+  background-color: #f3f4f6;
+  object-fit: cover;  /* Images sahi se fit hongi */
+  max-width: 100%;     /* Responsive */
+  height: auto;        /* Aspect ratio maintain */
+}
+
+img[loading="lazy"] {
+  min-height: 200px;
+  background: linear-gradient(110deg, #f3f4f6 8%, #e5e7eb 18%, #f3f4f6 33%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

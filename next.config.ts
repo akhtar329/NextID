@@ -1,90 +1,110 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  // ✅ ENABLE CACHE COMPONENTS
-  cacheComponents: true,
+type NextConfigWithTurbo = NextConfig & {
+  turbo?: {
+    resolveAlias: Record<string, string>;
+  };
+};
+
+const nextConfig: NextConfigWithTurbo = {
+  // ✅ Remove console logs in production (reduces bundle size)
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
 
   // ✅ Images configuration
   images: {
-    // Add unoptimized for local uploads
-    unoptimized: process.env.NODE_ENV === 'development', // Optional: for dev only
+    // Image formats for modern browsers
+    formats: ["image/avif", "image/webp"],
     
+    // Device sizes for responsive images
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
+    
+    // Image sizes for different layouts
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    
+    // Remote patterns for external images
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'encrypted-tbn0.gstatic.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "encrypted-tbn0.gstatic.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'cdn.pixabay.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "cdn.pixabay.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: '*.gstatic.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "*.gstatic.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: '*.googleapis.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "*.googleapis.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: '*.googleusercontent.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "*.googleusercontent.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'blogger.googleusercontent.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "blogger.googleusercontent.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: 'www.nextid.pk',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "www.nextid.pk",
+        pathname: "/**",
       },
       {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '3000',
-        pathname: '/**',
-      },
-      // ✅ Add for uploaded images
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '3000',
-        pathname: '/uploads/**',
+        protocol: "http",
+        hostname: "localhost",
+        port: "3000",
+        pathname: "/**",
       },
       {
-        protocol: 'https',
-        hostname: '*.vercel.app',
-        pathname: '/uploads/**',
+        protocol: "http",
+        hostname: "localhost",
+        port: "3000",
+        pathname: "/uploads/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.vercel.app",
+        pathname: "/uploads/**",
       },
     ],
-    // ✅ Allow local uploads folder
-    domains: ['localhost'],
   },
 
+  // ✅ Redirects configuration
   async redirects() {
     return [
+      // ✅ NEW: Redirect /newss/* to /news/*
+      {
+        source: "/newss/:path*",
+        destination: "/news/:path*",
+        permanent: true,
+      },
+      // Existing redirect (nextid.pk to www)
       {
         source: "/:path*",
         has: [{ type: "host", value: "nextid.pk" }],
@@ -94,10 +114,11 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // ✅ Headers configuration (caching + security)
   async headers() {
     return [
       {
-        source: "/_next/static/media/:path*",
+        source: "/_next/static/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex" },
           {
@@ -110,7 +131,6 @@ const nextConfig: NextConfig = {
         source: "/manifest.json",
         headers: [{ key: "X-Robots-Tag", value: "noindex" }],
       },
-      // ✅ Add cache headers for uploads
       {
         source: "/uploads/:path*",
         headers: [
@@ -120,7 +140,55 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/images/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      // ✅ Security headers
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
+          },
+        ],
+      },
     ];
+  },
+
+  // ✅ Enable React strict mode
+  reactStrictMode: true,
+
+  // ✅ Experimental features for better performance
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "react-icons",
+      "@hello-pangea/dnd",
+      "chart.js",
+      "react-chartjs-2",
+    ],
+  },
+
+  // ✅ Turbopack configuration (since you're using --turbo)
+  turbo: {
+    resolveAlias: {
+      canvas: "./empty-module.ts",
+    },
   },
 };
 
