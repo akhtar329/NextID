@@ -79,11 +79,13 @@ const CATEGORY_OPTIONS = [
   { value: "General", label: "General", icon: "📰" },
 ];
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
   const allNews = await postService.getPostsByType('news', 200);
   const totalNews = allNews.length;
-  const currentYear = new Date().getFullYear();
+  
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
   
   return {
     title: `Latest Education News ${currentYear} | Pakistan Admissions, Results & Updates | NextID.pk`,
@@ -226,7 +228,8 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   const latestNews = newsList.slice(8, 16);
   const popularNews = [...newsList].sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
   
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({

@@ -5,7 +5,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import { 
   Calendar, 
@@ -153,6 +152,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   }
 }
 
+// ✅ Server-side related news fetch (no client hooks needed)
 async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
   try {
     const allNews = await postService.getPostsByType('news', 50);
@@ -191,7 +191,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  // ✅ Use SEO data from database
   const breakingPrefix = newsItem.isBreaking ? 'BREAKING: ' : '';
   const seoTitle = newsItem.metaTitle || `${breakingPrefix}${newsItem.title} | NextID.pk`;
   const seoDescription = newsItem.metaDescription || newsItem.excerpt || `Read latest education news. Updated on ${formatShortDate(newsItem.publishedAt)}.`;
@@ -305,20 +304,16 @@ function ShareButtons({ title, slug }: { title: string; slug: string }) {
   );
 }
 
-// ============ NEWS CONTENT COMPONENT ============
-function NewsContent({ newsPromise }: { newsPromise: Promise<NewsDetail | null> }) {
-  const newsItem = React.use(newsPromise);
-
-  // Get related news
-  const [relatedNews, setRelatedNews] = React.useState<RelatedNews[]>([]);
+// ============ NEWS CONTENT COMPONENT (Server Component) ============
+async function NewsContent({ slug }: { slug: string }) {
+  const newsItem = await getNewsBySlug(slug);
   
-  React.useEffect(() => {
-    if (!newsItem?.id) return;
-    getRelatedNews(newsItem.id).then(setRelatedNews);
-  }, [newsItem?.id]);
-
-  if (!newsItem) return null;
+  if (!newsItem) {
+    notFound();
+  }
   
+  // ✅ Fetch related news on server side
+  const relatedNews = await getRelatedNews(newsItem.id);
   const readTime = getReadTime(newsItem.content);
 
   // ✅ Generate JSON-LD Structured Data for SEO
@@ -494,7 +489,7 @@ function NewsContent({ newsPromise }: { newsPromise: Promise<NewsDetail | null> 
                 {/* Sidebar Widgets */}
                 <SidebarWidgets />
                 
-                {/* Related News - Dynamically loaded */}
+                {/* Related News - Server-side fetched */}
                 {relatedNews.length > 0 && (
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                     <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
@@ -543,17 +538,11 @@ function NewsContent({ newsPromise }: { newsPromise: Promise<NewsDetail | null> 
 
 // ============ MAIN PAGE ============
 export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const slugPromise = params.then(p => p.slug);
-  
-  const newsPromise = slugPromise.then(async (slug) => {
-    const newsItem = await getNewsBySlug(slug);
-    if (!newsItem) notFound();
-    return newsItem;
-  });
+  const { slug } = await params;
   
   return (
     <Suspense fallback={<NewsLoading />}>
-      <NewsContent newsPromise={newsPromise} />
+      <NewsContent slug={slug} />
     </Suspense>
   );
 }
