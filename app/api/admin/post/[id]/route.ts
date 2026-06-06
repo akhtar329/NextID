@@ -6,8 +6,14 @@ import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 
-// Type for update data
-type UpdateData = {
+// PostgreSQL error type
+interface PostgresError {
+  code: string;
+  message: string;
+}
+
+// Type for update data (no 'any' type)
+interface UpdateData {
   slug?: string;
   type?: string;
   title?: string;
@@ -19,15 +25,34 @@ type UpdateData = {
   isPopular?: boolean;
   isBreaking?: boolean;
   publishedAt?: Date;
+  expiresAt?: Date | null;
   meta?: Record<string, unknown>;
   tags?: Record<string, unknown>;
   updatedAt?: Date;
-};
-
-// PostgreSQL error type
-interface PostgresError {
-  code: string;
-  message: string;
+  // SEO Fields
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  focusKeyword?: string | null;
+  canonicalUrl?: string | null;
+  robots?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImage?: string | null;
+  ogType?: string | null;
+  twitterCard?: string | null;
+  twitterTitle?: string | null;
+  twitterDescription?: string | null;
+  twitterImage?: string | null;
+  schemaMarkup?: Record<string, unknown> | null;
+  focusKeywordDensity?: string | null;
+  readabilityScore?: number | null;
+  seoScore?: number | null;
+  lastSeoAnalysis?: Date | null;
+  priority?: string | null;
+  changefreq?: string | null;
+  breadcrumbTitle?: string | null;
+  oldSlug?: string | null;
 }
 
 /* =========================
@@ -40,7 +65,7 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
   return numericId;
 }
 
-// Helper function to revalidate cache (Next.js 15+)
+// Helper function to revalidate cache (Fixed: added second argument 'default' for profile)
 async function revalidatePostCache(slug: string, type: string) {
   try {
     // ✅ Fixed: revalidateTag now takes 2 arguments (tag, profile)
@@ -101,7 +126,7 @@ export async function GET(
 }
 
 /* =========================
-   PUT → Update Full Post
+   PUT → Update Full Post (With SEO Fields)
 ========================= */
 export async function PUT(
   req: NextRequest,
@@ -118,9 +143,9 @@ export async function PUT(
   try {
     const body = await req.json();
 
-    if (!body.title || !body.slug || !body.type) {
+    if (!body.title) {
       return NextResponse.json(
-        { success: false, error: "Title, slug and type are required" },
+        { success: false, error: "Title is required" },
         { status: 400 }
       );
     }
@@ -138,27 +163,11 @@ export async function PUT(
       );
     }
 
-    // Check for duplicate slug if being changed
-    if (body.slug && body.slug !== existing.slug) {
-      const [duplicateSlug] = await db
-        .select()
-        .from(posts)
-        .where(eq(posts.slug, body.slug));
-
-      if (duplicateSlug && duplicateSlug.id !== numericId) {
-        return NextResponse.json(
-          { success: false, error: `Slug "${body.slug}" already exists` },
-          { status: 409 }
-        );
-      }
-    }
-
-    // Update post
+    // ✅ Update post with ALL fields including SEO
     const updated = await db
       .update(posts)
       .set({
-        slug: body.slug.trim(),
-        type: body.type,
+        // Basic Info
         title: body.title.trim(),
         content: body.content || null,
         excerpt: body.excerpt || null,
@@ -168,9 +177,39 @@ export async function PUT(
         isPopular: body.isPopular !== undefined ? Boolean(body.isPopular) : false,
         isBreaking: body.isBreaking !== undefined ? Boolean(body.isBreaking) : false,
         publishedAt: body.publishedAt ? new Date(body.publishedAt) : existing.publishedAt,
-        meta: body.meta || existing.meta,
-        tags: body.tags || existing.tags,
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         updatedAt: new Date(),
+        
+        // ✅ SEO Fields - Core Meta
+        metaTitle: body.metaTitle || null,
+        metaDescription: body.metaDescription || null,
+        metaKeywords: body.metaKeywords || null,
+        focusKeyword: body.focusKeyword || null,
+        canonicalUrl: body.canonicalUrl || null,
+        robots: body.robots || "index, follow",
+        
+        // ✅ SEO Fields - Open Graph
+        ogTitle: body.ogTitle || null,
+        ogDescription: body.ogDescription || null,
+        ogImage: body.ogImage || null,
+        ogType: body.ogType || "article",
+        
+        // ✅ SEO Fields - Twitter
+        twitterCard: body.twitterCard || "summary_large_image",
+        twitterTitle: body.twitterTitle || null,
+        twitterDescription: body.twitterDescription || null,
+        twitterImage: body.twitterImage || null,
+        
+        // ✅ SEO Fields - Extra
+        focusKeywordDensity: body.focusKeywordDensity || null,
+        readabilityScore: body.readabilityScore || null,
+        seoScore: body.seoScore || null,
+        lastSeoAnalysis: body.lastSeoAnalysis ? new Date(body.lastSeoAnalysis) : null,
+        priority: body.priority || "0.5",
+        changefreq: body.changefreq || "weekly",
+        breadcrumbTitle: body.breadcrumbTitle || null,
+        oldSlug: body.oldSlug || null,
+        schemaMarkup: body.schemaMarkup || null,
       })
       .where(eq(posts.id, numericId))
       .returning();
@@ -185,7 +224,11 @@ export async function PUT(
     // Revalidate cache
     await revalidatePostCache(existing.slug, existing.type);
 
-    return NextResponse.json({ success: true, post: updated[0] });
+    return NextResponse.json({ 
+      success: true, 
+      post: updated[0],
+      message: "Post updated successfully" 
+    });
   } catch (err) {
     console.error("❌ PUT error:", err);
     
@@ -225,8 +268,7 @@ export async function PATCH(
     // Build update object dynamically
     const updateData: UpdateData = {};
     
-    if (body.slug !== undefined) updateData.slug = body.slug.trim();
-    if (body.type !== undefined) updateData.type = body.type;
+    // Basic fields
     if (body.title !== undefined) updateData.title = body.title.trim();
     if (body.content !== undefined) updateData.content = body.content || null;
     if (body.excerpt !== undefined) updateData.excerpt = body.excerpt || null;
@@ -236,8 +278,31 @@ export async function PATCH(
     if (body.isPopular !== undefined) updateData.isPopular = Boolean(body.isPopular);
     if (body.isBreaking !== undefined) updateData.isBreaking = Boolean(body.isBreaking);
     if (body.publishedAt !== undefined) updateData.publishedAt = body.publishedAt ? new Date(body.publishedAt) : undefined;
+    if (body.expiresAt !== undefined) updateData.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    
+    // ✅ SEO Fields
+    if (body.metaTitle !== undefined) updateData.metaTitle = body.metaTitle || null;
+    if (body.metaDescription !== undefined) updateData.metaDescription = body.metaDescription || null;
+    if (body.metaKeywords !== undefined) updateData.metaKeywords = body.metaKeywords || null;
+    if (body.focusKeyword !== undefined) updateData.focusKeyword = body.focusKeyword || null;
+    if (body.canonicalUrl !== undefined) updateData.canonicalUrl = body.canonicalUrl || null;
+    if (body.robots !== undefined) updateData.robots = body.robots || "index, follow";
+    if (body.ogTitle !== undefined) updateData.ogTitle = body.ogTitle || null;
+    if (body.ogDescription !== undefined) updateData.ogDescription = body.ogDescription || null;
+    if (body.ogImage !== undefined) updateData.ogImage = body.ogImage || null;
+    if (body.ogType !== undefined) updateData.ogType = body.ogType || "article";
+    if (body.twitterCard !== undefined) updateData.twitterCard = body.twitterCard || "summary_large_image";
+    if (body.twitterTitle !== undefined) updateData.twitterTitle = body.twitterTitle || null;
+    if (body.twitterDescription !== undefined) updateData.twitterDescription = body.twitterDescription || null;
+    if (body.twitterImage !== undefined) updateData.twitterImage = body.twitterImage || null;
+    if (body.priority !== undefined) updateData.priority = body.priority || "0.5";
+    if (body.changefreq !== undefined) updateData.changefreq = body.changefreq || "weekly";
+    if (body.breadcrumbTitle !== undefined) updateData.breadcrumbTitle = body.breadcrumbTitle || null;
+    if (body.oldSlug !== undefined) updateData.oldSlug = body.oldSlug || null;
+    
     if (body.meta !== undefined) updateData.meta = body.meta;
     if (body.tags !== undefined) updateData.tags = body.tags;
+    
     if (Object.keys(updateData).length > 0) updateData.updatedAt = new Date();
 
     // Check if post exists
@@ -251,21 +316,6 @@ export async function PATCH(
         { success: false, error: "Post not found" },
         { status: 404 }
       );
-    }
-
-    // Check for duplicate slug if being updated
-    if (body.slug && body.slug !== existing.slug) {
-      const [duplicateSlug] = await db
-        .select()
-        .from(posts)
-        .where(eq(posts.slug, body.slug));
-
-      if (duplicateSlug && duplicateSlug.id !== numericId) {
-        return NextResponse.json(
-          { success: false, error: `Slug "${body.slug}" already exists` },
-          { status: 409 }
-        );
-      }
     }
 
     // Only update if there's data to update
@@ -292,7 +342,11 @@ export async function PATCH(
     // Revalidate cache
     await revalidatePostCache(existing.slug, existing.type);
 
-    return NextResponse.json({ success: true, post: updated[0] });
+    return NextResponse.json({ 
+      success: true, 
+      post: updated[0],
+      message: "Post updated successfully" 
+    });
   } catch (err) {
     console.error("❌ PATCH error:", err);
     

@@ -5,7 +5,7 @@ import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-// Types for request body
+// Types for request body (with SEO fields)
 interface CreatePostBody {
   slug: string;
   type: string;
@@ -18,8 +18,33 @@ interface CreatePostBody {
   isPopular?: boolean;
   isBreaking?: boolean;
   publishedAt?: string | Date;
+  expiresAt?: string | Date | null;
   meta?: Record<string, unknown>;
   tags?: string[];
+  // ✅ SEO Fields
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  focusKeyword?: string | null;
+  canonicalUrl?: string | null;
+  robots?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImage?: string | null;
+  ogType?: string | null;
+  twitterCard?: string | null;
+  twitterTitle?: string | null;
+  twitterDescription?: string | null;
+  twitterImage?: string | null;
+  schemaMarkup?: Record<string, unknown> | null;
+  focusKeywordDensity?: string | null;
+  readabilityScore?: number | null;
+  seoScore?: number | null;
+  lastSeoAnalysis?: string | Date | null;
+  priority?: string | null;
+  changefreq?: string | null;
+  breadcrumbTitle?: string | null;
+  oldSlug?: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -27,6 +52,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as CreatePostBody;
     
     const {
+      // Basic fields
       slug,
       type,
       title,
@@ -38,8 +64,33 @@ export async function POST(request: NextRequest) {
       isPopular,
       isBreaking,
       publishedAt,
+      expiresAt,
       meta,
       tags,
+      // ✅ SEO Fields
+      metaTitle,
+      metaDescription,
+      metaKeywords,
+      focusKeyword,
+      canonicalUrl,
+      robots,
+      ogTitle,
+      ogDescription,
+      ogImage,
+      ogType,
+      twitterCard,
+      twitterTitle,
+      twitterDescription,
+      twitterImage,
+      schemaMarkup,
+      focusKeywordDensity,
+      readabilityScore,
+      seoScore,
+      lastSeoAnalysis,
+      priority,
+      changefreq,
+      breadcrumbTitle,
+      oldSlug,
     } = body;
 
     // Validate required fields
@@ -66,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate type is valid
-    const validTypes = ["admission", "result", "news", "date_sheet", "scholarship", "job", "blog", "board"];
+    const validTypes = ["admission", "result", "news", "date_sheet", "scholarship", "job", "blog"];
     if (!validTypes.includes(type)) {
       return NextResponse.json(
         { 
@@ -89,7 +140,7 @@ export async function POST(request: NextRequest) {
           success: false, 
           error: "Slug already exists. Please choose a different slug." 
         },
-        { status: 409 } // Conflict status code
+        { status: 409 }
       );
     }
 
@@ -102,8 +153,23 @@ export async function POST(request: NextRequest) {
       parsedPublishedAt = new Date();
     }
 
-    // Create new post
+    // Parse expires date safely
+    let parsedExpiresAt: Date | null = null;
+    if (expiresAt) {
+      const date = new Date(expiresAt);
+      parsedExpiresAt = isNaN(date.getTime()) ? null : date;
+    }
+
+    // Parse lastSeoAnalysis date safely
+    let parsedLastSeoAnalysis: Date | null = null;
+    if (lastSeoAnalysis) {
+      const date = new Date(lastSeoAnalysis);
+      parsedLastSeoAnalysis = isNaN(date.getTime()) ? null : date;
+    }
+
+    // Create new post with ALL fields including SEO
     const newPost = await db.insert(posts).values({
+      // Basic fields
       slug: slug.trim().toLowerCase(),
       type,
       title: title.trim(),
@@ -115,8 +181,42 @@ export async function POST(request: NextRequest) {
       isPopular: isPopular ?? false,
       isBreaking: isBreaking ?? false,
       publishedAt: parsedPublishedAt,
+      expiresAt: parsedExpiresAt,
       meta: meta || {},
       tags: tags || [],
+      
+      // ✅ SEO Fields - Core Meta
+      metaTitle: metaTitle || null,
+      metaDescription: metaDescription || null,
+      metaKeywords: metaKeywords || null,
+      focusKeyword: focusKeyword || null,
+      canonicalUrl: canonicalUrl || null,
+      robots: robots || "index, follow",
+      
+      // ✅ SEO Fields - Open Graph
+      ogTitle: ogTitle || null,
+      ogDescription: ogDescription || null,
+      ogImage: ogImage || null,
+      ogType: ogType || "article",
+      
+      // ✅ SEO Fields - Twitter
+      twitterCard: twitterCard || "summary_large_image",
+      twitterTitle: twitterTitle || null,
+      twitterDescription: twitterDescription || null,
+      twitterImage: twitterImage || null,
+      
+      // ✅ SEO Fields - Extra
+      schemaMarkup: schemaMarkup || null,
+      focusKeywordDensity: focusKeywordDensity || null,
+      readabilityScore: readabilityScore || null,
+      seoScore: seoScore || null,
+      lastSeoAnalysis: parsedLastSeoAnalysis,
+      priority: priority || "0.5",
+      changefreq: changefreq || "weekly",
+      breadcrumbTitle: breadcrumbTitle || null,
+      oldSlug: oldSlug || null,
+      
+      // Timestamps
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();

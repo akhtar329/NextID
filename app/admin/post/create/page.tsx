@@ -37,7 +37,7 @@ const STATUS_OPTIONS = [
   { value: 'archived', label: '📦 Archived' },
 ];
 
-// ==================== ACTION BUTTONS ====================
+// ==================== ACTION BUTTONS COMPONENT ====================
 const ActionButtons = ({ loading, slugCheck }: { loading: boolean; slugCheck: { available: boolean } }) => (
   <div className="flex gap-3">
     <Link
@@ -236,7 +236,7 @@ export default function CreatePostPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="p-6 max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header - UPPER BUTTON */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Create New Post</h1>
@@ -262,7 +262,7 @@ export default function CreatePostPage() {
             {/* ==================== MAIN AREA (2/3 width) ==================== */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* 1. POST TYPE - Dropdown at Top */}
+              {/* 1. POST TYPE - Dropdown */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   📋 Post Type <span className="text-red-500">*</span>
@@ -516,7 +516,7 @@ export default function CreatePostPage() {
                     {formData.metaTitle || 'Will auto-generate from title'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Length: {formData.metaTitle?.length || 0}/60 chars
+                    Length: {charCount.title}/60 chars
                   </p>
                 </div>
 
@@ -528,12 +528,12 @@ export default function CreatePostPage() {
                     {formData.metaDescription || 'Will auto-generate from content'}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Length: {formData.metaDescription?.length || 0}/160 chars
+                    Length: {charCount.desc}/160 chars
                   </p>
                 </div>
               </div>
 
-              {/* Submit Buttons */}
+              {/* SIDEBAR SUBMIT BUTTON */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex gap-3">
                   <Link
@@ -554,7 +554,7 @@ export default function CreatePostPage() {
             </div>
           </div>
 
-          {/* ==================== GOOGLE SEARCH PREVIEW - AT THE VERY BOTTOM (FULL WIDTH) ==================== */}
+          {/* ==================== GOOGLE SEARCH PREVIEW - AT THE VERY BOTTOM ==================== */}
           <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <button
               type="button"
@@ -573,7 +573,6 @@ export default function CreatePostPage() {
 
             {showGooglePreview && (
               <div className="p-6 space-y-4">
-                {/* Google Preview Card */}
                 <div className="bg-gray-50 rounded-xl p-5 border border-gray-200 shadow-inner">
                   <div className="text-blue-600 text-sm mb-1 hover:underline">
                     {seoPreview.url}
@@ -586,93 +585,46 @@ export default function CreatePostPage() {
                   </div>
                 </div>
 
-                {/* Character Count Indicators */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📝</span>
-                      <span className="text-sm font-medium text-gray-700">Meta Title</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${seoPreview.title.length > 60 ? 'bg-red-500' : 'bg-green-500'}`}
-                          style={{ width: `${Math.min((seoPreview.title.length / 60) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <span className={`text-sm font-mono ${seoPreview.title.length > 60 ? 'text-red-600' : 'text-gray-600'}`}>
-                        {seoPreview.title.length}/60
-                      </span>
+                    <span className="text-sm font-medium">📝 Title: {seoPreview.title.length}/60 chars</span>
+                    <div className="w-24 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${seoPreview.title.length > 60 ? 'bg-red-500' : 'bg-green-500'}`}
+                        style={{ width: `${Math.min((seoPreview.title.length / 60) * 100, 100)}%` }}
+                      />
                     </div>
                   </div>
-                  
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📄</span>
-                      <span className="text-sm font-medium text-gray-700">Meta Description</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-32 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${seoPreview.description.length > 160 ? 'bg-red-500' : 'bg-green-500'}`}
-                          style={{ width: `${Math.min((seoPreview.description.length / 160) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <span className={`text-sm font-mono ${seoPreview.description.length > 160 ? 'text-red-600' : 'text-gray-600'}`}>
-                        {seoPreview.description.length}/160
-                      </span>
+                    <span className="text-sm font-medium">📄 Description: {seoPreview.description.length}/160 chars</span>
+                    <div className="w-24 bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${seoPreview.description.length > 160 ? 'bg-red-500' : 'bg-green-500'}`}
+                        style={{ width: `${Math.min((seoPreview.description.length / 160) * 100, 100)}%` }}
+                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Warning Messages */}
                 {seoPreview.title.length > 60 && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <span className="text-red-500 text-lg">⚠️</span>
-                    <p className="text-sm text-red-700">
-                      Meta title is too long ({seoPreview.title.length} characters). Keep under 60 characters for better SEO.
-                    </p>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    ⚠️ Meta title is too long ({seoPreview.title.length} characters). Keep under 60 characters.
                   </div>
                 )}
-                
                 {seoPreview.description.length > 160 && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <span className="text-red-500 text-lg">⚠️</span>
-                    <p className="text-sm text-red-700">
-                      Meta description is too long ({seoPreview.description.length} characters). Keep under 160 characters for better SEO.
-                    </p>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    ⚠️ Meta description is too long ({seoPreview.description.length} characters). Keep under 160 characters.
                   </div>
                 )}
-
-                {seoPreview.title.length > 0 && seoPreview.title.length <= 60 && seoPreview.description.length > 0 && seoPreview.description.length <= 160 && (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <span className="text-green-500 text-lg">✅</span>
-                    <p className="text-sm text-green-700">
-                      Perfect! Your SEO metadata is optimized for Google search results.
-                    </p>
-                  </div>
-                )}
-
-                {/* SEO Tips */}
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                  <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                    <span>💡</span> SEO Tips for Better Ranking
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-blue-700">
-                    <ul className="space-y-1">
-                      <li>✓ Use your focus keyword in the title</li>
-                      <li>✓ Keep meta title between 50-60 characters</li>
-                      <li>✓ Include primary keyword in first 100 words</li>
-                    </ul>
-                    <ul className="space-y-1">
-                      <li>✓ Write compelling meta description (150-160 chars)</li>
-                      <li>✓ Use emotional triggers in description</li>
-                      <li>✓ Add call-to-action (Learn more, Apply now, etc.)</li>
-                    </ul>
-                  </div>
-                </div>
               </div>
             )}
+          </div>
+
+          {/* ==================== BOTTOM BUTTONS ==================== */}
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex justify-end gap-3">
+              <ActionButtons loading={loading} slugCheck={slugCheck} />
+            </div>
           </div>
         </form>
       </div>

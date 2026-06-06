@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { generateJsonLd } from '@/lib/seo';
 
 // Types
 interface Program {
@@ -38,16 +39,7 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// Pure function to check if deadline is near (no Date.now() during render)
-function isDeadlineNear(closeDate: Date | null): boolean {
-  if (!closeDate) return false;
-  // This will be evaluated at build time, not during render
-  const now = new Date();
-  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  return closeDate < weekFromNow;
-}
-
-// Generate metadata dynamically
+// ============ SEO: Generate Metadata from Database ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const post = await postService.getPost(slug);
@@ -56,12 +48,68 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return {
       title: 'Admission Not Found | NextID.pk',
       description: 'The requested admission could not be found.',
+      robots: { index: false },
     };
   }
   
+  // ✅ Use SEO data from database (posts table)
+  const seoTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'metaTitle', `${post.title} | Admissions 2026 | NextID.pk`);
+  const seoDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'metaDescription', post.excerpt || `Apply for ${post.title}. Check eligibility criteria, programs offered, application deadline, and admission process.`);
+  const seoKeywords = getMetaValue(post.meta as Record<string, unknown> | null, 'metaKeywords', 'admission, university admission, college admission, Pakistan education');
+  const canonicalUrl = getMetaValue(post.meta as Record<string, unknown> | null, 'canonicalUrl', `https://www.nextid.pk/admissions/${slug}`);
+  const robots = getMetaValue(post.meta as Record<string, unknown> | null, 'robots', 'index, follow');
+  
+  // Parse robots string
+  const robotsObj = {
+    index: robots.includes('index'),
+    follow: robots.includes('follow'),
+  };
+  
+  // Open Graph data
+  const ogTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'ogTitle', seoTitle);
+  const ogDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'ogDescription', seoDescription);
+  const ogImage = getMetaValue(post.meta as Record<string, unknown> | null, 'ogImage', post.featuredImage || '/og-image.png');
+  
+  // Twitter data
+  const twitterTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterTitle', ogTitle);
+  const twitterDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterDescription', ogDescription);
+  const twitterImage = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterImage', ogImage);
+  
   return {
-    title: `${post.title} | Admissions 2026 | NextID.pk`,
-    description: post.excerpt || `Apply for ${post.title} at ${getMetaValue(post.meta, 'instituteName', 'University')}. Check eligibility, programs, and deadline.`,
+    title: seoTitle,
+    description: seoDescription,
+    keywords: seoKeywords,
+    metadataBase: new URL('https://www.nextid.pk'),
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    robots: robotsObj,
+    openGraph: {
+      title: ogTitle,
+      description: ogDescription,
+      url: canonicalUrl,
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: ogTitle,
+        },
+      ],
+      locale: 'en_PK',
+      type: 'article',
+      publishedTime: post.publishedAt?.toISOString(),
+      modifiedTime: post.updatedAt?.toISOString(),
+    },
+    twitter: {
+      card: getMetaValue(post.meta as Record<string, unknown> | null, 'twitterCard', 'summary_large_image'),
+      title: twitterTitle,
+      description: twitterDescription,
+      images: [twitterImage],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
   };
 }
 
@@ -98,213 +146,241 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
   const status = getMetaValue(meta, 'status', 'Open');
   const isFeatured = post.isFeatured || getMetaValue(meta, 'isFeatured', false);
   
-  // Now calling the pure function
-  const deadlineNear = isDeadlineNear(closeDate);
+  // Deadline calculation
+  const isDeadlineNear = (() => {
+    if (!closeDate) return false;
+    const now = new Date();
+    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return closeDate < weekFromNow;
+  })();
+  
+  // ✅ Generate JSON-LD Structured Data for SEO
+  const jsonLd = generateJsonLd({
+    type: 'Event',
+    title: post.title,
+    description: post.excerpt || `Apply for ${post.title} at ${instituteName}`,
+    url: `https://www.nextid.pk/admissions/${slug}`,
+    image: post.featuredImage || undefined,
+    datePublished: post.publishedAt?.toISOString(),
+    dateModified: post.updatedAt?.toISOString(),
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'Admissions', url: '/admissions' },
+      { name: post.title, url: `/admissions/${slug}` },
+    ],
+  });
   
   return (
-    <main className="min-h-screen bg-gray-50">
+    <>
+      {/* ✅ JSON-LD Structured Data for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-blue-600 to-indigo-700 text-white overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative container mx-auto px-4 py-12 md:py-16">
-          <div className="max-w-4xl mx-auto">
-            {/* Back Button */}
-            <Link 
-              href="/admissions" 
-              className="inline-flex items-center gap-1 text-blue-200 hover:text-white transition mb-6 group"
-            >
-              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
-              Back to Admissions
-            </Link>
-            
-            {/* Status Badge */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {status === "Open" ? (
-                <span className="inline-flex items-center gap-1 bg-green-500 text-white text-xs px-3 py-1 rounded-full">
-                  <CheckCircle className="w-3 h-3" />
-                  Admissions Open
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 bg-gray-500 text-white text-xs px-3 py-1 rounded-full">
-                  Admissions Closed
-                </span>
-              )}
-              {isFeatured && (
-                <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-xs px-3 py-1 rounded-full">
-                  ⭐ Featured
-                </span>
-              )}
-              {deadlineNear && status === "Open" && (
-                <span className="inline-flex items-center gap-1 bg-orange-500 text-white text-xs px-3 py-1 rounded-full animate-pulse">
-                  <AlertCircle className="w-3 h-3" />
-                  Deadline Approaching
-                </span>
-              )}
-            </div>
-            
-            {/* Title */}
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              {post.title}
-            </h1>
-            
-            {/* Institute Info */}
-            <div className="flex flex-wrap gap-4 text-blue-200 mb-6">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                <span>{instituteName}</span>
+      <main className="min-h-screen bg-gray-50">
+        {/* Hero Section */}
+        <div className="relative bg-gradient-to-r from-blue-600 to-indigo-700 text-white overflow-hidden">
+          <div className="absolute inset-0 bg-black/20"></div>
+          <div className="relative container mx-auto px-4 py-12 md:py-16">
+            <div className="max-w-4xl mx-auto">
+              {/* Back Button */}
+              <Link 
+                href="/admissions" 
+                className="inline-flex items-center gap-1 text-blue-200 hover:text-white transition mb-6 group"
+              >
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
+                Back to Admissions
+              </Link>
+              
+              {/* Status Badge */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {status === "Open" ? (
+                  <span className="inline-flex items-center gap-1 bg-green-500 text-white text-xs px-3 py-1 rounded-full">
+                    <CheckCircle className="w-3 h-3" />
+                    Admissions Open
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 bg-gray-500 text-white text-xs px-3 py-1 rounded-full">
+                    Admissions Closed
+                  </span>
+                )}
+                {isFeatured && (
+                  <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-xs px-3 py-1 rounded-full">
+                    ⭐ Featured
+                  </span>
+                )}
+                {isDeadlineNear && status === "Open" && (
+                  <span className="inline-flex items-center gap-1 bg-orange-500 text-white text-xs px-3 py-1 rounded-full animate-pulse">
+                    <AlertCircle className="w-3 h-3" />
+                    Deadline Approaching
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>{cityName}</span>
+              
+              {/* Title */}
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+                {post.title}
+              </h1>
+              
+              {/* Institute Info */}
+              <div className="flex flex-wrap gap-4 text-blue-200 mb-6">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  <span>{instituteName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  <span>{cityName}</span>
+                </div>
               </div>
-            </div>
-            
-            {/* Dates */}
-            <div className="flex flex-wrap gap-6 text-sm">
-              {openDate && (
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <Calendar className="w-4 h-4" />
-                  <div>
-                    <div className="text-xs text-blue-200">Application Starts</div>
-                    <div className="font-semibold">{formatDate(openDate)}</div>
+              
+              {/* Dates */}
+              <div className="flex flex-wrap gap-6 text-sm">
+                {openDate && (
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                    <Calendar className="w-4 h-4" />
+                    <div>
+                      <div className="text-xs text-blue-200">Application Starts</div>
+                      <div className="font-semibold">{formatDate(openDate)}</div>
+                    </div>
                   </div>
-                </div>
-              )}
-              {closeDate && (
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
-                  <Clock className="w-4 h-4" />
-                  <div>
-                    <div className="text-xs text-blue-200">Deadline</div>
-                    <div className="font-semibold">{formatDate(closeDate)}</div>
+                )}
+                {closeDate && (
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                    <Clock className="w-4 h-4" />
+                    <div>
+                      <div className="text-xs text-blue-200">Deadline</div>
+                      <div className="font-semibold">{formatDate(closeDate)}</div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      {/* Content Section with Sidebar */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="flex flex-col lg:flex-row gap-8">
-          
-          {/* MAIN CONTENT */}
-          <main className="lg:w-2/3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              
-              {/* Featured Image */}
-              {post.featuredImage && (
-                <div className="relative w-full h-72 md:h-96">
-                  <Image
-                    src={post.featuredImage}
-                    alt={post.title}
-                    fill
-                    className="object-cover"
-                    priority
-                  />
+        
+        {/* Content Section with Sidebar */}
+        <div className="container mx-auto px-4 py-12">
+          <div className="flex flex-col lg:flex-row gap-8">
+            
+            {/* MAIN CONTENT */}
+            <main className="lg:w-2/3">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                
+                {/* Featured Image */}
+                {post.featuredImage && (
+                  <div className="relative w-full h-72 md:h-96">
+                    <Image
+                      src={post.featuredImage}
+                      alt={post.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  </div>
+                )}
+                
+                {/* Content */}
+                <div className="p-6 md:p-8">
+                  
+                  {/* Excerpt */}
+                  {post.excerpt && (
+                    <div className="mb-8 p-5 bg-blue-50 rounded-xl border-l-4 border-blue-500">
+                      <p className="text-blue-800 text-base leading-relaxed">{post.excerpt}</p>
+                    </div>
+                  )}
+                  
+                  {/* Programs Offered */}
+                  {programs && programs.length > 0 && (
+                    <div className="mb-8">
+                      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-blue-600" />
+                        Programs Offered
+                      </h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {programs.map((program: Program, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            <span className="text-gray-700">{program.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Eligibility Criteria */}
+                  {eligibility && (
+                    <div className="mb-8">
+                      <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        Eligibility Criteria
+                      </h2>
+                      <div className="prose prose-sm max-w-none text-gray-700">
+                        <p>{eligibility}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Main Content */}
+                  {post.content && (
+                    <div 
+                      className="prose prose-sm md:prose-base max-w-none
+                        prose-headings:text-gray-900 prose-headings:font-bold
+                        prose-p:text-gray-700 prose-p:leading-relaxed
+                        prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
+                        prose-strong:text-gray-900
+                        prose-li:text-gray-700
+                        prose-img:rounded-lg"
+                      dangerouslySetInnerHTML={{ __html: post.content }}
+                    />
+                  )}
+                  
+                  {/* Application Fee */}
+                  {applicationFee && (
+                    <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold">Application Fee:</span> {applicationFee}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Apply Button */}
+                  {applyLink && status === "Open" && (
+                    <div className="mt-8 pt-6 border-t border-gray-100">
+                      <a
+                        href={applyLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all group"
+                      >
+                        Apply Now
+                        <ExternalLink className="w-4 h-4 group-hover:translate-x-1 transition" />
+                      </a>
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              {/* Content */}
-              <div className="p-6 md:p-8">
                 
-                {/* Excerpt */}
-                {post.excerpt && (
-                  <div className="mb-8 p-5 bg-blue-50 rounded-xl border-l-4 border-blue-500">
-                    <p className="text-blue-800 text-base leading-relaxed">{post.excerpt}</p>
-                  </div>
-                )}
-                
-                {/* Programs Offered */}
-                {programs && programs.length > 0 && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                      <GraduationCap className="w-5 h-5 text-blue-600" />
-                      Programs Offered
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {programs.map((program: Program, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-gray-700">{program.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Eligibility Criteria */}
-                {eligibility && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-blue-600" />
-                      Eligibility Criteria
-                    </h2>
-                    <div className="prose prose-sm max-w-none text-gray-700">
-                      <p>{eligibility}</p>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Main Content */}
-                {post.content && (
-                  <div 
-                    className="prose prose-sm md:prose-base max-w-none
-                      prose-headings:text-gray-900 prose-headings:font-bold
-                      prose-p:text-gray-700 prose-p:leading-relaxed
-                      prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
-                      prose-strong:text-gray-900
-                      prose-li:text-gray-700
-                      prose-img:rounded-lg"
-                    dangerouslySetInnerHTML={{ __html: post.content }}
-                  />
-                )}
-                
-                {/* Application Fee */}
-                {applicationFee && (
-                  <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-semibold">Application Fee:</span> {applicationFee}
-                    </p>
-                  </div>
-                )}
-                
-                {/* Apply Button */}
-                {applyLink && status === "Open" && (
-                  <div className="mt-8 pt-6 border-t border-gray-100">
-                    <a
-                      href={applyLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all group"
-                    >
-                      Apply Now
-                      <ExternalLink className="w-4 h-4 group-hover:translate-x-1 transition" />
-                    </a>
-                  </div>
-                )}
+                {/* Footer */}
+                <div className="border-t border-gray-100 px-6 md:px-8 py-4 bg-gray-50">
+                  <p className="text-xs text-gray-400">
+                    Last updated: {formatDate(post.updatedAt || post.createdAt)}
+                  </p>
+                </div>
               </div>
-              
-              {/* Footer */}
-              <div className="border-t border-gray-100 px-6 md:px-8 py-4 bg-gray-50">
-                <p className="text-xs text-gray-400">
-                  Last updated: {formatDate(post.updatedAt || post.createdAt)}
-                </p>
+            </main>
+            
+            {/* SIDEBAR */}
+            <aside className="lg:w-1/3">
+              <div className="lg:sticky lg:top-6 space-y-6">
+                <SidebarWidgets />
               </div>
-            </div>
-          </main>
-          
-          {/* SIDEBAR */}
-          <aside className="lg:w-1/3">
-            <div className="lg:sticky lg:top-6 space-y-6">
-              <SidebarWidgets />
-            </div>
-          </aside>
-          
+            </aside>
+            
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }
 

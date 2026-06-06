@@ -3,6 +3,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import React from 'react';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 import { 
@@ -15,6 +16,7 @@ import {
   Clock
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { generateJsonLd } from '@/lib/seo';
 
 // ============ TYPES ============
 interface ResultItem {
@@ -92,10 +94,57 @@ function isResultRecent(resultDate: Date | null): boolean {
 }
 
 // ============ METADATA ============
-export const metadata: Metadata = {
-  title: 'Exam Results 2026 Pakistan | Board & University Results | NextID.pk',
-  description: 'Check latest board and university results 2026 in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const allResults = await postService.getPostsByType('result', 200);
+  const totalResults = allResults.length;
+  const currentYear = new Date().getFullYear();
+  
+  // Count recent results
+  const recentResults = allResults.filter(r => {
+    const meta = r.meta || {};
+    const resultDateRaw = getMetaValue(meta, 'resultDate', null);
+    if (!resultDateRaw || typeof resultDateRaw !== 'string') return false;
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    try {
+      return new Date(resultDateRaw).getTime() > thirtyDaysAgo;
+    } catch {
+      return false;
+    }
+  }).length;
+  
+  return {
+    title: `Exam Results ${currentYear} Pakistan | ${totalResults}+ Board & University Results | NextID.pk`,
+    description: `Check ${recentResults}+ latest board and university results ${currentYear} in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results. Download result cards online.`,
+    keywords: `exam results ${currentYear}, board results ${currentYear}, matric results, intermediate results, BA results, BSc results, BISE results, FBISE result, Pakistan results`,
+    alternates: {
+      canonical: 'https://www.nextid.pk/results',
+    },
+    openGraph: {
+      title: `Exam Results ${currentYear} Pakistan - Board & University Results | NextID.pk`,
+      description: `Check ${totalResults}+ board and university results for Matric, Intermediate, BA, BSc, MA, MSc. Download result cards online.`,
+      url: 'https://www.nextid.pk/results',
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'Exam Results Pakistan',
+        },
+      ],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Exam Results ${currentYear} Pakistan`,
+      description: `Check the latest board and university results for ${currentYear}. Download result cards online.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
 
 // ============ DATA FETCHING ============
 async function getResults(filters: Filters): Promise<ResultItem[]> {
@@ -292,237 +341,285 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
     return urlParams.toString() ? `/results?${urlParams.toString()}` : '/results';
   };
 
+  const currentYear = new Date().getFullYear();
+  
+  // ✅ Generate JSON-LD Structured Data for SEO
+  const jsonLd = generateJsonLd({
+    type: 'WebPage',
+    title: `Exam Results ${currentYear} - Board & University Results Pakistan`,
+    description: `Find ${resultsData.length} exam results for boards and universities in Pakistan`,
+    url: 'https://www.nextid.pk/results',
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'Results', url: '/results' },
+    ],
+  });
+  
+  // ✅ ItemList Schema for results listing
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": `Exam Results ${currentYear} - Pakistan`,
+    "description": `List of ${resultsData.length} exam results for Matric, Intermediate, BA, BSc, MA, MSc`,
+    "numberOfItems": resultsData.length,
+    "url": "https://www.nextid.pk/results",
+    "itemListElement": resultsData.slice(0, 10).map((result, index) => ({
+      "@type": "ListItem",
+      "position": index + 1,
+      "url": `https://www.nextid.pk/results/${result.slug}`,
+      "name": result.title
+    }))
+  };
+
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
+    <>
+      {/* ✅ JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
+      />
       
-      {/* LEFT SIDEBAR - Filters */}
-      <aside className="lg:w-72 flex-shrink-0">
-        <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
-          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <div className="w-1 h-5 bg-gradient-to-b from-green-500 to-teal-500 rounded-full"></div>
-            Filter Results
-          </h2>
-          
-          {/* Search */}
-          <div className="mb-6">
-            <form action="/results" method="GET" className="relative">
-              <input 
-                type="text" 
-                name="q" 
-                defaultValue={filters.q} 
-                placeholder="Search results..." 
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" 
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </form>
-          </div>
-
-          {/* Result Type */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Result Type</h3>
-            <div className="space-y-1">
-              {RESULT_TYPES.map(t => (
-                <Link 
-                  key={t.slug} 
-                  href={buildUrl('level', t.slug)} 
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                    filters.level === t.slug 
-                      ? 'bg-green-600 text-white' 
-                      : 'hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>{t.icon}</span>
-                    <span>{t.name}</span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Boards */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Education Boards</h3>
-            <div className="space-y-1 max-h-60 overflow-y-auto">
-              <Link 
-                href={buildUrl('board', '')} 
-                className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                  !filters.board 
-                    ? 'bg-green-600 text-white' 
-                    : 'hover:bg-gray-50 text-gray-600'
-                }`}
-              >
-                <span>All Boards</span>
-              </Link>
-              {BOARDS.map(b => (
-                <Link 
-                  key={b.slug} 
-                  href={buildUrl('board', b.slug)} 
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
-                    filters.board === b.slug 
-                      ? 'bg-green-600 text-white' 
-                      : 'hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <span>{b.name}</span>
-                  <span className="text-xs text-gray-400">{b.city}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Year */}
-          {stats.years.length > 0 && (
+      <div className="flex flex-col lg:flex-row gap-8">
+        
+        {/* LEFT SIDEBAR - Filters */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <div className="w-1 h-5 bg-gradient-to-b from-green-500 to-teal-500 rounded-full"></div>
+              Filter Results
+            </h2>
+            
+            {/* Search */}
             <div className="mb-6">
-              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Year</h3>
-              <div className="flex flex-wrap gap-2">
-                <Link 
-                  href={buildUrl('year', '')} 
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                    !filters.year 
-                      ? 'bg-green-600 text-white' 
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  All
-                </Link>
-                {stats.years.slice(0, 6).map(y => (
+              <form action="/results" method="GET" className="relative">
+                <input 
+                  type="text" 
+                  name="q" 
+                  defaultValue={filters.q} 
+                  placeholder="Search results..." 
+                  className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" 
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </form>
+            </div>
+
+            {/* Result Type */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Result Type</h3>
+              <div className="space-y-1">
+                {RESULT_TYPES.map(t => (
                   <Link 
-                    key={y} 
-                    href={buildUrl('year', y.toString())} 
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                      filters.year === y.toString() 
+                    key={t.slug} 
+                    href={buildUrl('level', t.slug)} 
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                      filters.level === t.slug 
                         ? 'bg-green-600 text-white' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : 'hover:bg-gray-50 text-gray-600'
                     }`}
                   >
-                    {y}
+                    <span className="flex items-center gap-2">
+                      <span>{t.icon}</span>
+                      <span>{t.name}</span>
+                    </span>
                   </Link>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Clear Filters */}
-          {(filters.board || filters.year || filters.level || filters.q) && (
-            <Link 
-              href="/results" 
-              className="block text-center text-sm text-green-600 hover:text-green-700 mt-4 pt-3 border-t border-gray-100"
-            >
-              Clear all filters
-            </Link>
-          )}
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <div className="flex-1">
-        
-        {/* Stats Bar */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-green-500" />
-              {resultsData.length} Results Found
-            </h2>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Award className="w-3 h-3" /> {stats.totalResults} Total</span>
-              <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-green-500" /> {stats.recentResults} Recent</span>
+            {/* Boards */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Education Boards</h3>
+              <div className="space-y-1 max-h-60 overflow-y-auto">
+                <Link 
+                  href={buildUrl('board', '')} 
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                    !filters.board 
+                      ? 'bg-green-600 text-white' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                >
+                  <span>All Boards</span>
+                </Link>
+                {BOARDS.map(b => (
+                  <Link 
+                    key={b.slug} 
+                    href={buildUrl('board', b.slug)} 
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+                      filters.board === b.slug 
+                        ? 'bg-green-600 text-white' 
+                        : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span>{b.name}</span>
+                    <span className="text-xs text-gray-400">{b.city}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-          {filters.level && (
-            <p className="text-sm text-gray-500 mt-2">
-              Type: {RESULT_TYPES.find(l => l.slug === filters.level)?.name}
-            </p>
-          )}
-        </div>
 
-        {/* Results List */}
-        <div className="space-y-4">
-          {resultsData.length > 0 ? (
-            resultsData.map((r) => {
-              const isRecent = isResultRecent(r.resultDate);
-              const institutionName = r.boardName || r.instituteName || 'Education Board';
-              return (
-                <article key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-green-200 transition-all overflow-hidden group">
-                  <div className="p-5">
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-green-600" />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
-                              <Link href={`/results/${r.slug}`}>{r.title}</Link>
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-2">
-                              <span className="font-medium text-green-600">{institutionName}</span>
+            {/* Year */}
+            {stats.years.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-700 mb-3 text-sm">Year</h3>
+                <div className="flex flex-wrap gap-2">
+                  <Link 
+                    href={buildUrl('year', '')} 
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                      !filters.year 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </Link>
+                  {stats.years.slice(0, 6).map(y => (
+                    <Link 
+                      key={y} 
+                      href={buildUrl('year', y.toString())} 
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                        filters.year === y.toString() 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {y}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clear Filters */}
+            {(filters.board || filters.year || filters.level || filters.q) && (
+              <Link 
+                href="/results" 
+                className="block text-center text-sm text-green-600 hover:text-green-700 mt-4 pt-3 border-t border-gray-100"
+              >
+                Clear all filters
+              </Link>
+            )}
+          </div>
+        </aside>
+
+        {/* MAIN CONTENT */}
+        <div className="flex-1">
+          
+          {/* Stats Bar */}
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-green-500" />
+                {resultsData.length} Results Found
+              </h2>
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><Award className="w-3 h-3" /> {stats.totalResults} Total</span>
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-green-500" /> {stats.recentResults} Recent</span>
+                <span className="flex items-center gap-1">👁️ {resultsData.reduce((sum, r) => sum + r.viewCount, 0).toLocaleString()} views</span>
+              </div>
+            </div>
+            {filters.level && (
+              <p className="text-sm text-gray-500 mt-2">
+                Type: {RESULT_TYPES.find(l => l.slug === filters.level)?.name}
+              </p>
+            )}
+          </div>
+
+          {/* Results List */}
+          <div className="space-y-4">
+            {resultsData.length > 0 ? (
+              resultsData.map((r) => {
+                const isRecent = isResultRecent(r.resultDate);
+                const institutionName = r.boardName || r.instituteName || 'Education Board';
+                return (
+                  <article key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-green-200 transition-all overflow-hidden group">
+                    <div className="p-5">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                              <FileText className="w-5 h-5 text-green-600" />
                             </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                              {r.resultDate && (
+                            <div className="flex-1">
+                              <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
+                                <Link href={`/results/${r.slug}`}>{r.title}</Link>
+                              </h3>
+                              <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mb-2">
+                                <span className="font-medium text-green-600">{institutionName}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                                {r.resultDate && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {formatDate(r.resultDate)}
+                                  </span>
+                                )}
                                 <span className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {formatDate(r.resultDate)}
+                                  Year: {r.year}
                                 </span>
-                              )}
-                              <span className="flex items-center gap-1">
-                                Year: {r.year}
-                              </span>
-                              <div className="flex gap-2">
-                                {r.isPopular && (
-                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
-                                    <TrendingUp className="w-3 h-3" /> Popular
-                                  </span>
-                                )}
-                                {isRecent && (
-                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                    New
-                                  </span>
-                                )}
+                                <span className="flex items-center gap-1">
+                                  👁️ {r.viewCount.toLocaleString()} views
+                                </span>
+                                <div className="flex gap-2">
+                                  {r.isPopular && (
+                                    <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                      <TrendingUp className="w-3 h-3" /> Popular
+                                    </span>
+                                  )}
+                                  {isRecent && (
+                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                      New
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
+                        <Link 
+                          href={`/results/${r.slug}`} 
+                          className="flex-shrink-0 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2"
+                        >
+                          Check Result
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+                        </Link>
                       </div>
-                      <Link 
-                        href={`/results/${r.slug}`} 
-                        className="flex-shrink-0 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium inline-flex items-center gap-2"
-                      >
-                        Check Result
-                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
-                      </Link>
                     </div>
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
-              <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
-              <p className="text-gray-500">Try adjusting your filters to see more results</p>
-              <Link href="/results" className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                View All Results
-              </Link>
-            </div>
-          )}
+                  </article>
+                );
+              })
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
+                <div className="text-6xl mb-4">📭</div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Results Found</h3>
+                <p className="text-gray-500">Try adjusting your filters to see more results</p>
+                <Link href="/results" className="inline-block mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                  View All Results
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* RIGHT SIDEBAR - Widgets */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <div className="sticky top-24">
+            <SidebarWidgets />
+          </div>
+        </aside>
+        
       </div>
-      
-      {/* RIGHT SIDEBAR - Widgets */}
-      <aside className="lg:w-72 flex-shrink-0">
-        <div className="sticky top-24">
-          <SidebarWidgets />
-        </div>
-      </aside>
-      
-    </div>
+    </>
   );
 }
 
 // ============ MAIN PAGE ============
 export default async function ResultsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const currentYear = new Date().getFullYear();
+  
   return (
     <main className="min-h-screen bg-gray-50">
       
@@ -533,7 +630,7 @@ export default async function ResultsPage({ searchParams }: { searchParams?: Pro
           <div className="max-w-3xl text-center mx-auto">
             <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
               <FileText className="w-4 h-4" />
-              <span className="text-sm font-medium">Exam Results 2026</span>
+              <span className="text-sm font-medium">Exam Results {currentYear}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
               Exam Results <span className="text-yellow-300">Pakistan</span>

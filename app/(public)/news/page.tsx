@@ -1,6 +1,7 @@
 // app/(public)/news/page.tsx
 
 import { notFound } from "next/navigation";
+import type { Metadata } from 'next';
 import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
@@ -12,13 +13,13 @@ import {
   Search,
   Flame,
   User,
-  MessageCircle,
   X,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { generateJsonLd } from '@/lib/seo';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -79,10 +80,44 @@ const CATEGORY_OPTIONS = [
 ];
 
 // ============ METADATA ============
-export const metadata = {
-  title: 'News | Latest Education Updates Pakistan | NextID.pk',
-  description: 'Breaking news, latest updates on admissions, results, scholarships and educational events from across Pakistan.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const allNews = await postService.getPostsByType('news', 200);
+  const totalNews = allNews.length;
+  const currentYear = new Date().getFullYear();
+  
+  return {
+    title: `Latest Education News ${currentYear} | Pakistan Admissions, Results & Updates | NextID.pk`,
+    description: `Get ${totalNews}+ latest education news, breaking updates on admissions, board results, scholarships, and educational events from across Pakistan. Stay informed with NextID.pk.`,
+    keywords: `education news ${currentYear}, Pakistan education news, admission news, result news, scholarship news, breaking news Pakistan, educational updates`,
+    alternates: {
+      canonical: 'https://www.nextid.pk/news',
+    },
+    openGraph: {
+      title: `Latest Education News ${currentYear} - Pakistan Updates | NextID.pk`,
+      description: `Breaking news, admissions, results, scholarships and educational events from across Pakistan.`,
+      url: 'https://www.nextid.pk/news',
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'Education News Pakistan',
+        },
+      ],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Latest Education News ${currentYear} - Pakistan Updates`,
+      description: `Get the latest education news, admissions, and results updates from across Pakistan.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
 
 // ============ DATA FETCHING ============
 async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
@@ -191,337 +226,379 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   const latestNews = newsList.slice(8, 16);
   const popularNews = [...newsList].sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
   
+  const currentYear = new Date().getFullYear();
+  
+  // ✅ Generate JSON-LD Structured Data for SEO
+  const jsonLd = generateJsonLd({
+    type: 'WebPage',
+    title: `Latest Education News ${currentYear} - Pakistan Updates`,
+    description: `Get ${pagination.totalItems} latest education news, breaking updates on admissions, board results, and scholarships`,
+    url: 'https://www.nextid.pk/news',
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'News', url: '/news' },
+    ],
+  });
+  
+  // ✅ ItemList Schema for news listing
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": `Latest Education News ${currentYear}`,
+    "description": `List of ${pagination.totalItems} latest education news articles and updates`,
+    "numberOfItems": pagination.totalItems,
+    "url": "https://www.nextid.pk/news",
+    "itemListElement": newsList.slice(0, 10).map((news, index) => ({
+      "@type": "ListItem",
+      "position": index + 1,
+      "url": `https://www.nextid.pk/news/${news.slug}`,
+      "name": news.title
+    }))
+  };
+  
   return (
-    <main className="min-h-screen bg-gray-50">
+    <>
+      {/* ✅ JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
+      />
       
-      {/* ============ BREAKING NEWS TICKER ============ */}
-      {newsList.filter(n => n.isBreaking).length > 0 && (
-        <div className="bg-red-600 text-white py-2">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full">
-                <Flame className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="font-bold text-xs uppercase tracking-wider">Breaking</span>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <div className="whitespace-nowrap animate-marquee inline-block">
-                  {newsList.filter(n => n.isBreaking).slice(0, 5).map((news, idx) => (
-                    <Link key={idx} href={`/news/${news.slug}`} className="mx-4 hover:underline text-sm">
-                      {news.title}
-                    </Link>
-                  ))}
+      <main className="min-h-screen bg-gray-50">
+        
+        {/* ============ BREAKING NEWS TICKER ============ */}
+        {newsList.filter(n => n.isBreaking).length > 0 && (
+          <div className="bg-red-600 text-white py-2">
+            <div className="container mx-auto px-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full">
+                  <Flame className="w-3.5 h-3.5 text-yellow-400" />
+                  <span className="font-bold text-xs uppercase tracking-wider">Breaking</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============ HERO SECTION ============ */}
-      <div className="bg-gradient-to-r from-red-600 to-red-700 text-white py-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
-              <Newspaper className="w-4 h-4" />
-              <span className="text-sm font-medium">Latest News & Updates</span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-3">
-              News <span className="text-yellow-300">Updates</span>
-            </h1>
-            <p className="text-lg text-red-100">
-              Breaking news, admissions, results, and educational events from across Pakistan
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-12 max-w-7xl">
-        
-        {/* ============ CATEGORY FILTER BAR ============ */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-gray-500 mr-2">Filter:</span>
-            {CATEGORY_OPTIONS.map((cat) => (
-              <Link
-                key={cat.value}
-                href={`/news${cat.value ? `?category=${encodeURIComponent(cat.value)}` : ''}`}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
-                  selectedCategory === cat.value
-                    ? 'bg-red-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <span>{cat.icon}</span>
-                <span>{cat.label}</span>
-              </Link>
-            ))}
-            
-            {selectedCategory && (
-              <Link
-                href="/news"
-                className="px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition flex items-center gap-1"
-              >
-                <X className="w-3 h-3" />
-                Clear
-              </Link>
-            )}
-          </div>
-        </div>
-        
-        {/* ============ HERO MAIN STORY ============ */}
-        {heroNews && (
-          <div className="mb-10">
-            <Link href={`/news/${heroNews.slug}`} className="group">
-              <div className="relative overflow-hidden rounded-xl shadow-lg bg-white">
-                <div className="grid grid-cols-1 lg:grid-cols-2">
-                  {/* Image */}
-                  <div className="relative h-64 lg:h-80 overflow-hidden">
-                    {heroNews.featuredImage ? (
-                      <Image
-                        src={heroNews.featuredImage}
-                        alt={heroNews.title}
-                        fill
-                        className="object-cover group-hover:scale-105 transition duration-700"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center">
-                        <Newspaper className="w-16 h-16 text-gray-500" />
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Content */}
-                  <div className="p-6 lg:p-8 flex flex-col justify-center">
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
-                        {heroNews.category}
-                      </span>
-                      <span className="text-sm text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatDate(heroNews.publishedAt)}
-                      </span>
-                    </div>
-                    <h2 className="text-2xl lg:text-3xl font-bold text-gray-800 group-hover:text-red-600 transition mb-3 line-clamp-3">
-                      {heroNews.title}
-                    </h2>
-                    <p className="text-gray-600 line-clamp-2 mb-4">
-                      {heroNews.excerpt}
-                    </p>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        {heroNews.authorName || 'NextID Team'}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MessageCircle className="w-3 h-3" />
-                        0 Comments
-                      </span>
-                    </div>
+                <div className="flex-1 overflow-hidden">
+                  <div className="whitespace-nowrap animate-marquee inline-block">
+                    {newsList.filter(n => n.isBreaking).slice(0, 5).map((news, idx) => (
+                      <Link key={idx} href={`/news/${news.slug}`} className="mx-4 hover:underline text-sm">
+                        {news.title}
+                      </Link>
+                    ))}
                   </div>
                 </div>
               </div>
-            </Link>
+            </div>
           </div>
         )}
 
-        {newsList.length > 0 && (
-          <div className="flex flex-col lg:flex-row gap-8">
-            
-            {/* ============ MAIN CONTENT ============ */}
-            <main className="lg:w-2/3 space-y-8">
+        {/* ============ HERO SECTION ============ */}
+        <div className="bg-gradient-to-r from-red-600 to-red-700 text-white py-12">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center">
+              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
+                <Newspaper className="w-4 h-4" />
+                <span className="text-sm font-medium">Latest News & Updates</span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold mb-3">
+                News <span className="text-yellow-300">Updates</span>
+              </h1>
+              <p className="text-lg text-red-100">
+                Breaking news, admissions, results, and educational events from across Pakistan
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 py-12 max-w-7xl">
+          
+          {/* ============ CATEGORY FILTER BAR ============ */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-8">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-500 mr-2">Filter:</span>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <Link
+                  key={cat.value}
+                  href={`/news${cat.value ? `?category=${encodeURIComponent(cat.value)}` : ''}`}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
+                    selectedCategory === cat.value
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </Link>
+              ))}
               
-              {/* Top Stories Grid */}
-              {topStories.length > 0 && (
+              {selectedCategory && (
+                <Link
+                  href="/news"
+                  className="px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </Link>
+              )}
+            </div>
+          </div>
+          
+          {/* ============ HERO MAIN STORY ============ */}
+          {heroNews && (
+            <div className="mb-10">
+              <Link href={`/news/${heroNews.slug}`} className="group">
+                <div className="relative overflow-hidden rounded-xl shadow-lg bg-white">
+                  <div className="grid grid-cols-1 lg:grid-cols-2">
+                    {/* Image */}
+                    <div className="relative h-64 lg:h-80 overflow-hidden">
+                      {heroNews.featuredImage ? (
+                        <Image
+                          src={heroNews.featuredImage}
+                          alt={heroNews.title}
+                          fill
+                          className="object-cover group-hover:scale-105 transition duration-700"
+                          priority
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center">
+                          <Newspaper className="w-16 h-16 text-gray-500" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="p-6 lg:p-8 flex flex-col justify-center">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
+                          {heroNews.category}
+                        </span>
+                        <span className="text-sm text-gray-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {formatDate(heroNews.publishedAt)}
+                        </span>
+                      </div>
+                      <h2 className="text-2xl lg:text-3xl font-bold text-gray-800 group-hover:text-red-600 transition mb-3 line-clamp-3">
+                        {heroNews.title}
+                      </h2>
+                      <p className="text-gray-600 line-clamp-2 mb-4">
+                        {heroNews.excerpt}
+                      </p>
+                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {heroNews.authorName || 'NextID Team'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          👁️ {heroNews.viewCount.toLocaleString()} views
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          )}
+
+          {newsList.length > 0 && (
+            <div className="flex flex-col lg:flex-row gap-8">
+              
+              {/* ============ MAIN CONTENT ============ */}
+              <main className="lg:w-2/3 space-y-8">
+                
+                {/* Top Stories Grid */}
+                {topStories.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-1 h-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
+                      <h2 className="text-xl font-bold text-gray-800">Top Stories</h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      {topStories.map((news, idx) => (
+                        <Link key={idx} href={`/news/${news.slug}`} className="group">
+                          <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100 h-full">
+                            <div className="relative h-40 w-full overflow-hidden bg-gray-100">
+                              {news.featuredImage ? (
+                                <Image
+                                  src={news.featuredImage}
+                                  alt={news.title}
+                                  fill
+                                  className="object-cover group-hover:scale-105 transition duration-500"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                                  <Newspaper className="w-8 h-8 text-gray-400" />
+                                </div>
+                              )}
+                              <div className="absolute top-2 left-2">
+                                <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded">
+                                  {news.category}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-4">
+                              <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+                                <Clock className="w-3 h-3" />
+                                {formatDate(news.publishedAt)}
+                              </div>
+                              <h3 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2">
+                                {news.title}
+                              </h3>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Latest News List */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
-                    <h2 className="text-xl font-bold text-gray-800">Top Stories</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Latest News</h2>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {topStories.map((news, idx) => (
-                      <Link key={idx} href={`/news/${news.slug}`} className="group">
-                        <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100 h-full">
-                          <div className="relative h-40 w-full overflow-hidden bg-gray-100">
-                            {news.featuredImage ? (
-                              <Image
-                                src={news.featuredImage}
-                                alt={news.title}
-                                fill
-                                className="object-cover group-hover:scale-105 transition duration-500"
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                                <Newspaper className="w-8 h-8 text-gray-400" />
-                              </div>
-                            )}
-                            <div className="absolute top-2 left-2">
-                              <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded">
-                                {news.category}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="p-4">
-                            <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                              <Clock className="w-3 h-3" />
-                              {formatDate(news.publishedAt)}
-                            </div>
-                            <h3 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2">
-                              {news.title}
-                            </h3>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Latest News List */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-1 h-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
-                  <h2 className="text-xl font-bold text-gray-800">Latest News</h2>
-                </div>
-                
-                <div className="space-y-3">
-                  {latestNews.map((news) => (
-                    <Link key={news.id} href={`/news/${news.slug}`} className="block group">
-                      <div className="bg-white rounded-lg border border-gray-100 hover:shadow-md transition-all p-4">
-                        <div className="flex gap-4">
-                          {/* Thumbnail */}
-                          <div className="flex-shrink-0 w-20 h-20 md:w-24 md:h-24 overflow-hidden rounded-lg bg-gray-100">
-                            {news.featuredImage ? (
-                              <Image
-                                src={news.featuredImage}
-                                alt={news.title}
-                                width={96}
-                                height={96}
-                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                              />
-                            ) : (
-                              <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                <Newspaper className="w-6 h-6 text-gray-400" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">
-                                {news.category}
-                              </span>
-                              <span className="text-xs text-gray-400 flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {formatDate(news.publishedAt)}
-                              </span>
-                            </div>
-                            <h3 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2">
-                              {news.title}
-                            </h3>
-                            <p className="text-gray-500 text-sm mt-1 line-clamp-1 hidden md:block">
-                              {news.excerpt}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Pagination */}
-              {pagination.totalPages > 1 && !searchQuery && !selectedCategory && (
-                <div className="flex justify-center items-center gap-2 pt-4">
-                  {pagination.currentPage > 1 && (
-                    <Link
-                      href={`/news?page=${pagination.currentPage - 1}`}
-                      className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      Previous
-                    </Link>
-                  )}
-                  <span className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm">
-                    {pagination.currentPage}
-                  </span>
-                  {pagination.currentPage < pagination.totalPages && (
-                    <Link
-                      href={`/news?page=${pagination.currentPage + 1}`}
-                      className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
-                    >
-                      Next
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
-                  )}
-                </div>
-              )}
-            </main>
-            
-            {/* ============ RIGHT SIDEBAR ============ */}
-            <aside className="lg:w-1/3">
-              <div className="sticky top-24 space-y-6">
-                
-                {/* Search Bar */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                  <form action="/news" method="get">
-                    {selectedCategory && (
-                      <input type="hidden" name="category" value={selectedCategory} />
-                    )}
-                    <div className="relative">
-                      <input
-                        type="text"
-                        name="search"
-                        defaultValue={searchQuery || ''}
-                        placeholder="Search news..."
-                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
-                      />
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-                  </form>
-                </div>
-                
-                {/* Most Popular */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                  <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
-                    <TrendingUp className="w-4 h-4 text-red-600" />
-                    <h3 className="font-bold text-gray-800">Most Popular</h3>
-                  </div>
+                  
                   <div className="space-y-3">
-                    {popularNews.map((news, idx) => (
-                      <Link key={idx} href={`/news/${news.slug}`} className="flex gap-3 group items-start">
-                        <div className="flex-shrink-0 w-6 h-6 bg-red-100 text-red-600 rounded-md flex items-center justify-center font-bold text-xs">
-                          {idx + 1}
+                    {latestNews.map((news) => (
+                      <Link key={news.id} href={`/news/${news.slug}`} className="block group">
+                        <div className="bg-white rounded-lg border border-gray-100 hover:shadow-md transition-all p-4">
+                          <div className="flex gap-4">
+                            {/* Thumbnail */}
+                            <div className="flex-shrink-0 w-20 h-20 md:w-24 md:h-24 overflow-hidden rounded-lg bg-gray-100">
+                              {news.featuredImage ? (
+                                <Image
+                                  src={news.featuredImage}
+                                  alt={news.title}
+                                  width={96}
+                                  height={96}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                  <Newspaper className="w-6 h-6 text-gray-400" />
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                                  {news.category}
+                                </span>
+                                <span className="text-xs text-gray-400 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {formatDate(news.publishedAt)}
+                                </span>
+                              </div>
+                              <h3 className="font-semibold text-gray-800 group-hover:text-red-600 transition line-clamp-2">
+                                {news.title}
+                              </h3>
+                              <p className="text-gray-500 text-sm mt-1 line-clamp-1 hidden md:block">
+                                {news.excerpt}
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-700 group-hover:text-red-600 transition line-clamp-2 flex-1 font-medium">
-                          {news.title}
-                        </p>
                       </Link>
                     ))}
                   </div>
                 </div>
                 
-                {/* Sidebar Widgets */}
-                <SidebarWidgets />
-              </div>
-            </aside>
-          </div>
-        )}
-        
-        {/* No results message */}
-        {newsList.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-xl">
-            <Newspaper className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700 mb-2">No news found</h3>
-            <p className="text-gray-500">Try changing your filter or search criteria.</p>
-            <Link href="/news" className="mt-4 inline-block px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-              View All News
-            </Link>
-          </div>
-        )}
-        
-      </div>
-    </main>
+                {/* Pagination */}
+                {pagination.totalPages > 1 && !searchQuery && !selectedCategory && (
+                  <div className="flex justify-center items-center gap-2 pt-4">
+                    {pagination.currentPage > 1 && (
+                      <Link
+                        href={`/news?page=${pagination.currentPage - 1}`}
+                        className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Previous
+                      </Link>
+                    )}
+                    <span className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm">
+                      {pagination.currentPage}
+                    </span>
+                    {pagination.currentPage < pagination.totalPages && (
+                      <Link
+                        href={`/news?page=${pagination.currentPage + 1}`}
+                        className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
+                      >
+                        Next
+                        <ChevronRight className="w-4 h-4" />
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </main>
+              
+              {/* ============ RIGHT SIDEBAR ============ */}
+              <aside className="lg:w-1/3">
+                <div className="sticky top-24 space-y-6">
+                  
+                  {/* Search Bar */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                    <form action="/news" method="get">
+                      {selectedCategory && (
+                        <input type="hidden" name="category" value={selectedCategory} />
+                      )}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="search"
+                          defaultValue={searchQuery || ''}
+                          placeholder="Search news..."
+                          className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                        />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      </div>
+                    </form>
+                  </div>
+                  
+                  {/* Most Popular */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                      <TrendingUp className="w-4 h-4 text-red-600" />
+                      <h3 className="font-bold text-gray-800">Most Popular</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {popularNews.map((news, idx) => (
+                        <Link key={idx} href={`/news/${news.slug}`} className="flex gap-3 group items-start">
+                          <div className="flex-shrink-0 w-6 h-6 bg-red-100 text-red-600 rounded-md flex items-center justify-center font-bold text-xs">
+                            {idx + 1}
+                          </div>
+                          <p className="text-sm text-gray-700 group-hover:text-red-600 transition line-clamp-2 flex-1 font-medium">
+                            {news.title}
+                          </p>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Sidebar Widgets */}
+                  <SidebarWidgets />
+                </div>
+              </aside>
+            </div>
+          )}
+          
+          {/* No results message */}
+          {newsList.length === 0 && (
+            <div className="text-center py-16 bg-white rounded-xl">
+              <Newspaper className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">No news found</h3>
+              <p className="text-gray-500">Try changing your filter or search criteria.</p>
+              <Link href="/news" className="mt-4 inline-block px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                View All News
+              </Link>
+            </div>
+          )}
+          
+        </div>
+      </main>
+    </>
   );
 }
 

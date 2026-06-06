@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
+import { generateJsonLd } from '@/lib/seo';
 
 // ============================================
 // INTERFACE DEFINITIONS
@@ -66,16 +67,51 @@ const EXAM_TYPES = [
   { value: 'Special', label: 'Special Exams' },
 ];
 
-export const metadata: Metadata = {
-  title: 'Date Sheets 2026 in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk',
-  description: 'Download all 2026 date sheets for BISE boards, FBISE, and universities in Pakistan.',
-};
-
 // Helper function
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
   return value !== undefined && value !== null ? value : defaultValue;
+}
+
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const allSheets = await postService.getPostsByType('date_sheet', 1000);
+  const totalSheets = allSheets.length;
+  const currentYear = new Date().getFullYear();
+  
+  return {
+    title: `Date Sheets ${currentYear} in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk`,
+    description: `Download ${totalSheets}+ date sheets for Matric, Intermediate, and University exams ${currentYear}. Complete exam schedules for all BISE boards and universities in Pakistan.`,
+    keywords: `date sheets ${currentYear}, exam schedules ${currentYear}, BISE date sheets, FBISE date sheet, Matric exam schedule, Intermediate exam dates, university date sheets, Pakistan exams`,
+    alternates: {
+      canonical: 'https://www.nextid.pk/date-sheets',
+    },
+    openGraph: {
+      title: `Date Sheets ${currentYear} – Exam Schedules Pakistan | NextID.pk`,
+      description: `Download complete exam schedules for Matric, Intermediate, and University exams across Pakistan.`,
+      url: 'https://www.nextid.pk/date-sheets',
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'Date Sheets Pakistan',
+        },
+      ],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Date Sheets ${currentYear} – Exam Schedules`,
+      description: `Download complete exam schedules for all boards and universities in Pakistan.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
 }
 
 // ============================================
@@ -253,7 +289,7 @@ function FilterSidebar({ filters, stats, buildUrl }: { filters: DateSheetFilters
             type="text" 
             name="q" 
             defaultValue={filters.q} 
-            placeholder="Search..." 
+            placeholder="Search date sheets..." 
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" 
           />
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
@@ -359,7 +395,7 @@ function Pagination({ currentPage, totalPages, buildUrl }: {
 
   return (
     <div className="flex justify-center mt-8">
-      <nav className="flex items-center gap-2 flex-wrap">
+      <nav className="flex items-center gap-2 flex-wrap" aria-label="Pagination">
         {currentPage > 1 && (
           <Link href={buildUrl('page', String(currentPage - 1))} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
             ← Previous
@@ -427,45 +463,85 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/date-sheets?${urlParams.toString()}` : '/date-sheets';
   };
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Left Filter Sidebar */}
-      <aside className="lg:w-72 flex-shrink-0">
-        <FilterSidebar filters={filters} stats={stats} buildUrl={buildUrl} />
-      </aside>
+  // ✅ Generate JSON-LD Structured Data for SEO
+  const jsonLd = generateJsonLd({
+    type: 'WebPage',
+    title: `Date Sheets ${new Date().getFullYear()} - Exam Schedules Pakistan`,
+    description: `Download ${dateSheetsResult.totalCount} exam schedules for Matric, Intermediate, and University exams`,
+    url: 'https://www.nextid.pk/date-sheets',
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'Date Sheets', url: '/date-sheets' },
+    ],
+  });
 
-      {/* Right Content */}
-      <div className="flex-1">
-        {/* Stats Bar */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-lg font-bold text-gray-800">
-              {dateSheetsResult.totalCount} Date Sheets Found
-            </h2>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>📊 {stats.totalSheets} Total</span>
-              <span>🔥 {stats.popularSheets} Popular</span>
-              <span>👁️ {stats.totalViews.toLocaleString()} Views</span>
+  // ✅ ItemList Schema for date sheets listing
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": `Date Sheets ${new Date().getFullYear()} - Exam Schedules`,
+    "description": `List of ${dateSheetsResult.totalCount} exam date sheets for Matric, Intermediate, and University exams`,
+    "numberOfItems": dateSheetsResult.totalCount,
+    "url": "https://www.nextid.pk/date-sheets",
+    "itemListElement": dateSheetsResult.dateSheets.slice(0, 10).map((sheet, index) => ({
+      "@type": "ListItem",
+      "position": index + 1,
+      "url": `https://www.nextid.pk/date-sheets/${sheet.slug}`,
+      "name": sheet.title
+    }))
+  };
+
+  return (
+    <>
+      {/* ✅ JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
+      />
+      
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Left Filter Sidebar */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <FilterSidebar filters={filters} stats={stats} buildUrl={buildUrl} />
+        </aside>
+
+        {/* Right Content */}
+        <div className="flex-1">
+          {/* Stats Bar */}
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-gray-800">
+                {dateSheetsResult.totalCount} Date Sheets Found
+              </h2>
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span>📊 {stats.totalSheets} Total</span>
+                <span>🔥 {stats.popularSheets} Popular</span>
+                <span>👁️ {stats.totalViews.toLocaleString()} Views</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {dateSheetsResult.dateSheets.length > 0 ? (
-            dateSheetsResult.dateSheets.map((sheet) => <DateSheetCard key={sheet.id} sheet={sheet} />)
-          ) : (
-            <div className="col-span-full bg-white rounded-2xl p-16 text-center border border-gray-100">
-              <div className="text-6xl mb-4">📄</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Date Sheets Found</h3>
-              <p className="text-gray-500">Try changing your filters to see more results</p>
-            </div>
-          )}
-        </div>
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {dateSheetsResult.dateSheets.length > 0 ? (
+              dateSheetsResult.dateSheets.map((sheet) => <DateSheetCard key={sheet.id} sheet={sheet} />)
+            ) : (
+              <div className="col-span-full bg-white rounded-2xl p-16 text-center border border-gray-100">
+                <div className="text-6xl mb-4">📄</div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Date Sheets Found</h3>
+                <p className="text-gray-500">Try changing your filters to see more results</p>
+              </div>
+            )}
+          </div>
 
-        <Pagination currentPage={dateSheetsResult.currentPage} totalPages={dateSheetsResult.totalPages} filters={filters} buildUrl={buildUrl} />
+          <Pagination currentPage={dateSheetsResult.currentPage} totalPages={dateSheetsResult.totalPages} filters={filters} buildUrl={buildUrl} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -508,6 +584,8 @@ function DateSheetsLoading() {
 
 // ============ MAIN PAGE ============
 export default async function DateSheetsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const currentYear = new Date().getFullYear();
+  
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Hero Section - Matching Theme */}
@@ -517,10 +595,10 @@ export default async function DateSheetsPage({ searchParams }: { searchParams: P
           <div className="max-w-3xl text-center mx-auto">
             <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
               <span className="text-lg">📅</span>
-              <span className="text-sm font-medium">Exam Schedules 2026</span>
+              <span className="text-sm font-medium">Exam Schedules {currentYear}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Date Sheets 2026
+              Date Sheets {currentYear}
             </h1>
             <p className="text-lg text-orange-100">
               Download exam schedules for Matric, Intermediate &amp; University exams across Pakistan

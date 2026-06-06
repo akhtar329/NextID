@@ -16,6 +16,7 @@ export async function GET() {
     { name: "date-sheets"},
     { name: "scholarships"},
     { name: "jobs" },
+    { name: "blogs" },
   ];
   
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

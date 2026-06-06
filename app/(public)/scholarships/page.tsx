@@ -3,6 +3,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import React from 'react';
 import { postService } from '@/services/post/post.service';
 import { unstable_cache } from 'next/cache';
 import { 
@@ -19,6 +20,7 @@ import {
   Globe
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { generateJsonLd } from '@/lib/seo';
 
 // ============ TYPES ============
 interface ScholarshipItem {
@@ -101,15 +103,55 @@ function getDaysLeft(date: Date | null): number | null {
 }
 
 // ============ METADATA ============
-export const metadata: Metadata = {
-  title: 'Scholarships in Pakistan 2026 | Fully Funded & Partial | NextID.pk',
-  description: 'Find latest scholarships for Pakistani students. Fully funded, partial, merit-based, need-based scholarships for Matric to PhD.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const allScholarships = await postService.getPostsByType('scholarship', 200);
+  const totalScholarships = allScholarships.length;
+  const currentYear = new Date().getFullYear();
+  
+  // Count fully funded scholarships
+  const fullyFunded = allScholarships.filter(s => {
+    const meta = s.meta || {};
+    return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
+  }).length;
+  
+  return {
+    title: `Scholarships ${currentYear} in Pakistan | ${totalScholarships}+ Fully Funded & Partial | NextID.pk`,
+    description: `Find ${fullyFunded}+ fully funded and ${totalScholarships - fullyFunded}+ partial scholarships for Pakistani students ${currentYear}. Merit-based, need-based scholarships for Matric to PhD. Apply now!`,
+    keywords: `scholarships ${currentYear}, scholarships in Pakistan, fully funded scholarships, merit scholarships, need-based scholarships, study abroad scholarships, ${currentYear} scholarships`,
+    alternates: {
+      canonical: 'https://www.nextid.pk/scholarships',
+    },
+    openGraph: {
+      title: `Scholarships ${currentYear} Pakistan - Fully Funded & Partial | NextID.pk`,
+      description: `Find ${totalScholarships}+ scholarships for Pakistani students including fully funded, merit-based, and need-based opportunities.`,
+      url: 'https://www.nextid.pk/scholarships',
+      siteName: 'NextID.pk',
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'Scholarships in Pakistan',
+        },
+      ],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Scholarships ${currentYear} Pakistan`,
+      description: `Find the best scholarship opportunities for Pakistani students. Apply now for fully funded and partial scholarships.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
 
 // ============ DATA FETCHING ============
 async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
   try {
-    const allScholarships = await postService.getPostsByType('scholarships', 200);
+    const allScholarships = await postService.getPostsByType('scholarship', 200);
     
     let scholarshipsList: ScholarshipItem[] = allScholarships.map(post => {
       const meta = post.meta || {};
@@ -198,7 +240,7 @@ async function getStats(): Promise<Stats> {
   return unstable_cache(
     async () => {
       try {
-        const allScholarships = await postService.getPostsByType('scholarships', 500);
+        const allScholarships = await postService.getPostsByType('scholarship', 500);
         
         const total = allScholarships.length;
         const featured = allScholarships.filter(s => {
@@ -285,236 +327,284 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
     return urlParams.toString() ? `/scholarships?${urlParams.toString()}` : '/scholarships';
   };
 
+  const currentYear = new Date().getFullYear();
+  
+  // ✅ Generate JSON-LD Structured Data for SEO
+  const jsonLd = generateJsonLd({
+    type: 'WebPage',
+    title: `Scholarships ${currentYear} - Study Opportunities for Pakistani Students`,
+    description: `Find ${scholarships.length} scholarship opportunities for Pakistani students`,
+    url: 'https://www.nextid.pk/scholarships',
+    breadcrumbs: [
+      { name: 'Home', url: '/' },
+      { name: 'Scholarships', url: '/scholarships' },
+    ],
+  });
+  
+  // ✅ ItemList Schema for scholarships listing
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": `Scholarships ${currentYear} for Pakistani Students`,
+    "description": `List of ${scholarships.length} scholarship opportunities including fully funded and partial scholarships`,
+    "numberOfItems": scholarships.length,
+    "url": "https://www.nextid.pk/scholarships",
+    "itemListElement": scholarships.slice(0, 10).map((scholarship, index) => ({
+      "@type": "ListItem",
+      "position": index + 1,
+      "url": `https://www.nextid.pk/scholarships/${scholarship.slug}`,
+      "name": scholarship.title
+    }))
+  };
+
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
+    <>
+      {/* ✅ JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
+      />
       
-      {/* LEFT SIDEBAR - Filters */}
-      <aside className="lg:w-72 flex-shrink-0">
-        <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
-          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
-            <div className="w-1 h-5 bg-gradient-to-b from-teal-500 to-emerald-500 rounded-full"></div>
-            Filter Scholarships
-          </h2>
-          
-          {/* Search */}
-          <div className="mb-6">
-            <form action="/scholarships" method="GET" className="relative">
-              <input 
-                type="text" 
-                name="q" 
-                defaultValue={filters.q} 
-                placeholder="Search scholarships..." 
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            </form>
-          </div>
-
-          {/* Study Level */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Study Level</h3>
-            <div className="space-y-1">
-              {STUDY_LEVELS.map(level => (
-                <Link 
-                  key={level.slug} 
-                  href={buildUrl('level', level.slug)} 
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    filters.level === level.slug 
-                      ? 'bg-teal-600 text-white' 
-                      : 'hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <span>{level.icon}</span>
-                  <span>{level.name}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Scholarship Type */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Scholarship Type</h3>
-            <div className="space-y-1">
-              {SCHOLARSHIP_TYPES.map(type => (
-                <Link 
-                  key={type.slug} 
-                  href={buildUrl('type', type.slug)} 
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    filters.type === type.slug 
-                      ? 'bg-teal-600 text-white' 
-                      : 'hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <span>{type.icon}</span>
-                  <span>{type.name}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Location */}
-          <div className="mb-6">
-            <h3 className="font-semibold text-gray-700 mb-3 text-sm">Location</h3>
-            <div className="space-y-1">
-              {LOCATIONS.map(loc => (
-                <Link 
-                  key={loc.slug} 
-                  href={buildUrl('location', loc.slug)} 
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    filters.location === loc.slug 
-                      ? 'bg-teal-600 text-white' 
-                      : 'hover:bg-gray-50 text-gray-600'
-                  }`}
-                >
-                  <span>{loc.icon}</span>
-                  <span>{loc.name}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Clear Filters */}
-          {(filters.level || filters.type || filters.location || filters.q) && (
-            <Link 
-              href="/scholarships" 
-              className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t border-gray-100"
-            >
-              Clear all filters
-            </Link>
-          )}
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <div className="flex-1">
+      <div className="flex flex-col lg:flex-row gap-8">
         
-        {/* Stats Bar */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Award className="w-5 h-5 text-teal-500" />
-              {scholarships.length} Scholarships Found
+        {/* LEFT SIDEBAR - Filters */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <div className="w-1 h-5 bg-gradient-to-b from-teal-500 to-emerald-500 rounded-full"></div>
+              Filter Scholarships
             </h2>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
-              <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {stats.abroad} Abroad</span>
-              <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {stats.fullyFunded} Fully Funded</span>
+            
+            {/* Search */}
+            <div className="mb-6">
+              <form action="/scholarships" method="GET" className="relative">
+                <input 
+                  type="text" 
+                  name="q" 
+                  defaultValue={filters.q} 
+                  placeholder="Search scholarships..." 
+                  className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </form>
             </div>
-          </div>
-          {filters.level && (
-            <p className="text-sm text-gray-500 mt-2">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>
-          )}
-        </div>
 
-        {/* Scholarships List */}
-        <div className="space-y-4">
-          {scholarships.length > 0 ? (
-            scholarships.map((s) => {
-              const daysLeft = getDaysLeft(s.deadline);
-              const isOpen = daysLeft !== null && daysLeft > 0;
-              const isUrgent = daysLeft !== null && daysLeft <= 7;
-              return (
-                <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-teal-200 transition-all overflow-hidden group">
-                  <div className="p-5">
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                      <div className="flex-1">
-                        {/* Badges */}
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          {s.isFeatured && (
-                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
-                              <TrendingUp className="w-3 h-3" /> Featured
-                            </span>
-                          )}
-                          {s.isPopular && (
-                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
-                              <Zap className="w-3 h-3" /> Popular
-                            </span>
-                          )}
-                          {isUrgent && isOpen && (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
-                              <Clock className="w-3 h-3" /> Urgent
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Title */}
-                        <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
-                          <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
-                        </h3>
-                        
-                        {/* Provider */}
-                        <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
-                          <GraduationCap className="w-3.5 h-3.5" />
-                          {s.provider}
-                        </p>
-                        
-                        {/* Tags */}
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.studyLevel}</span>
-                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.type}</span>
-                          <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium flex items-center gap-1">
-                            <MapPin className="w-3 h-3" /> {s.location}
-                          </span>
-                          {s.amount && (
-                            <span className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" /> {s.amount}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Deadline */}
-                        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>Deadline: <span className="font-medium text-gray-700">{formatDate(s.deadline)}</span></span>
-                          </div>
-                          {daysLeft && (
-                            <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
-                              <div className="text-xs font-bold">{daysLeft} days left</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Action Button */}
-                      <Link 
-                        href={`/scholarships/${s.slug}`} 
-                        className="flex-shrink-0 px-5 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium inline-flex items-center gap-2"
-                      >
-                        View Details
-                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
-              <div className="text-6xl mb-4">🎓</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
-              <p className="text-gray-500">Try adjusting your filters to see more results</p>
-              <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">
-                View All Scholarships
-              </Link>
+            {/* Study Level */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Study Level</h3>
+              <div className="space-y-1">
+                {STUDY_LEVELS.map(level => (
+                  <Link 
+                    key={level.slug} 
+                    href={buildUrl('level', level.slug)} 
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      filters.level === level.slug 
+                        ? 'bg-teal-600 text-white' 
+                        : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span>{level.icon}</span>
+                    <span>{level.name}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
-          )}
+
+            {/* Scholarship Type */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Scholarship Type</h3>
+              <div className="space-y-1">
+                {SCHOLARSHIP_TYPES.map(type => (
+                  <Link 
+                    key={type.slug} 
+                    href={buildUrl('type', type.slug)} 
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      filters.type === type.slug 
+                        ? 'bg-teal-600 text-white' 
+                        : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span>{type.icon}</span>
+                    <span>{type.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className="mb-6">
+              <h3 className="font-semibold text-gray-700 mb-3 text-sm">Location</h3>
+              <div className="space-y-1">
+                {LOCATIONS.map(loc => (
+                  <Link 
+                    key={loc.slug} 
+                    href={buildUrl('location', loc.slug)} 
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      filters.location === loc.slug 
+                        ? 'bg-teal-600 text-white' 
+                        : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span>{loc.icon}</span>
+                    <span>{loc.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Clear Filters */}
+            {(filters.level || filters.type || filters.location || filters.q) && (
+              <Link 
+                href="/scholarships" 
+                className="block text-center text-sm text-teal-600 hover:text-teal-700 mt-4 pt-3 border-t border-gray-100"
+              >
+                Clear all filters
+              </Link>
+            )}
+          </div>
+        </aside>
+
+        {/* MAIN CONTENT */}
+        <div className="flex-1">
+          
+          {/* Stats Bar */}
+          <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <Award className="w-5 h-5 text-teal-500" />
+                {scholarships.length} Scholarships Found
+              </h2>
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
+                <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {stats.abroad} Abroad</span>
+                <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {stats.fullyFunded} Fully Funded</span>
+                <span className="flex items-center gap-1">👁️ {scholarships.reduce((sum, s) => sum + s.viewCount, 0).toLocaleString()} views</span>
+              </div>
+            </div>
+            {filters.level && (
+              <p className="text-sm text-gray-500 mt-2">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>
+            )}
+          </div>
+
+          {/* Scholarships List */}
+          <div className="space-y-4">
+            {scholarships.length > 0 ? (
+              scholarships.map((s) => {
+                const daysLeft = getDaysLeft(s.deadline);
+                const isOpen = daysLeft !== null && daysLeft > 0;
+                const isUrgent = daysLeft !== null && daysLeft <= 7;
+                return (
+                  <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-teal-200 transition-all overflow-hidden group">
+                    <div className="p-5">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="flex-1">
+                          {/* Badges */}
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {s.isFeatured && (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3" /> Featured
+                              </span>
+                            )}
+                            {s.isPopular && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                <Zap className="w-3 h-3" /> Popular
+                              </span>
+                            )}
+                            {isUrgent && isOpen && (
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
+                                <Clock className="w-3 h-3" /> Urgent
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Title */}
+                          <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
+                            <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
+                          </h3>
+                          
+                          {/* Provider */}
+                          <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            {s.provider}
+                          </p>
+                          
+                          {/* Tags */}
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.studyLevel}</span>
+                            <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.type}</span>
+                            <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium flex items-center gap-1">
+                              <MapPin className="w-3 h-3" /> {s.location}
+                            </span>
+                            {s.amount && (
+                              <span className="px-2 py-1 bg-green-50 text-green-700 rounded-lg text-xs font-medium flex items-center gap-1">
+                                <DollarSign className="w-3 h-3" /> {s.amount}
+                              </span>
+                            )}
+                            <span className="px-2 py-1 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium flex items-center gap-1">
+                              👁️ {s.viewCount.toLocaleString()} views
+                            </span>
+                          </div>
+                          
+                          {/* Deadline */}
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <Calendar className="w-3.5 h-3.5" />
+                              <span>Deadline: <span className="font-medium text-gray-700">{formatDate(s.deadline)}</span></span>
+                            </div>
+                            {daysLeft && (
+                              <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
+                                <div className="text-xs font-bold">{daysLeft} days left</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Action Button */}
+                        <Link 
+                          href={`/scholarships/${s.slug}`} 
+                          className="flex-shrink-0 px-5 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium inline-flex items-center gap-2"
+                        >
+                          View Details
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+                        </Link>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm p-16 text-center border border-gray-100">
+                <div className="text-6xl mb-4">🎓</div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No Scholarships Found</h3>
+                <p className="text-gray-500">Try adjusting your filters to see more results</p>
+                <Link href="/scholarships" className="inline-block mt-4 px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">
+                  View All Scholarships
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
+        
+        {/* RIGHT SIDEBAR - Widgets */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <div className="sticky top-24">
+            <SidebarWidgets />
+          </div>
+        </aside>
+        
       </div>
-      
-      {/* RIGHT SIDEBAR - Widgets */}
-      <aside className="lg:w-72 flex-shrink-0">
-        <div className="sticky top-24">
-          <SidebarWidgets />
-        </div>
-      </aside>
-      
-    </div>
+    </>
   );
 }
 
 // ============ MAIN PAGE ============
 export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const currentYear = new Date().getFullYear();
+  
   return (
     <main className="min-h-screen bg-gray-50">
       
@@ -525,10 +615,10 @@ export default async function ScholarshipsPage({ searchParams }: { searchParams?
           <div className="max-w-3xl text-center mx-auto">
             <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
               <Award className="w-4 h-4" />
-              <span className="text-sm font-medium">Scholarships 2026</span>
+              <span className="text-sm font-medium">Scholarships {currentYear}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Scholarships <span className="text-yellow-300">2026</span>
+              Scholarships <span className="text-yellow-300">{currentYear}</span>
             </h1>
             <p className="text-lg text-teal-100">
               Find fully funded, partial, and merit-based scholarships for Pakistani students
