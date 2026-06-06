@@ -162,7 +162,7 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
   }
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const scholarship = await getScholarshipBySlug(slug);
@@ -175,10 +175,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
+  
   // ✅ Use SEO data from database
-  const seoTitle = scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${new Date().getFullYear()} | NextID.pk`;
+  const seoTitle = scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear} | NextID.pk`;
   const seoDescription = scholarship.metaDescription || scholarship.excerpt || `Apply for ${scholarship.title} scholarship offered by ${scholarship.provider}. ${scholarship.amount ? `Award amount: ${scholarship.amount}. ` : ''}Deadline: ${formatShortDate(scholarship.deadline)}.`;
-  const seoKeywords = scholarship.metaKeywords || `${scholarship.title} scholarship, ${scholarship.studyLevel} scholarship, ${scholarship.provider} scholarship, ${scholarship.location} scholarship, Pakistan scholarship ${new Date().getFullYear()}`;
+  const seoKeywords = scholarship.metaKeywords || `${scholarship.title} scholarship, ${scholarship.studyLevel} scholarship, ${scholarship.provider} scholarship, ${scholarship.location} scholarship, Pakistan scholarship ${currentYear}`;
   const canonicalUrl = scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`;
   const robots = scholarship.robots || 'index, follow';
   

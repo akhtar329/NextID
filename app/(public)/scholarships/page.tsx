@@ -102,11 +102,12 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
   const allScholarships = await postService.getPostsByType('scholarship', 200);
   const totalScholarships = allScholarships.length;
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
   
   // Count fully funded scholarships
   const fullyFunded = allScholarships.filter(s => {
@@ -327,7 +328,8 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
     return urlParams.toString() ? `/scholarships?${urlParams.toString()}` : '/scholarships';
   };
 
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
@@ -603,7 +605,8 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
 
 // ============ MAIN PAGE ============
 export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">

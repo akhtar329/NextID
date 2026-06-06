@@ -97,11 +97,12 @@ function getReadTime(content: string | null): number {
   return Math.ceil(words / 200);
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
   const allBlogs = await postService.getPostsByType('blog', 200);
   const totalBlogs = allBlogs.length;
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
   
   return {
     title: `Educational Blog ${currentYear} | Study Tips & Career Guidance | NextID.pk`,
@@ -291,7 +292,8 @@ async function BlogContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/blog?${urlParams.toString()}` : '/blog';
   };
 
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
@@ -665,7 +667,8 @@ async function BlogContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
 // ============ MAIN PAGE ============
 export default async function BlogPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year instead of new Date()
+  const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">
