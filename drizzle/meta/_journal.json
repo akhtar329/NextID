@@ -64,6 +64,13 @@
       "when": 1780565288937,
       "tag": "0008_wild_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780733587837,
+      "tag": "0009_abandoned_punisher",
+      "breakpoints": true
     }
   ]
 }

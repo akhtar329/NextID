@@ -9,7 +9,6 @@ import {
   integer,
   jsonb,
   boolean,
-  unique,
   index,
   decimal,
 } from "drizzle-orm/pg-core";
@@ -90,70 +89,72 @@ export const notifications = pgTable("notifications", {
 });
 
 /* =========================
-🔍 SEO METADATA
-========================= */
-export const seoMetadata = pgTable("seo_metadata", {
-  id: serial("id").primaryKey(),
-  entityType: varchar("entity_type", { length: 50 }).notNull(),
-  entityId: integer("entity_id").notNull(),
-  variation: varchar("variation", { length: 50 }).default("default"),
-  metaTitle: varchar("meta_title", { length: 255 }),
-  metaDescription: text("meta_description"),
-  metaKeywords: text("meta_keywords"),
-  canonicalUrl: text("canonical_url"),
-  robots: varchar("robots", { length: 100 }).default("index, follow"),
-  schemaMarkup: jsonb("schema_markup"),
-  ogTitle: varchar("og_title", { length: 255 }),
-  ogDescription: text("og_description"),
-  ogImage: varchar("og_image", { length: 500 }),
-  ogType: varchar("og_type", { length: 50 }).default("website"),
-  twitterCard: varchar("twitter_card", { length: 50 }).default("summary_large_image"),
-  twitterTitle: varchar("twitter_title", { length: 255 }),
-  twitterDescription: text("twitter_description"),
-  twitterImage: varchar("twitter_image", { length: 500 }),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => ({
-  uniqueEntityVariation: unique("seo_metadata_entity_variation").on(
-    table.entityType,
-    table.entityId,
-    table.variation
-  ),
-  idxEntity: index("idx_seo_entity").on(table.entityType, table.entityId),
-}));
-
-/* =========================
-📝 POSTS (UNIFIED TABLE - Sab kuch yahan)
+📝 POSTS (Unified - All SEO merged here)
 ========================= */
 export const posts = pgTable(
   "posts",
   {
     id: serial("id").primaryKey(),
     
-    // Basic Info
+    // ==================== BASIC INFO ====================
     slug: varchar("slug", { length: 500 }).notNull().unique(),
     type: varchar("type", { length: 50 }).notNull(),
-    // type values: 'admission', 'result', 'news', 'date_sheet', 'scholarship', 'blog', 'job'
+    // values: 'admission', 'result', 'news', 'date_sheet', 'scholarship', 'blog', 'job'
     
     title: varchar("title", { length: 500 }).notNull(),
     content: text("content"),
     excerpt: text("excerpt"),
     
-    // Author (relation to adminUsers)
+    // ==================== AUTHOR ====================
     authorId: integer("author_id").references(() => adminUsers.id),
     authorName: varchar("author_name", { length: 100 }),
     
-    // Media
+    // ==================== MEDIA ====================
     featuredImage: varchar("featured_image", { length: 500 }),
-    actualImage: varchar("actual_image", { length: 500 }), // ✅ Added for image mapping
+    actualImage: varchar("actual_image", { length: 500 }),
     galleryImages: jsonb("gallery_images"),
     
-    // SEO
+    // ==================== SEO - META TAGS (Core) ====================
     metaTitle: varchar("meta_title", { length: 255 }),
     metaDescription: text("meta_description"),
+    metaKeywords: text("meta_keywords"),
     focusKeyword: varchar("focus_keyword", { length: 100 }),
+    canonicalUrl: text("canonical_url"),
+    robots: varchar("robots", { length: 100 }).default("index, follow"),
     
-    // Status & Flags
+    // ==================== SEO - OPEN GRAPH (Social Media) ====================
+    ogTitle: varchar("og_title", { length: 255 }),
+    ogDescription: text("og_description"),
+    ogImage: varchar("og_image", { length: 500 }),
+    ogType: varchar("og_type", { length: 50 }).default("article"),
+    
+    // ==================== SEO - TWITTER CARD ====================
+    twitterCard: varchar("twitter_card", { length: 50 }).default("summary_large_image"),
+    twitterTitle: varchar("twitter_title", { length: 255 }),
+    twitterDescription: text("twitter_description"),
+    twitterImage: varchar("twitter_image", { length: 500 }),
+    
+    // ==================== SEO - STRUCTURED DATA (JSON-LD) ====================
+    schemaMarkup: jsonb("schema_markup"),
+    
+    // ==================== SEO - EXTRA BOOST FIELDS ====================
+    // For better SEO ranking
+    focusKeywordDensity: decimal("focus_keyword_density", { precision: 5, scale: 2 }),
+    readabilityScore: integer("readability_score"), // 0-100
+    seoScore: integer("seo_score"), // 0-100
+    lastSeoAnalysis: timestamp("last_seo_analysis"),
+    
+    // For better indexing
+    priority: decimal("priority", { precision: 2, scale: 1 }).default("0.5"),
+    changefreq: varchar("changefreq", { length: 20 }).default("weekly"),
+    
+    // For breadcrumbs
+    breadcrumbTitle: varchar("breadcrumb_title", { length: 255 }),
+    
+    // For redirects (301 handling)
+    oldSlug: varchar("old_slug", { length: 500 }),
+    
+    // ==================== STATUS & FLAGS ====================
     status: varchar("status", { length: 20 }).default("published"),
     // 'draft', 'published', 'archived'
     
@@ -161,16 +162,16 @@ export const posts = pgTable(
     isPopular: boolean("is_popular").default(false),
     isBreaking: boolean("is_breaking").default(false),
     
-    // Stats
+    // ==================== STATS ====================
     viewCount: integer("view_count").default(0),
     
-    // Type-specific data (JSON)
+    // ==================== TYPE-SPECIFIC DATA ====================
     meta: jsonb("meta"),
     
-    // Tags (JSON array)
+    // ==================== TAGS ====================
     tags: jsonb("tags"),
     
-    // Timestamps
+    // ==================== TIMESTAMPS ====================
     publishedAt: timestamp("published_at").defaultNow(),
     expiresAt: timestamp("expires_at"),
     createdAt: timestamp("created_at").defaultNow(),
@@ -186,6 +187,12 @@ export const posts = pgTable(
     idxPostsPopular: index("idx_posts_popular").on(table.isPopular),
     idxPostsAuthor: index("idx_posts_author").on(table.authorId),
     idxPostsCreatedAt: index("idx_posts_created_at").on(table.createdAt),
+    
+    // SEO Indexes
+    idxPostsMetaTitle: index("idx_posts_meta_title").on(table.metaTitle),
+    idxPostsFocusKeyword: index("idx_posts_focus_keyword").on(table.focusKeyword),
+    idxPostsSeoScore: index("idx_posts_seo_score").on(table.seoScore),
+    idxPostsOldSlug: index("idx_posts_old_slug").on(table.oldSlug),
   })
 );
 
@@ -197,61 +204,26 @@ export const postComments = pgTable(
   {
     id: serial("id").primaryKey(),
     postId: integer("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-    parentId: integer("parent_id"), // For nested replies (NULL = top-level comment)
+    parentId: integer("parent_id"),
     
-    // User info
     userName: varchar("user_name", { length: 100 }).notNull(),
     userEmail: varchar("user_email", { length: 255 }),
     userWebsite: varchar("user_website", { length: 255 }),
     
-    // Comment content
     comment: text("comment").notNull(),
     
-    // Moderation
     isApproved: boolean("is_approved").default(false),
     likes: integer("likes").default(0),
     
-    // Tracking
     userAgent: text("user_agent"),
     ipAddress: varchar("ip_address", { length: 50 }),
     
-    // Timestamps
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => ({
-    // Indexes
     idxCommentPost: index("idx_comment_post").on(table.postId),
     idxCommentApproved: index("idx_comment_approved").on(table.isApproved),
     idxCommentCreated: index("idx_comment_created").on(table.createdAt),
     idxCommentParent: index("idx_comment_parent").on(table.parentId),
   })
 );
-
-/* =========================
-🔀 REDIRECTS
-========================= */
-export const redirects = pgTable("redirects", {
-  id: serial("id").primaryKey(),
-  fromPath: varchar("from_path", { length: 500 }).notNull().unique(),
-  toPath: varchar("to_path", { length: 500 }).notNull(),
-  statusCode: integer("status_code").notNull().default(301),
-  hitCount: integer("hit_count").default(0),
-  lastHit: timestamp("last_hit"),
-  status: boolean("status").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-/* =========================
-🗺️ SITEMAP ENTRIES
-========================= */
-export const sitemapEntries = pgTable("sitemap_entries", {
-  id: serial("id").primaryKey(),
-  url: varchar("url", { length: 500 }).notNull().unique(),
-  changeFreq: varchar("change_freq", { length: 20 }).default("weekly"),
-  priority: decimal("priority", { precision: 2, scale: 1 }).default("0.5"),
-  lastModified: timestamp("last_modified").defaultNow(),
-  status: boolean("status").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});

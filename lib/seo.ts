@@ -2,18 +2,15 @@
 
 import type { Metadata } from "next";
 import { db } from "@/db/db";
-import { seoMetadata } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { posts } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { cacheTag } from 'next/cache';
 
 const BASE_URL = "https://www.nextid.pk";
 const SITE_NAME = "NextID";
 
 export type EntityType =
-  | "program"
-  | "city"
-  | "board"
-  | "institute"
+  | "post"
   | "admission"
   | "news"
   | "result"
@@ -32,6 +29,7 @@ type SEOProps = {
   };
   entityType?: EntityType;
   entityId?: number;
+  slug?: string;
   openGraph?: Metadata['openGraph'];
   twitter?: Metadata['twitter'];
 };
@@ -66,32 +64,44 @@ const DEFAULT_KEYWORDS = [
   "NextID",
 ];
 
-// ✅ Fetch SEO from DB - Using 'use cache' instead of unstable_cache
-async function fetchSeoMetadata(entityType: EntityType, entityId: number) {
+// ✅ Fetch SEO from Posts table
+async function fetchSeoFromPost(postId: number) {
   'use cache';
   cacheTag('seo');
   
   try {
-    const [metadata] = await db
-      .select()
-      .from(seoMetadata)
-      .where(
-        and(
-          eq(seoMetadata.entityType, entityType),
-          eq(seoMetadata.entityId, entityId)
-        )
-      )
+    const [post] = await db
+      .select({
+        metaTitle: posts.metaTitle,
+        metaDescription: posts.metaDescription,
+        metaKeywords: posts.metaKeywords,
+        canonicalUrl: posts.canonicalUrl,
+        robots: posts.robots,
+        ogTitle: posts.ogTitle,
+        ogDescription: posts.ogDescription,
+        ogImage: posts.ogImage,
+        ogType: posts.ogType,
+        twitterCard: posts.twitterCard,
+        twitterTitle: posts.twitterTitle,
+        twitterDescription: posts.twitterDescription,
+        twitterImage: posts.twitterImage,
+        schemaMarkup: posts.schemaMarkup,
+        focusKeyword: posts.focusKeyword,
+      })
+      .from(posts)
+      .where(eq(posts.id, postId))
       .limit(1);
 
-    return metadata || null;
+    return post || null;
   } catch (error) {
-    console.error(`Error fetching SEO metadata for ${entityType}/${entityId}:`, error);
+    console.error(`Error fetching SEO for post ${postId}:`, error);
     return null;
   }
 }
 
 // ✅ Parse robots string safely
-function parseRobotsString(robots: string) {
+function parseRobotsString(robots: string | null) {
+  if (!robots) return { index: true, follow: true };
   const noIndex = /\bnoindex\b/i.test(robots);
   const noFollow = /\bnofollow\b/i.test(robots);
   return {
@@ -140,7 +150,7 @@ export function generateJsonLd({
           "@type": "ListItem",
           position: index + 1,
           name: crumb.name,
-          item: crumb.url,
+          item: crumb.url.startsWith('http') ? crumb.url : `${BASE_URL}${crumb.url}`,
         })),
       },
     };
@@ -190,7 +200,6 @@ export async function generateSEO({
   image = DEFAULT_IMAGE,
   noIndex = false,
   keywords = [],
-  entityType,
   entityId,
 }: SEOProps = {}): Promise<Metadata> {
   let finalTitle = title || DEFAULT_TITLE;
@@ -200,16 +209,21 @@ export async function generateSEO({
   let finalRobots = noIndex
     ? { index: false, follow: false }
     : { index: true, follow: true };
+  let finalKeywords = [...DEFAULT_KEYWORDS, ...keywords];
 
-  // ✅ DB SEO fetch
-  if (entityType && entityId) {
-    const dbSeo = await fetchSeoMetadata(entityType, entityId);
+  // ✅ Fetch SEO from posts table if entityId is provided
+  if (entityId) {
+    const dbSeo = await fetchSeoFromPost(entityId);
 
     if (dbSeo) {
       finalTitle = dbSeo.metaTitle || finalTitle;
       finalDescription = dbSeo.metaDescription || finalDescription;
       finalImage = dbSeo.ogImage || finalImage;
       finalCanonical = dbSeo.canonicalUrl || path;
+      
+      if (dbSeo.metaKeywords) {
+        finalKeywords = [...finalKeywords, ...dbSeo.metaKeywords.split(',').map(k => k.trim())];
+      }
 
       if (dbSeo.robots) {
         finalRobots = parseRobotsString(dbSeo.robots);
@@ -218,7 +232,6 @@ export async function generateSEO({
   }
 
   const url = `${BASE_URL}${finalCanonical}`;
-  const finalKeywords = [...DEFAULT_KEYWORDS, ...keywords];
 
   return {
     title: finalTitle,
@@ -247,7 +260,7 @@ export async function generateSEO({
       locale: "en_PK",
       images: [
         {
-          url: `${BASE_URL}${finalImage}`,
+          url: finalImage.startsWith('http') ? finalImage : `${BASE_URL}${finalImage}`,
           width: 1200,
           height: 630,
           alt: finalTitle,
@@ -258,7 +271,7 @@ export async function generateSEO({
       card: "summary_large_image",
       title: finalTitle,
       description: finalDescription,
-      images: [`${BASE_URL}${finalImage}`],
+      images: [finalImage.startsWith('http') ? finalImage : `${BASE_URL}${finalImage}`],
       site: "@nextidpk",
       creator: "@nextidpk",
     },
@@ -325,57 +338,81 @@ export function generateSEOClient({
   };
 }
 
-// ✅ Save SEO to DB
+// ✅ Save SEO to Posts table
 export async function saveSeoMetadata(
-  entityType: EntityType,
-  entityId: number,
+  postId: number,
   data: {
     metaTitle?: string;
     metaDescription?: string;
+    metaKeywords?: string;
     canonicalUrl?: string;
     robots?: string;
     ogTitle?: string;
     ogDescription?: string;
     ogImage?: string;
+    twitterTitle?: string;
+    twitterDescription?: string;
+    focusKeyword?: string;
   }
 ) {
   try {
-    const existing = await fetchSeoMetadata(entityType, entityId);
+    const [updated] = await db
+      .update(posts)
+      .set({ 
+        ...data, 
+        updatedAt: new Date() 
+      })
+      .where(eq(posts.id, postId))
+      .returning();
 
-    if (existing) {
-      const [updated] = await db
-        .update(seoMetadata)
-        .set({ ...data, updatedAt: new Date() })
-        .where(
-          and(
-            eq(seoMetadata.entityType, entityType),
-            eq(seoMetadata.entityId, entityId)
-          )
-        )
-        .returning();
-
-      return updated;
-    } else {
-      const [created] = await db
-        .insert(seoMetadata)
-        .values({
-          entityType,
-          entityId,
-          ...data,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-
-      return created;
-    }
+    return updated || null;
   } catch (error) {
-    console.error(`Error saving SEO metadata for ${entityType}/${entityId}:`, error);
+    console.error(`Error saving SEO for post ${postId}:`, error);
     return null;
   }
 }
 
-// ✅ Add cacheLife helper if not already defined
-declare module 'next/cache' {
-  export function cacheLife(profile: 'days' | 'hours' | 'minutes' | 'seconds'): void;
+// ✅ Get SEO for a post by slug
+export async function getSeoBySlug(slug: string) {
+  try {
+    const [post] = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        slug: posts.slug,
+        type: posts.type,
+        metaTitle: posts.metaTitle,
+        metaDescription: posts.metaDescription,
+        metaKeywords: posts.metaKeywords,
+        canonicalUrl: posts.canonicalUrl,
+        robots: posts.robots,
+        ogTitle: posts.ogTitle,
+        ogDescription: posts.ogDescription,
+        ogImage: posts.ogImage,
+        twitterTitle: posts.twitterTitle,
+        twitterDescription: posts.twitterDescription,
+        twitterImage: posts.twitterImage,  // ✅ Added missing field
+        focusKeyword: posts.focusKeyword,
+        featuredImage: posts.featuredImage,
+        excerpt: posts.excerpt,
+        content: posts.content,
+        publishedAt: posts.publishedAt,
+        updatedAt: posts.updatedAt,
+      })
+      .from(posts)
+      .where(eq(posts.slug, slug))
+      .limit(1);
+
+    if (!post) return null;
+
+    return {
+      ...post,
+      metaDescription: post.metaDescription || post.excerpt,
+      ogImage: post.ogImage || post.featuredImage,
+      twitterImage: post.twitterImage || post.featuredImage,  // ✅ Now works
+    };
+  } catch (error) {
+    console.error(`Error getting SEO for slug ${slug}:`, error);
+    return null;
+  }
 }

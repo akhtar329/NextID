@@ -8,6 +8,7 @@ type NextConfigWithTurbo = NextConfig & {
 
 const nextConfig: NextConfigWithTurbo = {
   // ✅ Remove console logs in production (reduces bundle size)
+  cacheComponents: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
