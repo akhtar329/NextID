@@ -1,14 +1,12 @@
+// next.config.ts
+
 import type { NextConfig } from "next";
 
-type NextConfigWithTurbo = NextConfig & {
-  turbo?: {
-    resolveAlias: Record<string, string>;
-  };
-};
-
-const nextConfig: NextConfigWithTurbo = {
-  // ✅ Remove console logs in production (reduces bundle size)
+const nextConfig: NextConfig = {
+  // ✅ Enable cache components
   cacheComponents: true,
+
+  // ✅ Remove console logs in production (reduces bundle size)
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
@@ -183,13 +181,6 @@ const nextConfig: NextConfigWithTurbo = {
       "chart.js",
       "react-chartjs-2",
     ],
-  },
-
-  // ✅ Turbopack configuration (since you're using --turbo)
-  turbo: {
-    resolveAlias: {
-      canvas: "./empty-module.ts",
-    },
   },
 };
 

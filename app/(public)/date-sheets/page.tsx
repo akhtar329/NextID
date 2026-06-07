@@ -74,11 +74,12 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
   const allSheets = await postService.getPostsByType('date_sheet', 1000);
   const totalSheets = allSheets.length;
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   return {
     title: `Date Sheets ${currentYear} in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk`,
@@ -463,10 +464,13 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/date-sheets?${urlParams.toString()}` : '/date-sheets';
   };
 
+  // ✅ Use static year
+  const currentYear = "2026";
+
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
-    title: `Date Sheets ${new Date().getFullYear()} - Exam Schedules Pakistan`,
+    title: `Date Sheets ${currentYear} - Exam Schedules Pakistan`,
     description: `Download ${dateSheetsResult.totalCount} exam schedules for Matric, Intermediate, and University exams`,
     url: 'https://www.nextid.pk/date-sheets',
     breadcrumbs: [
@@ -479,7 +483,7 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    "name": `Date Sheets ${new Date().getFullYear()} - Exam Schedules`,
+    "name": `Date Sheets ${currentYear} - Exam Schedules`,
     "description": `List of ${dateSheetsResult.totalCount} exam date sheets for Matric, Intermediate, and University exams`,
     "numberOfItems": dateSheetsResult.totalCount,
     "url": "https://www.nextid.pk/date-sheets",
@@ -584,7 +588,8 @@ function DateSheetsLoading() {
 
 // ============ MAIN PAGE ============
 export default async function DateSheetsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">

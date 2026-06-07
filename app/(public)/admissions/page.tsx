@@ -45,20 +45,22 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
   const posts = await postService.getPostsByType('admission', 50);
   const openCount = posts.filter(post => getMetaValue(post.meta, 'status', 'Open') === "Open").length;
+  // ✅ Use static year
+  const currentYear = "2026";
   
   return {
-    title: `Admissions ${new Date().getFullYear()} in Pakistan | NextID.pk`,
-    description: `Find ${openCount}+ latest university admissions in Pakistan for ${new Date().getFullYear()}. Check deadlines, eligibility criteria, programs offered, and apply online.`,
-    keywords: `admissions ${new Date().getFullYear()}, university admissions Pakistan, college admissions, admission schedule, education Pakistan`,
+    title: `Admissions ${currentYear} in Pakistan | NextID.pk`,
+    description: `Find ${openCount}+ latest university admissions in Pakistan for ${currentYear}. Check deadlines, eligibility criteria, programs offered, and apply online.`,
+    keywords: `admissions ${currentYear}, university admissions Pakistan, college admissions, admission schedule, education Pakistan`,
     alternates: {
       canonical: 'https://www.nextid.pk/admissions',
     },
     openGraph: {
-      title: `Admissions ${new Date().getFullYear()} in Pakistan | NextID.pk`,
+      title: `Admissions ${currentYear} in Pakistan | NextID.pk`,
       description: `Find latest university admissions in Pakistan. Check deadlines and programs.`,
       url: 'https://www.nextid.pk/admissions',
       siteName: 'NextID.pk',
@@ -75,7 +77,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: 'summary_large_image',
-      title: `Admissions ${new Date().getFullYear()} in Pakistan`,
+      title: `Admissions ${currentYear} in Pakistan`,
       description: `Find latest university admissions in Pakistan. Check deadlines and programs.`,
       images: ['/og-image.png'],
       site: '@nextidpk',
@@ -111,10 +113,13 @@ export default async function AdmissionsPage() {
   const openCount = openAdmissions.length;
   const closedCount = totalCount - openCount;
 
+  // ✅ Use static year
+  const currentYear = "2026";
+
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
-    title: `Admissions ${new Date().getFullYear()} in Pakistan`,
+    title: `Admissions ${currentYear} in Pakistan`,
     description: `Find ${openCount}+ university admissions in Pakistan.`,
     url: 'https://www.nextid.pk/admissions',
     breadcrumbs: [
@@ -138,7 +143,7 @@ export default async function AdmissionsPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "ItemList",
-            "name": `Admissions ${new Date().getFullYear()} in Pakistan`,
+            "name": `Admissions ${currentYear} in Pakistan`,
             "description": `List of ${openCount} open admissions in Pakistan`,
             "numberOfItems": totalCount,
             "url": "https://www.nextid.pk/admissions",
@@ -159,7 +164,7 @@ export default async function AdmissionsPage() {
           <div className="container mx-auto px-4 text-center">
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
               <GraduationCap className="w-4 h-4" />
-              <span className="text-sm">Admissions {new Date().getFullYear()}</span>
+              <span className="text-sm">Admissions {currentYear}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-3">
               University Admissions

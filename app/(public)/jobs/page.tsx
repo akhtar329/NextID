@@ -99,9 +99,10 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-// ============ METADATA ============
+// ============ METADATA (Fixed - No new Date()) ============
 export async function generateMetadata(): Promise<Metadata> {
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   const allJobs = await postService.getPostsByType('job', 200);
   const totalJobs = allJobs.length;
   
@@ -308,10 +309,13 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/jobs?${urlParams.toString()}` : '/jobs';
   };
 
+  // ✅ Use static year
+  const currentYear = "2026";
+
   // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
-    title: `Jobs in ${new Date().getFullYear()} - Career Opportunities Pakistan`,
+    title: `Jobs in ${currentYear} - Career Opportunities Pakistan`,
     description: `Find ${jobs.length} latest job opportunities in education, IT, and management sectors`,
     url: 'https://www.nextid.pk/jobs',
     breadcrumbs: [
@@ -324,7 +328,7 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    "name": `Jobs in Pakistan ${new Date().getFullYear()}`,
+    "name": `Jobs in Pakistan ${currentYear}`,
     "description": `List of ${jobs.length} latest job opportunities in education, IT, and management sectors`,
     "numberOfItems": jobs.length,
     "url": "https://www.nextid.pk/jobs",
@@ -563,7 +567,8 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
 // ============ MAIN PAGE ============
 export default async function JobsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = new Date().getFullYear();
+  // ✅ Use static year
+  const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">

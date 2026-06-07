@@ -1,7 +1,6 @@
 // app/(public)/news/[slug]/page.tsx
 
 import { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
@@ -12,13 +11,11 @@ import {
   Clock, 
   Eye, 
   ChevronLeft,
-  Newspaper,
   Twitter,
   Facebook,
   Linkedin,
   Mail
 } from 'lucide-react';
-import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
 
 // ============ TYPES ============
@@ -152,7 +149,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   }
 }
 
-// ✅ Server-side related news fetch (no client hooks needed)
+// ✅ Server-side related news fetch
 async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
   try {
     const allNews = await postService.getPostsByType('news', 50);
@@ -304,7 +301,7 @@ function ShareButtons({ title, slug }: { title: string; slug: string }) {
   );
 }
 
-// ============ NEWS CONTENT COMPONENT (Server Component) ============
+// ============ NEWS CONTENT COMPONENT ============
 async function NewsContent({ slug }: { slug: string }) {
   const newsItem = await getNewsBySlug(slug);
   
@@ -312,11 +309,9 @@ async function NewsContent({ slug }: { slug: string }) {
     notFound();
   }
   
-  // ✅ Fetch related news on server side
   const relatedNews = await getRelatedNews(newsItem.id);
   const readTime = getReadTime(newsItem.content);
 
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'Article',
     title: newsItem.title,
@@ -334,7 +329,6 @@ async function NewsContent({ slug }: { slug: string }) {
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data for SEO */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -409,12 +403,11 @@ async function NewsContent({ slug }: { slug: string }) {
               {/* Featured Image */}
               {newsItem.featuredImage && (
                 <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video">
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={newsItem.featuredImage}
                     alt={newsItem.title}
-                    fill
-                    className="object-cover"
-                    priority
+                    className="w-full h-full object-cover"
                   />
                   {newsItem.source && (
                     <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded">
@@ -485,32 +478,27 @@ async function NewsContent({ slug }: { slug: string }) {
             {/* Right Sidebar */}
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
-                
-                {/* Sidebar Widgets */}
-                <SidebarWidgets />
-                
-                {/* Related News - Server-side fetched */}
+                {/* Related News */}
                 {relatedNews.length > 0 && (
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                     <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
-                      <Newspaper className="w-4 h-4 text-red-600" />
                       <h3 className="font-bold text-gray-800">Related News</h3>
                     </div>
                     <div className="space-y-4">
                       {relatedNews.map((item) => (
                         <Link key={item.id} href={`/news/${item.slug}`} className="flex gap-3 group">
                           {item.featuredImage ? (
-                            <div className="relative w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg">
-                              <Image 
+                            <div className="relative w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img 
                                 src={item.featuredImage} 
                                 alt={item.title}
-                                fill
-                                className="object-cover group-hover:scale-105 transition duration-300"
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                               />
                             </div>
                           ) : (
                             <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Newspaper className="w-6 h-6 text-gray-400" />
+                              <span className="text-2xl">📰</span>
                             </div>
                           )}
                           <div className="flex-1">
@@ -545,4 +533,18 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
       <NewsContent slug={slug} />
     </Suspense>
   );
+}
+
+// ✅ Generate static params for all news posts
+export async function generateStaticParams() {
+  try {
+    const posts = await postService.getPostsByType('news', 1000);
+    
+    return posts.map((post) => ({
+      slug: post.slug,
+    }));
+  } catch (error) {
+    console.error('Error generating static params for news:', error);
+    return [];
+  }
 }
