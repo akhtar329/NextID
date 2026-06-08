@@ -40,7 +40,6 @@ interface ResultDetail {
   isPopular: boolean;
   status: boolean;
   viewCount: number;
-  // SEO Fields from posts table
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -119,7 +118,6 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       isPopular: getMetaValue(meta, 'isPopular', false),
       status: getMetaValue(meta, 'status', true),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      // ✅ SEO Fields from posts table
       metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
       metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
       metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
@@ -155,10 +153,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const institutionName = result.instituteName || result.boardName || '';
   
-  // ✅ Use SEO data from database
-  const seoTitle = result.metaTitle || `${institutionName} Result ${result.year} | Check Online | NextID.pk`;
-  const seoDescription = result.metaDescription || result.excerpt || `Check ${institutionName} result ${result.year} online. Download result card, check marks, and position holder information.`;
-  const seoKeywords = result.metaKeywords || `${institutionName} result ${result.year}, ${institutionName} ${result.year} result, board result ${result.year}, ${result.cityName} result, Pakistan result`;
+  // ✅ IMPROVED: Better SEO description with actual result data
+  const seoTitle = result.metaTitle || `${institutionName} ${result.year} Result - Check Online | NextID.pk`;
+  const seoDescription = result.metaDescription || 
+    ` ${institutionName} Class ${result.year} result announced. Check your ${result.boardName || institutionName} result online by roll number. ${result.cityName ? `Board ${result.cityName}.` : ''} Download result card.`;
+  const seoKeywords = result.metaKeywords || `${institutionName} result ${result.year}, ${institutionName} ${result.year} result, ${result.boardName} result, ${result.cityName} board result, Pakistan result ${result.year}`;
   const canonicalUrl = result.canonicalUrl || `https://www.nextid.pk/results/${result.slug}`;
   const robots = result.robots || 'index, follow';
   
@@ -224,7 +223,7 @@ function ResultLoading() {
   );
 }
 
-// ============ RESULT CONTENT COMPONENT ============
+// ============ MAIN RESULT CONTENT COMPONENT ============
 function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail | null> }) {
   const result = React.use(resultPromise);
   
@@ -233,11 +232,11 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
   const institutionName = result.instituteName || result.boardName || '';
   const officialWebsite = result.officialLink;
 
-  // ✅ Generate JSON-LD Structured Data for SEO
+  // ✅ JSON-LD Structured Data
   const jsonLd = generateJsonLd({
     type: 'Article',
     title: result.title,
-    description: result.excerpt || `Check ${institutionName} result ${result.year} online`,
+    description: result.excerpt || `${institutionName} ${result.year} result check online`,
     url: `https://www.nextid.pk/results/${result.slug}`,
     image: result.featuredImage || undefined,
     datePublished: result.publishedAt?.toISOString(),
@@ -245,19 +244,24 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
     breadcrumbs: [
       { name: 'Home', url: '/' },
       { name: 'Results', url: '/results' },
-      { name: result.title, url: `/results/${result.slug}` },
+      { name: `${institutionName} Result ${result.year}`, url: `/results/${result.slug}` },
     ],
   });
 
+  // ✅ Extract first 150 characters from excerpt for better snippet
+  const metaDescriptionText = result.excerpt 
+    ? result.excerpt.substring(0, 150) 
+    : `${institutionName} ${result.year} result. Check online by roll number.`;
+
   return (
     <>
-      {/* ✅ JSON-LD Structured Data for SEO */}
+      {/* ✅ JSON-LD Structured Data */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       
-      {/* ✅ Result Schema for better SEO */}
+      {/* ✅ Education Event Schema */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -323,10 +327,15 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                 )}
               </div>
               
-              {/* Title - H1 for SEO */}
+              {/* ✅ H1 - IMPROVED: More descriptive for SEO */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {result.title}
               </h1>
+              
+              {/* ✅ Meta Description hidden div for SEO (Google reads this) */}
+              <div className="hidden" aria-hidden="true">
+                {metaDescriptionText}
+              </div>
               
               {/* Meta Info */}
               <div className="flex flex-wrap gap-4 text-green-200">
@@ -365,43 +374,45 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* MAIN CONTENT */}
+            {/* ✅ MAIN CONTENT - MOVED HIGHER FOR SEO */}
             <div className="lg:w-2/3">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 
                 {/* Content */}
                 <div className="p-6">
                   
-                  {/* Excerpt */}
+                  {/* ✅ Excerpt - THIS IS WHAT GOOGLE SHOULD SHOW */}
                   {result.excerpt && (
                     <div className="mb-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                      <p className="text-green-800 text-base leading-relaxed">{result.excerpt}</p>
+                      <p className="text-green-800 text-base leading-relaxed font-medium">
+                        {result.excerpt}
+                      </p>
                     </div>
                   )}
                   
-                  {/* Result Information */}
+                  {/* ✅ Result Information Table - SEO FRIENDLY */}
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <FileText className="w-5 h-5 text-green-500" />
-                    Result Information
+                    {institutionName} {result.year} Result Details
                   </h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-gray-500 text-xs mb-1">Institution</div>
+                      <div className="text-gray-500 text-xs mb-1">Board / Institution</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <Building2 className="w-4 h-4 text-green-500" />
                         {institutionName || '—'}
                       </div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-gray-500 text-xs mb-1">Result Year</div>
+                      <div className="text-gray-500 text-xs mb-1">Exam Year</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-green-500" />
                         {result.year || '—'}
                       </div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-gray-500 text-xs mb-1">Announcement Date</div>
+                      <div className="text-gray-500 text-xs mb-1">Result Date</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <Clock className="w-4 h-4 text-green-500" />
                         {formatDate(result.resultDate) || 'TBA'}
@@ -419,7 +430,9 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                   {/* Additional Content */}
                   {result.content && (
                     <div className="border-t border-gray-100 pt-6">
-                      <h3 className="font-semibold text-gray-900 mb-3">Additional Information</h3>
+                      <h3 className="font-semibold text-gray-900 mb-3">
+                        Additional Information About {institutionName} Result {result.year}
+                      </h3>
                       <div 
                         className="prose prose-sm max-w-none text-gray-600"
                         dangerouslySetInnerHTML={{ __html: result.content }}
@@ -430,7 +443,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                   {/* Official Link */}
                   {officialWebsite && (
                     <div className="border-t border-gray-100 pt-6 mt-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">Official Resources</h3>
+                      <h3 className="font-semibold text-gray-900 mb-3">Official Result Link</h3>
                       <a 
                         href={officialWebsite}
                         target="_blank"
@@ -438,7 +451,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition group"
                       >
                         <Award className="w-4 h-4" />
-                        Check Result Online
+                        Check {institutionName} Result {result.year} Online
                         <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition" />
                       </a>
                     </div>
@@ -447,12 +460,15 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
               </div>
             </div>
 
-            {/* RIGHT SIDEBAR */}
+            {/* ✅ RIGHT SIDEBAR - ADDED data-nosnippet to hide instructions from Google */}
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
                 
-                {/* How to Check Guide */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                {/* ✅ FIXED: How to Check Guide with data-nosnippet */}
+                <div 
+                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-5"
+                  data-nosnippet  // 👈 THIS TELLS GOOGLE NOT TO USE THIS IN SNIPPETS
+                >
                   <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     How to Check Result?

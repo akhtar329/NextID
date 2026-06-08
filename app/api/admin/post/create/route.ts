@@ -1,263 +1,124 @@
-// app/api/admin/post/create/route.ts
+// app/api/admin/post/create/route.ts (With existing session)
 
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
-import { posts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/db/db';
+import { posts } from '@/db/schema';
+import { cookies } from 'next/headers';
 
-// Types for request body (with SEO fields)
+// ==================== TYPES ====================
 interface CreatePostBody {
+  title: string;
   slug: string;
   type: string;
-  title: string;
-  content?: string | null;
-  excerpt?: string | null;
-  featuredImage?: string | null;
+  content: string;
+  excerpt?: string;
+  featuredImage?: string;
+  authorName?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  focusKeyword?: string;
+  canonicalUrl?: string;
+  robots?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  ogType?: string;
+  twitterCard?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
   status?: string;
   isFeatured?: boolean;
   isPopular?: boolean;
   isBreaking?: boolean;
-  publishedAt?: string | Date;
-  expiresAt?: string | Date | null;
   meta?: Record<string, unknown>;
   tags?: string[];
-  // ✅ SEO Fields
-  metaTitle?: string | null;
-  metaDescription?: string | null;
-  metaKeywords?: string | null;
-  focusKeyword?: string | null;
-  canonicalUrl?: string | null;
-  robots?: string | null;
-  ogTitle?: string | null;
-  ogDescription?: string | null;
-  ogImage?: string | null;
-  ogType?: string | null;
-  twitterCard?: string | null;
-  twitterTitle?: string | null;
-  twitterDescription?: string | null;
-  twitterImage?: string | null;
-  schemaMarkup?: Record<string, unknown> | null;
-  focusKeywordDensity?: string | null;
-  readabilityScore?: number | null;
-  seoScore?: number | null;
-  lastSeoAnalysis?: string | Date | null;
-  priority?: string | null;
-  changefreq?: string | null;
-  breadcrumbTitle?: string | null;
-  oldSlug?: string | null;
+  publishedAt?: string;
+  expiresAt?: string;
 }
 
-export async function POST(request: NextRequest) {
+// ==================== GET SESSION FROM COOKIE ====================
+async function getSessionFromCookie(): Promise<{ userId: number; userName: string } | null> {
   try {
-    const body = await request.json() as CreatePostBody;
+    const cookieStore = cookies();
+    const sessionCookie = (await cookieStore).get('admin_session');
     
-    const {
-      // Basic fields
-      slug,
-      type,
-      title,
-      content,
-      excerpt,
-      featuredImage,
-      status,
-      isFeatured,
-      isPopular,
-      isBreaking,
-      publishedAt,
-      expiresAt,
-      meta,
-      tags,
-      // ✅ SEO Fields
-      metaTitle,
-      metaDescription,
-      metaKeywords,
-      focusKeyword,
-      canonicalUrl,
-      robots,
-      ogTitle,
-      ogDescription,
-      ogImage,
-      ogType,
-      twitterCard,
-      twitterTitle,
-      twitterDescription,
-      twitterImage,
-      schemaMarkup,
-      focusKeywordDensity,
-      readabilityScore,
-      seoScore,
-      lastSeoAnalysis,
-      priority,
-      changefreq,
-      breadcrumbTitle,
-      oldSlug,
-    } = body;
-
-    // Validate required fields
-    if (!slug || !type || !title) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Missing required fields: slug, type, title" 
-        },
-        { status: 400 }
-      );
+    if (sessionCookie) {
+      return JSON.parse(sessionCookie.value);
     }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
-    // Validate slug format (no spaces, only lowercase letters, numbers, hyphens)
-    const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-    if (!slugRegex.test(slug)) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Invalid slug format. Use only lowercase letters, numbers, and hyphens." 
-        },
-        { status: 400 }
-      );
-    }
-
-    // Validate type is valid
-    const validTypes = ["admission", "result", "news", "date_sheet", "scholarship", "job", "blog"];
-    if (!validTypes.includes(type)) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Invalid type. Must be one of: ${validTypes.join(", ")}` 
-        },
-        { status: 400 }
-      );
-    }
-
-    // Check if slug already exists
-    const existingPosts = await db
-      .select()
-      .from(posts)
-      .where(eq(posts.slug, slug));
+// ==================== API ROUTE ====================
+export async function POST(req: NextRequest) {
+  try {
+    // ✅ Get session from cookie
+    const session = await getSessionFromCookie();
     
-    if (existingPosts.length > 0) {
+    if (!session) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Slug already exists. Please choose a different slug." 
-        },
-        { status: 409 }
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
-    // Parse published date safely
-    let parsedPublishedAt: Date;
-    if (publishedAt) {
-      const date = new Date(publishedAt);
-      parsedPublishedAt = isNaN(date.getTime()) ? new Date() : date;
-    } else {
-      parsedPublishedAt = new Date();
-    }
-
-    // Parse expires date safely
-    let parsedExpiresAt: Date | null = null;
-    if (expiresAt) {
-      const date = new Date(expiresAt);
-      parsedExpiresAt = isNaN(date.getTime()) ? null : date;
-    }
-
-    // Parse lastSeoAnalysis date safely
-    let parsedLastSeoAnalysis: Date | null = null;
-    if (lastSeoAnalysis) {
-      const date = new Date(lastSeoAnalysis);
-      parsedLastSeoAnalysis = isNaN(date.getTime()) ? null : date;
-    }
-
-    // Create new post with ALL fields including SEO
-    const newPost = await db.insert(posts).values({
-      // Basic fields
-      slug: slug.trim().toLowerCase(),
-      type,
-      title: title.trim(),
-      content: content || null,
-      excerpt: excerpt || null,
-      featuredImage: featuredImage || null,
-      status: status || "draft",
-      isFeatured: isFeatured ?? false,
-      isPopular: isPopular ?? false,
-      isBreaking: isBreaking ?? false,
-      publishedAt: parsedPublishedAt,
-      expiresAt: parsedExpiresAt,
-      meta: meta || {},
-      tags: tags || [],
-      
-      // ✅ SEO Fields - Core Meta
-      metaTitle: metaTitle || null,
-      metaDescription: metaDescription || null,
-      metaKeywords: metaKeywords || null,
-      focusKeyword: focusKeyword || null,
-      canonicalUrl: canonicalUrl || null,
-      robots: robots || "index, follow",
-      
-      // ✅ SEO Fields - Open Graph
-      ogTitle: ogTitle || null,
-      ogDescription: ogDescription || null,
-      ogImage: ogImage || null,
-      ogType: ogType || "article",
-      
-      // ✅ SEO Fields - Twitter
-      twitterCard: twitterCard || "summary_large_image",
-      twitterTitle: twitterTitle || null,
-      twitterDescription: twitterDescription || null,
-      twitterImage: twitterImage || null,
-      
-      // ✅ SEO Fields - Extra
-      schemaMarkup: schemaMarkup || null,
-      focusKeywordDensity: focusKeywordDensity || null,
-      readabilityScore: readabilityScore || null,
-      seoScore: seoScore || null,
-      lastSeoAnalysis: parsedLastSeoAnalysis,
-      priority: priority || "0.5",
-      changefreq: changefreq || "weekly",
-      breadcrumbTitle: breadcrumbTitle || null,
-      oldSlug: oldSlug || null,
-      
-      // Timestamps
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
-
-    if (!newPost.length) {
+    const body: CreatePostBody = await req.json();
+    
+    if (!body.title || !body.slug || !body.type || !body.content) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Failed to create post - no data returned" 
-        },
-        { status: 500 }
+        { success: false, error: 'Missing required fields' },
+        { status: 400 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Post created successfully",
-      post: newPost[0],
+    const postData = {
+      slug: body.slug,
+      type: body.type,
+      title: body.title,
+      content: body.content,
+      excerpt: body.excerpt || null,
+      authorId: session.userId,
+      authorName: body.authorName || session.userName,
+      featuredImage: body.featuredImage || null,
+      metaTitle: body.metaTitle || null,
+      metaDescription: body.metaDescription || null,
+      metaKeywords: body.metaKeywords || null,
+      focusKeyword: body.focusKeyword || null,
+      canonicalUrl: body.canonicalUrl || null,
+      robots: body.robots || 'index, follow',
+      ogTitle: body.ogTitle || null,
+      ogDescription: body.ogDescription || null,
+      ogImage: body.ogImage || body.featuredImage || null,
+      ogType: body.ogType || 'article',
+      twitterCard: body.twitterCard || 'summary_large_image',
+      twitterTitle: body.twitterTitle || body.ogTitle || null,
+      twitterDescription: body.twitterDescription || body.ogDescription || null,
+      twitterImage: body.twitterImage || body.ogImage || body.featuredImage || null,
+      status: body.status || 'draft',
+      isFeatured: body.isFeatured || false,
+      isPopular: body.isPopular || false,
+      isBreaking: body.isBreaking || false,
+      meta: body.meta || {},
+      tags: body.tags || [],
+      publishedAt: body.publishedAt ? new Date(body.publishedAt) : new Date(),
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+    };
+
+    const [newPost] = await db.insert(posts).values(postData).returning();
+
+    return NextResponse.json({ 
+      success: true, 
+      post: newPost 
     });
 
   } catch (error) {
-    console.error("Error creating post:", error);
-    
-    // Handle duplicate key error (PostgreSQL code 23505)
-    const pgError = error as { code?: string };
-    if (pgError.code === "23505") {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Slug already exists. Please choose a different slug." 
-        },
-        { status: 409 }
-      );
-    }
-    
+    console.error('Error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: "Failed to create post",
-        details: error instanceof Error ? error.message : "Unknown error"
-      },
+      { success: false, error: 'Failed to create post' },
       { status: 500 }
     );
   }

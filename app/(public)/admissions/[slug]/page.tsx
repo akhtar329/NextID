@@ -39,7 +39,7 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// ============ SEO: Generate Metadata from Database ============
+// ============ SEO: Generate Metadata from Database (IMPROVED) ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const post = await postService.getPost(slug);
@@ -52,28 +52,50 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
   
-  // ✅ Use SEO data from database (posts table)
-  const seoTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'metaTitle', `${post.title} | Admissions 2026 | NextID.pk`);
-  const seoDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'metaDescription', post.excerpt || `Apply for ${post.title}. Check eligibility criteria, programs offered, application deadline, and admission process.`);
-  const seoKeywords = getMetaValue(post.meta as Record<string, unknown> | null, 'metaKeywords', 'admission, university admission, college admission, Pakistan education');
-  const canonicalUrl = getMetaValue(post.meta as Record<string, unknown> | null, 'canonicalUrl', `https://www.nextid.pk/admissions/${slug}`);
-  const robots = getMetaValue(post.meta as Record<string, unknown> | null, 'robots', 'index, follow');
+  const meta = post.meta || {};
+  const instituteName = getMetaValue(meta, 'instituteName', 'University');
+  const cityName = getMetaValue(meta, 'cityName', '');
+  const programs = getMetaValue(meta, 'programs', []) as Program[];
+  const closeDate = getMetaValue(meta, 'closeDate', null) ? new Date(getMetaValue(meta, 'closeDate', '')) : null;
+  const status = getMetaValue(meta, 'status', 'Open');
   
-  // Parse robots string
+  // ✅ IMPROVED: Better SEO title with deadline and status
+  const deadlineText = closeDate ? ` (Deadline: ${formatDate(closeDate)})` : '';
+  const statusText = status === 'Open' ? 'Open - Apply Now' : 'Closed';
+  
+  const seoTitle = getMetaValue(meta, 'metaTitle', 
+    `${instituteName} Admissions ${new Date().getFullYear()} | ${statusText}${deadlineText} | ${post.title}`
+  );
+  
+  // ✅ IMPROVED: Better meta description with programs list
+  const programsText = programs.length > 0 
+    ? ` Programs: ${programs.slice(0, 3).map(p => p.name).join(', ')}${programs.length > 3 ? '...' : ''}.` 
+    : '';
+  
+  const seoDescription = getMetaValue(meta, 'metaDescription', 
+    post.excerpt || 
+    `${instituteName} admissions ${new Date().getFullYear()} ${status === 'Open' ? 'are open' : 'status'}.${programsText} Check eligibility criteria, apply online, last date ${formatDate(closeDate)}. ${instituteName}${cityName ? ' ' + cityName + '.' : ''}`
+  );
+  
+  const seoKeywords = getMetaValue(meta, 'metaKeywords', 
+    `${instituteName} admission ${new Date().getFullYear()}, ${instituteName} admissions, ${programs.map(p => p.name).join(', ')}, university admission Pakistan, college admission`
+  );
+  
+  const canonicalUrl = getMetaValue(meta, 'canonicalUrl', `https://www.nextid.pk/admissions/${slug}`);
+  const robots = getMetaValue(meta, 'robots', 'index, follow');
+  
   const robotsObj = {
     index: robots.includes('index'),
     follow: robots.includes('follow'),
   };
   
-  // Open Graph data
-  const ogTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'ogTitle', seoTitle);
-  const ogDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'ogDescription', seoDescription);
-  const ogImage = getMetaValue(post.meta as Record<string, unknown> | null, 'ogImage', post.featuredImage || '/og-image.png');
+  const ogTitle = getMetaValue(meta, 'ogTitle', seoTitle);
+  const ogDescription = getMetaValue(meta, 'ogDescription', seoDescription);
+  const ogImage = getMetaValue(meta, 'ogImage', post.featuredImage || '/og-image.png');
   
-  // Twitter data
-  const twitterTitle = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterTitle', ogTitle);
-  const twitterDescription = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterDescription', ogDescription);
-  const twitterImage = getMetaValue(post.meta as Record<string, unknown> | null, 'twitterImage', ogImage);
+  const twitterTitle = getMetaValue(meta, 'twitterTitle', ogTitle);
+  const twitterDescription = getMetaValue(meta, 'twitterDescription', ogDescription);
+  const twitterImage = getMetaValue(meta, 'twitterImage', ogImage);
   
   return {
     title: seoTitle,
@@ -103,7 +125,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       modifiedTime: post.updatedAt?.toISOString(),
     },
     twitter: {
-      card: getMetaValue(post.meta as Record<string, unknown> | null, 'twitterCard', 'summary_large_image'),
+      card: getMetaValue(meta, 'twitterCard', 'summary_large_image'),
       title: twitterTitle,
       description: twitterDescription,
       images: [twitterImage],
@@ -154,11 +176,19 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
     return closeDate < weekFromNow;
   })();
   
-  // ✅ Generate JSON-LD Structured Data for SEO
+  // ✅ Create SEO description text for hidden div
+  const programsForMeta = programs.length > 0 
+    ? programs.map(p => p.name).join(', ') 
+    : 'various programs';
+  
+  const metaDescriptionText = post.excerpt || 
+    `${instituteName} admissions ${new Date().getFullYear()} ${status === 'Open' ? 'are now open' : 'status'}. Apply for ${programsForMeta}. Last date: ${formatDate(closeDate)}. Eligibility: ${eligibility.substring(0, 100)}...`;
+  
+  // ✅ Generate JSON-LD Structured Data for SEO (IMPROVED)
   const jsonLd = generateJsonLd({
-    type: 'Event',
+    type: 'Event',  // Admission is an event type
     title: post.title,
-    description: post.excerpt || `Apply for ${post.title} at ${instituteName}`,
+    description: metaDescriptionText,
     url: `https://www.nextid.pk/admissions/${slug}`,
     image: post.featuredImage || undefined,
     datePublished: post.publishedAt?.toISOString(),
@@ -166,9 +196,42 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
     breadcrumbs: [
       { name: 'Home', url: '/' },
       { name: 'Admissions', url: '/admissions' },
-      { name: post.title, url: `/admissions/${slug}` },
+      { name: `${instituteName} Admissions`, url: `/admissions/${slug}` },
     ],
   });
+  
+  // ✅ Additional EducationEvent Schema for better SEO
+  const educationEventSchema = {
+    "@context": "https://schema.org",
+    "@type": "EducationEvent",
+    "name": `${instituteName} Admissions ${new Date().getFullYear()}`,
+    "description": metaDescriptionText,
+    "startDate": openDate?.toISOString(),
+    "endDate": closeDate?.toISOString(),
+    "eventStatus": status === 'Open' 
+      ? "https://schema.org/EventScheduled" 
+      : "https://schema.org/EventCancelled",
+    "location": {
+      "@type": "Place",
+      "name": instituteName,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": cityName,
+        "addressCountry": "PK"
+      }
+    },
+    "organizer": {
+      "@type": "EducationalOrganization",
+      "name": instituteName,
+      "url": applyLink || undefined
+    },
+    "offers": applicationFee ? {
+      "@type": "Offer",
+      "price": applicationFee,
+      "priceCurrency": "PKR",
+      "availability": status === 'Open' ? "https://schema.org/InStock" : "https://schema.org/SoldOut"
+    } : undefined
+  };
   
   return (
     <>
@@ -176,6 +239,12 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      
+      {/* ✅ Education Event Schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(educationEventSchema) }}
       />
       
       <main className="min-h-screen bg-gray-50">
@@ -218,10 +287,15 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                 )}
               </div>
               
-              {/* Title */}
+              {/* ✅ H1 - IMPROVED: More descriptive */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-                {post.title}
+                {status === 'Open' ? '📢 ' : ''}{post.title}
               </h1>
+              
+              {/* ✅ Hidden SEO description for Google */}
+              <div className="hidden" aria-hidden="true">
+                {metaDescriptionText}
+              </div>
               
               {/* Institute Info */}
               <div className="flex flex-wrap gap-4 text-blue-200 mb-6">
@@ -251,7 +325,12 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                     <Clock className="w-4 h-4" />
                     <div>
                       <div className="text-xs text-blue-200">Deadline</div>
-                      <div className="font-semibold">{formatDate(closeDate)}</div>
+                      <div className="font-semibold">
+                        {formatDate(closeDate)}
+                        {isDeadlineNear && status === "Open" && (
+                          <span className="ml-2 text-xs text-orange-200">(Soon!)</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -264,7 +343,7 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* MAIN CONTENT */}
+            {/* ✅ MAIN CONTENT - MOVED HIGHER FOR SEO */}
             <main className="lg:w-2/3">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 
@@ -284,19 +363,21 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                 {/* Content */}
                 <div className="p-6 md:p-8">
                   
-                  {/* Excerpt */}
+                  {/* ✅ Excerpt - THIS IS WHAT GOOGLE SHOULD SHOW */}
                   {post.excerpt && (
                     <div className="mb-8 p-5 bg-blue-50 rounded-xl border-l-4 border-blue-500">
-                      <p className="text-blue-800 text-base leading-relaxed">{post.excerpt}</p>
+                      <p className="text-blue-800 text-base leading-relaxed font-medium">
+                        {post.excerpt}
+                      </p>
                     </div>
                   )}
                   
-                  {/* Programs Offered */}
+                  {/* ✅ Programs Offered - WITH BETTER HEADING FOR SEO */}
                   {programs && programs.length > 0 && (
                     <div className="mb-8">
                       <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <GraduationCap className="w-5 h-5 text-blue-600" />
-                        Programs Offered
+                        Programs Offered at {instituteName}
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {programs.map((program: Program, idx: number) => (
@@ -309,12 +390,12 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                     </div>
                   )}
                   
-                  {/* Eligibility Criteria */}
+                  {/* ✅ Eligibility Criteria */}
                   {eligibility && (
                     <div className="mb-8">
                       <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <FileText className="w-5 h-5 text-blue-600" />
-                        Eligibility Criteria
+                        Eligibility Criteria for {instituteName} Admission {new Date().getFullYear()}
                       </h2>
                       <div className="prose prose-sm max-w-none text-gray-700">
                         <p>{eligibility}</p>
@@ -345,7 +426,7 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                     </div>
                   )}
                   
-                  {/* Apply Button */}
+                  {/* ✅ Apply Button - BETTER TEXT FOR SEO */}
                   {applyLink && status === "Open" && (
                     <div className="mt-8 pt-6 border-t border-gray-100">
                       <a
@@ -354,7 +435,7 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all group"
                       >
-                        Apply Now
+                        Apply Now for {instituteName} Admission {new Date().getFullYear()}
                         <ExternalLink className="w-4 h-4 group-hover:translate-x-1 transition" />
                       </a>
                     </div>
@@ -370,10 +451,13 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
               </div>
             </main>
             
-            {/* SIDEBAR */}
+            {/* ✅ SIDEBAR - ADDED data-nosnippet if there are instructions */}
             <aside className="lg:w-1/3">
               <div className="lg:sticky lg:top-6 space-y-6">
-                <SidebarWidgets />
+                {/* ✅ If SidebarWidgets has instructions, add data-nosnippet */}
+                <div data-nosnippet>
+                  <SidebarWidgets />
+                </div>
               </div>
             </aside>
             

@@ -6,8 +6,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
-import { Calendar, Clock, MapPin, Building2, Eye, Download, ExternalLink, FileText } from 'lucide-react';
-import { generateJsonLd } from '@/lib/seo';
+import { Calendar, Clock, MapPin, Building2, Eye, ExternalLink, FileText, AlertCircle } from 'lucide-react';
 
 // Types
 interface DateSheetDetail {
@@ -28,7 +27,6 @@ interface DateSheetDetail {
   viewCount: number;
   officialLink: string | null;
   downloadLink: string | null;
-  // SEO Fields from posts table
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -44,7 +42,6 @@ interface DateSheetDetail {
   updatedAt: Date | null;
 }
 
-// Helper function to safely extract meta values
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
@@ -61,7 +58,6 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// Get date sheet detail from posts service with SEO fields
 async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null> {
   try {
     const post = await postService.getPost(slug);
@@ -99,7 +95,6 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       viewCount: getMetaValue(meta, 'viewCount', 0),
       officialLink: getMetaValue(meta, 'officialLink', null),
       downloadLink: getMetaValue(meta, 'downloadLink', null),
-      // ✅ SEO Fields from posts table
       metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
       metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
       metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
@@ -111,8 +106,8 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       twitterTitle: getSeoField<string>(seoPost, 'twitterTitle'),
       twitterDescription: getSeoField<string>(seoPost, 'twitterDescription'),
       featuredImage: getSeoField<string>(seoPost, 'featuredImage'),
-      publishedAt: getSeoField<unknown>(seoPost, 'publishedAt') as Date | null,
-      updatedAt: getSeoField<unknown>(seoPost, 'updatedAt') as Date | null,
+      publishedAt: seoPost.publishedAt as Date | null,
+      updatedAt: seoPost.updatedAt as Date | null,
     };
   } catch (error) {
     console.error('Error fetching date sheet detail:', error);
@@ -120,7 +115,7 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
   }
 }
 
-// ============ SEO: Generate Metadata from Database ============
+// ============ SEO: Generate Metadata (IMPROVED) ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const dateSheet = await getDateSheetDetail(slug);
@@ -133,25 +128,31 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  // ✅ Use SEO data from database (posts table)
-  const seoTitle = dateSheet.metaTitle || `${dateSheet.title} - Download ${dateSheet.examType} Date Sheet ${dateSheet.year} | NextID.pk`;
-  const seoDescription = dateSheet.metaDescription || `Download official ${dateSheet.title}. Complete ${dateSheet.examType} examinations date sheet for ${dateSheet.year}. PDF available.`;
-  const seoKeywords = dateSheet.metaKeywords || `${dateSheet.title}, date sheet, exam schedule, ${dateSheet.examType} exams, ${dateSheet.year} exams, Pakistan education`;
+  const displayName = dateSheet.boardName || dateSheet.instituteName || '';
+  
+  // ✅ IMPROVED: Better SEO title (no fake download promise)
+  const seoTitle = dateSheet.metaTitle || 
+    `${displayName} ${dateSheet.examType} Exam Date Sheet ${dateSheet.year} - Check Official Schedule | NextID.pk`;
+  
+  // ✅ IMPROVED: Meta description clearly states it's a redirect
+  const seoDescription = dateSheet.metaDescription || 
+    `✅ Check ${displayName} ${dateSheet.examType} examinations date sheet ${dateSheet.year}. View complete exam schedule on official website. ${dateSheet.examDate ? `Exams from ${formatDate(dateSheet.examDate)}.` : ''}`;
+  
+  const seoKeywords = dateSheet.metaKeywords || 
+    `${displayName} date sheet ${dateSheet.year}, ${displayName} ${dateSheet.examType} exam schedule, ${dateSheet.boardName || dateSheet.instituteName} date sheet, Pakistan board date sheet`;
+  
   const canonicalUrl = dateSheet.canonicalUrl || `https://www.nextid.pk/date-sheets/${dateSheet.slug}`;
   const robots = dateSheet.robots || 'index, follow';
   
-  // Parse robots string
   const robotsObj = {
     index: robots.includes('index'),
     follow: robots.includes('follow'),
   };
   
-  // Open Graph data
   const ogTitle = dateSheet.ogTitle || seoTitle;
   const ogDescription = dateSheet.ogDescription || seoDescription;
   const ogImage = dateSheet.ogImage || dateSheet.featuredImage || '/og-image.png';
   
-  // Twitter data
   const twitterTitle = dateSheet.twitterTitle || ogTitle;
   const twitterDescription = dateSheet.twitterDescription || ogDescription;
 
@@ -169,14 +170,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description: ogDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
-      images: [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: ogTitle,
-        },
-      ],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: ogTitle }],
       locale: 'en_PK',
       type: 'article',
       publishedTime: dateSheet.publishedAt?.toISOString(),
@@ -205,38 +199,69 @@ function DateSheetLoading() {
   );
 }
 
-// Date Sheet Details Client Component
+// ============ DATE SHEET DETAILS (IMPROVED) ============
 function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<DateSheetDetail | null> }) {
   const dateSheet = React.use(dateSheetPromise);
   
   if (!dateSheet) return null;
   
   const displayName = dateSheet.boardName || dateSheet.instituteName;
-  const hasDownloadLinks = dateSheet.officialLink || dateSheet.downloadLink;
+  const officialLink = dateSheet.officialLink || undefined;
+  const hasOfficialLink = !!officialLink;
   
-  // ✅ Generate JSON-LD Structured Data for SEO
-  const jsonLd = generateJsonLd({
-    type: 'Event',
-    title: dateSheet.title,
-    description: dateSheet.description || `Download official ${dateSheet.examType} examinations date sheet for ${dateSheet.year}`,
-    url: `https://www.nextid.pk/date-sheets/${dateSheet.slug}`,
-    image: dateSheet.featuredImage || undefined,
-    datePublished: dateSheet.publishedAt?.toISOString(),
-    dateModified: dateSheet.updatedAt?.toISOString(),
-    breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Date Sheets', url: '/date-sheets' },
-      { name: dateSheet.title, url: `/date-sheets/${dateSheet.slug}` },
-    ],
-  });
+  // ✅ Create SEO description for hidden div
+  const metaDescriptionText = dateSheet.description || 
+    `${displayName} ${dateSheet.examType} examinations date sheet for ${dateSheet.year}. Check complete exam schedule including dates, subjects, and timings.`;
+
+  // ✅ IMPROVED: JSON-LD with proper schema for external link
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "EducationEvent",
+    "name": `${displayName} ${dateSheet.examType} Examinations ${dateSheet.year}`,
+    "description": metaDescriptionText,
+    "startDate": dateSheet.examDate?.toISOString(),
+    "eventSchedule": {
+      "@type": "Schedule",
+      "scheduleTimezone": "Asia/Karachi",
+      "repeatFrequency": "P1Y"
+    },
+    "location": {
+      "@type": "Place",
+      "name": displayName || "Pakistan",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": dateSheet.cityName || "Pakistan",
+        "addressCountry": "PK"
+      }
+    },
+    "organizer": {
+      "@type": "EducationalOrganization",
+      "name": displayName,
+      "url": dateSheet.officialLink || undefined
+    },
+    "offers": {
+      "@type": "Offer",
+      "availability": "https://schema.org/OnlineOnly",
+      "url": dateSheet.officialLink || undefined
+    }
+  };
+  
+  // ✅ Breadcrumb Schema
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Date Sheets", "item": "https://www.nextid.pk/date-sheets" },
+      { "@type": "ListItem", "position": 3, "name": dateSheet.title, "item": `https://www.nextid.pk/date-sheets/${dateSheet.slug}` }
+    ]
+  };
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data for SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {/* JSON-LD Structured Data */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
       
       <main className="min-h-screen bg-gray-50">
         
@@ -245,6 +270,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
           <div className="absolute inset-0 bg-black/20"></div>
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
+              
               {/* Breadcrumbs */}
               <div className="text-sm text-orange-100 mb-6 flex items-center gap-2 flex-wrap">
                 <Link href="/" className="hover:text-white transition">Home</Link>
@@ -257,20 +283,28 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
               {/* Popular Badge */}
               {dateSheet.isPopular && (
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full mb-4">
-                  <span className="text-yellow-300">🔥</span>
-                  <span className="text-sm font-medium text-white">Popular Date Sheet</span>
+                  <span>🔥</span>
+                  <span className="text-sm font-medium">Popular Date Sheet</span>
                 </div>
               )}
 
-              {/* Title - H1 for SEO */}
+              {/* ✅ H1 - IMPROVED */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {dateSheet.title}
               </h1>
               
+              {/* ✅ Hidden SEO description */}
+              <div className="hidden" aria-hidden="true">
+                {metaDescriptionText}
+              </div>
+              
               {/* Description */}
               <p className="text-lg text-orange-100 mb-6">
-                Download official {dateSheet.examType} examinations date sheet for {dateSheet.year}.
+                {dateSheet.examType} examinations date sheet for {dateSheet.year}.
                 {displayName && ` Published by ${displayName}.`}
+                <span className="block text-sm text-orange-200 mt-2">
+                  📌 Click the button below to view on official website
+                </span>
               </p>
 
               {/* Info Cards */}
@@ -305,42 +339,33 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
         <div className="container mx-auto px-4 py-12">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            {/* Left Column - Main Content */}
+            {/* ✅ LEFT COLUMN - MAIN CONTENT (Comes first for SEO) */}
             <div className="lg:col-span-2 space-y-6">
               
-              {/* Download Section */}
-              {hasDownloadLinks && (
+              {/* ✅ MAIN ACTION BUTTON - Improved text */}
+              {hasOfficialLink && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
                     <h2 className="text-white font-semibold text-lg flex items-center gap-2">
-                      <Download className="w-5 h-5" />
-                      Download Date Sheet
+                      <ExternalLink className="w-5 h-5" />
+                      View Date Sheet Online
                     </h2>
                   </div>
                   <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {dateSheet.officialLink && (
-                        <a 
-                          href={dateSheet.officialLink} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium group"
-                        >
-                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                          Official Website
-                        </a>
-                      )}
-                      {dateSheet.downloadLink && (
-                        <a 
-                          href={dateSheet.downloadLink} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition font-medium group"
-                        >
-                          <Download className="w-4 h-4 group-hover:-translate-y-0.5 transition" />
-                          Download PDF
-                        </a>
-                      )}
+                    <div className="text-center">
+                      <a 
+                        href={officialLink ?? undefined}
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition font-semibold text-lg group w-full md:w-auto"
+                      >
+                        <ExternalLink className="w-5 h-5 group-hover:translate-x-1 transition" />
+                        View {displayName} Date Sheet on Official Website
+                        <span className="text-sm text-orange-200 ml-2">↗</span>
+                      </a>
+                      <p className="text-sm text-gray-500 mt-3">
+                        You will be redirected to the official {displayName} website
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -361,12 +386,12 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </div>
               )}
 
-              {/* Exam Schedule Section */}
+              {/* Exam Schedule Details */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                     <Calendar className="w-5 h-5 text-orange-500" />
-                    Exam Schedule Details
+                    {displayName} Exam Schedule {dateSheet.year}
                   </h2>
                 </div>
                 <div className="p-6">
@@ -376,12 +401,12 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                       <div className="font-semibold text-gray-900 text-base mt-1">{dateSheet.examType}</div>
                     </div>
                     <div className="bg-orange-50 rounded-xl p-4">
-                      <div className="text-orange-500 text-xs font-medium">Year</div>
+                      <div className="text-orange-500 text-xs font-medium">Academic Year</div>
                       <div className="font-semibold text-gray-900 text-base mt-1">{dateSheet.year}</div>
                     </div>
                     {dateSheet.examDate && (
                       <div className="bg-orange-50 rounded-xl p-4 md:col-span-2">
-                        <div className="text-orange-500 text-xs font-medium">Exam Date</div>
+                        <div className="text-orange-500 text-xs font-medium">Exam Start Date</div>
                         <div className="font-semibold text-gray-900 text-base mt-1 flex items-center gap-2">
                           <Clock className="w-4 h-4 text-orange-500" />
                           {formatDate(dateSheet.examDate)}
@@ -391,12 +416,28 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                   </div>
                 </div>
               </div>
+              
+              {/* ✅ How to Check Guide - WITH data-nosnippet */}
+              <div className="bg-blue-50 rounded-xl p-5 border border-blue-100" data-nosnippet>
+                <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  How to View Date Sheet?
+                </h3>
+                <ol className="space-y-2 text-sm text-blue-700 list-decimal list-inside">
+                  <li>Click the <strong>&quot;View Date Sheet on Official Website&quot;</strong> button above</li>
+                  <li>You will be redirected to the official {displayName} website</li>
+                  <li>Look for the date sheet PDF or exam schedule section</li>
+                  <li>Download or save the date sheet for reference</li>
+                </ol>
+              </div>
             </div>
 
-            {/* Right Sidebar */}
+            {/* ✅ RIGHT SIDEBAR - WITH data-nosnippet */}
             <aside className="space-y-6">
+              
+              {/* Board/Institute Info - MOVED to sidebar but with data-nosnippet */}
               {displayName && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24" data-nosnippet>
                   <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
                     <h3 className="text-white font-semibold flex items-center gap-2">
                       <Building2 className="w-4 h-4" />
@@ -412,30 +453,32 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                         {dateSheet.cityName}{dateSheet.province ? `, ${dateSheet.province}` : ''}
                       </p>
                     )}
+                    {dateSheet.officialLink && (
+                      <a 
+                        href={dateSheet.officialLink}
+                        target="_blank"
+                        rel="noopener noreferrer nofollow"
+                        className="mt-4 text-sm text-orange-600 hover:text-orange-700 inline-flex items-center gap-1"
+                      >
+                        Visit Official Website
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Help Section */}
-              <div className="bg-blue-50 rounded-xl p-5 border border-blue-100">
-                <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                  <span>💡</span> Need Help?
+              {/* Important Note - Users should know it's a redirect */}
+              <div className="bg-amber-50 rounded-xl p-5 border border-amber-200" data-nosnippet>
+                <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                  <span>ℹ️</span> Important Note
                 </h3>
-                <p className="text-sm text-blue-700 mb-3">
-                  Having trouble downloading? Visit the official website directly.
+                <p className="text-sm text-amber-700">
+                  We provide direct link to the official {displayName} website where the 
+                  official date sheet is published. We do not host PDF files directly.
                 </p>
-                {dateSheet.officialLink && (
-                  <a 
-                    href={dateSheet.officialLink} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
-                  >
-                    Go to Official Website
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
               </div>
+
             </aside>
           </div>
         </div>

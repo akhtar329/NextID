@@ -18,10 +18,10 @@ import {
   DollarSign,
   ExternalLink,
   TrendingUp,
-  Zap
+  Zap,
+  AlertCircle
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
-import { generateJsonLd } from '@/lib/seo';
 
 // ============ TYPES ============
 interface ScholarshipDetail {
@@ -43,7 +43,6 @@ interface ScholarshipDetail {
   isFeatured: boolean;
   isPopular: boolean;
   viewCount: number;
-  // SEO Fields from posts table
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -84,6 +83,7 @@ function formatShortDate(date: Date | null): string {
   if (!date) return 'TBA';
   return new Date(date).toLocaleDateString('en-PK', {
     month: 'short',
+    day: 'numeric',
     year: 'numeric'
   });
 }
@@ -95,6 +95,31 @@ function getDaysLeft(date: Date | null): number | null {
   const diffTime = deadline.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays > 0 ? diffDays : null;
+}
+
+// ✅ Parse amount for schema
+function parseAmountForSchema(amount: string | null): { value: number; currency: string; unitText: string } | null {
+  if (!amount) return null;
+  
+  // Extract numeric value
+  const match = amount.match(/(\d[\d,]*)/);
+  if (!match) return null;
+  
+  const value = parseInt(match[1].replace(/,/g, ''));
+  let unitText = "MONTH";
+  
+  // Check for yearly scholarship
+  if (amount.toLowerCase().includes('year') || amount.toLowerCase().includes('annual')) {
+    unitText = "YEAR";
+  }
+  
+  // Check for PKR or USD
+  let currency = "PKR";
+  if (amount.toLowerCase().includes('usd') || amount.toLowerCase().includes('dollar')) {
+    currency = "USD";
+  }
+  
+  return { value, currency, unitText };
 }
 
 // ============ DATA FETCHING ============
@@ -141,7 +166,6 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       isPopular: getMetaValue(meta, 'isPopular', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      // ✅ SEO Fields from posts table
       metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
       metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
       metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
@@ -162,7 +186,7 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipDetail | n
   }
 }
 
-// ============ METADATA (Fixed - No new Date()) ============
+// ============ METADATA (IMPROVED) ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const scholarship = await getScholarshipBySlug(slug);
@@ -175,13 +199,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  // ✅ Use static year instead of new Date()
   const currentYear = "2026";
+  const daysLeft = getDaysLeft(scholarship.deadline);
+  const urgencyText = daysLeft && daysLeft <= 14 ? `Apply urgently! ${daysLeft} days left. ` : '';
   
-  // ✅ Use SEO data from database
-  const seoTitle = scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear} | NextID.pk`;
-  const seoDescription = scholarship.metaDescription || scholarship.excerpt || `Apply for ${scholarship.title} scholarship offered by ${scholarship.provider}. ${scholarship.amount ? `Award amount: ${scholarship.amount}. ` : ''}Deadline: ${formatShortDate(scholarship.deadline)}.`;
-  const seoKeywords = scholarship.metaKeywords || `${scholarship.title} scholarship, ${scholarship.studyLevel} scholarship, ${scholarship.provider} scholarship, ${scholarship.location} scholarship, Pakistan scholarship ${currentYear}`;
+  // ✅ IMPROVED: Better SEO title with deadline
+  const seoTitle = scholarship.metaTitle || 
+    `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear} | ${scholarship.amount ? scholarship.amount : ''} | Apply by ${formatShortDate(scholarship.deadline)} | NextID.pk`;
+  
+  // ✅ IMPROVED: Better meta description
+  const seoDescription = scholarship.metaDescription || 
+    `${urgencyText}Apply for ${scholarship.title} scholarship offered by ${scholarship.provider}. ${scholarship.amount ? `Award: ${scholarship.amount}. ` : ''}Eligibility: ${scholarship.studyLevel} students. Deadline: ${formatShortDate(scholarship.deadline)}. Apply online now.`;
+  
+  const seoKeywords = scholarship.metaKeywords || 
+    `${scholarship.title}, ${scholarship.studyLevel} scholarship, ${scholarship.provider} scholarship, ${scholarship.location} scholarship, Pakistan scholarship ${currentYear}, fully funded scholarship`;
+  
   const canonicalUrl = scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`;
   const robots = scholarship.robots || 'index, follow';
   
@@ -211,14 +243,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description: ogDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
-      images: [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: ogTitle,
-        },
-      ],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: ogTitle }],
       locale: 'en_PK',
       type: 'article',
       publishedTime: scholarship.publishedAt?.toISOString(),
@@ -247,7 +272,7 @@ function ScholarshipLoading() {
   );
 }
 
-// ============ SCHOLARSHIP CONTENT COMPONENT ============
+// ============ SCHOLARSHIP CONTENT COMPONENT (IMPROVED) ============
 function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promise<ScholarshipDetail | null> }) {
   const scholarship = React.use(scholarshipPromise);
   
@@ -255,57 +280,68 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
   
   const daysLeft = getDaysLeft(scholarship.deadline);
   const isOpen = daysLeft !== null && daysLeft > 0;
-  const isUrgent = daysLeft !== null && daysLeft <= 7;
+  const isUrgent = daysLeft !== null && daysLeft <= 14;
+  const amountData = parseAmountForSchema(scholarship.amount);
+  
+  // Create SEO description for hidden div
+  const metaDescriptionText = scholarship.excerpt || 
+    `${scholarship.title} scholarship offered by ${scholarship.provider}. ${scholarship.amount ? `Award amount: ${scholarship.amount}. ` : ''}Study level: ${scholarship.studyLevel}. Deadline: ${formatShortDate(scholarship.deadline)}. Apply online.`;
 
-  // ✅ Generate JSON-LD Structured Data for SEO
-  const jsonLd = generateJsonLd({
-    type: 'Article',
-    title: scholarship.title,
-    description: scholarship.excerpt || `Apply for ${scholarship.title} scholarship`,
-    url: `https://www.nextid.pk/scholarships/${scholarship.slug}`,
-    image: scholarship.featuredImage || undefined,
-    datePublished: scholarship.publishedAt?.toISOString(),
-    dateModified: scholarship.updatedAt?.toISOString(),
-    breadcrumbs: [
-      { name: 'Home', url: '/' },
-      { name: 'Scholarships', url: '/scholarships' },
-      { name: scholarship.title, url: `/scholarships/${scholarship.slug}` },
-    ],
-  });
+  // ✅ IMPROVED: Correct Scholarship Schema (Google specific)
+  const scholarshipSchema = {
+    "@context": "https://schema.org",
+    "@type": "Scholarship",  // ✅ Correct type for scholarship
+    "name": scholarship.title,
+    "description": scholarship.excerpt || metaDescriptionText,
+    "url": `https://www.nextid.pk/scholarships/${scholarship.slug}`,
+    "provider": {
+      "@type": "Organization",
+      "name": scholarship.provider,
+      "url": scholarship.officialLink || undefined
+    },
+    "eligibleRegion": {
+      "@type": "Place",
+      "name": scholarship.location,
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": scholarship.location.includes('Pakistan') ? "PK" : undefined
+      }
+    },
+    "educationalProgramLevel": scholarship.studyLevel,
+    "financialAidType": scholarship.type,
+    ...(amountData && {
+      "amount": {
+        "@type": "MonetaryAmount",
+        "value": amountData.value,
+        "currency": amountData.currency,
+        "unitText": amountData.unitText
+      }
+    }),
+    "deadline": scholarship.deadline?.toISOString(),
+    "eligibility": scholarship.eligibility,
+    "applicationLink": scholarship.applicationLink || scholarship.officialLink,
+    "datePublished": scholarship.publishedAt?.toISOString(),
+    "dateModified": scholarship.updatedAt?.toISOString()
+  };
+  
+  // ✅ Breadcrumb Schema
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Scholarships", "item": "https://www.nextid.pk/scholarships" },
+      { "@type": "ListItem", "position": 3, "name": scholarship.title, "item": `https://www.nextid.pk/scholarships/${scholarship.slug}` }
+    ]
+  };
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data for SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {/* ✅ Scholarship Schema */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scholarshipSchema) }} />
       
-      {/* ✅ Scholarship Schema for better SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "EducationalOccupationalProgram",
-            "name": scholarship.title,
-            "description": scholarship.excerpt,
-            "provider": {
-              "@type": "Organization",
-              "name": scholarship.provider,
-              "url": scholarship.officialLink || undefined
-            },
-            "educationalProgramMode": scholarship.studyLevel,
-            "financialAidEligible": true,
-            "deadline": scholarship.deadline?.toISOString(),
-            "url": `https://www.nextid.pk/scholarships/${scholarship.slug}`,
-            "amount": scholarship.amount ? {
-              "@type": "MonetaryAmount",
-              "value": scholarship.amount
-            } : undefined
-          })
-        }}
-      />
+      {/* ✅ Breadcrumb Schema */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
       
       <main className="min-h-screen bg-gray-50">
         
@@ -341,7 +377,7 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                 {isOpen && isUrgent && (
                   <span className="inline-flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1 rounded-full animate-pulse">
                     <Clock className="w-3 h-3" />
-                    Urgent - Apply Soon
+                    Deadline Approaching
                   </span>
                 )}
                 {!isOpen && scholarship.deadline && (
@@ -351,10 +387,15 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                 )}
               </div>
               
-              {/* Title - H1 for SEO */}
+              {/* ✅ H1 - IMPROVED */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {scholarship.title}
               </h1>
+              
+              {/* ✅ Hidden SEO description */}
+              <div className="hidden" aria-hidden="true">
+                {metaDescriptionText}
+              </div>
               
               {/* Provider */}
               <p className="text-xl text-teal-200 mb-4 flex items-center gap-2">
@@ -377,9 +418,9 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                   <span>{scholarship.location}</span>
                 </div>
                 {scholarship.amount && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 py-1 rounded-lg">
                     <DollarSign className="w-4 h-4" />
-                    <span>{scholarship.amount}</span>
+                    <span className="font-semibold">{scholarship.amount}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -395,8 +436,40 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* MAIN CONTENT */}
+            {/* ✅ MAIN CONTENT - COMES FIRST FOR SEO */}
             <div className="lg:w-2/3">
+              
+              {/* ✅ Apply Now Button - Prominent (if open) */}
+              {(scholarship.applicationLink || scholarship.officialLink) && isOpen && (
+                <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-xl p-6 mb-6 border border-green-200">
+                  <div className="text-center">
+                    <h2 className="text-xl font-bold text-teal-800 mb-3 flex items-center justify-center gap-2">
+                      <Award className="w-5 h-5" />
+                      Apply for {scholarship.title}
+                    </h2>
+                    <div className="flex flex-wrap gap-3 justify-center">
+                      {scholarship.applicationLink && (
+                        <a 
+                          href={scholarship.applicationLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-8 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition font-semibold text-lg group"
+                        >
+                          Apply Now for {scholarship.provider} Scholarship
+                          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+                        </a>
+                      )}
+                    </div>
+                    {scholarship.deadline && (
+                      <p className="text-sm text-teal-700 mt-3">
+                        ⏰ Apply before {formatDate(scholarship.deadline)}
+                        {daysLeft && ` (${daysLeft} days remaining)`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 
                 {/* Content */}
@@ -405,19 +478,21 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                   {/* Excerpt */}
                   {scholarship.excerpt && (
                     <div className="mb-6 p-4 bg-teal-50 rounded-lg border-l-4 border-teal-500">
-                      <p className="text-teal-800 text-base leading-relaxed">{scholarship.excerpt}</p>
+                      <p className="text-teal-800 text-base leading-relaxed font-medium">
+                        📌 <span className="font-bold">Scholarship Highlights:</span> {scholarship.excerpt}
+                      </p>
                     </div>
                   )}
                   
                   {/* Scholarship Details */}
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <Award className="w-5 h-5 text-teal-500" />
-                    Scholarship Details
+                    {scholarship.title} - Scholarship Details
                   </h2>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-gray-500 text-xs mb-1">Provider</div>
+                      <div className="text-gray-500 text-xs mb-1">Provider / Organization</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <GraduationCap className="w-4 h-4 text-teal-500" />
                         {scholarship.provider}
@@ -432,7 +507,7 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                       <div className="font-semibold text-gray-900">{scholarship.type}</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-gray-500 text-xs mb-1">Location</div>
+                      <div className="text-gray-500 text-xs mb-1">Location / Country</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-teal-500" />
                         {scholarship.location}
@@ -440,7 +515,7 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                     </div>
                     {scholarship.amount && (
                       <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="text-gray-500 text-xs mb-1">Award Amount</div>
+                        <div className="text-gray-500 text-xs mb-1">Scholarship Amount</div>
                         <div className="font-semibold text-gray-900 flex items-center gap-2">
                           <DollarSign className="w-4 h-4 text-green-500" />
                           {scholarship.amount}
@@ -462,7 +537,7 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-teal-500" />
-                        Eligibility Criteria
+                        Eligibility Criteria for {scholarship.provider} Scholarship
                       </h3>
                       <div 
                         className="prose prose-sm max-w-none text-gray-600"
@@ -474,7 +549,10 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                   {/* Coverage */}
                   {scholarship.coverage && (
                     <div className="border-t border-gray-100 pt-6 mt-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">Coverage</h3>
+                      <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Award className="w-4 h-4 text-teal-500" />
+                        Scholarship Coverage
+                      </h3>
                       <div 
                         className="prose prose-sm max-w-none text-gray-600"
                         dangerouslySetInnerHTML={{ __html: scholarship.coverage }}
@@ -492,73 +570,65 @@ function ScholarshipContent({ scholarshipPromise }: { scholarshipPromise: Promis
                       />
                     </div>
                   )}
-
-                  {/* Apply Links */}
-                  {(scholarship.applicationLink || scholarship.officialLink) && (
-                    <div className="border-t border-gray-100 pt-6 mt-4">
-                      <h3 className="font-semibold text-gray-900 mb-3">Apply Now</h3>
-                      <div className="flex flex-wrap gap-3">
-                        {scholarship.applicationLink && (
-                          <a 
-                            href={scholarship.applicationLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition font-semibold group"
-                          >
-                            Apply Online
-                            <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                          </a>
-                        )}
-                        {scholarship.officialLink && (
-                          <a 
-                            href={scholarship.officialLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition group"
-                          >
-                            Official Website
-                            <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
 
-            {/* RIGHT SIDEBAR */}
+            {/* ✅ RIGHT SIDEBAR - WITH data-nosnippet */}
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
                 
-                {/* How to Apply Guide */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                {/* Quick Scholarship Summary */}
+                <div className="bg-teal-50 rounded-xl p-5 border border-teal-100" data-nosnippet>
+                  <h3 className="font-semibold text-teal-800 mb-3 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Quick Summary
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p><span className="font-medium">🎓 Scholarship:</span> {scholarship.title}</p>
+                    <p><span className="font-medium">🏢 Provider:</span> {scholarship.provider}</p>
+                    <p><span className="font-medium">📚 Study Level:</span> {scholarship.studyLevel}</p>
+                    <p><span className="font-medium">📍 Location:</span> {scholarship.location}</p>
+                    {scholarship.amount && <p><span className="font-medium">💰 Amount:</span> {scholarship.amount}</p>}
+                    {scholarship.deadline && (
+                      <p className={`font-medium ${isUrgent && isOpen ? 'text-red-600' : ''}`}>
+                        ⏰ Deadline: {formatShortDate(scholarship.deadline)}
+                        {daysLeft && isOpen && ` (${daysLeft} days left)`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* ✅ How to Apply Guide - WITH data-nosnippet */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5" data-nosnippet>
                   <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-teal-500" />
-                    How to Apply?
+                    How to Apply for This Scholarship?
                   </h3>
                   <ol className="space-y-3 text-sm text-gray-600">
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                      <span>Click the &quot;Apply Online&quot; button above</span>
+                      <span>Click the &quot;Apply Now&quot; button above</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                      <span>Fill the application form</span>
+                      <span>Fill the online application form</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                      <span>Upload required documents</span>
+                      <span>Upload required documents (CV, transcripts, etc.)</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                      <span>Submit before deadline</span>
+                      <span>Submit application before the deadline</span>
                     </li>
                   </ol>
                 </div>
                 
-                {/* Sidebar Widgets */}
-                <SidebarWidgets />
+                {/* Sidebar Widgets with data-nosnippet */}
+                <div data-nosnippet>
+                  <SidebarWidgets />
+                </div>
               </div>
             </aside>
           </div>

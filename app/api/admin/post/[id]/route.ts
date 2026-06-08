@@ -12,7 +12,7 @@ interface PostgresError {
   message: string;
 }
 
-// Type for update data (no 'any' type)
+// Type for update data
 interface UpdateData {
   slug?: string;
   type?: string;
@@ -45,7 +45,7 @@ interface UpdateData {
   twitterDescription?: string | null;
   twitterImage?: string | null;
   schemaMarkup?: Record<string, unknown> | null;
-  focusKeywordDensity?: string | null;
+  focusKeywordDensity?: string | null;  // ✅ Changed from number to string
   readabilityScore?: number | null;
   seoScore?: number | null;
   lastSeoAnalysis?: Date | null;
@@ -65,7 +65,7 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
   return numericId;
 }
 
-// Helper function to revalidate cache (Fixed: added second argument 'default' for profile)
+// ✅ Fixed: Helper function to revalidate cache (Next.js 15 compatible)
 async function revalidatePostCache(slug: string, type: string) {
   try {
     // ✅ Fixed: revalidateTag now takes 2 arguments (tag, profile)
@@ -163,6 +163,11 @@ export async function PUT(
       );
     }
 
+    // ✅ Fixed: Convert number to string for focusKeywordDensity
+    const focusKeywordDensityValue = body.focusKeywordDensity 
+      ? String(body.focusKeywordDensity) 
+      : null;
+
     // ✅ Update post with ALL fields including SEO
     const updated = await db
       .update(posts)
@@ -200,10 +205,10 @@ export async function PUT(
         twitterDescription: body.twitterDescription || null,
         twitterImage: body.twitterImage || null,
         
-        // ✅ SEO Fields - Extra
-        focusKeywordDensity: body.focusKeywordDensity || null,
-        readabilityScore: body.readabilityScore || null,
-        seoScore: body.seoScore || null,
+        // ✅ SEO Fields - Extra (Fixed: focusKeywordDensity as string)
+        focusKeywordDensity: focusKeywordDensityValue,
+        readabilityScore: body.readabilityScore ? Number(body.readabilityScore) : null,
+        seoScore: body.seoScore ? Number(body.seoScore) : null,
         lastSeoAnalysis: body.lastSeoAnalysis ? new Date(body.lastSeoAnalysis) : null,
         priority: body.priority || "0.5",
         changefreq: body.changefreq || "weekly",
@@ -300,6 +305,17 @@ export async function PATCH(
     if (body.breadcrumbTitle !== undefined) updateData.breadcrumbTitle = body.breadcrumbTitle || null;
     if (body.oldSlug !== undefined) updateData.oldSlug = body.oldSlug || null;
     
+    // ✅ Fixed: focusKeywordDensity as string (not number)
+    if (body.focusKeywordDensity !== undefined) {
+      updateData.focusKeywordDensity = body.focusKeywordDensity ? String(body.focusKeywordDensity) : null;
+    }
+    if (body.readabilityScore !== undefined) {
+      updateData.readabilityScore = body.readabilityScore ? Number(body.readabilityScore) : null;
+    }
+    if (body.seoScore !== undefined) {
+      updateData.seoScore = body.seoScore ? Number(body.seoScore) : null;
+    }
+    
     if (body.meta !== undefined) updateData.meta = body.meta;
     if (body.tags !== undefined) updateData.tags = body.tags;
     
@@ -328,7 +344,7 @@ export async function PATCH(
 
     const updated = await db
       .update(posts)
-      .set(updateData)
+      .set(updateData as UpdateData)
       .where(eq(posts.id, numericId))
       .returning();
 
