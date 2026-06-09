@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { Toaster } from "sonner";
@@ -9,15 +10,65 @@ interface AdminLayoutProps {
   children: ReactNode;
 }
 
+interface UserData {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions: string[];
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch user role
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch("/api/admin/profile");
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data.profile);
+          
+          // ✅ Check if user is trying to access restricted pages
+          const isEditor = data.profile.role === "Editor";
+          const restrictedForEditor = [
+            "/admin/users",
+            "/admin/roles",
+            "/admin/settings",
+            "/admin/backup",
+          ];
+          
+          if (isEditor && restrictedForEditor.some(r => pathname?.startsWith(r))) {
+            router.push("/admin/unauthorized");
+          }
+        } else if (response.status === 401) {
+          router.push("/login");
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUser();
+  }, [router, pathname]);
 
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem("sidebar_collapsed");
-    if (saved !== null) setSidebarCollapsed(saved === "true");
+    // Avoid synchronous setState inside effect by deferring to next tick
+    const t = setTimeout(() => {
+      setMounted(true);
+      const saved = localStorage.getItem("sidebar_collapsed");
+      if (saved !== null) setSidebarCollapsed(saved === "true");
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -40,14 +91,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     setMobileOpen(!mobileOpen);
   };
 
-  if (!mounted) {
+  if (!mounted || loading) {
     return <div className="h-screen bg-gray-100 animate-pulse" />;
+  }
+
+  // Editor ko restricted page par redirect
+  if (user?.role === "Editor") {
+    const restrictedPaths = ["/admin/users", "/admin/roles", "/admin/settings"];
+    if (restrictedPaths.some(path => pathname?.startsWith(path))) {
+      return null; // Redirect ho raha hai
+    }
   }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       
-      {/* Sidebar */}
+      {/* Sidebar - Pass userRole */}
       <div
         className={`
           fixed lg:relative top-0 left-0 h-full z-50
@@ -55,7 +114,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <Sidebar 
+          collapsed={sidebarCollapsed} 
+          onToggle={toggleSidebar}
+        />
       </div>
 
       {/* Mobile Overlay */}

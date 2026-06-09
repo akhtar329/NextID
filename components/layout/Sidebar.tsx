@@ -1,5 +1,3 @@
-// app/components/layout/Sidebar.tsx
-
 "use client";
 
 import Link from "next/link";
@@ -15,20 +13,28 @@ import {
   Users,
   RefreshCw,
   Wrench,
+  Image,
+  FolderTree,
+  Tag,
 } from "lucide-react";
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  userRole?: string;  // ✅ New prop for role-based menu
 }
 
-const navItems = [
+// ✅ Admin ke liye full menu items
+const adminNavItems = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   
   // ==================== POSTS SECTION ====================
-  { name: "Posts", href: "/admin/post", icon: FileEdit, divider: true },
+  { name: "Content", href: "#", icon: FileEdit, divider: true },
   { name: "All Posts", href: "/admin/post", icon: List },
   { name: "Create Post", href: "/admin/post/create", icon: PlusCircle },
+  { name: "Media", href: "/admin/media", icon: Image },
+  { name: "Categories", href: "/admin/categories", icon: FolderTree },
+  { name: "Tags", href: "/admin/tags", icon: Tag },
   
   // ==================== SYSTEM ====================
   { name: "System", href: "#", icon: Settings, divider: true },
@@ -38,8 +44,28 @@ const navItems = [
   { name: "SEO Redirects", href: "/admin/settings/redirects", icon: RefreshCw },
 ];
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+// ✅ Editor ke liye limited menu items (no users, no settings)
+const editorNavItems = [
+  { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  
+  // ==================== POSTS SECTION ====================
+  { name: "Content", href: "#", icon: FileEdit, divider: true },
+  { name: "All Posts", href: "/admin/post", icon: List },
+  { name: "Create Post", href: "/admin/post/create", icon: PlusCircle },
+  { name: "Media", href: "/admin/media", icon: Image },
+  { name: "Categories", href: "/admin/categories", icon: FolderTree },
+  { name: "Tags", href: "/admin/tags", icon: Tag },
+  
+  // ==================== SYSTEM (Limited) ====================
+  // ❌ No Users, No Settings, No Maintenance for Editor
+];
+
+export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: SidebarProps) {
   const pathname = usePathname();
+  
+  // ✅ Choose menu based on role
+  const isEditor = userRole === "Editor";
+  const navItems = isEditor ? editorNavItems : adminNavItems;
 
   const isActive = (href: string) => {
     if (href === "#") return false;
@@ -51,6 +77,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       return pathname === "/admin/settings" || 
              pathname === "/admin/settings/maintenance" || 
              pathname === "/admin/settings/redirects";
+    }
+    if (href === "/admin/media") {
+      return pathname === "/admin/media" || pathname.startsWith("/admin/media/");
+    }
+    if (href === "/admin/categories") {
+      return pathname === "/admin/categories";
+    }
+    if (href === "/admin/tags") {
+      return pathname === "/admin/tags";
     }
     return pathname.startsWith(href);
   };
@@ -104,7 +139,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             const Icon = item.icon;
             const active = isActive(item.href);
             
-            // Divider
+            // Divider for section headers
             if (item.divider && !collapsed) {
               return (
                 <div key={item.name} className="pt-2 mt-2 first:pt-0">
@@ -148,11 +183,26 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Footer Info */}
-      {!collapsed && (
-        <div className="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
-          <p>NextID Admin Panel</p>
-          <p className="mt-1">Version 1.0.0</p>
+      {/* Footer Info with Role Badge */}
+      {!collapsed ? (
+        <div className="p-4 border-t border-gray-100">
+          <div className={`text-xs text-center ${isEditor ? "text-orange-600" : "text-gray-400"}`}>
+            <p>NextID Admin Panel</p>
+            <div className={`mt-2 px-2 py-1 rounded-lg ${isEditor ? "bg-orange-50" : "bg-gray-50"}`}>
+              <span className={`text-xs font-medium ${isEditor ? "text-orange-600" : "text-gray-500"}`}>
+                Role: {userRole}
+              </span>
+            </div>
+            <p className="mt-1 text-gray-400">Version 1.0.0</p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-2 border-t border-gray-100">
+          <div className="flex justify-center">
+            <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+              <span className="text-xs text-gray-500">{userRole === "Editor" ? "E" : "A"}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

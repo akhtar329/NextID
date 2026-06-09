@@ -1,10 +1,55 @@
 // app/api/admin/post/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
+
+// ==================== AUTHENTICATION HELPER ====================
+async function isAuthenticated(): Promise<{ userId: number; userRole: string } | null> {
+  try {
+    const cookieStore = await cookies();
+    const authToken = cookieStore.get('authToken')?.value;
+    
+    if (!authToken) {
+      console.log('❌ No authToken found');
+      return null;
+    }
+    
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (!JWT_SECRET) {
+      console.error('JWT_SECRET not set');
+      return null;
+    }
+    
+    try {
+      const decoded = jwt.verify(authToken, JWT_SECRET) as {
+        id: number;
+        email: string;
+        name: string;
+        role: string;
+      };
+      
+      return { userId: decoded.id, userRole: decoded.role };
+    } catch (jwtError) {
+      console.error('❌ JWT verification failed:', jwtError);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Auth error:', error);
+    return null;
+  }
+}
+
+// ==================== UNAUTHORIZED RESPONSE ====================
+function unauthorizedResponse() {
+  return NextResponse.json(
+    { success: false, error: 'Unauthorized - Please login first' },
+    { status: 401 }
+  );
+}
 
 // PostgreSQL error type
 interface PostgresError {
@@ -45,7 +90,7 @@ interface UpdateData {
   twitterDescription?: string | null;
   twitterImage?: string | null;
   schemaMarkup?: Record<string, unknown> | null;
-  focusKeywordDensity?: string | null;  // ✅ Changed from number to string
+  focusKeywordDensity?: string | null;
   readabilityScore?: number | null;
   seoScore?: number | null;
   lastSeoAnalysis?: Date | null;
@@ -65,10 +110,9 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
   return numericId;
 }
 
-// ✅ Fixed: Helper function to revalidate cache (Next.js 15 compatible)
+// Helper function to revalidate cache
 async function revalidatePostCache(slug: string, type: string) {
   try {
-    // ✅ Fixed: revalidateTag now takes 2 arguments (tag, profile)
     revalidateTag(`post-${slug}`, "default");
     revalidateTag(`posts-type-${type}`, "default");
     revalidateTag("homepage", "default");
@@ -88,12 +132,18 @@ async function revalidatePostCache(slug: string, type: string) {
 }
 
 /* =========================
-   GET → Fetch Single Post
+   GET → Fetch Single Post (Requires Auth)
 ========================= */
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // ✅ Check authentication
+  const auth = await isAuthenticated();
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+  
   const numericId = await getNumericId(context);
   if (!numericId) {
     return NextResponse.json(
@@ -132,6 +182,12 @@ export async function PUT(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // ✅ Check authentication
+  const auth = await isAuthenticated();
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+  
   const numericId = await getNumericId(context);
   if (!numericId) {
     return NextResponse.json(
@@ -163,16 +219,13 @@ export async function PUT(
       );
     }
 
-    // ✅ Fixed: Convert number to string for focusKeywordDensity
     const focusKeywordDensityValue = body.focusKeywordDensity 
       ? String(body.focusKeywordDensity) 
       : null;
 
-    // ✅ Update post with ALL fields including SEO
     const updated = await db
       .update(posts)
       .set({
-        // Basic Info
         title: body.title.trim(),
         content: body.content || null,
         excerpt: body.excerpt || null,
@@ -185,7 +238,6 @@ export async function PUT(
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         updatedAt: new Date(),
         
-        // ✅ SEO Fields - Core Meta
         metaTitle: body.metaTitle || null,
         metaDescription: body.metaDescription || null,
         metaKeywords: body.metaKeywords || null,
@@ -193,19 +245,16 @@ export async function PUT(
         canonicalUrl: body.canonicalUrl || null,
         robots: body.robots || "index, follow",
         
-        // ✅ SEO Fields - Open Graph
         ogTitle: body.ogTitle || null,
         ogDescription: body.ogDescription || null,
         ogImage: body.ogImage || null,
         ogType: body.ogType || "article",
         
-        // ✅ SEO Fields - Twitter
         twitterCard: body.twitterCard || "summary_large_image",
         twitterTitle: body.twitterTitle || null,
         twitterDescription: body.twitterDescription || null,
         twitterImage: body.twitterImage || null,
         
-        // ✅ SEO Fields - Extra (Fixed: focusKeywordDensity as string)
         focusKeywordDensity: focusKeywordDensityValue,
         readabilityScore: body.readabilityScore ? Number(body.readabilityScore) : null,
         seoScore: body.seoScore ? Number(body.seoScore) : null,
@@ -226,7 +275,6 @@ export async function PUT(
       );
     }
 
-    // Revalidate cache
     await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ 
@@ -259,6 +307,12 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // ✅ Check authentication
+  const auth = await isAuthenticated();
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+  
   const numericId = await getNumericId(context);
   if (!numericId) {
     return NextResponse.json(
@@ -270,10 +324,8 @@ export async function PATCH(
   try {
     const body = await req.json();
 
-    // Build update object dynamically
     const updateData: UpdateData = {};
     
-    // Basic fields
     if (body.title !== undefined) updateData.title = body.title.trim();
     if (body.content !== undefined) updateData.content = body.content || null;
     if (body.excerpt !== undefined) updateData.excerpt = body.excerpt || null;
@@ -285,7 +337,6 @@ export async function PATCH(
     if (body.publishedAt !== undefined) updateData.publishedAt = body.publishedAt ? new Date(body.publishedAt) : undefined;
     if (body.expiresAt !== undefined) updateData.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
     
-    // ✅ SEO Fields
     if (body.metaTitle !== undefined) updateData.metaTitle = body.metaTitle || null;
     if (body.metaDescription !== undefined) updateData.metaDescription = body.metaDescription || null;
     if (body.metaKeywords !== undefined) updateData.metaKeywords = body.metaKeywords || null;
@@ -305,7 +356,6 @@ export async function PATCH(
     if (body.breadcrumbTitle !== undefined) updateData.breadcrumbTitle = body.breadcrumbTitle || null;
     if (body.oldSlug !== undefined) updateData.oldSlug = body.oldSlug || null;
     
-    // ✅ Fixed: focusKeywordDensity as string (not number)
     if (body.focusKeywordDensity !== undefined) {
       updateData.focusKeywordDensity = body.focusKeywordDensity ? String(body.focusKeywordDensity) : null;
     }
@@ -321,7 +371,6 @@ export async function PATCH(
     
     if (Object.keys(updateData).length > 0) updateData.updatedAt = new Date();
 
-    // Check if post exists
     const [existing] = await db
       .select()
       .from(posts)
@@ -334,7 +383,6 @@ export async function PATCH(
       );
     }
 
-    // Only update if there's data to update
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { success: false, error: "No fields to update" },
@@ -355,7 +403,6 @@ export async function PATCH(
       );
     }
 
-    // Revalidate cache
     await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ 
@@ -388,6 +435,12 @@ export async function DELETE(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // ✅ Check authentication
+  const auth = await isAuthenticated();
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+  
   const numericId = await getNumericId(context);
   if (!numericId) {
     return NextResponse.json(
@@ -397,7 +450,6 @@ export async function DELETE(
   }
 
   try {
-    // Check if post exists
     const [existing] = await db
       .select()
       .from(posts)
@@ -410,7 +462,6 @@ export async function DELETE(
       );
     }
 
-    // Soft delete - set status to archived
     await db
       .update(posts)
       .set({
@@ -419,7 +470,6 @@ export async function DELETE(
       })
       .where(eq(posts.id, numericId));
 
-    // Revalidate cache
     await revalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({

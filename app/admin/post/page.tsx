@@ -1,4 +1,4 @@
-// app/admin/post/page.tsx (Updated with selective cache clearing)
+// app/admin/post/page.tsx
 
 'use client';
 
@@ -16,10 +16,11 @@ import {
   ChevronRight,
   AlertCircle,
   CheckCircle,
+  Clock,
   ChevronDown
 } from 'lucide-react';
 
-// ✅ Helper function to get correct URL folder name
+// Helper function to get correct URL folder name
 const getUrlFolder = (type: string): string => {
   const typeMap: Record<string, string> = {
     'scholarship': 'scholarships',
@@ -110,7 +111,6 @@ interface Post {
   isFeatured: boolean | null;
   isPopular: boolean | null;
   isBreaking: boolean | null;
-  viewCount: number | null;
   publishedAt: string | null;
   createdAt: string | null;
   expiresAt: string | null;
@@ -135,6 +135,12 @@ export default function AdminPostsPage() {
   // Pagination
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
+
+  // Check if post is expired
+  const isPostExpired = (expiresAt: string | null): boolean => {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) < new Date();
+  };
 
   // Show temporary message
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -304,12 +310,15 @@ export default function AdminPostsPage() {
     return config[type] || { color: 'bg-gray-100 text-gray-700', icon: '📄' };
   };
 
-  // Get status badge
-  const getStatusBadge = (status: string | null) => {
-    if (status === 'published') return { color: 'bg-green-100 text-green-700', icon: '✅' };
-    if (status === 'draft') return { color: 'bg-yellow-100 text-yellow-700', icon: '📝' };
-    if (status === 'archived') return { color: 'bg-gray-100 text-gray-700', icon: '📦' };
-    return { color: 'bg-gray-100 text-gray-700', icon: '❓' };
+  // Get status badge (including expired)
+  const getStatusBadge = (status: string | null, expiresAt: string | null) => {
+    if (expiresAt && new Date(expiresAt) < new Date()) {
+      return { color: 'bg-red-100 text-red-700', icon: '⚠️', label: 'Expired' };
+    }
+    if (status === 'published') return { color: 'bg-green-100 text-green-700', icon: '✅', label: 'Published' };
+    if (status === 'draft') return { color: 'bg-yellow-100 text-yellow-700', icon: '📝', label: 'Draft' };
+    if (status === 'archived') return { color: 'bg-gray-100 text-gray-700', icon: '📦', label: 'Archived' };
+    return { color: 'bg-gray-100 text-gray-700', icon: '❓', label: 'Unknown' };
   };
 
   // Format date
@@ -452,6 +461,7 @@ export default function AdminPostsPage() {
               <option value="published">Published</option>
               <option value="draft">Draft</option>
               <option value="archived">Archived</option>
+              <option value="expired">Expired</option>
             </select>
           </div>
           
@@ -520,22 +530,21 @@ export default function AdminPostsPage() {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Title</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Views</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Created</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                     <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-500" />
                     <p>Loading posts...</p>
                    </td>
                  </tr>
               ) : posts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                     <div className="text-5xl mb-3">📭</div>
                     <p>No posts found</p>
                     <Link
@@ -549,8 +558,9 @@ export default function AdminPostsPage() {
               ) : (
                 posts.map((post) => {
                   const typeConfig = getTypeBadge(post.type);
-                  const statusConfig = getStatusBadge(post.status);
-                  const isExpired = post.expiresAt && new Date(post.expiresAt) < new Date();
+                  const statusConfig = getStatusBadge(post.status, post.expiresAt);
+                  const isExpired = isPostExpired(post.expiresAt);
+                  const hasExpiryDate = post.expiresAt !== null && post.expiresAt !== '';
                   
                   return (
                     <tr key={post.id} className="hover:bg-gray-50 transition">
@@ -561,45 +571,65 @@ export default function AdminPostsPage() {
                           onChange={() => toggleSelect(post.id)}
                           className="w-4 h-4 rounded border-gray-300"
                         />
-                       </td>
+                      </td>
                       <td className="px-4 py-3">
                         <div>
                           <Link
                             href={`/admin/post/${post.id}/edit`}
-                            className="font-medium text-gray-900 hover:text-blue-600 transition line-clamp-1"
+                            className={`font-medium hover:text-blue-600 transition line-clamp-1 ${
+                              isExpired ? 'text-red-600' : 'text-gray-900'
+                            }`}
                           >
                             {post.title}
+                            {isExpired && <span className="ml-2 text-xs text-red-500">(Expired)</span>}
                           </Link>
-                          {/* ✅ FIXED: Show correct URL in table */}
-                          <div className="text-xs text-gray-400 mt-0.5">/{getUrlFolder(post.type)}/{post.slug}</div>
-                          {isExpired && (
-                            <div className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" />
-                              Expired: {formatDate(post.expiresAt)}
-                            </div>
-                          )}
+                          
+                          {/* Slug with expiry info */}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <code className="text-xs text-gray-400">
+                              /{getUrlFolder(post.type)}/{post.slug}
+                            </code>
+                            {isExpired ? (
+                              <span className="text-xs text-red-500 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Expired: {formatDate(post.expiresAt)}
+                              </span>
+                            ) : hasExpiryDate ? (
+                              <span className="text-xs text-green-500 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                Expires: {formatDate(post.expiresAt)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                No expiry date
+                              </span>
+                            )}
+                          </div>
                         </div>
-                       </td>
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeConfig.color}`}>
                           <span className="mr-1">{typeConfig.icon}</span>
-                          {post.type}
+                          {post.type === 'date_sheet' ? 'Date Sheet' : 
+                           post.type === 'admission' ? 'Admission' :
+                           post.type === 'scholarship' ? 'Scholarship' :
+                           post.type === 'news' ? 'News' :
+                           post.type === 'result' ? 'Result' :
+                           post.type === 'job' ? 'Job' : 'Blog'}
                         </span>
-                       </td>
+                      </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
-                          <span className="mr-1">{statusConfig.icon}</span>
-                          {post.status || 'draft'}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${statusConfig.color}`}>
+                          <span>{statusConfig.icon}</span>
+                          {statusConfig.label}
                         </span>
-                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {post.viewCount?.toLocaleString() || 0}
-                       </td>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {formatDate(post.createdAt)}
-                       </td>
+                      </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-end gap-3">
                           <Link
                             href={`/admin/post/${post.id}/edit`}
                             className="text-blue-600 hover:text-blue-800"
@@ -607,7 +637,6 @@ export default function AdminPostsPage() {
                           >
                             <Edit className="w-4 h-4" />
                           </Link>
-                          {/* ✅ FIXED: View button with correct URL */}
                           <Link
                             href={`/${getUrlFolder(post.type)}/${post.slug}`}
                             target="_blank"
@@ -624,7 +653,7 @@ export default function AdminPostsPage() {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                       </td>
+                      </td>
                     </tr>
                   );
                 })

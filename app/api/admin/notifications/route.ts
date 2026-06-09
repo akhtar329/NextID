@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/db';
 import { notifications } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';  // ✅ Added desc
 import jwt from 'jsonwebtoken';
 
 // GET - Fetch notifications
@@ -21,9 +21,24 @@ export async function GET(request: NextRequest) {
       .select()
       .from(notifications)
       .where(eq(notifications.userId, userId))
-      .orderBy(notifications.createdAt);
+      .orderBy(desc(notifications.createdAt));  // ✅ Latest first
 
-    return NextResponse.json({ success: true, notifications: userNotifications });
+    // ✅ Also return unread count
+    const unreadResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.read, false)
+        )
+      );
+
+    return NextResponse.json({ 
+      success: true, 
+      notifications: userNotifications,
+      unreadCount: Number(unreadResult[0]?.count) || 0
+    });
   } catch {
     return NextResponse.json({ success: false, error: 'Failed to fetch' }, { status: 500 });
   }

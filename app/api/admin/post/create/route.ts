@@ -1,54 +1,44 @@
-// app/api/admin/post/create/route.ts (With existing session)
-
+// app/api/admin/post/create/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/db';
 import { posts } from '@/db/schema';
 import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
 
-// ==================== TYPES ====================
-interface CreatePostBody {
-  title: string;
-  slug: string;
-  type: string;
-  content: string;
-  excerpt?: string;
-  featuredImage?: string;
-  authorName?: string;
-  metaTitle?: string;
-  metaDescription?: string;
-  metaKeywords?: string;
-  focusKeyword?: string;
-  canonicalUrl?: string;
-  robots?: string;
-  ogTitle?: string;
-  ogDescription?: string;
-  ogImage?: string;
-  ogType?: string;
-  twitterCard?: string;
-  twitterTitle?: string;
-  twitterDescription?: string;
-  twitterImage?: string;
-  status?: string;
-  isFeatured?: boolean;
-  isPopular?: boolean;
-  isBreaking?: boolean;
-  meta?: Record<string, unknown>;
-  tags?: string[];
-  publishedAt?: string;
-  expiresAt?: string;
-}
-
-// ==================== GET SESSION FROM COOKIE ====================
+// ==================== GET SESSION FROM COOKIE (FIXED) ====================
 async function getSessionFromCookie(): Promise<{ userId: number; userName: string } | null> {
   try {
-    const cookieStore = cookies();
-    const sessionCookie = (await cookieStore).get('admin_session');
+    const cookieStore = await cookies();
     
-    if (sessionCookie) {
-      return JSON.parse(sessionCookie.value);
+    // ✅ Read 'authToken' cookie (match karo login ke saath)
+    const authToken = cookieStore.get('authToken')?.value;
+    
+    if (!authToken) {
+      console.log('❌ No authToken cookie found');
+      return null;
     }
-    return null;
-  } catch {
+    
+    // ✅ Verify and decode JWT token
+    try {
+      const decoded = jwt.verify(authToken, process.env.JWT_SECRET!) as {
+        id: number;
+        email: string;
+        name: string;
+        role: string;
+      };
+      
+      console.log('✅ Token verified for user:', decoded.email);
+      
+      return { 
+        userId: decoded.id, 
+        userName: decoded.name || 'Admin' 
+      };
+    } catch (jwtError) {
+      console.error('❌ JWT verification failed:', jwtError);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error reading session cookie:', error);
     return null;
   }
 }
@@ -61,12 +51,15 @@ export async function POST(req: NextRequest) {
     
     if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
+        { 
+          success: false, 
+          error: 'Unauthorized - Please login first'
+        },
         { status: 401 }
       );
     }
 
-    const body: CreatePostBody = await req.json();
+    const body = await req.json();
     
     if (!body.title || !body.slug || !body.type || !body.content) {
       return NextResponse.json(
@@ -116,7 +109,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Error creating post:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create post' },
       { status: 500 }
