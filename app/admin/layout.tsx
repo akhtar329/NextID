@@ -1,3 +1,4 @@
+// app/admin/layout.tsx
 "use client";
 
 import { ReactNode, useState, useEffect } from "react";
@@ -36,7 +37,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           const data = await response.json();
           setUser(data.profile);
           
-          // ✅ Check if user is trying to access restricted pages
           const isEditor = data.profile.role === "Editor";
           const restrictedForEditor = [
             "/admin/users",
@@ -62,7 +62,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   }, [router, pathname]);
 
   useEffect(() => {
-    // Avoid synchronous setState inside effect by deferring to next tick
     const t = setTimeout(() => {
       setMounted(true);
       const saved = localStorage.getItem("sidebar_collapsed");
@@ -95,18 +94,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return <div className="h-screen bg-gray-100 animate-pulse" />;
   }
 
-  // Editor ko restricted page par redirect
   if (user?.role === "Editor") {
     const restrictedPaths = ["/admin/users", "/admin/roles", "/admin/settings"];
     if (restrictedPaths.some(path => pathname?.startsWith(path))) {
-      return null; // Redirect ho raha hai
+      return null;
     }
   }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      
-      {/* Sidebar - Pass userRole */}
       <div
         className={`
           fixed lg:relative top-0 left-0 h-full z-50
@@ -120,7 +116,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         />
       </div>
 
-      {/* Mobile Overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -128,7 +123,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         />
       )}
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar onMenuClick={toggleMobileSidebar} />
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
