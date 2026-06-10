@@ -1,5 +1,4 @@
 // app/(public)/date-sheets/page.tsx
-export const dynamic = 'force-dynamic';
 
 import { Metadata } from 'next';
 import Link from 'next/link';
