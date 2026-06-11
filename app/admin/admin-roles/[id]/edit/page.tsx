@@ -17,7 +17,7 @@ interface AdminRole {
 export default function EditAdminRolePage() {
   const router = useRouter();
   const params = useParams();
-  const roleId = params?.id;
+  const roleId = Array.isArray(params?.id) ? params.id[0] : params?.id;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
