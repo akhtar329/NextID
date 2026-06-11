@@ -452,14 +452,15 @@ async function AdmissionContent({ slugPromise }: { slugPromise: Promise<string> 
             </main>
             
             {/* ✅ SIDEBAR - ADDED data-nosnippet if there are instructions */}
-            <aside className="lg:w-1/3">
-              <div className="lg:sticky lg:top-6 space-y-6">
-                {/* ✅ If SidebarWidgets has instructions, add data-nosnippet */}
-                <div data-nosnippet>
-                  <SidebarWidgets />
-                </div>
-              </div>
-            </aside>
+        
+
+<aside className="lg:w-1/3">
+  <div className="lg:sticky lg:top-6 space-y-6">
+    <Suspense fallback={<div>Loading...</div>}>
+      <SidebarWidgets />
+    </Suspense>
+  </div>
+</aside>
             
           </div>
         </div>

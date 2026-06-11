@@ -62,9 +62,15 @@ export default async function HomePage() {
             </main>
 
             {/* SIDEBAR */}
-            <aside className="lg:w-4/12 lg:sticky lg:top-6 space-y-8">
-              <SidebarWidgets />
-            </aside>
+            
+
+<aside className="lg:w-1/3">
+  <div className="lg:sticky lg:top-6 space-y-6">
+    <Suspense fallback={<div>Loading...</div>}>
+      <SidebarWidgets />
+    </Suspense>
+  </div>
+</aside>
           </div>
         </div>
       </div>
