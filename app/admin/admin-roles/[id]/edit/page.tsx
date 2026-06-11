@@ -17,8 +17,7 @@ interface AdminRole {
 export default function EditAdminRolePage() {
   const router = useRouter();
   const params = useParams();
-  const roleId = Array.isArray(params?.id) ? params.id[0] : params?.id;
-
+  const roleId = Array.isArray(params?.id) ? params.id[0] : params?.id;   
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState(true);
@@ -27,7 +26,9 @@ export default function EditAdminRolePage() {
   const [fetchLoading, setFetchLoading] = useState(Boolean(roleId));
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch existing role
+  // Fetch existing role added 
+
+  // when roleId is present (editing an existing role)
   useEffect(() => {
     if (!roleId) return;
 
