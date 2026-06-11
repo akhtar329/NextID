@@ -4,6 +4,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Suspense } from "react";
 import { 
   GraduationCap, 
   MapPin,
@@ -350,10 +351,12 @@ export default async function AdmissionsPage() {
             
             {/* SIDEBAR */}
             <aside className="lg:w-1/3">
-              <div className="lg:sticky lg:top-6 space-y-6">
-                <SidebarWidgets />
-              </div>
-            </aside>
+  <div className="lg:sticky lg:top-6 space-y-6">
+    <Suspense fallback={<div>Loading...</div>}>
+      <SidebarWidgets />
+    </Suspense>
+  </div>
+</aside>
             
           </div>
         </div>
