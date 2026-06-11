@@ -1,6 +1,7 @@
 // services/sidebar/sidebar.service.ts
-import { sidebarRepository, type SidebarPost } from "@/repositories/sidebar/sidebar.repository";
+
 import { cache } from "react";
+import { sidebarRepository, type SidebarPost } from "@/repositories/sidebar/sidebar.repository";
 
 export interface SidebarData {
   trending: SidebarPost[];
@@ -9,66 +10,49 @@ export interface SidebarData {
   quickAccess: Record<string, number>;
 }
 
-class SidebarService {
-  
-  // ✅ Level 1: React cache() - Per request deduplication
-  // ✅ Level 2: Manual 24-hour cache (in-memory)
-  
-  private cacheData: SidebarData | null = null;
-  private cacheTimestamp: number | null = null;
-  private readonly CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+type SidebarRepositoryMethods = {
+  getTrending(limit: number): Promise<SidebarPost[]>;
+  getBreaking(limit: number): Promise<SidebarPost[]>;
+  getFeatured(limit: number): Promise<SidebarPost[]>;
+  getTypeCounts(): Promise<Record<string, number>>;
+};
 
-  // Main method - Get cached sidebar data
+class SidebarService {
+  private repo = sidebarRepository as unknown as SidebarRepositoryMethods;
+
+  // ✅ ONLY ONE CACHE LAYER (React cache)
   getSidebarData = cache(async (): Promise<SidebarData> => {
-    
-    // Cache miss or expired - fetch fresh data
-    console.log("🔄 [Cache MISS] Fetching fresh data from database...");
-    
+
     const [trending, breaking, featured, quickAccess] = await Promise.all([
-      sidebarRepository.getTrending(5),
-      sidebarRepository.getBreaking(3),
-      sidebarRepository.getFeatured(4),
-      sidebarRepository.getTypeCounts(),
+      this.repo.getTrending(5),
+      this.repo.getBreaking(3),
+      this.repo.getFeatured(4),
+      this.repo.getTypeCounts(),
     ]);
-    
-    this.cacheData = { trending, breaking, featured, quickAccess };
-    this.cacheTimestamp = Date.now();
-    
-    console.log("💾 [CACHE SET] Data cached for 24 hours");
-    
-    return this.cacheData;
+
+    return {
+      trending,
+      breaking,
+      featured,
+      quickAccess,
+    };
   });
 
-  // Force refresh cache (manually call when post updates)
+  // ⚠️ If you REALLY need refresh, do NOT fake cache
   async refreshCache(): Promise<SidebarData> {
-    console.log("🔄 [MANUAL REFRESH] Clearing cache...");
-    this.cacheData = null;
-    this.cacheTimestamp = null;
     return this.getSidebarData();
   }
 
-  // Check if cache is still valid
-  getCacheStatus(): { isValid: boolean; ageHours: number | null } {
-    if (!this.cacheTimestamp) {
-      return { isValid: false, ageHours: null };
-    }
-    const ageHours = (Date.now() - this.cacheTimestamp) / 1000 / 60 / 60;
+  // ⚠️ This is fine but mostly useless in serverless
+  getCacheStatus() {
     return {
-      isValid: ageHours < 24,
-      ageHours: Math.round(ageHours * 10) / 10,
+      isValid: false,
+      note: "React cache is request-level only. No persistent cache exists here.",
     };
   }
 
-  // Real-time data (no cache at all)
   async getSidebarDataRealTime(): Promise<SidebarData> {
-    console.log("⚡ [REAL TIME] Fetching without cache...");
-    const [trending, breaking, featured, quickAccess] = await Promise.all([
-      sidebarRepository.getTrending(5),
-      sidebarRepository.getBreaking(3),
-      sidebarRepository.getFeatured(4),
-      sidebarRepository.getTypeCounts(),
-    ]);
-    return { trending, breaking, featured, quickAccess };
+    return this.getSidebarData();
   }
 }
 
