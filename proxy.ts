@@ -1,132 +1,105 @@
-// proxy.ts (project root mein)
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import jwt from "jsonwebtoken";
+import { getRedirect } from "@/services/redirects-config";
 
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getRedirect } from '@/services/redirects-config';
-import jwt from 'jsonwebtoken';
+// =====================
+// CONFIG
+// =====================
 
-// Paths that should NEVER redirect (always accessible)
-const ALLOWED_PATHS = [
-  '/maintenance',
-  '/_next',
-  '/favicon.ico',
-  '/images',
-  '/fonts',
-  '/api/auth/login',
-  '/login',
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/maintenance",
 ];
 
-// Admin routes that require authentication
-const ADMIN_ROUTES = [
-  '/admin',
-  '/api/admin',
-];
+const ADMIN_PREFIX = "/admin";
+const ADMIN_API_PREFIX = "/api/admin";
 
-// Public admin routes (no auth needed - like login page)
-const PUBLIC_ADMIN_ROUTES = [
-  '/login',
-  '/api/auth/login',
-];
+// =====================
+// HELPERS
+// =====================
 
-function isMaintenanceMode(): boolean {
-  return process.env.MAINTENANCE_MODE === 'true';
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 }
 
-function isAllowedPath(pathname: string): boolean {
-  if (pathname.startsWith('/api')) {
-    return true;
-  }
-  return ALLOWED_PATHS.some(path => pathname.startsWith(path));
+function isAdminPath(pathname: string) {
+  return pathname.startsWith(ADMIN_PREFIX) || pathname.startsWith(ADMIN_API_PREFIX);
 }
 
-function isAdminRoute(pathname: string): boolean {
-  return ADMIN_ROUTES.some(route => pathname.startsWith(route));
+function isMaintenanceMode() {
+  return process.env.MAINTENANCE_MODE === "true";
 }
 
-function isPublicAdminRoute(pathname: string): boolean {
-  return PUBLIC_ADMIN_ROUTES.some(route => pathname.startsWith(route));
-}
+// =====================
+// AUTH CHECK
+// =====================
 
-// ✅ Verify JWT token
-function verifyAuthToken(token: string): boolean {
+function verifyToken(token: string) {
   try {
-    const JWT_SECRET = process.env.JWT_SECRET;
-    if (!JWT_SECRET) {
-      console.error('JWT_SECRET not set');
-      return false;
-    }
-    
-    jwt.verify(token, JWT_SECRET);
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return false;
+
+    jwt.verify(token, secret);
     return true;
-  } catch (error) {
-    console.error('Token verification failed:', error);
+  } catch {
     return false;
   }
 }
 
-// ✅ Check if user is authenticated via cookie
-function isAuthenticated(request: NextRequest): boolean {
-  const authToken = request.cookies.get('authToken')?.value;
-  
-  if (!authToken) {
-    console.log('🔒 No auth token found');
-    return false;
-  }
-  
-  const isValid = verifyAuthToken(authToken);
-  
-  if (!isValid) {
-    console.log('🔒 Invalid auth token');
-  } else {
-    console.log('✅ Valid auth token found');
-  }
-  
-  return isValid;
+function isAuthenticated(req: NextRequest) {
+  const token = req.cookies.get("authToken")?.value;
+  if (!token) return false;
+  return verifyToken(token);
 }
 
-// ✅ Main middleware function
-export default async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  
-  // FIRST: Check for SEO redirects
+// =====================
+// MIDDLEWARE
+// =====================
+
+export default function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // 1. SEO redirects first
   const redirect = getRedirect(pathname);
   if (redirect) {
-    const url = new URL(redirect.to, request.url);
-    return NextResponse.redirect(url, { status: redirect.status });
+    return NextResponse.redirect(new URL(redirect.to, req.url), {
+      status: redirect.status,
+    });
   }
-  
-  // ✅ CHECK: Admin route authentication
-  if (isAdminRoute(pathname) && !isPublicAdminRoute(pathname)) {
-    if (!isAuthenticated(request)) {
-      console.log(`🔒 Unauthorized access to ${pathname}, redirecting to login`);
-      
-      if (pathname.startsWith('/api/admin')) {
+
+  // 2. Maintenance mode (block everything except allowed)
+  if (isMaintenanceMode() && !isPublicPath(pathname)) {
+    return NextResponse.redirect(new URL("/maintenance", req.url));
+  }
+
+  // 3. Admin protection
+  if (isAdminPath(pathname) && !isPublicPath(pathname)) {
+    if (!isAuthenticated(req)) {
+      // API request
+      if (pathname.startsWith("/api/admin")) {
         return NextResponse.json(
-          { success: false, error: 'Authentication required. Please login.' },
+          { success: false, error: "Unauthorized" },
           { status: 401 }
         );
       }
-      
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirect', pathname);
+
+      // Page request
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("redirect", pathname);
       return NextResponse.redirect(loginUrl);
     }
-    
-    console.log(`✅ Authenticated access to ${pathname}`);
   }
-  
-  if (isAllowedPath(pathname)) {
-    return NextResponse.next();
-  }
-  
-  if (isMaintenanceMode()) {
-    const maintenanceUrl = new URL('/maintenance', request.url);
-    return NextResponse.redirect(maintenanceUrl);
-  }
-  
+
+  // 4. Allow request
   return NextResponse.next();
 }
 
+// =====================
+// MATCHER
+// =====================
+
 export const config = {
-  matcher: '/((?!_next/static|_next/image|favicon.ico).*)',
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
