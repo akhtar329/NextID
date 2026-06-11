@@ -34,4 +34,6 @@ export interface Post {
   publishedAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+
+  meta: PostMeta | null; 
 }
