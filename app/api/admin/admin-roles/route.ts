@@ -8,7 +8,9 @@ import { eq } from "drizzle-orm";
 
 // GET: fetch all roles
 export async function GET() {
-  const roles = await db.select().from(adminRoles);
+  const roles = await db
+  .select({id: adminRoles.id, name: adminRoles.name, description: adminRoles.description, status: adminRoles.status, })
+  .from(adminRoles);
   return NextResponse.json({ success: true, roles });
 }
 
@@ -29,11 +31,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: "Role already exists" }, { status: 400 });
   }
 
-  await db.insert(adminRoles).values({
-    name,
-    description: description || "",
-    status: status ?? true,
-  });
+await db.insert(adminRoles).values({
+  name,
+  description: description || "",
+  status: status ?? true,
+});
 
   return NextResponse.json({ success: true, message: "Role created successfully" });
 }

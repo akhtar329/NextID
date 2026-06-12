@@ -5,17 +5,26 @@ import type { Post, PostType } from "@/types/post";
 
 export class PostRepository {
 
-  // Accept a DB row which may have `type` as string and normalize to Post
-  private castPost(row: any): Post {
-    return {
-      ...row,
-      type: row.type as PostType,
-    };
-  }
+  private selectFields = {
+    id: posts.id,
+    slug: posts.slug,
+    type: posts.type,
+    title: posts.title,
+    excerpt: posts.excerpt,
+    featuredImage: posts.featuredImage,
+    status: posts.status,
+    isFeatured: posts.isFeatured,
+    viewCount: posts.viewCount,
+    publishedAt: posts.publishedAt,
+  };
+
+private castPost(row: unknown): Post {
+  return row as Post;
+}
 
   async getBySlug(slug: string): Promise<Post | null> {
     const [row] = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(eq(posts.slug, slug))
       .limit(1);
@@ -25,7 +34,7 @@ export class PostRepository {
 
   async getById(id: number): Promise<Post | null> {
     const [row] = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(eq(posts.id, id))
       .limit(1);
@@ -35,7 +44,7 @@ export class PostRepository {
 
   async getByType(type: PostType, limit = 10, offset = 0): Promise<Post[]> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(and(eq(posts.type, type), eq(posts.status, "published")))
       .orderBy(desc(posts.publishedAt))
@@ -47,13 +56,12 @@ export class PostRepository {
 
   async getByTypes(types: PostType[], limit = 5): Promise<Record<PostType, Post[]>> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(inArray(posts.type, types))
       .orderBy(desc(posts.publishedAt));
 
     const grouped = {} as Record<PostType, Post[]>;
-
     for (const t of types) grouped[t] = [];
 
     for (const row of rows) {
@@ -70,7 +78,7 @@ export class PostRepository {
 
   async getFeatured(limit = 6): Promise<Post[]> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(and(eq(posts.isFeatured, true), eq(posts.status, "published")))
       .orderBy(desc(posts.publishedAt))
@@ -81,18 +89,18 @@ export class PostRepository {
 
   async getPopular(limit = 8): Promise<Post[]> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(eq(posts.status, "published"))
       .orderBy(desc(posts.viewCount))
       .limit(limit);
 
-    return rows.map(r => this.castPost(r));
+    return rows.map(row => this.castPost(row));
   }
 
   async getRecent(limit = 10): Promise<Post[]> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(eq(posts.status, "published"))
       .orderBy(desc(posts.publishedAt))
@@ -103,7 +111,7 @@ export class PostRepository {
 
   async getRelated(currentSlug: string, type: PostType, limit = 5): Promise<Post[]> {
     const rows = await db
-      .select()
+      .select(this.selectFields)
       .from(posts)
       .where(
         and(

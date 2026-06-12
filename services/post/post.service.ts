@@ -8,6 +8,15 @@ interface ExtendedPost extends Post {
   actualImage: string | null;
 }
 
+type PostType =
+  | "result"
+  | "admission"
+  | "news"
+  | "date_sheet"
+  | "scholarship"
+  | "blog"
+  | "job";
+
 /* =========================
 IMAGE NORMALIZER
 ========================= */
@@ -39,13 +48,13 @@ export const postService = {
     return post ? mapPost(post) : null;
   },
 
-  async getPostsByType(type: string, limit = 10, offset = 0) {
+  async getPostsByType(type: PostType, limit = 10, offset = 0) {
     const posts = await postRepository.getByType(type, limit, offset);
     return posts.map(mapPost);
   },
 
   async getHomepageData() {
-    const types = ["admission", "result", "news", "date_sheet", "scholarship"];
+    const types: PostType[] = ["admission", "result", "news", "date_sheet", "scholarship"];
 
     const grouped = await postRepository.getByTypes(types, 5);
 
@@ -72,7 +81,7 @@ export const postService = {
     return (await postRepository.getRecent(limit)).map(mapPost);
   },
 
-  async getRelatedPosts(slug: string, type: string, limit = 5) {
+  async getRelatedPosts(slug: string, type: PostType, limit = 5) {
     return (await postRepository.getRelated(slug, type, limit)).map(mapPost);
   },
 

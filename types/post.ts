@@ -10,6 +10,14 @@ export const POST_TYPES = [
 
 export type PostType = (typeof POST_TYPES)[number];
 
+/* =========================
+🧠 META TYPE (FIXED)
+========================= */
+export type PostMeta = Record<string, unknown>;
+
+/* =========================
+📦 POST TYPE
+========================= */
 export interface Post {
   id: number;
   slug: string;
@@ -31,9 +39,9 @@ export interface Post {
 
   viewCount: number | null;
 
+  meta: PostMeta | null;
+
   publishedAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date | null;
-
-  meta: PostMeta | null; 
 }

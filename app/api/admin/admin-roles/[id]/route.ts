@@ -24,11 +24,16 @@ export async function GET(request: Request) {
       );
     }
 
-    const role = await db
-      .select()
-      .from(adminRoles)
-      .where(eq(adminRoles.id, roleId))
-      .limit(1);
+   const role = await db
+  .select({
+    id: adminRoles.id,
+    name: adminRoles.name,
+    description: adminRoles.description,
+    status: adminRoles.status,
+  })
+  .from(adminRoles)
+  .where(eq(adminRoles.id, roleId))
+  .limit(1);
 
     if (!role.length) {
       return NextResponse.json(
@@ -89,11 +94,11 @@ export async function PATCH(request: Request) {
     if (body.description !== undefined) updateData.description = body.description;
     if (body.status !== undefined) updateData.status = Boolean(body.status);
 
-    const updated = await db
-      .update(adminRoles)
-      .set(updateData)
-      .where(eq(adminRoles.id, roleId))
-      .returning();
+const updated = await db
+  .update(adminRoles)
+  .set(updateData)
+  .where(eq(adminRoles.id, roleId))
+  .returning();
 
     return NextResponse.json({
       success: true,
