@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
-import type { Post } from '@/repositories/post/post.repository';
+import type { Post } from '@/types/post';
 import { cacheLife } from 'next/cache';
 
 // ==================== TYPES ====================
