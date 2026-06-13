@@ -81,6 +81,20 @@ class SidebarRepository {
       results.map(r => [r.type, Number(r.count)])
     );
   }
+
+  async getTrending(limit = 5) {
+  return this.getSidebarFeed(limit).then(r => r.trending);
+}
+
+async getBreaking(limit = 3) {
+  return this.getSidebarFeed(limit).then(r => r.breaking);
+}
+
+async getFeatured(limit = 4) {
+  return this.getSidebarFeed(limit).then(r => r.featured);
+}
+
+
 }
 
 export const sidebarRepository = new SidebarRepository();

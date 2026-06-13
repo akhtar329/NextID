@@ -2,6 +2,8 @@
 import Link from 'next/link';
 import { sidebarService } from '@/services/sidebar/sidebar.service';
 import { TrendingUp, AlertCircle, Zap } from 'lucide-react';
+import { cacheTag, cacheLife } from 'next/cache'
+
 
 function getTypeInfo(type: string) {
   const types: Record<string, { label: string; icon: string; bgColor: string; textColor: string }> = {
@@ -17,6 +19,10 @@ function getTypeInfo(type: string) {
 }
 
 export default async function SidebarWidgets() {
+  "use cache"
+  cacheTag('sidebar-widgets')
+  cacheLife('days') // 1 day cache
+
   // Service handles all caching internally
   const { trending, breaking, featured, quickAccess } = await sidebarService.getSidebarData();
   

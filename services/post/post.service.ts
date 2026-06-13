@@ -3,8 +3,12 @@
 import { revalidateTag } from "next/cache";
 import { postRepository } from "@/repositories/post/post.repository";
 import type { Post } from "@/types/post";
+import { cacheTag, cacheLife } from "next/cache";
 
 interface ExtendedPost extends Post {
+
+
+  
   actualImage: string | null;
 }
 
@@ -48,10 +52,19 @@ export const postService = {
     return post ? mapPost(post) : null;
   },
 
-  async getPostsByType(type: PostType, limit = 10, offset = 0) {
-    const posts = await postRepository.getByType(type, limit, offset);
-    return posts.map(mapPost);
-  },
+async getPostsByType(
+  type: PostType,
+  limit = 10
+): Promise<ExtendedPost[]> {
+  "use cache";
+
+  cacheTag(`posts-${type}`);
+  cacheLife("hours");
+
+  const posts = await postRepository.getByType(type, limit);
+
+  return posts.map(mapPost);
+},
 
   async getHomepageData() {
     const types: PostType[] = ["admission", "result", "news", "date_sheet", "scholarship"];
