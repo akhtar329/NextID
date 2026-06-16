@@ -17,7 +17,6 @@ import {
   Clock,
   Zap,
   DollarSign,
-  Globe,
   Twitter,
   Facebook,
   Linkedin,
@@ -347,7 +346,6 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Scholarships in Pakistan' }],
       locale: 'en_PK',
       type: 'website',
-      modifiedTime: new Date().toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
