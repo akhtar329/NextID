@@ -2,12 +2,22 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { generateJsonLd } from '@/lib/seo';
 import { cacheTag, cacheLife } from 'next/cache';
+import { 
+  Eye,
+  FileText,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail,
+  Building2,
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============================================
 // INTERFACE DEFINITIONS
@@ -25,6 +35,7 @@ interface DateSheetItem {
   viewCount: number;
   officialLink: string | null;
   downloadLink: string | null;
+  featuredImage: string | null;
 }
 
 interface DateSheetsResult {
@@ -55,6 +66,8 @@ interface DateSheetFilters {
 // CONSTANTS
 // ============================================
 const ITEMS_PER_PAGE = 9;
+const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
 
 const BOARD_TYPES = [
   { slug: '', name: 'All Boards', icon: '📋' },
@@ -74,6 +87,53 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   if (!meta) return defaultValue;
   const value = meta[key] as T;
   return value !== undefined && value !== null ? value : defaultValue;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+function formatDate(date: Date | null): string {
+  if (!date) return 'TBA';
+  return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
+}
+
+// ============================================
+// SHARE BUTTONS
+// ============================================
+function ShareButtons({ title, url }: { title: string; url: string }) {
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
 }
 
 // ============ CACHED DATA FETCHING ============
@@ -120,10 +180,11 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
       );
     }
     
+    // ✅ FIXED: Static year (no new Date())
     if (filters.year) {
       const yearInt = parseInt(filters.year);
       allSheets = allSheets.filter(sheet => 
-        getMetaValue(sheet.meta, 'year', new Date().getFullYear()) === yearInt
+        getMetaValue(sheet.meta, 'year', parseInt(CURRENT_YEAR)) === yearInt
       );
     }
     
@@ -152,13 +213,14 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
         title: sheet.title,
         examType: getMetaValue(meta, 'examType', 'Annual'),
         examDate: examDate,
-        year: getMetaValue(meta, 'year', new Date().getFullYear()),
+        year: getMetaValue(meta, 'year', parseInt(CURRENT_YEAR)),
         boardName: getMetaValue(meta, 'boardName', null),
         instituteName: getMetaValue(meta, 'instituteName', null),
         isPopular: getMetaValue(meta, 'isPopular', false),
         viewCount: getMetaValue(meta, 'viewCount', 0),
         officialLink: getMetaValue(meta, 'officialLink', null),
         downloadLink: getMetaValue(meta, 'downloadLink', null),
+        featuredImage: sheet.featuredImage || null,
       };
     });
     
@@ -194,7 +256,8 @@ async function getStats(): Promise<StatsResult> {
     const universitySheets = allSheets.filter(s => getMetaValue(s.meta, 'instituteName', null) !== null).length;
     const totalViews = allSheets.reduce((sum, s) => sum + getMetaValue(s.meta, 'viewCount', 0), 0);
     
-    const years = [...new Set(allSheets.map(s => getMetaValue(s.meta, 'year', new Date().getFullYear())))];
+    // ✅ FIXED: Static year (no new Date())
+    const years = [...new Set(allSheets.map(s => getMetaValue(s.meta, 'year', parseInt(CURRENT_YEAR))))];
     years.sort((a, b) => b - a);
     
     return { totalSheets, popularSheets, biseSheets, universitySheets, totalViews, availableYears: years };
@@ -208,13 +271,21 @@ async function getStats(): Promise<StatsResult> {
 export async function generateMetadata(): Promise<Metadata> {
   const allSheets = await getAllDateSheets();
   const totalSheets = allSheets.length;
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
   
   return {
     title: `Date Sheets ${currentYear} in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk`,
     description: `Download ${totalSheets}+ date sheets for Matric, Intermediate, and University exams ${currentYear}. Complete exam schedules for all BISE boards and universities in Pakistan.`,
     keywords: `date sheets ${currentYear}, exam schedules ${currentYear}, BISE date sheets, FBISE date sheet, Matric exam schedule, Intermediate exam dates, university date sheets, Pakistan exams`,
-    alternates: { canonical: 'https://www.nextid.pk/date-sheets' },
+    robots: 'index, follow',
+    alternates: {
+      canonical: 'https://www.nextid.pk/date-sheets',
+      languages: {
+        'en-US': 'https://www.nextid.pk/date-sheets',
+      },
+    },
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Date Sheets ${currentYear} – Exam Schedules Pakistan | NextID.pk`,
       description: `Download complete exam schedules for Matric, Intermediate, and University exams across Pakistan.`,
@@ -236,26 +307,45 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // ============================================
-// CLIENT COMPONENTS
+// UI COMPONENTS
 // ============================================
 
 function DateSheetCard({ sheet }: { sheet: DateSheetItem }) {
-  const formatDate = (date: Date | null) => {
-    if (!date) return 'TBA';
-    return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
-  };
+  const displayName = sheet.boardName || sheet.instituteName || 'Education Board';
   
   return (
     <Link href={`/date-sheets/${sheet.slug}`} className="block group">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all overflow-hidden h-full">
+        {/* Image with Fallback */}
+        <div className="relative h-40 w-full overflow-hidden bg-gradient-to-br from-orange-100 to-amber-100">
+          {sheet.featuredImage ? (
+            <Image
+              src={sheet.featuredImage}
+              alt={sheet.title}
+              fill
+              className="object-cover group-hover:scale-105 transition duration-500"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center">
+                <FileText className="w-12 h-12 text-orange-400 mx-auto" />
+                <span className="text-xs text-gray-500 mt-1 block">{displayName}</span>
+              </div>
+            </div>
+          )}
+          {sheet.isPopular && (
+            <div className="absolute top-3 right-3 bg-orange-500 text-white text-xs px-2 py-1 rounded-full shadow-lg">
+              🔥 Popular
+            </div>
+          )}
+        </div>
+        
         <div className="p-5">
-          <div className="flex items-start justify-between mb-3">
-            {sheet.isPopular && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-                🔥 Popular
-              </span>
-            )}
+          <div className="flex items-start justify-between mb-2">
             <span className="text-xs text-gray-400">{sheet.year}</span>
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {sheet.examType}
+            </span>
           </div>
           
           <h3 className="text-lg font-bold text-gray-800 mb-2 line-clamp-2 group-hover:text-orange-600 transition">
@@ -263,12 +353,8 @@ function DateSheetCard({ sheet }: { sheet: DateSheetItem }) {
           </h3>
           
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-            {sheet.boardName && (
-              <span className="text-orange-600 font-medium">{sheet.boardName}</span>
-            )}
-            {sheet.instituteName && (
-              <span className="text-orange-600 font-medium">{sheet.instituteName}</span>
-            )}
+            <Building2 className="w-3 h-3 text-orange-500" />
+            <span className="text-orange-600 font-medium truncate">{displayName}</span>
           </div>
           
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -282,8 +368,14 @@ function DateSheetCard({ sheet }: { sheet: DateSheetItem }) {
             </div>
           </div>
           
-          <div className="inline-flex items-center gap-1 text-orange-600 font-medium text-sm group-hover:gap-2 transition-all">
-            View Details →
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 text-xs text-gray-400">
+              <Eye className="w-3 h-3" />
+              {sheet.viewCount.toLocaleString()} views
+            </div>
+            <div className="inline-flex items-center gap-1 text-orange-600 font-medium text-sm group-hover:gap-2 transition-all">
+              View Details →
+            </div>
           </div>
         </div>
       </div>
@@ -304,7 +396,7 @@ function FilterSidebar({ filters, stats, buildUrl }: { filters: DateSheetFilters
           <input 
             type="text" 
             name="q" 
-            defaultValue={filters.q} 
+            defaultValue={filters.q || ''} 
             placeholder="Search date sheets..." 
             className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent" 
           />
@@ -451,8 +543,33 @@ function Pagination({ currentPage, totalPages, buildUrl }: {
   );
 }
 
-function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const searchParams = React.use(searchParamsPromise);
+// ============ STATS CARDS ============
+function StatsCards({ stats }: { stats: StatsResult }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-orange-600">{stats.totalSheets}</div>
+        <div className="text-xs text-gray-500">Total Date Sheets</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-orange-600">{stats.popularSheets}</div>
+        <div className="text-xs text-gray-500">Popular</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-orange-600">{stats.biseSheets}</div>
+        <div className="text-xs text-gray-500">BISE Boards</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-orange-600">{stats.universitySheets}</div>
+        <div className="text-xs text-gray-500">Universities</div>
+      </div>
+    </div>
+  );
+}
+
+// ============ DATE SHEETS CONTENT (SERVER COMPONENT) ============
+async function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const searchParams = await searchParamsPromise;
   
   const currentPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page) : 1;
   const filters: DateSheetFilters = {
@@ -463,10 +580,10 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     page: currentPage,
   };
 
-  const [dateSheetsResult, stats] = React.use(Promise.all([
+  const [dateSheetsResult, stats] = await Promise.all([
     getDateSheets(filters),
     getStats(),
-  ]));
+  ]);
 
   const buildUrl = (key: string, value: string) => {
     const urlParams = new URLSearchParams();
@@ -478,7 +595,7 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/date-sheets?${urlParams.toString()}` : '/date-sheets';
   };
 
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
 
   const jsonLd = generateJsonLd({
     type: 'WebPage',
@@ -498,7 +615,7 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     "description": `List of ${dateSheetsResult.totalCount} exam date sheets for Matric, Intermediate, and University exams`,
     "numberOfItems": dateSheetsResult.totalCount,
     "url": "https://www.nextid.pk/date-sheets",
-    "itemListElement": dateSheetsResult.dateSheets.slice(0, 10).map((sheet, index) => ({
+    "itemListElement": dateSheetsResult.dateSheets.slice(0, 10).map((sheet: DateSheetItem, index: number) => ({
       "@type": "ListItem",
       "position": index + 1,
       "url": `https://www.nextid.pk/date-sheets/${sheet.slug}`,
@@ -506,34 +623,50 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     }))
   };
 
+  const shareUrl = 'https://www.nextid.pk/date-sheets';
+  const shareTitle = `Date Sheets ${currentYear} - Exam Schedules Pakistan`;
+
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <div className="flex flex-col lg:flex-row gap-8">
+        {/* LEFT SIDEBAR - Filters */}
         <aside className="lg:w-72 flex-shrink-0">
           <FilterSidebar filters={filters} stats={stats} buildUrl={buildUrl} />
         </aside>
 
+        {/* MAIN CONTENT */}
         <div className="flex-1">
+          {/* Stats Cards */}
+          <StatsCards stats={stats} />
+          
+          {/* Results Bar */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800">
                 Showing {dateSheetsResult.dateSheets.length} of {dateSheetsResult.totalCount} Date Sheets
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span>📊 {stats.totalSheets} Total</span>
-                <span>🔥 {stats.popularSheets} Popular</span>
                 <span>👁️ {stats.totalViews.toLocaleString()} Views</span>
                 <span>Page {dateSheetsResult.currentPage} of {dateSheetsResult.totalPages}</span>
               </div>
             </div>
           </div>
 
+          {/* Share Buttons */}
+          <div className="bg-white rounded-xl shadow-sm p-3 mb-6 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-sm text-gray-500 font-medium">Share this page:</span>
+              <ShareButtons title={shareTitle} url={shareUrl} />
+            </div>
+          </div>
+
+          {/* Date Sheets Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {dateSheetsResult.dateSheets.length > 0 ? (
-              dateSheetsResult.dateSheets.map((sheet) => <DateSheetCard key={sheet.id} sheet={sheet} />)
+              dateSheetsResult.dateSheets.map((sheet: DateSheetItem) => <DateSheetCard key={sheet.id} sheet={sheet} />)
             ) : (
               <div className="col-span-full bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <div className="text-6xl mb-4">📄</div>
@@ -545,6 +678,15 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
           <Pagination currentPage={dateSheetsResult.currentPage} totalPages={dateSheetsResult.totalPages} buildUrl={buildUrl} />
         </div>
+
+        {/* RIGHT SIDEBAR - Widgets */}
+        <aside className="lg:w-72 flex-shrink-0">
+          <div className="sticky top-24 space-y-6">
+            <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+              <SidebarWidgets />
+            </Suspense>
+          </div>
+        </aside>
       </div>
     </>
   );
@@ -565,20 +707,30 @@ function DateSheetsLoading() {
         </div>
       </div>
       <div className="flex-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white rounded-xl p-4 animate-pulse">
+              <div className="h-8 bg-gray-200 rounded w-16 mx-auto mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-20 mx-auto"></div>
+            </div>
+          ))}
+        </div>
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6 animate-pulse">
           <div className="h-6 bg-gray-200 rounded w-48"></div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="bg-white rounded-xl p-5 animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-16 mb-3"></div>
-              <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="h-14 bg-gray-200 rounded"></div>
-                <div className="h-14 bg-gray-200 rounded"></div>
+            <div key={i} className="bg-white rounded-xl overflow-hidden animate-pulse">
+              <div className="h-40 bg-gray-200"></div>
+              <div className="p-5 space-y-3">
+                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-12 bg-gray-200 rounded"></div>
+                  <div className="h-12 bg-gray-200 rounded"></div>
+                </div>
               </div>
-              <div className="h-4 bg-gray-200 rounded w-24"></div>
             </div>
           ))}
         </div>
@@ -589,10 +741,19 @@ function DateSheetsLoading() {
 
 // ============ MAIN PAGE ============
 export default async function DateSheetsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
   
   return (
     <main className="min-h-screen bg-gray-50">
+      {/* Breadcrumbs UI */}
+      <div className="container mx-auto px-4 py-4">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/" className="hover:text-orange-600 transition">Home</Link>
+          <span>›</span>
+          <span className="text-gray-700 font-medium">Date Sheets</span>
+        </nav>
+      </div>
+      
       <div className="relative bg-gradient-to-r from-orange-600 to-amber-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 py-16">

@@ -2,8 +2,8 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { 
@@ -17,7 +17,11 @@ import {
   Clock,
   Zap,
   DollarSign,
-  Globe
+  Globe,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
@@ -25,6 +29,8 @@ import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ CONSTANTS ============
 const ITEMS_PER_PAGE = 10;
+const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
 
 const STUDY_LEVELS = [
   { slug: '', name: 'All Levels', icon: '📚' },
@@ -64,6 +70,7 @@ interface ScholarshipItem {
   isFeatured: boolean;
   isPopular: boolean;
   viewCount: number;
+  featuredImage: string | null;
 }
 
 interface Filters {
@@ -95,22 +102,62 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Static date with reference
+function formatDateStatic(date: Date | null): string {
   if (!date) return 'TBA';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'short',
     year: 'numeric'
   });
 }
 
-function getDaysLeft(date: Date | null): number | null {
-  if (!date) return null;
-  const today = new Date();
-  const deadline = new Date(date);
-  const diffTime = deadline.getTime() - today.getTime();
+// ✅ FIXED: Get days left using reference date
+function getDaysLeftStatic(deadline: Date | null, referenceDate: Date): number | null {
+  if (!deadline) return null;
+  const diffTime = deadline.getTime() - referenceDate.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays > 0 ? diffDays : null;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, url }: { title: string; url: string }) {
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
 }
 
 // ============ CACHED DATA FETCHING ============
@@ -196,6 +243,7 @@ async function getPaginatedScholarships(filters: Filters): Promise<PaginatedResp
         isFeatured: getMetaValue(meta, 'isFeatured', false),
         isPopular: getMetaValue(meta, 'isPopular', false),
         viewCount: getMetaValue(meta, 'viewCount', 0),
+        featuredImage: post.featuredImage || null,
       };
     });
     
@@ -271,7 +319,7 @@ async function getPaginatedScholarships(filters: Filters): Promise<PaginatedResp
 export async function generateMetadata(): Promise<Metadata> {
   const allScholarships = await getAllScholarships();
   const totalScholarships = allScholarships.length;
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
   
   const fullyFunded = allScholarships.filter(s => {
     const meta = s.meta || {};
@@ -282,7 +330,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Scholarships ${currentYear} in Pakistan | ${totalScholarships}+ Fully Funded & Partial | NextID.pk`,
     description: `Find ${fullyFunded}+ fully funded and ${totalScholarships - fullyFunded}+ partial scholarships for Pakistani students ${currentYear}. Merit-based, need-based scholarships for Matric to PhD. Apply now!`,
     keywords: `scholarships ${currentYear}, scholarships in Pakistan, fully funded scholarships, merit scholarships, need-based scholarships, study abroad scholarships`,
-    alternates: { canonical: 'https://www.nextid.pk/scholarships' },
+    robots: 'index, follow', // ✅ ADDED
+    alternates: {
+      canonical: 'https://www.nextid.pk/scholarships',
+      languages: { // ✅ ADDED
+        'en-US': 'https://www.nextid.pk/scholarships',
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
     openGraph: {
       title: `Scholarships ${currentYear} Pakistan - Fully Funded & Partial | NextID.pk`,
       description: `Find ${totalScholarships}+ scholarships for Pakistani students including fully funded, merit-based, and need-based opportunities.`,
@@ -291,6 +347,7 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Scholarships in Pakistan' }],
       locale: 'en_PK',
       type: 'website',
+      modifiedTime: new Date().toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
@@ -380,6 +437,30 @@ function Pagination({ currentPage, totalPages, baseUrl, filters }: {
   );
 }
 
+// ============ STATS CARDS ============
+function StatsCards({ stats }: { stats: Stats }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-teal-600">{stats.total}</div>
+        <div className="text-xs text-gray-500">Total Scholarships</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-amber-600">{stats.featured}</div>
+        <div className="text-xs text-gray-500">Featured</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-blue-600">{stats.abroad}</div>
+        <div className="text-xs text-gray-500">Abroad</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.fullyFunded}</div>
+        <div className="text-xs text-gray-500">Fully Funded</div>
+      </div>
+    </div>
+  );
+}
+
 // ============ LOADING COMPONENT ============
 function ScholarshipsLoading() {
   return (
@@ -444,7 +525,9 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
     return urlParams.toString() ? `/scholarships?${urlParams.toString()}` : '/scholarships';
   };
 
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
+  const shareUrl = 'https://www.nextid.pk/scholarships';
+  const shareTitle = `Scholarships ${currentYear} - Study Opportunities for Pakistani Students`;
   
   const jsonLd = generateJsonLd({
     type: 'WebPage',
@@ -477,6 +560,13 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
+      {/* ✅ Breadcrumbs UI */}
+      <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+        <Link href="/" className="hover:text-teal-600 transition">Home</Link>
+        <span>›</span>
+        <span className="text-gray-700 font-medium">Scholarships</span>
+      </div>
+      
       <div className="flex flex-col lg:flex-row gap-8">
         
         {/* LEFT SIDEBAR - Filters */}
@@ -492,7 +582,7 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                 <input 
                   type="text" 
                   name="q" 
-                  defaultValue={filters.q} 
+                  defaultValue={filters.q || ''} 
                   placeholder="Search scholarships..." 
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent" 
                 />
@@ -574,6 +664,9 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
         {/* MAIN CONTENT */}
         <div className="flex-1">
           
+          {/* ✅ Stats Cards */}
+          <StatsCards stats={stats} />
+          
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -581,41 +674,68 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                 Showing {scholarships.length} of {totalCount} Scholarships
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
-                <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {stats.abroad} Abroad</span>
-                <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {stats.fullyFunded} Fully Funded</span>
-                <span className="flex items-center gap-1">Page {currentPage} of {totalPages}</span>
+                <span>Page {currentPage} of {totalPages}</span>
               </div>
+            </div>
+          </div>
+
+          {/* ✅ Share Buttons */}
+          <div className="bg-white rounded-xl shadow-sm p-3 mb-4 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-sm text-gray-500 font-medium">Share this page:</span>
+              <ShareButtons title={shareTitle} url={shareUrl} />
             </div>
           </div>
 
           <div className="space-y-4">
             {scholarships.length > 0 ? (
               scholarships.map((s) => {
-                const daysLeft = getDaysLeft(s.deadline);
+                const daysLeft = getDaysLeftStatic(s.deadline, REFERENCE_DATE);
                 const isOpen = daysLeft !== null && daysLeft > 0;
                 const isUrgent = daysLeft !== null && daysLeft <= 7;
+                const displayName = s.provider;
+                
                 return (
                   <article key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-teal-200 transition-all overflow-hidden group">
                     <div className="p-5">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {s.isFeatured && (
-                              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3" /> Featured
-                              </span>
-                            )}
-                            {s.isPopular && (
-                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
-                                <Zap className="w-3 h-3" /> Popular
-                              </span>
-                            )}
-                            {isUrgent && isOpen && (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
-                                <Clock className="w-3 h-3" /> Urgent
-                              </span>
-                            )}
+                          {/* ✅ Image with Fallback */}
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gradient-to-br from-teal-100 to-emerald-100 flex items-center justify-center flex-shrink-0">
+                              {s.featuredImage ? (
+                                <Image
+                                  src={s.featuredImage}
+                                  alt={s.provider}
+                                  width={40}
+                                  height={40}
+                                  className="object-cover w-full h-full"
+                                />
+                              ) : (
+                                <span className="text-sm font-bold text-teal-600">
+                                  {getInitials(displayName)}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {s.isFeatured && (
+                                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                    <TrendingUp className="w-3 h-3" /> Featured
+                                  </span>
+                                )}
+                                {s.isPopular && (
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                    <Zap className="w-3 h-3" /> Popular
+                                  </span>
+                                )}
+                                {isUrgent && isOpen && (
+                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 animate-pulse">
+                                    <Clock className="w-3 h-3" /> Urgent
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           
                           <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
@@ -646,9 +766,9 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                               <Calendar className="w-3.5 h-3.5" />
-                              <span>Deadline: <span className="font-medium text-gray-700">{formatDate(s.deadline)}</span></span>
+                              <span>Deadline: <span className="font-medium text-gray-700">{formatDateStatic(s.deadline)}</span></span>
                             </div>
-                            {daysLeft && (
+                            {daysLeft && isOpen && (
                               <div className={`text-right ${isUrgent ? 'text-red-600' : 'text-teal-600'}`}>
                                 <div className="text-xs font-bold">{daysLeft} days left</div>
                               </div>
@@ -689,7 +809,7 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
         </div>
         
         <aside className="lg:w-72 flex-shrink-0">
-          <div className="sticky top-24">
+          <div className="sticky top-24 space-y-6">
             <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
               <SidebarWidgets />
             </Suspense>
@@ -703,10 +823,19 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
 
 // ============ MAIN PAGE ============
 export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
   
   return (
     <main className="min-h-screen bg-gray-50">
+      
+      {/* ✅ Breadcrumbs UI */}
+      <div className="container mx-auto px-4 py-4">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/" className="hover:text-teal-600 transition">Home</Link>
+          <span>›</span>
+          <span className="text-gray-700 font-medium">Scholarships</span>
+        </nav>
+      </div>
       
       <div className="relative bg-gradient-to-r from-teal-600 to-emerald-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>

@@ -2,17 +2,30 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
-import { cookies } from 'next/headers';
 import { postService } from '@/services/post/post.service';
-import type { ExtendedPost } from '@/services/post/post.service';
-import { Calendar, Clock, MapPin, Building2, Eye, ExternalLink, FileText, AlertCircle } from 'lucide-react';
+import { 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  Building2, 
+  Eye, 
+  ExternalLink, 
+  FileText, 
+  AlertCircle,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail,
+  ChevronLeft
+} from 'lucide-react';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { cacheTag, cacheLife } from 'next/cache';
 
-// Types
-interface DateSheetDetail {
+// ============ TYPES ============
+interface DateSheetWithComputed {
   id: number;
   slug: string;
   title: string;
@@ -30,6 +43,10 @@ interface DateSheetDetail {
   viewCount: number;
   officialLink: string | null;
   downloadLink: string | null;
+  featuredImage: string | null;
+  publishedAt: Date | null;
+  updatedAt: Date | null;
+  // Meta fields
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -40,11 +57,13 @@ interface DateSheetDetail {
   ogImage: string | null;
   twitterTitle: string | null;
   twitterDescription: string | null;
-  featuredImage: string | null;
-  publishedAt: Date | null;
-  updatedAt: Date | null;
+  // Computed values
+  formattedDate: string;
+  displayName: string;
+  currentYear: string;
 }
 
+// ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
@@ -54,6 +73,64 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
 function formatDate(date: Date | null): string {
   if (!date) return 'TBA';
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// ✅ Sanitize content - Convert H1 to H2
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  let sanitized = html;
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  sanitized = sanitized
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Add IDs to H2 and H3
+  sanitized = sanitized.replace(
+    /<h([2-3])>(.*?)<\/h\1>/gi,
+    (match, level, content) => {
+      const text = content.replace(/<[^>]*>/g, '');
+      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return `<h${level} id="${id}">${content}</h${level}>`;
+    }
+  );
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const url = `https://www.nextid.pk/date-sheets/${slug}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
 }
 
 // ============ GENERATE STATIC PARAMS ============
@@ -76,7 +153,7 @@ export async function generateStaticParams() {
 }
 
 // ============ CACHED DATA FETCHING ============
-async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null> {
+async function getDateSheetDetail(slug: string): Promise<DateSheetWithComputed | null> {
   "use cache";
   cacheTag(`date-sheet-detail-${slug}`);
   cacheLife("hours");
@@ -99,6 +176,14 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       }
     }
     
+    // ✅ FIXED: Static year (no new Date())
+    const currentYear = '2026';
+    const year = getMetaValue(meta, 'year', parseInt(currentYear));
+    const boardName = getMetaValue(meta, 'boardName', null);
+    const instituteName = getMetaValue(meta, 'instituteName', null);
+    const displayName = boardName || instituteName || 'Education Board';
+  
+    
     return {
       id: post.id,
       slug: post.slug,
@@ -106,10 +191,10 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       description: post.content || post.excerpt,
       examType: getMetaValue(meta, 'examType', 'Annual'),
       examDate: examDate,
-      year: getMetaValue(meta, 'year', new Date().getFullYear()),
-      boardName: getMetaValue(meta, 'boardName', null),
+      year: year,
+      boardName: boardName,
       boardSlug: getMetaValue(meta, 'boardSlug', null),
-      instituteName: getMetaValue(meta, 'instituteName', null),
+      instituteName: instituteName,
       instituteSlug: getMetaValue(meta, 'instituteSlug', null),
       cityName: getMetaValue(meta, 'cityName', null),
       province: getMetaValue(meta, 'province', null),
@@ -117,6 +202,10 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       viewCount: getMetaValue(meta, 'viewCount', 0),
       officialLink: getMetaValue(meta, 'officialLink', null),
       downloadLink: getMetaValue(meta, 'downloadLink', null),
+      featuredImage: post.featuredImage || null,
+      publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
+      // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
       metaKeywords: getMetaValue(meta, 'metaKeywords', null),
@@ -127,9 +216,10 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
       ogImage: getMetaValue(meta, 'ogImage', null),
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
-      featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      // Computed values
+      formattedDate: formatDate(examDate),
+      displayName: displayName,
+      currentYear: currentYear,
     };
   } catch (error) {
     console.error('Error fetching date sheet detail:', error);
@@ -137,11 +227,10 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetDetail | null>
   }
 }
 
-// ============ SEO: Generate Metadata ============
+// ============ METADATA ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   
-  // Handle placeholder
   if (slug === 'placeholder') {
     return {
       title: 'Date Sheet Not Found | NextID.pk',
@@ -149,9 +238,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       robots: { index: false },
     };
   }
-  
-  // ✅ Access cookies first to make route dynamic
-  await cookies();
   
   const dateSheet = await getDateSheetDetail(slug);
 
@@ -163,42 +249,49 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const displayName = dateSheet.boardName || dateSheet.instituteName || '';
-  // ✅ Now new Date() is allowed after cookies()
-  const currentYear = new Date().getFullYear();
-  
   const seoTitle = dateSheet.metaTitle || 
-    `${displayName} ${dateSheet.examType} Exam Date Sheet ${currentYear} - Official Schedule | NextID.pk`;
+    `${dateSheet.displayName} ${dateSheet.examType} Exam Date Sheet ${dateSheet.currentYear} - Official Schedule | NextID.pk`;
   
   const seoDescription = dateSheet.metaDescription || 
-    `Check ${displayName} ${dateSheet.examType} examinations date sheet ${currentYear}. View complete exam schedule on official website. ${dateSheet.examDate ? `Exams from ${formatDate(dateSheet.examDate)}.` : ''}`;
+    `Check ${dateSheet.displayName} ${dateSheet.examType} examinations date sheet ${dateSheet.currentYear}. View complete exam schedule on official website. ${dateSheet.examDate ? `Exams from ${dateSheet.formattedDate}.` : ''}`;
   
   const canonicalUrl = dateSheet.canonicalUrl || `https://www.nextid.pk/date-sheets/${dateSheet.slug}`;
   const ogImage = dateSheet.ogImage || dateSheet.featuredImage || '/og-image.png';
+  const robots = dateSheet.robots || 'index, follow';
 
   return {
     title: seoTitle,
     description: seoDescription,
-    alternates: { canonical: canonicalUrl },
+    keywords: dateSheet.metaKeywords || undefined, // ✅ ADDED
+    robots: robots, // ✅ ADDED
+    alternates: {
+      canonical: canonicalUrl,
+      languages: { // ✅ ADDED
+        'en-US': canonicalUrl,
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID Team' }], // ✅ ADDED
     openGraph: {
-      title: seoTitle,
-      description: seoDescription,
+      title: dateSheet.ogTitle || seoTitle,
+      description: dateSheet.ogDescription || seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: dateSheet.publishedAt?.toISOString(),
+      modifiedTime: dateSheet.updatedAt?.toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
-      title: seoTitle,
-      description: seoDescription,
+      title: dateSheet.twitterTitle || seoTitle,
+      description: dateSheet.twitterDescription || seoDescription,
       images: [ogImage],
     },
   };
 }
 
-// Loading component
+// ============ LOADING COMPONENT ============
 function DateSheetLoading() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -210,15 +303,36 @@ function DateSheetLoading() {
   );
 }
 
-// ============ DATE SHEET DETAILS ============
-function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<DateSheetDetail | null> }) {
-  const dateSheet = React.use(dateSheetPromise);
+// ============ SCHEMA: BREADCRUMB ============
+function BreadcrumbSchema({ dateSheet }: { dateSheet: DateSheetWithComputed }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Date Sheets", "item": "https://www.nextid.pk/date-sheets" },
+      { "@type": "ListItem", "position": 3, "name": dateSheet.title, "item": `https://www.nextid.pk/date-sheets/${dateSheet.slug}` }
+    ]
+  };
+  
+  return (
+    <script 
+      type="application/ld+json" 
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} 
+    />
+  );
+}
+
+// ============ DATE SHEET DETAILS (SERVER COMPONENT) ============
+async function DateSheetDetails({ slug }: { slug: string }) {
+  const dateSheet = await getDateSheetDetail(slug);
   
   if (!dateSheet) return null;
   
-  const displayName = dateSheet.boardName || dateSheet.instituteName;
-  const officialLink = dateSheet.officialLink || undefined;
+  const displayName = dateSheet.displayName;
+  const officialLink = dateSheet.officialLink;
   const hasOfficialLink = !!officialLink;
+  const sanitizedDescription = sanitizeContent(dateSheet.description);
   
   const metaDescriptionText = dateSheet.description || 
     `${displayName} ${dateSheet.examType} examinations date sheet for ${dateSheet.year}. Check complete exam schedule including dates, subjects, and timings.`;
@@ -244,21 +358,11 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
       "url": dateSheet.officialLink || undefined
     }
   };
-  
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
-      { "@type": "ListItem", "position": 2, "name": "Date Sheets", "item": "https://www.nextid.pk/date-sheets" },
-      { "@type": "ListItem", "position": 3, "name": dateSheet.title, "item": `https://www.nextid.pk/date-sheets/${dateSheet.slug}` }
-    ]
-  };
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <BreadcrumbSchema dateSheet={dateSheet} />
       
       <main className="min-h-screen bg-gray-50">
         
@@ -268,14 +372,13 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
               
-              {/* Breadcrumbs */}
-              <div className="text-sm text-orange-100 mb-6 flex items-center gap-2 flex-wrap">
-                <Link href="/" className="hover:text-white transition">Home</Link>
-                <span>›</span>
-                <Link href="/date-sheets" className="hover:text-white transition">Date Sheets</Link>
-                <span>›</span>
-                <span className="text-white font-medium truncate">{dateSheet.title}</span>
-              </div>
+              <Link 
+                href="/date-sheets" 
+                className="inline-flex items-center gap-2 text-orange-200 hover:text-white transition mb-6 group"
+              >
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
+                Back to Date Sheets
+              </Link>
 
               {dateSheet.isPopular && (
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full mb-4">
@@ -284,6 +387,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </div>
               )}
 
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {dateSheet.title}
               </h1>
@@ -334,6 +438,31 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
             {/* LEFT COLUMN - MAIN CONTENT */}
             <div className="lg:col-span-2 space-y-6">
               
+              {/* Featured Image with Fallback */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                <div className="relative w-full h-64 md:h-80 bg-gradient-to-br from-orange-100 to-amber-100">
+                  {dateSheet.featuredImage ? (
+                    <Image
+                      src={dateSheet.featuredImage}
+                      alt={dateSheet.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-3">
+                          <FileText className="w-10 h-10 text-orange-500" />
+                        </div>
+                        <p className="text-gray-600 font-medium">{displayName}</p>
+                        <p className="text-gray-400 text-sm">Date Sheet {dateSheet.year}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {hasOfficialLink && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
@@ -345,7 +474,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                   <div className="p-6">
                     <div className="text-center">
                       <a 
-                        href={officialLink ?? undefined}
+                        href={officialLink}
                         target="_blank" 
                         rel="noopener noreferrer" 
                         className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition font-semibold text-lg group w-full md:w-auto"
@@ -362,6 +491,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </div>
               )}
 
+              {/* Description/Content with Sanitized Headings */}
               {dateSheet.description && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100">
@@ -370,12 +500,24 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                       About This Date Sheet
                     </h2>
                   </div>
-                  <div className="p-6 prose prose-sm max-w-none text-gray-700">
-                    <div dangerouslySetInnerHTML={{ __html: dateSheet.description }} />
+                  <div className="p-6">
+                    <div 
+                      className="prose prose-sm max-w-none text-gray-700
+                        prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                        prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                        prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                        prose-strong:text-gray-900 prose-strong:font-semibold
+                        prose-li:text-gray-700 prose-li:mb-1
+                        prose-ul:my-3 prose-ol:my-3"
+                      dangerouslySetInnerHTML={{ 
+                        __html: sanitizedDescription 
+                      }}
+                    />
                   </div>
                 </div>
               )}
 
+              {/* Exam Schedule Info */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100">
                   <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -398,7 +540,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                         <div className="text-orange-500 text-xs font-medium">Exam Start Date</div>
                         <div className="font-semibold text-gray-900 text-base mt-1 flex items-center gap-2">
                           <Clock className="w-4 h-4 text-orange-500" />
-                          {formatDate(dateSheet.examDate)}
+                          {dateSheet.formattedDate}
                         </div>
                       </div>
                     )}
@@ -406,6 +548,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </div>
               </div>
               
+              {/* How to View */}
               <div className="bg-blue-50 rounded-xl p-5 border border-blue-100" data-nosnippet>
                 <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
@@ -418,11 +561,20 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                   <li>Download or save the date sheet for reference</li>
                 </ol>
               </div>
+
+              {/* Share Buttons */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-sm text-gray-500 font-medium">Share this date sheet:</span>
+                  <ShareButtons title={dateSheet.title} slug={dateSheet.slug} />
+                </div>
+              </div>
             </div>
 
             {/* RIGHT SIDEBAR */}
             <aside className="space-y-6">
               
+              {/* Institute/Board Info */}
               {displayName && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24" data-nosnippet>
                   <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
@@ -455,6 +607,7 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </div>
               )}
 
+              {/* Important Note */}
               <div className="bg-amber-50 rounded-xl p-5 border border-amber-200" data-nosnippet>
                 <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
                   <span>ℹ️</span> Important Note
@@ -465,6 +618,10 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
                 </p>
               </div>
 
+              {/* Sidebar Widgets */}
+              <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                <SidebarWidgets />
+              </Suspense>
             </aside>
           </div>
         </div>
@@ -475,22 +632,15 @@ function DateSheetDetails({ dateSheetPromise }: { dateSheetPromise: Promise<Date
 
 // ============ MAIN PAGE ============
 export default async function DateSheetDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const slugPromise = params.then(p => p.slug);
+  const { slug } = await params;
   
-  const dataPromise = slugPromise.then(async (slug) => {
-    // Handle placeholder
-    if (slug === 'placeholder') {
-      notFound();
-    }
-    
-    const dateSheet = await getDateSheetDetail(slug);
-    if (!dateSheet) notFound();
-    return dateSheet;
-  });
+  if (slug === 'placeholder') {
+    notFound();
+  }
   
   return (
     <Suspense fallback={<DateSheetLoading />}>
-      <DateSheetDetails dateSheetPromise={dataPromise} />
+      <DateSheetDetails slug={slug} />
     </Suspense>
   );
 }

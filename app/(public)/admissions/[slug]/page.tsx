@@ -82,6 +82,31 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ✅ Sanitize content to avoid duplicate H1
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  let sanitized = html
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
+}
+
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
@@ -230,7 +255,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description: seoDescription,
     keywords: admission.metaKeywords || undefined,
     robots: robots,
-    alternates: { canonical: canonicalUrl },
+    alternates: { 
+      canonical: canonicalUrl,
+      languages: {
+        'en-US': canonicalUrl,
+      },
+    },
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: admission.ogTitle || seoTitle,
       description: admission.ogDescription || seoDescription,
@@ -341,6 +373,7 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
     formattedOpenDate,
     formattedCloseDate,
     currentYear,
+    slug
   } = admission;
 
   return (
@@ -391,6 +424,7 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                 )}
               </div>
               
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
                 {title}
               </h1>
@@ -462,10 +496,10 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                 </div>
               </div>
               
-              {/* Featured Image */}
-              {featuredImage && (
-                <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
-                  <div className="relative w-full h-80 md:h-96">
+              {/* Featured Image with Fallback */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                <div className="relative w-full h-80 md:h-96 bg-gradient-to-br from-blue-100 to-indigo-100">
+                  {featuredImage ? (
                     <Image
                       src={featuredImage}
                       alt={title}
@@ -473,9 +507,23 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                       className="object-cover"
                       priority
                     />
-                  </div>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-32 h-32 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-4">
+                          <span className="text-4xl font-bold text-blue-600">
+                            {getInitials(instituteName)}
+                          </span>
+                        </div>
+                        <p className="text-gray-600 font-medium">{instituteName}</p>
+                        <p className="text-gray-400 text-sm">Admissions {currentYear}</p>
+                      </div>
+                    </div>
+                  )}
+                  {/* Gradient overlay for text readability */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                 </div>
-              )}
+              </div>
               
               {/* Content Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -504,6 +552,7 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                             <div>
                               <div className="font-medium text-gray-800">{program.name}</div>
                               {program.duration && <div className="text-xs text-gray-500">{program.duration}</div>}
+                              {program.fee && <div className="text-xs text-gray-500">Fee: {program.fee}</div>}
                             </div>
                           </div>
                         ))}
@@ -524,7 +573,7 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                     </div>
                   )}
                   
-                  {/* Full Content */}
+                  {/* Full Content - Sanitized to avoid duplicate H1 */}
                   {content && (
                     <div className="mb-8">
                       <div 
@@ -537,7 +586,9 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                           prose-li:text-gray-700 prose-li:mb-1
                           prose-ul:my-3 prose-ol:my-3
                           prose-img:rounded-lg prose-img:shadow-md"
-                        dangerouslySetInnerHTML={{ __html: content }}
+                        dangerouslySetInnerHTML={{ 
+                          __html: sanitizeContent(content) 
+                        }}
                       />
                     </div>
                   )}
@@ -576,6 +627,33 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                   <p className="text-xs text-gray-400">
                     Last updated: {formatDate(admission.updatedAt || admission.publishedAt)}
                   </p>
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <span>Share: </span>
+                    <a 
+                      href={`https://www.facebook.com/sharer/sharer.php?u=https://www.nextid.pk/admissions/${slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-600 transition"
+                    >
+                      Facebook
+                    </a>
+                    <a 
+                      href={`https://twitter.com/intent/tweet?url=https://www.nextid.pk/admissions/${slug}&text=${encodeURIComponent(title)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-400 transition"
+                    >
+                      Twitter
+                    </a>
+                    <a 
+                      href={`https://www.linkedin.com/sharing/share-offsite/?url=https://www.nextid.pk/admissions/${slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-blue-700 transition"
+                    >
+                      LinkedIn
+                    </a>
+                  </div>
                 </div>
               </div>
             </main>
@@ -601,14 +679,45 @@ function AdmissionContent({ admission }: { admission: AdmissionWithComputed }) {
                       {closeDate && (
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Last Date to Apply</span>
-                          <span className="text-sm font-semibold text-gray-800">
+                          <span className={`text-sm font-semibold ${isDeadlineNear && isOpen ? 'text-orange-600' : 'text-gray-800'}`}>
                             {formattedCloseDate}
+                            {isDeadlineNear && isOpen && (
+                              <span className="text-xs text-orange-500 ml-1">⚠️ Near</span>
+                            )}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
                 )}
+                
+                {/* Quick Stats */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                  <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-blue-600" />
+                    Quick Stats
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Institute</span>
+                      <span className="font-medium text-gray-800">{instituteName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">City</span>
+                      <span className="font-medium text-gray-800">{cityName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Programs</span>
+                      <span className="font-medium text-gray-800">{programs.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status</span>
+                      <span className={`font-medium ${isOpen ? 'text-green-600' : 'text-gray-500'}`}>
+                        {isOpen ? 'Open' : 'Closed'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 
                 {/* Sidebar Widgets */}
                 <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>

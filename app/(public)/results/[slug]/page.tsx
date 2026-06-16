@@ -2,9 +2,9 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { 
@@ -18,7 +18,11 @@ import {
   FileText,
   Award,
   ExternalLink,
-  TrendingUp
+  TrendingUp,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
@@ -42,6 +46,10 @@ interface ResultDetail {
   isPopular: boolean;
   status: boolean;
   viewCount: number;
+  featuredImage: string | null;
+  publishedAt: Date | null;
+  updatedAt: Date | null;
+  // Meta fields
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -52,10 +60,15 @@ interface ResultDetail {
   ogImage: string | null;
   twitterTitle: string | null;
   twitterDescription: string | null;
-  featuredImage: string | null;
-  publishedAt: Date | null;
-  updatedAt: Date | null;
+  // Computed values
+  sanitizedContent: string;
+  formattedDate: string;
+  institutionName: string;
 }
+
+// ============ CONSTANTS ============
+const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
 
 // ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
@@ -64,13 +77,102 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Static date with reference
+function formatDateStatic(date: Date | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ✅ Sanitize content - Convert H1 to H2
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  let sanitized = html;
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  sanitized = sanitized
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Add IDs to H2 and H3
+  sanitized = sanitized.replace(
+    /<h([2-3])>(.*?)<\/h\1>/gi,
+    (match, level, content) => {
+      const text = content.replace(/<[^>]*>/g, '');
+      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return `<h${level} id="${id}">${content}</h${level}>`;
+    }
+  );
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const url = `https://www.nextid.pk/results/${slug}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
+
+// ============ BREADCRUMB SCHEMA ============
+function BreadcrumbSchema({ result }: { result: ResultDetail }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Results", "item": "https://www.nextid.pk/results" },
+      { "@type": "ListItem", "position": 3, "name": result.title, "item": `https://www.nextid.pk/results/${result.slug}` }
+    ]
+  };
+  
+  return (
+    <script 
+      type="application/ld+json" 
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} 
+    />
+  );
 }
 
 // ============ GENERATE STATIC PARAMS ============
@@ -84,7 +186,6 @@ export async function generateStaticParams() {
       }));
     }
     
-    // Return placeholder for build validation
     return [{ slug: 'placeholder' }];
     
   } catch (error) {
@@ -121,23 +222,34 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       }
     }
     
+    // ✅ FIXED: Static year (no new Date())
+    const year = getMetaValue(meta, 'year', parseInt(CURRENT_YEAR));
+    const boardName = getMetaValue(meta, 'boardName', null);
+    const instituteName = getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null));
+    const institutionName = instituteName || boardName || '';
+    const content = post.content || '';
+    
     return {
       id: post.id,
       slug: post.slug,
       title: post.title,
       content: post.content,
       excerpt: post.excerpt,
-      year: getMetaValue(meta, 'year', new Date().getFullYear()),
+      year: year,
       resultDate: resultDate,
-      boardName: getMetaValue(meta, 'boardName', null),
+      boardName: boardName,
       boardSlug: getMetaValue(meta, 'boardSlug', null),
-      instituteName: getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null)),
+      instituteName: instituteName,
       instituteSlug: getMetaValue(meta, 'universitySlug', getMetaValue(meta, 'instituteSlug', null)),
       cityName: getMetaValue(meta, 'cityName', null),
       officialLink: getMetaValue(meta, 'officialLink', null),
       isPopular: getMetaValue(meta, 'isPopular', false),
       status: getMetaValue(meta, 'status', true),
       viewCount: getMetaValue(meta, 'viewCount', 0),
+      featuredImage: post.featuredImage || null,
+      publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
+      // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
       metaKeywords: getMetaValue(meta, 'metaKeywords', null),
@@ -148,9 +260,10 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       ogImage: getMetaValue(meta, 'ogImage', null),
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
-      featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      // Computed values
+      sanitizedContent: sanitizeContent(content),
+      formattedDate: formatDateStatic(resultDate),
+      institutionName: institutionName,
     };
   } catch (error) {
     console.error('Error fetching result detail:', error);
@@ -162,7 +275,6 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   
-  // Handle placeholder
   if (slug === 'placeholder') {
     return {
       title: 'Result Not Found | NextID.pk',
@@ -181,31 +293,41 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const institutionName = result.instituteName || result.boardName || '';
-  
+  const institutionName = result.institutionName;
   const seoTitle = result.metaTitle || `${institutionName} ${result.year} Result - Check Online | NextID.pk`;
   const seoDescription = result.metaDescription || 
     `${institutionName} Class ${result.year} result announced. Check your ${result.boardName || institutionName} result online by roll number. ${result.cityName ? `Board ${result.cityName}.` : ''} Download result card.`;
   const canonicalUrl = result.canonicalUrl || `https://www.nextid.pk/results/${result.slug}`;
   const ogImage = result.ogImage || result.featuredImage || '/og-image.png';
+  const robots = result.robots || 'index, follow';
 
   return {
     title: seoTitle,
     description: seoDescription,
-    alternates: { canonical: canonicalUrl },
+    keywords: result.metaKeywords || undefined, // ✅ ADDED
+    robots: robots, // ✅ ADDED
+    alternates: {
+      canonical: canonicalUrl,
+      languages: { // ✅ ADDED
+        'en-US': canonicalUrl,
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID Team' }], // ✅ ADDED
     openGraph: {
-      title: seoTitle,
-      description: seoDescription,
+      title: result.ogTitle || seoTitle,
+      description: result.ogDescription || seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: result.publishedAt?.toISOString(),
+      modifiedTime: result.updatedAt?.toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
-      title: seoTitle,
-      description: seoDescription,
+      title: result.twitterTitle || seoTitle,
+      description: result.twitterDescription || seoDescription,
       images: [ogImage],
     },
   };
@@ -223,14 +345,21 @@ function ResultLoading() {
   );
 }
 
-// ============ MAIN RESULT CONTENT COMPONENT ============
-function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail | null> }) {
-  const result = React.use(resultPromise);
+// ============ MAIN RESULT CONTENT COMPONENT (SERVER) ============
+async function ResultContent({ slug }: { slug: string }) {
+  if (slug === 'placeholder') {
+    notFound();
+  }
   
-  if (!result) return null;
+  const result = await getResultBySlug(slug);
   
-  const institutionName = result.instituteName || result.boardName || '';
+  if (!result) {
+    notFound();
+  }
+  
+  const institutionName = result.institutionName;
   const officialWebsite = result.officialLink;
+  const statusText = result.status ? 'Published' : 'Pending';
 
   const jsonLd = generateJsonLd({
     type: 'Article',
@@ -254,6 +383,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <BreadcrumbSchema result={result} />
       
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
         "@context": "https://schema.org",
@@ -285,9 +415,18 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
               
+              {/* ✅ Breadcrumbs UI */}
+              <div className="text-sm text-green-200 mb-2 flex items-center gap-2 flex-wrap">
+                <Link href="/" className="hover:text-white transition">Home</Link>
+                <span>›</span>
+                <Link href="/results" className="hover:text-white transition">Results</Link>
+                <span>›</span>
+                <span className="text-white font-medium truncate">{result.title}</span>
+              </div>
+              
               <Link 
                 href="/results" 
-                className="inline-flex items-center gap-1 text-green-200 hover:text-white transition mb-6 group"
+                className="inline-flex items-center gap-1 text-green-200 hover:text-white transition mb-4 group"
               >
                 <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
                 Back to Results
@@ -313,6 +452,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                 )}
               </div>
               
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {result.title}
               </h1>
@@ -341,7 +481,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                 {result.resultDate && (
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    <span>Announced: {formatDate(result.resultDate)}</span>
+                    <span>Announced: {result.formattedDate}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -358,6 +498,32 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
           <div className="flex flex-col lg:flex-row gap-8">
             
             <div className="lg:w-2/3">
+              
+              {/* ✅ Featured Image with Fallback */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+                <div className="relative w-full h-64 md:h-80 bg-gradient-to-br from-green-100 to-teal-100">
+                  {result.featuredImage ? (
+                    <Image
+                      src={result.featuredImage}
+                      alt={result.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-3">
+                          <Award className="w-10 h-10 text-green-500" />
+                        </div>
+                        <p className="text-gray-600 font-medium">{institutionName}</p>
+                        <p className="text-gray-400 text-sm">Result {result.year}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 
                 <div className="p-6">
@@ -394,7 +560,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                       <div className="text-gray-500 text-xs mb-1">Result Date</div>
                       <div className="font-semibold text-gray-900 flex items-center gap-2">
                         <Clock className="w-4 h-4 text-green-500" />
-                        {formatDate(result.resultDate) || 'TBA'}
+                        {result.formattedDate || 'TBA'}
                       </div>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4">
@@ -406,14 +572,23 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </div>
                   </div>
 
+                  {/* ✅ Content with Sanitized Headings */}
                   {result.content && (
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3">
                         Additional Information About {institutionName} Result {result.year}
                       </h3>
                       <div 
-                        className="prose prose-sm max-w-none text-gray-600"
-                        dangerouslySetInnerHTML={{ __html: result.content }}
+                        className="prose prose-sm max-w-none text-gray-600
+                          prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                          prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                          prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                          prose-strong:text-gray-900 prose-strong:font-semibold
+                          prose-li:text-gray-700 prose-li:mb-1
+                          prose-ul:my-3 prose-ol:my-3"
+                        dangerouslySetInnerHTML={{ 
+                          __html: result.sanitizedContent 
+                        }}
                       />
                     </div>
                   )}
@@ -435,6 +610,14 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                   )}
                 </div>
               </div>
+              
+              {/* ✅ Share Buttons */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-sm text-gray-500 font-medium">Share this result:</span>
+                  <ShareButtons title={result.title} slug={result.slug} />
+                </div>
+              </div>
             </div>
 
             <aside className="lg:w-1/3">
@@ -451,7 +634,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                   <ol className="space-y-3 text-sm text-gray-600">
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                      <span>Click the "Check Result Online" button above</span>
+                      <span>Click the &quot;Check Result Online&quot; button above</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
@@ -463,7 +646,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                      <span>Click the "Submit" to view your result</span>
+                      <span>Click the &quot;Submit&quot; to view your result</span>
                     </li>
                   </ol>
                 </div>
@@ -482,22 +665,11 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
 
 // ============ MAIN PAGE ============
 export default async function ResultDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const slugPromise = params.then(p => p.slug);
-  
-  const resultPromise = slugPromise.then(async (slug) => {
-    // Handle placeholder
-    if (slug === 'placeholder') {
-      notFound();
-    }
-    
-    const result = await getResultBySlug(slug);
-    if (!result) notFound();
-    return result;
-  });
+  const { slug } = await params;
   
   return (
     <Suspense fallback={<ResultLoading />}>
-      <ResultContent resultPromise={resultPromise} />
+      <ResultContent slug={slug} />
     </Suspense>
   );
 }

@@ -2,6 +2,7 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
@@ -21,7 +22,11 @@ import {
   CheckCircle,
   Users,
   Mail,
-  AlertCircle
+  AlertCircle,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Send
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { cacheTag, cacheLife } from 'next/cache';
@@ -46,6 +51,10 @@ interface JobWithComputed {
   applicationLink: string | null;
   isFeatured: boolean;
   viewCount: number;
+  featuredImage: string | null;
+  publishedAt: Date | null;
+  updatedAt: Date | null;
+  // Meta fields
   metaTitle: string | null;
   metaDescription: string | null;
   metaKeywords: string | null;
@@ -56,15 +65,13 @@ interface JobWithComputed {
   ogImage: string | null;
   twitterTitle: string | null;
   twitterDescription: string | null;
-  featuredImage: string | null;
-  publishedAt: Date | null;
-  updatedAt: Date | null;
   // Computed values - pre-calculated
   daysLeft: number | null;
   isOpen: boolean;
   isUrgent: boolean;
   shortDate: string;
   fullDate: string;
+  sanitizedDescription: string;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -92,6 +99,43 @@ function formatFullDate(date: Date | null): string {
   });
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ✅ Sanitize content - Convert H1 to H2
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  let sanitized = html;
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  sanitized = sanitized
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Add IDs to H2 and H3
+  sanitized = sanitized.replace(
+    /<h([2-3])>(.*?)<\/h\1>/gi,
+    (match, level, content) => {
+      const text = content.replace(/<[^>]*>/g, '');
+      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return `<h${level} id="${id}">${content}</h${level}>`;
+    }
+  );
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
+}
+
 // Parse salary for schema
 function parseSalaryForSchema(salary: string | null): { min?: number; max?: number; currency?: string } {
   if (!salary) return {};
@@ -111,6 +155,37 @@ function parseSalaryForSchema(salary: string | null): { min?: number; max?: numb
   }
   
   return result;
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const url = `https://www.nextid.pk/jobs/${slug}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Send className="w-4 h-4" />
+      </a>
+    </div>
+  );
 }
 
 // ============ GENERATE STATIC PARAMS ============
@@ -151,7 +226,6 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       : null;
     
     // Use a fixed reference date to avoid new Date() during prerendering
-    // This date is used only for calculation purposes
     const referenceDate = new Date('2024-01-01T00:00:00.000Z');
     
     // Calculate days left using the reference date
@@ -164,6 +238,8 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
     
     const isOpen = daysLeft !== null && daysLeft > 0;
     const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
+    
+    const description = post.content || '';
     
     return {
       id: post.id,
@@ -184,6 +260,10 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       applicationLink: getMetaValue(meta, 'applicationLink', null),
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
+      featuredImage: post.featuredImage || null,
+      publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
+      // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
       metaKeywords: getMetaValue(meta, 'metaKeywords', null),
@@ -194,15 +274,13 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       ogImage: getMetaValue(meta, 'ogImage', null),
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
-      featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
       // Computed values
       daysLeft,
       isOpen,
       isUrgent,
       shortDate: formatShortDate(deadline),
       fullDate: formatFullDate(deadline),
+      sanitizedDescription: sanitizeContent(description),
     };
   } catch (error) {
     console.error('Error fetching job detail:', error);
@@ -240,24 +318,35 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   
   const canonicalUrl = job.canonicalUrl || `https://www.nextid.pk/jobs/${job.slug}`;
   const ogImage = job.ogImage || job.featuredImage || '/og-image.png';
+  const robots = job.robots || 'index, follow';
 
   return {
     title: seoTitle,
     description: seoDescription,
-    alternates: { canonical: canonicalUrl },
+    keywords: job.metaKeywords || undefined, // ✅ ADDED
+    robots: robots, // ✅ ADDED
+    alternates: {
+      canonical: canonicalUrl,
+      languages: { // ✅ ADDED
+        'en-US': canonicalUrl,
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID Team' }], // ✅ ADDED
     openGraph: {
-      title: seoTitle,
-      description: seoDescription,
+      title: job.ogTitle || seoTitle,
+      description: job.ogDescription || seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: job.publishedAt?.toISOString(),
+      modifiedTime: job.updatedAt?.toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
-      title: seoTitle,
-      description: seoDescription,
+      title: job.twitterTitle || seoTitle,
+      description: job.twitterDescription || seoDescription,
       images: [ogImage],
     },
   };
@@ -275,10 +364,30 @@ function JobLoading() {
   );
 }
 
+// ============ BREADCRUMB SCHEMA ============
+function BreadcrumbSchema({ job }: { job: JobWithComputed }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Jobs", "item": "https://www.nextid.pk/jobs" },
+      { "@type": "ListItem", "position": 3, "name": job.title, "item": `https://www.nextid.pk/jobs/${job.slug}` }
+    ]
+  };
+  
+  return (
+    <script 
+      type="application/ld+json" 
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} 
+    />
+  );
+}
+
 // ============ SIMPLE SERVER COMPONENT (NO DATE CALCULATIONS) ============
 function JobContent({ job }: { job: JobWithComputed }) {
   // All values are pre-computed - NO new Date() calls here!
-  const { daysLeft, isOpen, isUrgent, shortDate } = job;
+  const { daysLeft, isOpen, isUrgent, shortDate, sanitizedDescription } = job;
   
   const salaryData = parseSalaryForSchema(job.salary);
 
@@ -342,21 +451,11 @@ function JobContent({ job }: { job: JobWithComputed }) {
       "value": job.id.toString()
     }
   };
-  
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
-      { "@type": "ListItem", "position": 2, "name": "Jobs", "item": "https://www.nextid.pk/jobs" },
-      { "@type": "ListItem", "position": 3, "name": job.title, "item": `https://www.nextid.pk/jobs/${job.slug}` }
-    ]
-  };
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <BreadcrumbSchema job={job} />
       
       <main className="min-h-screen bg-gray-50">
         {/* Hero Section */}
@@ -364,9 +463,18 @@ function JobContent({ job }: { job: JobWithComputed }) {
           <div className="absolute inset-0 bg-black/20"></div>
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
+              {/* ✅ Breadcrumbs UI */}
+              <div className="text-sm text-indigo-200 mb-4 flex items-center gap-2 flex-wrap">
+                <Link href="/" className="hover:text-white transition">Home</Link>
+                <span>›</span>
+                <Link href="/jobs" className="hover:text-white transition">Jobs</Link>
+                <span>›</span>
+                <span className="text-white font-medium truncate">{job.title}</span>
+              </div>
+              
               <Link 
                 href="/jobs" 
-                className="inline-flex items-center gap-1 text-indigo-200 hover:text-white transition mb-6 group"
+                className="inline-flex items-center gap-1 text-indigo-200 hover:text-white transition mb-4 group"
               >
                 <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
                 Back to Jobs
@@ -391,6 +499,7 @@ function JobContent({ job }: { job: JobWithComputed }) {
                 </span>
               </div>
               
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">{job.title}</h1>
               
               <div className="hidden" aria-hidden="true">{metaDescriptionText}</div>
@@ -444,6 +553,32 @@ function JobContent({ job }: { job: JobWithComputed }) {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="lg:w-2/3 space-y-6">
+              
+              {/* ✅ Featured Image with Fallback */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100">
+                <div className="relative w-full h-64 md:h-80 bg-gradient-to-br from-indigo-100 to-purple-100">
+                  {job.featuredImage ? (
+                    <Image
+                      src={job.featuredImage}
+                      alt={job.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-3">
+                          <Building2 className="w-10 h-10 text-indigo-500" />
+                        </div>
+                        <p className="text-gray-600 font-medium">{job.company}</p>
+                        <p className="text-gray-400 text-sm">Job Posting</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {(job.applicationLink || job.officialLink) && isOpen && (
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
                   <div className="text-center">
@@ -524,6 +659,7 @@ function JobContent({ job }: { job: JobWithComputed }) {
                     )}
                   </div>
 
+                  {/* ✅ Description with Sanitized Headings */}
                   {job.description && (
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -531,11 +667,27 @@ function JobContent({ job }: { job: JobWithComputed }) {
                         Job Description & Responsibilities
                       </h3>
                       <div 
-                        className="prose prose-sm max-w-none text-gray-600"
-                        dangerouslySetInnerHTML={{ __html: job.description }}
+                        className="prose prose-sm max-w-none text-gray-600
+                          prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                          prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                          prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                          prose-strong:text-gray-900 prose-strong:font-semibold
+                          prose-li:text-gray-700 prose-li:mb-1
+                          prose-ul:my-3 prose-ol:my-3"
+                        dangerouslySetInnerHTML={{ 
+                          __html: sanitizedDescription 
+                        }}
                       />
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* ✅ Share Buttons */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-sm text-gray-500 font-medium">Share this job:</span>
+                  <ShareButtons title={job.title} slug={job.slug} />
                 </div>
               </div>
             </div>

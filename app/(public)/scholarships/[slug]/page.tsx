@@ -2,15 +2,16 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
 import { cookies } from 'next/headers';
 import { postService, getCurrentYear, getDaysLeft, formatShortDate, isDeadlineNear } from '@/services/post/post.service';
 import { cacheTag, cacheLife } from 'next/cache';
 import { 
-   GraduationCap, MapPin, Eye, CheckCircle, Clock,
-  ChevronLeft, Award, DollarSign, ExternalLink, TrendingUp, Zap, AlertCircle
+  GraduationCap, MapPin, Eye, CheckCircle, Clock,
+  ChevronLeft, Award, DollarSign, ExternalLink, TrendingUp, Zap, AlertCircle,
+  Twitter, Facebook, Linkedin, Mail
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
@@ -36,10 +37,17 @@ interface ScholarshipDetail {
   viewCount: number;
   metaTitle: string | null;
   metaDescription: string | null;
+  metaKeywords: string | null;
   canonicalUrl: string | null;
+  robots: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
   ogImage: string | null;
+  twitterTitle: string | null;
+  twitterDescription: string | null;
   featuredImage: string | null;
   publishedAt: Date | null;
+  updatedAt: Date | null;
 }
 
 // Extended type with computed values
@@ -49,6 +57,9 @@ interface ScholarshipWithComputed extends ScholarshipDetail {
   computedFormattedDate: string;
   computedIsUrgent: boolean;
   computedIsOpen: boolean;
+  sanitizedContent: string;
+  sanitizedEligibility: string;
+  sanitizedCoverage: string;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -78,6 +89,94 @@ function formatFullDate(date: Date | null): string {
     month: 'long', 
     year: 'numeric'
   });
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ✅ Sanitize content - Convert H1 to H2
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  let sanitized = html;
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  sanitized = sanitized
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Add IDs to H2 and H3
+  sanitized = sanitized.replace(
+    /<h([2-3])>(.*?)<\/h\1>/gi,
+    (match, level, content) => {
+      const text = content.replace(/<[^>]*>/g, '');
+      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return `<h${level} id="${id}">${content}</h${level}>`;
+    }
+  );
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, slug }: { title: string; slug: string }) {
+  const url = `https://www.nextid.pk/scholarships/${slug}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
+
+// ============ BREADCRUMB SCHEMA ============
+function BreadcrumbSchema({ scholarship }: { scholarship: ScholarshipWithComputed }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "Scholarships", "item": "https://www.nextid.pk/scholarships" },
+      { "@type": "ListItem", "position": 3, "name": scholarship.title, "item": `https://www.nextid.pk/scholarships/${scholarship.slug}` }
+    ]
+  };
+  
+  return (
+    <script 
+      type="application/ld+json" 
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} 
+    />
+  );
 }
 
 // ============ GENERATE STATIC PARAMS ============
@@ -118,6 +217,10 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComput
     const computedIsUrgent = await isDeadlineNear(deadline, 14);
     const computedIsOpen = computedDaysLeft !== null && computedDaysLeft > 0;
     
+    const content = post.content || '';
+    const eligibility = getMetaValue(meta, 'eligibility', '');
+    const coverage = getMetaValue(meta, 'coverage', '');
+    
     return {
       id: post.id, 
       slug: post.slug, 
@@ -130,25 +233,35 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComput
       deadline: deadline,
       provider: getMetaValue(meta, 'organizationName', getMetaValue(meta, 'provider', 'Various')),
       amount: getMetaValue(meta, 'amount', null), 
-      eligibility: getMetaValue(meta, 'eligibility', null),
-      coverage: getMetaValue(meta, 'coverage', null), 
+      eligibility: eligibility,
+      coverage: coverage, 
       officialLink: getMetaValue(meta, 'officialLink', null),
       applicationLink: getMetaValue(meta, 'applicationLink', null),
       isFeatured: getMetaValue(meta, 'isFeatured', false), 
       isPopular: getMetaValue(meta, 'isPopular', false),
       viewCount: getMetaValue(meta, 'viewCount', 0), 
       metaTitle: getMetaValue(meta, 'metaTitle', null),
-      metaDescription: getMetaValue(meta, 'metaDescription', null), 
+      metaDescription: getMetaValue(meta, 'metaDescription', null),
+      metaKeywords: getMetaValue(meta, 'metaKeywords', null),
       canonicalUrl: getMetaValue(meta, 'canonicalUrl', null),
-      ogImage: getMetaValue(meta, 'ogImage', null), 
+      robots: getMetaValue(meta, 'robots', null),
+      ogTitle: getMetaValue(meta, 'ogTitle', null),
+      ogDescription: getMetaValue(meta, 'ogDescription', null),
+      ogImage: getMetaValue(meta, 'ogImage', null),
+      twitterTitle: getMetaValue(meta, 'twitterTitle', null),
+      twitterDescription: getMetaValue(meta, 'twitterDescription', null),
       featuredImage: post.featuredImage || null,
       publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
       // Computed values
       computedDaysLeft,
       computedShortDate,
       computedFormattedDate,
       computedIsUrgent,
       computedIsOpen,
+      sanitizedContent: sanitizeContent(content),
+      sanitizedEligibility: sanitizeContent(eligibility),
+      sanitizedCoverage: sanitizeContent(coverage),
     };
   } catch (error) {
     console.error('Error fetching scholarship detail:', error);
@@ -171,20 +284,37 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const currentYear = await getCurrentYear();
   const urgencyText = scholarship.computedIsUrgent && scholarship.computedDaysLeft ? `Apply urgently! ${scholarship.computedDaysLeft} days left. ` : '';
+  const robots = scholarship.robots || 'index, follow';
   
   return {
     title: scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`,
     description: scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
-    alternates: { canonical: scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}` },
+    keywords: scholarship.metaKeywords || undefined, // ✅ ADDED
+    robots: robots, // ✅ ADDED
+    alternates: {
+      canonical: scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`,
+      languages: { // ✅ ADDED
+        'en-US': scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`,
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID Team' }], // ✅ ADDED
     openGraph: {
-      title: scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`,
-      description: scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
+      title: scholarship.ogTitle || scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`,
+      description: scholarship.ogDescription || scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
       url: scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`,
       siteName: 'NextID.pk',
       images: [{ url: scholarship.ogImage || scholarship.featuredImage || '/og-image.png', width: 1200, height: 630 }],
       type: 'article',
+      publishedTime: scholarship.publishedAt?.toISOString(),
+      modifiedTime: scholarship.updatedAt?.toISOString(), // ✅ ADDED
     },
-    twitter: { card: 'summary_large_image', title: scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`, images: [scholarship.ogImage || scholarship.featuredImage || '/og-image.png'] },
+    twitter: { 
+      card: 'summary_large_image', 
+      title: scholarship.twitterTitle || scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`, 
+      description: scholarship.twitterDescription || scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
+      images: [scholarship.ogImage || scholarship.featuredImage || '/og-image.png'] 
+    },
   };
 }
 
@@ -200,11 +330,8 @@ function ScholarshipLoading() {
   );
 }
 
-// ============ CLIENT COMPONENT (RECEIVES PRE-COMPUTED VALUES) ============
+// ============ SCHOLARSHIP CONTENT COMPONENT ============
 function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithComputed }) {
-  'use client';
-  
-  // No useState needed - values are already computed on server
   const daysLeft = scholarship.computedDaysLeft;
   const shortDate = scholarship.computedShortDate;
   const formattedDate = scholarship.computedFormattedDate;
@@ -231,21 +358,11 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
     "applicationLink": scholarship.applicationLink || scholarship.officialLink,
     "datePublished": scholarship.publishedAt?.toISOString(),
   };
-  
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
-      { "@type": "ListItem", "position": 2, "name": "Scholarships", "item": "https://www.nextid.pk/scholarships" },
-      { "@type": "ListItem", "position": 3, "name": scholarship.title, "item": `https://www.nextid.pk/scholarships/${scholarship.slug}` }
-    ]
-  };
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scholarshipSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <BreadcrumbSchema scholarship={scholarship} />
       
       <main className="min-h-screen bg-gray-50">
         {/* Hero Section */}
@@ -253,7 +370,16 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
           <div className="absolute inset-0 bg-black/20"></div>
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
-              <Link href="/scholarships" className="inline-flex items-center gap-1 text-teal-200 hover:text-white transition mb-6 group">
+              {/* ✅ Breadcrumbs UI */}
+              <div className="text-sm text-teal-200 mb-2 flex items-center gap-2 flex-wrap">
+                <Link href="/" className="hover:text-white transition">Home</Link>
+                <span>›</span>
+                <Link href="/scholarships" className="hover:text-white transition">Scholarships</Link>
+                <span>›</span>
+                <span className="text-white font-medium truncate">{scholarship.title}</span>
+              </div>
+              
+              <Link href="/scholarships" className="inline-flex items-center gap-1 text-teal-200 hover:text-white transition mb-4 group">
                 <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
                 Back to Scholarships
               </Link>
@@ -265,6 +391,7 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
                 {!isOpen && scholarship.deadline && <span className="inline-flex items-center gap-1 bg-gray-500 text-white text-xs px-3 py-1 rounded-full">Closed</span>}
               </div>
               
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">{scholarship.title}</h1>
               <div className="hidden" aria-hidden="true">{metaDescriptionText}</div>
               <p className="text-xl text-teal-200 mb-4 flex items-center gap-2"><Award className="w-5 h-5" /> Offered by {scholarship.provider}</p>
@@ -284,6 +411,32 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="lg:w-2/3">
+              
+              {/* ✅ Featured Image with Fallback */}
+              <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+                <div className="relative w-full h-64 md:h-80 bg-gradient-to-br from-teal-100 to-emerald-100">
+                  {scholarship.featuredImage ? (
+                    <Image
+                      src={scholarship.featuredImage}
+                      alt={scholarship.title}
+                      fill
+                      className="object-cover"
+                      priority
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-3">
+                          <Award className="w-10 h-10 text-teal-500" />
+                        </div>
+                        <p className="text-gray-600 font-medium">{scholarship.provider}</p>
+                        <p className="text-gray-400 text-sm">Scholarship</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
               {(scholarship.applicationLink || scholarship.officialLink) && isOpen && (
                 <div className="bg-gradient-to-r from-green-50 to-teal-50 rounded-xl p-6 mb-6 border border-green-200">
                   <div className="text-center">
@@ -320,26 +473,64 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
                     <div className="bg-gray-50 rounded-lg p-4"><div className="text-gray-500 text-xs mb-1">Deadline</div><div className={`font-semibold ${isUrgent && isOpen ? 'text-red-600' : ''}`}>{formattedDate || 'TBA'}{daysLeft && isOpen && <span className="text-sm ml-1">({daysLeft} days left)</span>}</div></div>
                   </div>
 
+                  {/* ✅ Eligibility with Sanitized Headings */}
                   {scholarship.eligibility && (
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-teal-500" /> Eligibility Criteria</h3>
-                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: scholarship.eligibility }} />
+                      <div 
+                        className="prose prose-sm max-w-none
+                          prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                          prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                          prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                          prose-strong:text-gray-900 prose-strong:font-semibold
+                          prose-li:text-gray-700 prose-li:mb-1
+                          prose-ul:my-3 prose-ol:my-3"
+                        dangerouslySetInnerHTML={{ __html: scholarship.sanitizedEligibility }} 
+                      />
                     </div>
                   )}
 
+                  {/* ✅ Coverage with Sanitized Headings */}
                   {scholarship.coverage && (
                     <div className="border-t border-gray-100 pt-6 mt-4">
                       <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-teal-500" /> Scholarship Coverage</h3>
-                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: scholarship.coverage }} />
+                      <div 
+                        className="prose prose-sm max-w-none
+                          prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                          prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                          prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                          prose-strong:text-gray-900 prose-strong:font-semibold
+                          prose-li:text-gray-700 prose-li:mb-1
+                          prose-ul:my-3 prose-ol:my-3"
+                        dangerouslySetInnerHTML={{ __html: scholarship.sanitizedCoverage }} 
+                      />
                     </div>
                   )}
 
+                  {/* ✅ Content with Sanitized Headings */}
                   {scholarship.content && (
                     <div className="border-t border-gray-100 pt-6 mt-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Additional Information</h3>
-                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: scholarship.content }} />
+                      <div 
+                        className="prose prose-sm max-w-none
+                          prose-headings:text-gray-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
+                          prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                          prose-p:text-gray-700 prose-p:leading-relaxed prose-p:mb-4
+                          prose-strong:text-gray-900 prose-strong:font-semibold
+                          prose-li:text-gray-700 prose-li:mb-1
+                          prose-ul:my-3 prose-ol:my-3"
+                        dangerouslySetInnerHTML={{ __html: scholarship.sanitizedContent }} 
+                      />
                     </div>
                   )}
+                </div>
+              </div>
+              
+              {/* ✅ Share Buttons */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-sm text-gray-500 font-medium">Share this scholarship:</span>
+                  <ShareButtons title={scholarship.title} slug={scholarship.slug} />
                 </div>
               </div>
             </div>

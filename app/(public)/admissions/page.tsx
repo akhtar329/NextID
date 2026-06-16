@@ -9,7 +9,9 @@ import {
   MapPin,
   Clock, 
   ChevronRight,
-  Building2
+  Building2,
+  Search,
+  X
 } from "lucide-react";
 import { postService } from "@/services/post/post.service";
 import type { ExtendedPost } from "@/services/post/post.service";
@@ -17,14 +19,14 @@ import SidebarWidgets from "@/components/sections/Home/SidebarWidgets";
 import { generateJsonLd } from "@/lib/seo";
 import { cacheTag, cacheLife } from "next/cache";
 
-// Helper functions
+// ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
   const value = meta[key] as T;
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// Types
+// ============ TYPES ============
 interface Program {
   name: string;
   slug?: string;
@@ -49,6 +51,16 @@ function formatDate(date: Date | null): string {
   return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' });
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
 // ✅ Calculate priority score
 function getPriorityScore(status: string, closeDate: Date | null): number {
   const today = new Date();
@@ -68,14 +80,13 @@ function getPriorityScore(status: string, closeDate: Date | null): number {
   return 10;
 }
 
-// ✅ CACHED DATA FETCHING WITH NEW getList FUNCTION
-async function getAdmissionsData(page: number = 1, limit: number = 10) {
+// ============ CACHED DATA FETCHING ============
+async function getAdmissionsData(page: number = 1, limit: number = 10, filter: string = 'all', search: string = '') {
   "use cache";
   cacheTag("admissions-data");
   cacheLife("hours");
   
   try {
-    // ✅ NEW: getList instead of getPostsByType
     const posts = await postService.getList('admission', 200);
     
     if (!posts || !Array.isArray(posts)) {
@@ -108,6 +119,23 @@ async function getAdmissionsData(page: number = 1, limit: number = 10) {
         priorityScore: 0,
       };
     });
+    
+    // ✅ Apply filters
+    if (filter === 'open') {
+      admissions = admissions.filter(a => a.status === 'Open');
+    } else if (filter === 'closed') {
+      admissions = admissions.filter(a => a.status !== 'Open');
+    }
+    
+    // ✅ Apply search
+    if (search.trim()) {
+      const query = search.toLowerCase().trim();
+      admissions = admissions.filter(a => 
+        a.title.toLowerCase().includes(query) ||
+        a.instituteName.toLowerCase().includes(query) ||
+        a.cityName.toLowerCase().includes(query)
+      );
+    }
     
     // ✅ Calculate priority scores
     admissions = admissions.map(item => ({
@@ -163,7 +191,6 @@ async function getOpenCountForMetadata() {
   cacheLife("hours");
   
   try {
-    // ✅ NEW: getList instead of getPostsByType
     const posts = await postService.getList('admission', 200);
     if (!posts || !Array.isArray(posts)) return 0;
     return posts.filter(post => getMetaValue(post.meta, 'status', 'Open') === "Open").length;
@@ -182,9 +209,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Admissions ${currentYear} in Pakistan | NextID.pk`,
     description: `Find ${openCount}+ latest university admissions in Pakistan for ${currentYear}. Check deadlines, eligibility criteria, programs offered, and apply online.`,
     keywords: `admissions ${currentYear}, university admissions Pakistan, college admissions, admission schedule, education Pakistan`,
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/admissions',
+      languages: {
+        'en-US': 'https://www.nextid.pk/admissions',
+      },
     },
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Admissions ${currentYear} in Pakistan | NextID.pk`,
       description: `Find latest university admissions in Pakistan. Check deadlines and programs.`,
@@ -206,7 +239,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // ============ PAGINATION COMPONENT ==========
-function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number; totalPages: number; baseUrl: string }) {
+function Pagination({ currentPage, totalPages, baseUrl, filter, search }: { 
+  currentPage: number; 
+  totalPages: number; 
+  baseUrl: string;
+  filter: string;
+  search: string;
+}) {
   if (totalPages <= 1) return null;
   
   const pages = [];
@@ -222,10 +261,18 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
     pages.push(i);
   }
   
+  const buildUrl = (page: number) => {
+    const params = new URLSearchParams();
+    params.set('page', page.toString());
+    if (filter !== 'all') params.set('filter', filter);
+    if (search) params.set('search', search);
+    return `${baseUrl}?${params.toString()}`;
+  };
+  
   return (
     <div className="flex justify-center items-center gap-2 mt-8">
       <Link
-        href={`${baseUrl}?page=${currentPage - 1}`}
+        href={buildUrl(currentPage - 1)}
         className={`px-3 py-2 rounded-lg border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
       >
         Previous
@@ -233,7 +280,7 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
       
       {startPage > 1 && (
         <>
-          <Link href={`${baseUrl}?page=1`} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">1</Link>
+          <Link href={buildUrl(1)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">1</Link>
           {startPage > 2 && <span className="px-2">...</span>}
         </>
       )}
@@ -241,7 +288,7 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
       {pages.map(page => (
         <Link
           key={page}
-          href={`${baseUrl}?page=${page}`}
+          href={buildUrl(page)}
           className={`px-3 py-2 rounded-lg border ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
         >
           {page}
@@ -251,14 +298,14 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
       {endPage < totalPages && (
         <>
           {endPage < totalPages - 1 && <span className="px-2">...</span>}
-          <Link href={`${baseUrl}?page=${totalPages}`} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
+          <Link href={buildUrl(totalPages)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
             {totalPages}
           </Link>
         </>
       )}
       
       <Link
-        href={`${baseUrl}?page=${currentPage + 1}`}
+        href={buildUrl(currentPage + 1)}
         className={`px-3 py-2 rounded-lg border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
       >
         Next
@@ -267,8 +314,8 @@ function Pagination({ currentPage, totalPages, baseUrl }: { currentPage: number;
   );
 }
 
-// ============ MAIN PAGE WITH SUSPENSE ==========
-export default async function AdmissionsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+// ============ MAIN PAGE ============
+export default async function AdmissionsPage({ searchParams }: { searchParams: Promise<{ page?: string; filter?: string; search?: string }> }) {
   return (
     <Suspense fallback={<AdmissionsPageSkeleton />}>
       <AdmissionsContent searchParams={searchParams} />
@@ -276,13 +323,16 @@ export default async function AdmissionsPage({ searchParams }: { searchParams: P
   );
 }
 
-// ✅ Content component that awaits searchParams
-async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+// ============ CONTENT COMPONENT ============
+async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ page?: string; filter?: string; search?: string }> }) {
   const params = await searchParams;
   const currentPage = parseInt(params.page || '1');
+  const filter = params.filter || 'all';
+  const search = params.search || '';
   const currentYear = "2026";
   
-  const { admissions, featuredAdmissions, totalCount, openCount, totalPages, currentPage: page } = await getAdmissionsData(currentPage, 10);
+  const { admissions, featuredAdmissions, totalCount, openCount, totalPages, currentPage: page } = 
+    await getAdmissionsData(currentPage, 10, filter, search);
   
   const jsonLd = generateJsonLd({
     type: 'WebPage',
@@ -312,18 +362,20 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
       
       <main className="min-h-screen bg-gray-50">
         
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-16">
+        {/* ===== HERO SECTION ===== */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-12 md:py-16">
           <div className="container mx-auto px-4 text-center">
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full mb-4">
               <GraduationCap className="w-4 h-4" />
               <span className="text-sm">Admissions {currentYear}</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-3">University Admissions</h1>
-            <p className="text-lg text-blue-100 max-w-2xl mx-auto">{openCount} admissions currently open across Pakistan</p>
+            <h1 className="text-3xl md:text-5xl font-bold mb-3">University Admissions</h1>
+            <p className="text-lg text-blue-100 max-w-2xl mx-auto">
+              {openCount} admissions currently open across Pakistan
+            </p>
             <div className="flex flex-wrap justify-center gap-4 mt-6 text-sm">
               <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
-                <span className="font-semibold">{totalCount}</span> Total Admissions
+                <span className="font-semibold">{totalCount}</span> Total
               </div>
               <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
                 <span className="font-semibold">{openCount}</span> Open
@@ -335,50 +387,154 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="container mx-auto px-4 py-12">
+        {/* ===== MAIN CONTENT ===== */}
+        <div className="container mx-auto px-4 py-8 md:py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             
+            {/* ===== LEFT COLUMN ===== */}
             <main className="lg:w-2/3">
               
-              {/* Featured Admissions */}
+              {/* ===== FILTERS & SEARCH ===== */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Search */}
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <form method="GET" className="w-full">
+                      <input
+                        type="text"
+                        name="search"
+                        defaultValue={search}
+                        placeholder="Search admissions, institutes, cities..."
+                        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                      {search && (
+                        <Link 
+                          href="/admissions"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </Link>
+                      )}
+                    </form>
+                  </div>
+                  
+                  {/* Filter */}
+                  <div className="flex gap-2">
+                    <Link
+                      href={filter === 'all' ? '#' : '/admissions'}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                        filter === 'all' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      All
+                    </Link>
+                    <Link
+                      href={filter === 'open' ? '#' : '/admissions?filter=open'}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                        filter === 'open' 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Open
+                    </Link>
+                    <Link
+                      href={filter === 'closed' ? '#' : '/admissions?filter=closed'}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                        filter === 'closed' 
+                          ? 'bg-gray-600 text-white' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Closed
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== FEATURED ADMISSIONS ===== */}
               {featuredAdmissions.length > 0 && (
-                <div className="mb-10">
-                  <h2 className="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
                     Featured Admissions
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {featuredAdmissions.map((item: AdmissionItem) => (
                       <Link key={item.id} href={`/admissions/${item.slug}`} className="group">
-                        <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all border border-gray-100 h-full">
-                          <div className="relative h-36 w-full">
+                        <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all border border-gray-100 h-full flex flex-col">
+                          
+                          {/* Image Area - Fixed Height 140px */}
+                          <div className="relative h-[140px] w-full shrink-0 bg-gradient-to-br from-blue-100 to-indigo-100 overflow-hidden">
                             {item.featuredImage ? (
-                              <Image src={item.featuredImage} alt={item.title} fill className="object-cover group-hover:scale-105 transition duration-500" />
+                              <>
+                                <Image 
+                                  src={item.featuredImage} 
+                                  alt={item.title} 
+                                  fill 
+                                  className="object-cover group-hover:scale-105 transition duration-500"
+                                />
+                                {/* Gradient overlay for better text readability */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+                              </>
                             ) : (
-                              <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-indigo-100 flex items-center justify-center">
-                                <GraduationCap className="w-12 h-12 text-blue-400" />
+                              // Beautiful fallback with institute initials
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-20 h-20 rounded-full bg-white/90 shadow-lg flex items-center justify-center">
+                                  <span className="text-2xl font-bold text-blue-600">
+                                    {getInitials(item.instituteName)}
+                                  </span>
+                                </div>
                               </div>
                             )}
-                            <div className="absolute top-3 right-3 bg-amber-500 text-white text-xs px-2 py-1 rounded-full">Featured</div>
-                            {item.status === "Open" && (
-                              <div className="absolute bottom-3 left-3 bg-green-500 text-white text-xs px-2 py-1 rounded-full">Open</div>
-                            )}
-                          </div>
-                          <div className="p-4">
-                            <h3 className="font-bold text-gray-800 group-hover:text-blue-600 transition line-clamp-2 text-base">{item.title}</h3>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-2">
-                              <Building2 className="w-3.5 h-3.5" />
-                              <span>{item.instituteName}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                              <MapPin className="w-3.5 h-3.5" />
-                              <span>{item.cityName}</span>
+                            
+                            {/* Badges */}
+                            <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+                              <span className="bg-amber-500 text-white text-xs px-2.5 py-1 rounded-full font-medium shadow-lg">
+                                Featured
+                              </span>
+                              {item.status === "Open" && (
+                                <span className="bg-green-500 text-white text-xs px-2.5 py-1 rounded-full font-medium shadow-lg">
+                                  Open
+                                </span>
+                              )}
                             </div>
                             {item.closeDate && (
-                              <div className="flex items-center gap-1 text-xs text-orange-600 mt-2">
-                                <Clock className="w-3 h-3" />
-                                Deadline: {formatDate(item.closeDate)}
+                              <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                {formatDate(item.closeDate)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="p-4 flex-1 flex flex-col">
+                            <h3 className="font-bold text-gray-800 group-hover:text-blue-600 transition line-clamp-2 text-base">
+                              {item.title}
+                            </h3>
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1.5">
+                              <Building2 className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{item.instituteName}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-0.5">
+                              <MapPin className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{item.cityName}</span>
+                            </div>
+                            {item.programs && item.programs.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {item.programs.slice(0, 2).map((program, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full truncate max-w-[100px]">
+                                    {program.name}
+                                  </span>
+                                ))}
+                                {item.programs.length > 2 && (
+                                  <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full">
+                                    +{item.programs.length - 2}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
@@ -389,9 +545,9 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
                 </div>
               )}
 
-              {/* All Admissions with Pagination */}
+              {/* ===== ALL ADMISSIONS LIST ===== */}
               <div>
-                <h2 className="text-xl font-bold text-gray-800 mb-5 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="w-1 h-5 bg-blue-500 rounded-full"></span>
                   All Admissions
                   <span className="text-sm font-normal text-gray-500 ml-2">({totalCount})</span>
@@ -399,59 +555,113 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
                 
                 <div className="space-y-3">
                   {admissions.map((item: AdmissionItem) => (
-                    <Link key={item.id} href={`/admissions/${item.slug}`} className="block bg-white rounded-lg border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group">
-                      <div className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition">
-                            <GraduationCap className="w-5 h-5 text-blue-600" />
+                    <Link key={item.id} href={`/admissions/${item.slug}`} className="block">
+                      <div className="bg-white rounded-lg border border-gray-100 hover:border-blue-200 hover:shadow-md transition-all group">
+                        <div className="p-4 flex items-start gap-4">
+                          
+                          {/* Thumbnail - Fixed 48x48 with fallback */}
+                          <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+                            {item.featuredImage ? (
+                              <div className="relative w-full h-full">
+                                <Image 
+                                  src={item.featuredImage} 
+                                  alt={item.title} 
+                                  fill 
+                                  className="object-cover group-hover:scale-105 transition duration-300"
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-sm font-bold text-blue-600">
+                                {getInitials(item.instituteName)}
+                              </span>
+                            )}
                           </div>
+                          
+                          {/* Content */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
                               <h3 className="font-semibold text-gray-800 group-hover:text-blue-600 transition line-clamp-1 text-sm md:text-base">
                                 {item.title}
                               </h3>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
-                                item.status === "Open" ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                                item.status === "Open" 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-gray-100 text-gray-500'
                               }`}>
                                 {item.status}
                               </span>
                             </div>
+                            
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mt-1">
-                              <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{item.instituteName}</span>
-                              <span>•</span>
-                              <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{item.cityName}</span>
-                              {item.closeDate && (<><span>•</span><span className="flex items-center gap-1 text-orange-600"><Clock className="w-3 h-3" />{formatDate(item.closeDate)}</span></>)}
+                              <span className="flex items-center gap-1">
+                                <Building2 className="w-3 h-3" />
+                                {item.instituteName}
+                              </span>
+                              <span className="text-gray-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {item.cityName}
+                              </span>
+                              {item.closeDate && (
+                                <>
+                                  <span className="text-gray-300">•</span>
+                                  <span className={`flex items-center gap-1 ${item.status === "Open" ? 'text-orange-600' : 'text-gray-400'}`}>
+                                    <Clock className="w-3 h-3" />
+                                    {formatDate(item.closeDate)}
+                                  </span>
+                                </>
+                              )}
                             </div>
+                            
                             {item.programs && item.programs.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 mt-2">
-                                {item.programs.slice(0, 2).map((program, idx) => (
-                                  <span key={idx} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{program.name}</span>
+                                {item.programs.slice(0, 3).map((program, idx) => (
+                                  <span key={idx} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full truncate max-w-[120px]">
+                                    {program.name}
+                                  </span>
                                 ))}
-                                {item.programs.length > 2 && (
-                                  <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full">+{item.programs.length - 2}</span>
+                                {item.programs.length > 3 && (
+                                  <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full">
+                                    +{item.programs.length - 3}
+                                  </span>
                                 )}
                               </div>
                             )}
                           </div>
-                          <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+                          
+                          <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0 self-center" />
                         </div>
                       </div>
                     </Link>
                   ))}
                 </div>
                 
-                <Pagination currentPage={page} totalPages={totalPages} baseUrl="/admissions" />
+                {admissions.length === 0 && (
+                  <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
+                    <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700">No admissions found</h3>
+                    <p className="text-gray-400 text-sm mt-1">
+                      {search ? 'Try adjusting your search or filters' : 'Check back later for new admissions'}
+                    </p>
+                    {search && (
+                      <Link href="/admissions" className="inline-block mt-4 text-blue-600 hover:underline text-sm">
+                        Clear search
+                      </Link>
+                    )}
+                  </div>
+                )}
+                
+                <Pagination 
+                  currentPage={page} 
+                  totalPages={totalPages} 
+                  baseUrl="/admissions"
+                  filter={filter}
+                  search={search}
+                />
               </div>
-              
-              {admissions.length === 0 && (
-                <div className="text-center py-16 bg-white rounded-xl">
-                  <GraduationCap className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700">No admissions found</h3>
-                  <p className="text-gray-400 text-sm mt-1">Check back later for new admissions</p>
-                </div>
-              )}
             </main>
             
+            {/* ===== RIGHT COLUMN ===== */}
             <aside className="lg:w-1/3">
               <div className="lg:sticky lg:top-6 space-y-6">
                 <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
@@ -459,6 +669,7 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
                 </Suspense>
               </div>
             </aside>
+            
           </div>
         </div>
       </main>
@@ -466,7 +677,7 @@ async function AdmissionsContent({ searchParams }: { searchParams: Promise<{ pag
   );
 }
 
-// ✅ Skeleton component for loading state
+// ============ SKELETON ============
 function AdmissionsPageSkeleton() {
   return (
     <div className="min-h-screen bg-gray-50">
@@ -488,6 +699,7 @@ function AdmissionsPageSkeleton() {
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="lg:w-2/3">
             <div className="animate-pulse space-y-6">
+              <div className="h-10 bg-gray-200 rounded-lg"></div>
               <div className="h-8 w-48 bg-gray-200 rounded"></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="bg-gray-200 rounded-xl h-64"></div>
@@ -495,9 +707,9 @@ function AdmissionsPageSkeleton() {
               </div>
               <div className="h-8 w-40 bg-gray-200 rounded mt-8"></div>
               <div className="space-y-3">
-                <div className="bg-gray-200 rounded-lg h-24"></div>
-                <div className="bg-gray-200 rounded-lg h-24"></div>
-                <div className="bg-gray-200 rounded-lg h-24"></div>
+                <div className="bg-gray-200 rounded-lg h-20"></div>
+                <div className="bg-gray-200 rounded-lg h-20"></div>
+                <div className="bg-gray-200 rounded-lg h-20"></div>
               </div>
             </div>
           </div>

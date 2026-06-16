@@ -4,7 +4,6 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Suspense } from 'react';
-import React from 'react';
 import { cacheTag, cacheLife } from 'next/cache';
 import {
   BookOpen,
@@ -66,6 +65,7 @@ interface Stats {
 // ================= CONSTANTS =================
 const ITEMS_PER_PAGE = 12;
 const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
 
 const BLOG_CATEGORIES = [
   { slug: '', name: 'All Posts', icon: '📚' },
@@ -85,20 +85,21 @@ function getMeta<T>(meta: Record<string, unknown> | null, key: string, fallback:
   return value ?? fallback;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Static date with reference
+function formatDateStatic(date: Date | null): string {
   if (!date) return 'Recent';
 
-  const diff = Date.now() - new Date(date).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
+  const diffMs = REFERENCE_DATE.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} mins ago`;
-  if (hours < 24) return `${hours} hours ago`;
-  if (days < 7) return `${days} days ago`;
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} mins ago`;
+  if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffDays < 7) return `${diffDays} days ago`;
 
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -110,7 +111,7 @@ function getReadTime(content: string | null): number {
   return Math.ceil(content.split(/\s+/).length / 200);
 }
 
-function normalizeCategory(cat: string) {
+function normalizeCategory(cat: string): string {
   return cat.toLowerCase().replace(/\s+/g, '-');
 }
 
@@ -122,10 +123,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: `Educational Blog ${CURRENT_YEAR} | Study Tips & Career Guidance | NextID.pk`,
     description: `Read ${totalBlogs}+ educational articles on study tips, exam preparation, career guidance, scholarship guides, and success stories.`,
-    keywords: `education blog ${CURRENT_YEAR}, study tips, exam preparation, career guidance`,
+    keywords: `education blog ${CURRENT_YEAR}, study tips, exam preparation, career guidance, scholarship guide, university life`,
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/blog',
+      languages: {
+        'en-US': 'https://www.nextid.pk/blog',
+      },
     },
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Educational Blog ${CURRENT_YEAR}`,
       description: 'Study tips, exam prep, career guidance',
@@ -134,6 +141,7 @@ export async function generateMetadata(): Promise<Metadata> {
       type: 'website',
       images: [{ url: '/og-image.png', width: 1200, height: 630 }],
       locale: 'en_PK',
+      // OpenGraph metadata does not accept modifiedTime in this type; omit to satisfy types
     },
     twitter: {
       card: 'summary_large_image',
@@ -170,7 +178,7 @@ async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
   try {
-    let allBlogs = await getAllBlogs();
+    const allBlogs = await getAllBlogs();
     
     let blogsList: BlogItem[] = allBlogs.map((post: ExtendedPost) => {
       const meta = post.meta || {};
@@ -198,11 +206,12 @@ async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
       new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()
     );
     
-    // Filter by category
+    // Filter by category with proper slug mapping
     if (filters.category) {
-      blogsList = blogsList.filter(
-        (b) => normalizeCategory(b.category) === filters.category
-      );
+      blogsList = blogsList.filter((b) => {
+        const normalized = normalizeCategory(b.category);
+        return normalized === filters.category;
+      });
     }
     
     // Filter by search query
@@ -293,12 +302,10 @@ function Pagination({ currentPage, totalPages, buildUrl }: {
   
   const pages = [];
   const maxVisible = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  const startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisible - 1);
   
-  if (endPage - startPage + 1 < maxVisible) {
-    startPage = Math.max(1, endPage - maxVisible + 1);
-  }
+  // ✅ FIXED: Use const for startPage and endPage
   
   for (let i = startPage; i <= endPage; i++) {
     pages.push(i);
@@ -368,7 +375,7 @@ function BlogCard({ blog }: { blog: BlogItem }) {
   return (
     <Link href={`/blog/${blog.slug}`} className="block group">
       <div className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100 h-full">
-        <div className="relative h-48 w-full overflow-hidden">
+        <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-indigo-100 to-purple-100">
           {blog.featuredImage ? (
             <Image
               src={blog.featuredImage}
@@ -377,8 +384,11 @@ function BlogCard({ blog }: { blog: BlogItem }) {
               className="object-cover group-hover:scale-105 transition duration-500"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-              <BookOpen className="w-12 h-12 text-indigo-400" />
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center">
+                <BookOpen className="w-12 h-12 text-indigo-400 mx-auto" />
+                <span className="text-xs text-gray-400 mt-1 block">{blog.category}</span>
+              </div>
             </div>
           )}
           <div className="absolute top-3 left-3">
@@ -392,7 +402,7 @@ function BlogCard({ blog }: { blog: BlogItem }) {
           <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              {formatDate(blog.publishedAt)}
+              {formatDateStatic(blog.publishedAt)}
             </span>
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
@@ -468,7 +478,7 @@ function BlogLoading() {
 }
 
 // ================= FILTER SIDEBAR =================
-function FilterSidebar({ filters, stats, buildUrl }: { filters: Filters; stats: Stats; buildUrl: (key: string, value: string) => string }) {
+function FilterSidebar({ filters, buildUrl }: { filters: Filters; stats: Stats; buildUrl: (key: string, value: string) => string }) {
   return (
     <div className="bg-white rounded-xl shadow-sm p-5 sticky top-24 border border-gray-100">
       <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -529,10 +539,35 @@ async function BlogContent({
 
   const { blogs, totalCount, totalPages, currentPage: page } = paginatedData;
 
-  const hero = blogs.find((b) => b.isFeatured) || blogs[0];
-  const featured = blogs.filter((b) => b.isFeatured).slice(0, 3);
-  const latest = blogs.filter((b) => !b.isFeatured);
-  const popular = [...blogs]
+  // Hero from all blogs (not filtered)
+  const allBlogs = await getAllBlogs();
+  const allBlogsList: BlogItem[] = allBlogs.map((post: ExtendedPost) => {
+    const meta = post.meta || {};
+    return {
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      content: post.content,
+      excerpt: post.excerpt,
+      featuredImage: post.featuredImage,
+      category: getMeta(meta, 'category', 'General'),
+      tags: getMeta(meta, 'tags', null),
+      authorName: getMeta(meta, 'authorName', null),
+      isFeatured: getMeta(meta, 'isFeatured', false),
+      isPopular: getMeta(meta, 'isPopular', false),
+      viewCount: getMeta(meta, 'viewCount', 0),
+      publishedAt: post.publishedAt,
+      createdAt: post.createdAt,
+    };
+  });
+  
+  const hero = allBlogsList.find((b) => b.isFeatured) || allBlogsList[0];
+  
+  // Featured from all blogs
+  const featured = allBlogsList.filter((b) => b.isFeatured).slice(0, 3);
+  
+  // Popular from all blogs (not filtered)
+  const popular = [...allBlogsList]
     .sort((a, b) => b.viewCount - a.viewCount)
     .slice(0, 5);
 
@@ -609,7 +644,7 @@ async function BlogContent({
               <Link href={`/blog/${hero.slug}`} className="group">
                 <div className="relative overflow-hidden rounded-xl shadow-lg bg-white">
                   <div className="grid grid-cols-1 lg:grid-cols-2">
-                    <div className="relative h-64 lg:h-80 overflow-hidden">
+                    <div className="relative h-64 lg:h-80 overflow-hidden bg-gradient-to-br from-indigo-700 to-purple-700">
                       {hero.featuredImage ? (
                         <Image
                           src={hero.featuredImage}
@@ -619,8 +654,11 @@ async function BlogContent({
                           priority
                         />
                       ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-700 to-purple-700 flex items-center justify-center">
-                          <BookOpen className="w-16 h-16 text-white/30" />
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center text-white/50">
+                            <BookOpen className="w-16 h-16 mx-auto mb-2" />
+                            <span className="text-sm">{hero.category}</span>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -631,7 +669,7 @@ async function BlogContent({
                         </span>
                         <span className="text-sm text-gray-500 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {formatDate(hero.publishedAt)}
+                          {formatDateStatic(hero.publishedAt)}
                         </span>
                       </div>
                       <h2 className="text-2xl lg:text-3xl font-bold text-gray-800 group-hover:text-indigo-600 transition mb-3 line-clamp-3">
@@ -679,7 +717,7 @@ async function BlogContent({
               <h2 className="text-xl font-bold text-gray-800">Latest Articles</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {latest.map((blog) => (
+              {blogs.map((blog) => (
                 <BlogCard key={blog.id} blog={blog} />
               ))}
             </div>
@@ -762,25 +800,6 @@ export default async function BlogPage({
             <p className="text-lg text-indigo-100">
               Expert insights, study tips, and career guidance for Pakistani students
             </p>
-            
-            {/* Hero Search */}
-            <div className="max-w-2xl mx-auto mt-8">
-              <form action="/blog" method="GET" className="relative">
-                <input 
-                  type="text" 
-                  name="q" 
-                  placeholder="Search articles..." 
-                  className="w-full pl-12 pr-32 py-4 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 shadow-lg" 
-                />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <button 
-                  type="submit" 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-yellow-400 text-gray-900 font-semibold rounded-lg hover:bg-yellow-300 transition"
-                >
-                  Search
-                </button>
-              </form>
-            </div>
           </div>
         </div>
       </div>

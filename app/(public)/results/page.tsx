@@ -2,8 +2,8 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { 
@@ -13,6 +13,10 @@ import {
   Search,
   ChevronRight,
   Award,
+  Twitter,
+  Facebook,
+  Linkedin,
+  Mail
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
@@ -32,6 +36,7 @@ interface ResultItem {
   cityName: string | null;
   isPopular: boolean;
   viewCount: number;
+  featuredImage: string | null;
 }
 
 interface Filters {
@@ -59,6 +64,8 @@ interface Stats {
 
 // ============ CONSTANTS ============
 const ITEMS_PER_PAGE = 10;
+const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
 
 const RESULT_TYPES = [
   { slug: '', name: 'All Results', icon: '📋' },
@@ -87,35 +94,85 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Static date with reference
+function formatDateStatic(date: Date | null): string {
   if (!date) return 'TBA';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'short',
     year: 'numeric'
   });
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ============ SHARE BUTTONS ============
+function ShareButtons({ title, url }: { title: string; url: string }) {
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(title);
+  
+  return (
+    <div className="flex gap-2">
+      <a href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-lg flex items-center justify-center transition">
+        <Twitter className="w-4 h-4" />
+      </a>
+      <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-700 hover:bg-blue-800 text-white rounded-lg flex items-center justify-center transition">
+        <Facebook className="w-4 h-4" />
+      </a>
+      <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodedUrl}`}
+        target="_blank" rel="noopener noreferrer nofollow"
+        className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center transition">
+        <Linkedin className="w-4 h-4" />
+      </a>
+      <a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+        className="w-8 h-8 bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center justify-center transition">
+        <Mail className="w-4 h-4" />
+      </a>
+    </div>
+  );
+}
+
 // ============ CACHED PAGINATED DATA FETCHING ============
-// ✅ Sirf requested page ke results fetch honge
+async function getAllResults(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("results-all");
+  cacheLife("hours");
+  
+  try {
+    const results = await postService.getList('result', 1000);
+    return results || [];
+  } catch (error) {
+    console.error('Error fetching all results:', error);
+    return [];
+  }
+}
+
 async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse> {
   "use cache";
   
-  // ✅ Different cache tag for each page + filters
   const cacheKey = `results-${filters.page || 1}-${filters.board || 'all'}-${filters.year || 'all'}-${filters.level || 'all'}-${filters.q || 'all'}`;
   cacheTag(cacheKey);
   cacheLife("hours");
   
+  const currentPage = filters.page || 1;
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  
   try {
-    // Step 1: Sirf total count ke liye query (light query)
-    const totalCount = await postService.getTotalCount('result');
+    let allResults = await getAllResults();
     
-    // Step 2: Sirf requested page ke results fetch karo
-    const offset = ((filters.page || 1) - 1) * ITEMS_PER_PAGE;
-    const posts = await postService.getList('result', ITEMS_PER_PAGE, offset);
-    
-    // Step 3: Transform results
-    let resultsList: ResultItem[] = posts.map((post: ExtendedPost) => {
+    let resultsList: ResultItem[] = allResults.map((post: ExtendedPost) => {
       const meta = post.meta || {};
       
       let resultDate: Date | null = null;
@@ -135,7 +192,7 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
         id: post.id,
         slug: post.slug,
         title: post.title,
-        year: getMetaValue(meta, 'year', new Date().getFullYear()),
+        year: getMetaValue(meta, 'year', parseInt(CURRENT_YEAR)),
         resultDate: resultDate,
         boardName: getMetaValue(meta, 'boardName', null),
         boardSlug: getMetaValue(meta, 'boardSlug', null),
@@ -144,10 +201,14 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
         cityName: getMetaValue(meta, 'cityName', null),
         isPopular: getMetaValue(meta, 'isPopular', false),
         viewCount: getMetaValue(meta, 'viewCount', 0),
+        featuredImage: post.featuredImage || null,
       };
     });
     
-    // Apply filters (client-side after fetching)
+    // Sort by year (newest first)
+    resultsList.sort((a, b) => b.year - a.year);
+    
+    // Apply filters
     if (filters.board) {
       resultsList = resultsList.filter(r => 
         r.boardSlug?.toLowerCase() === filters.board?.toLowerCase()
@@ -180,13 +241,15 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
       );
     }
     
+    const totalCount = resultsList.length;
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    const paginatedResults = resultsList.slice(offset, offset + ITEMS_PER_PAGE);
     
     return {
-      results: resultsList,
+      results: paginatedResults,
       totalCount,
       totalPages,
-      currentPage: filters.page || 1,
+      currentPage,
     };
   } catch (error) {
     console.error('Error fetching paginated results:', error);
@@ -199,17 +262,16 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
   }
 }
 
-// ============ STATS (Light query - sirf count) ============
+// ============ STATS ============
 async function getStats(): Promise<Stats> {
   "use cache";
   cacheTag("results-stats");
   cacheLife("hours");
   
   try {
-    const totalResults = await postService.getTotalCount('result');
+    const allResults = await getAllResults();
+    const totalResults = allResults.length;
     
-    // Get unique years from meta (light query)
-    const allResults = await postService.getList('result', 1000);
     const yearsSet = new Set<number>();
     allResults.forEach(r => {
       const meta = r.meta || {};
@@ -239,14 +301,23 @@ async function getStats(): Promise<Stats> {
 
 // ============ METADATA ============
 export async function generateMetadata(): Promise<Metadata> {
-  const totalResults = await postService.getTotalCount('result');
-  const currentYear = "2026";
+  const allResults = await getAllResults();
+  const totalResults = allResults.length;
+  const currentYear = CURRENT_YEAR;
   
   return {
     title: `Exam Results ${currentYear} Pakistan | ${totalResults}+ Board & University Results | NextID.pk`,
     description: `Check ${totalResults}+ board and university results ${currentYear} in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results.`,
     keywords: `exam results ${currentYear}, board results ${currentYear}, matric results, intermediate results`,
-    alternates: { canonical: 'https://www.nextid.pk/results' },
+    robots: 'index, follow', // ✅ ADDED
+    alternates: {
+      canonical: 'https://www.nextid.pk/results',
+      languages: { // ✅ ADDED
+        'en-US': 'https://www.nextid.pk/results',
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
     openGraph: {
       title: `Exam Results ${currentYear} Pakistan - Board & University Results | NextID.pk`,
       description: `Check ${totalResults}+ board and university results for Matric, Intermediate, BA, BSc, MA, MSc.`,
@@ -344,6 +415,30 @@ function Pagination({ currentPage, totalPages, baseUrl, filters }: {
   );
 }
 
+// ============ STATS CARDS ============
+function StatsCards({ stats }: { stats: Stats }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.totalResults}</div>
+        <div className="text-xs text-gray-500">Total Results</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.totalBoards}</div>
+        <div className="text-xs text-gray-500">Boards</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.totalUniversities}</div>
+        <div className="text-xs text-gray-500">Universities</div>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+        <div className="text-2xl font-bold text-green-600">{stats.recentResults}</div>
+        <div className="text-xs text-gray-500">Recent Results</div>
+      </div>
+    </div>
+  );
+}
+
 // ============ LOADING COMPONENT ============
 function ResultsLoading() {
   return (
@@ -390,7 +485,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
     page: typeof params.page === 'string' ? parseInt(params.page) : 1,
   };
 
-  // ✅ Sirf current page ke results fetch honge
   const { results, totalCount, totalPages, currentPage } = await getPaginatedResults(filters);
   const stats = await getStats();
 
@@ -405,7 +499,9 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
     return urlParams.toString() ? `/results?${urlParams.toString()}` : '/results';
   };
 
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
+  const shareUrl = 'https://www.nextid.pk/results';
+  const shareTitle = `Exam Results ${currentYear} - Board & University Results Pakistan`;
   
   const jsonLd = generateJsonLd({
     type: 'WebPage',
@@ -438,6 +534,13 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
+      {/* ✅ Breadcrumbs UI */}
+      <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+        <Link href="/" className="hover:text-green-600 transition">Home</Link>
+        <span>›</span>
+        <span className="text-gray-700 font-medium">Results</span>
+      </div>
+      
       <div className="flex flex-col lg:flex-row gap-8">
         
         {/* LEFT SIDEBAR - Filters */}
@@ -453,7 +556,7 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
                 <input 
                   type="text" 
                   name="q" 
-                  defaultValue={filters.q} 
+                  defaultValue={filters.q || ''} 
                   placeholder="Search results..." 
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" 
                 />
@@ -558,6 +661,9 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
         {/* MAIN CONTENT */}
         <div className="flex-1">
           
+          {/* ✅ Stats Cards */}
+          <StatsCards stats={stats} />
+          
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -567,6 +673,14 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span className="flex items-center gap-1"><Award className="w-3 h-3" /> Page {currentPage} of {totalPages}</span>
               </div>
+            </div>
+          </div>
+
+          {/* ✅ Share Buttons */}
+          <div className="bg-white rounded-xl shadow-sm p-3 mb-4 border border-gray-100">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-sm text-gray-500 font-medium">Share this page:</span>
+              <ShareButtons title={shareTitle} url={shareUrl} />
             </div>
           </div>
 
@@ -580,8 +694,21 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                              <FileText className="w-5 h-5 text-green-600" />
+                            {/* ✅ Image with Fallback */}
+                            <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-green-100 to-teal-100">
+                              {r.featuredImage ? (
+                                <Image
+                                  src={r.featuredImage}
+                                  alt={r.title}
+                                  width={48}
+                                  height={48}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <FileText className="w-5 h-5 text-green-600" />
+                                </div>
+                              )}
                             </div>
                             <div className="flex-1">
                               <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-green-600 transition-colors">
@@ -594,7 +721,7 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
                                 {r.resultDate && (
                                   <span className="flex items-center gap-1">
                                     <Calendar className="w-3 h-3" />
-                                    {formatDate(r.resultDate)}
+                                    {formatDateStatic(r.resultDate)}
                                   </span>
                                 )}
                                 <span className="flex items-center gap-1">Year: {r.year}</span>
@@ -632,7 +759,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
             )}
           </div>
           
-          {/* ✅ Pagination Component */}
           <Pagination 
             currentPage={currentPage} 
             totalPages={totalPages} 
@@ -643,7 +769,7 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
         
         {/* RIGHT SIDEBAR */}
         <aside className="lg:w-72 flex-shrink-0">
-          <div className="sticky top-24">
+          <div className="sticky top-24 space-y-6">
             <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
               <SidebarWidgets />
             </Suspense>
@@ -657,10 +783,19 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
 
 // ============ MAIN PAGE ============
 export default async function ResultsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const currentYear = "2026";
+  const currentYear = CURRENT_YEAR;
   
   return (
     <main className="min-h-screen bg-gray-50">
+      
+      {/* ✅ Breadcrumbs UI */}
+      <div className="container mx-auto px-4 py-4">
+        <nav className="flex items-center gap-2 text-sm text-gray-500">
+          <Link href="/" className="hover:text-green-600 transition">Home</Link>
+          <span>›</span>
+          <span className="text-gray-700 font-medium">Results</span>
+        </nav>
+      </div>
       
       <div className="relative bg-gradient-to-r from-green-600 to-teal-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>

@@ -2,9 +2,9 @@
 
 import { Metadata } from 'next';
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { 
@@ -21,6 +21,7 @@ import {
   Zap
 } from 'lucide-react';
 import { cacheTag, cacheLife } from 'next/cache';
+import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
 interface NewsDetail {
@@ -68,6 +69,10 @@ interface Heading {
   level: number;
 }
 
+// ============ CONSTANTS ============
+const CURRENT_YEAR = '2026';
+const REFERENCE_DATE = new Date('2024-01-01T00:00:00.000Z');
+
 // ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -75,18 +80,20 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Static date with reference
+function formatDateStatic(date: Date | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
 }
 
-function formatShortDate(date: Date | null): string {
+// ✅ FIXED: Static short date with reference
+function formatShortDateStatic(date: Date | null): string {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -123,6 +130,43 @@ function extractHeadings(content: string | null): Heading[] {
   }
   
   return headings.slice(0, 6);
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(word => word.length > 0)
+    .slice(0, 2)
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ✅ Sanitize content - Convert H1 to H2
+function sanitizeContent(html: string | null): string {
+  if (!html) return '';
+  
+  let sanitized = html;
+  
+  // Convert H1 to H2 (since we already have H1 in hero)
+  sanitized = sanitized
+    .replace(/<h1[^>]*>/gi, '<h2>')
+    .replace(/<\/h1>/gi, '</h2>');
+  
+  // Add IDs to H2 and H3
+  sanitized = sanitized.replace(
+    /<h([2-3])>(.*?)<\/h\1>/gi,
+    (match, level, content) => {
+      const text = content.replace(/<[^>]*>/g, '');
+      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return `<h${level} id="${id}">${content}</h${level}>`;
+    }
+  );
+  
+  // Remove empty paragraphs
+  sanitized = sanitized.replace(/<p>\s*<\/p>/g, '');
+  
+  return sanitized;
 }
 
 // ============ SHARE BUTTONS COMPONENT ============
@@ -199,7 +243,7 @@ function TableOfContents({ headings }: { headings: Heading[] }) {
   );
 }
 
-// ============ GENERATE STATIC PARAMS (FIXED) ============
+// ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
     const posts = await postService.getList('news', 100);
@@ -210,7 +254,6 @@ export async function generateStaticParams() {
       }));
     }
     
-    // Return placeholder for build validation
     return [{ slug: 'placeholder' }];
     
   } catch (error) {
@@ -319,7 +362,6 @@ async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   
-  // Handle placeholder
   if (slug === 'placeholder') {
     return {
       title: 'News Not Found | NextID.pk',
@@ -345,31 +387,62 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     `${breakingPrefix}${newsItem.title} | ${newsItem.category} News | NextID.pk`;
   
   const seoDescription = newsItem.metaDescription || 
-    `${newsItem.excerpt || `Latest ${newsItem.category} news: ${newsItem.title}`} Published on ${formatShortDate(newsItem.publishedAt)}. Read time: ${readTime} min.`;
+    `${newsItem.excerpt || `Latest ${newsItem.category} news: ${newsItem.title}`} Published on ${formatShortDateStatic(newsItem.publishedAt)}. Read time: ${readTime} min.`;
   
   const canonicalUrl = newsItem.canonicalUrl || `https://www.nextid.pk/news/${newsItem.slug}`;
   const ogImage = newsItem.ogImage || newsItem.featuredImage || '/og-image.png';
+  const robots = newsItem.robots || 'index, follow';
 
   return {
     title: seoTitle,
     description: seoDescription,
-    alternates: { canonical: canonicalUrl },
+    keywords: newsItem.metaKeywords || undefined, // ✅ ADDED
+    robots: robots, // ✅ ADDED
+    alternates: {
+      canonical: canonicalUrl,
+      languages: { // ✅ ADDED
+        'en-US': canonicalUrl,
+      },
+    },
+    publisher: 'NextID.pk', // ✅ ADDED
+    authors: [{ name: newsItem.authorName || 'NextID Team' }], // ✅ ADDED
     openGraph: {
-      title: seoTitle,
-      description: seoDescription,
+      title: newsItem.ogTitle || seoTitle,
+      description: newsItem.ogDescription || seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: newsItem.publishedAt?.toISOString(),
+      modifiedTime: newsItem.updatedAt?.toISOString(), // ✅ ADDED
     },
     twitter: {
       card: 'summary_large_image',
-      title: seoTitle,
-      description: seoDescription,
+      title: newsItem.twitterTitle || seoTitle,
+      description: newsItem.twitterDescription || seoDescription,
       images: [ogImage],
     },
   };
+}
+
+// ============ SCHEMA: BREADCRUMB ============
+function BreadcrumbSchema({ newsItem }: { newsItem: NewsDetail }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
+      { "@type": "ListItem", "position": 2, "name": "News", "item": "https://www.nextid.pk/news" },
+      { "@type": "ListItem", "position": 3, "name": newsItem.title.substring(0, 50), "item": `https://www.nextid.pk/news/${newsItem.slug}` }
+    ]
+  };
+  
+  return (
+    <script 
+      type="application/ld+json" 
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} 
+    />
+  );
 }
 
 // ============ LOADING COMPONENT ============
@@ -386,7 +459,6 @@ function NewsLoading() {
 
 // ============ NEWS CONTENT COMPONENT ============
 async function NewsContent({ slug }: { slug: string }) {
-  // Handle placeholder
   if (slug === 'placeholder') {
     notFound();
   }
@@ -400,9 +472,10 @@ async function NewsContent({ slug }: { slug: string }) {
   const relatedNews = await getRelatedNews(newsItem.id);
   const readTime = getReadTime(newsItem.content);
   const headings = extractHeadings(newsItem.content);
+  const sanitizedContent = sanitizeContent(newsItem.content);
   
   const metaDescriptionText = newsItem.excerpt || 
-    `${newsItem.title}. ${newsItem.category} news update. Published on ${formatShortDate(newsItem.publishedAt)}. Read time: ${readTime} min.`;
+    `${newsItem.title}. ${newsItem.category} news update. Published on ${formatShortDateStatic(newsItem.publishedAt)}. Read time: ${readTime} min.`;
 
   const newsArticleSchema = {
     "@context": "https://schema.org",
@@ -423,21 +496,11 @@ async function NewsContent({ slug }: { slug: string }) {
     },
     "articleSection": newsItem.category
   };
-  
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nextid.pk/" },
-      { "@type": "ListItem", "position": 2, "name": "News", "item": "https://www.nextid.pk/news" },
-      { "@type": "ListItem", "position": 3, "name": newsItem.title.substring(0, 50), "item": `https://www.nextid.pk/news/${newsItem.slug}` }
-    ]
-  };
 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(newsArticleSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <BreadcrumbSchema newsItem={newsItem} />
       
       <main className="min-h-screen bg-gray-50">
         
@@ -446,9 +509,18 @@ async function NewsContent({ slug }: { slug: string }) {
           <div className="container mx-auto px-4 py-12">
             <div className="max-w-4xl mx-auto">
               
+              {/* ✅ Breadcrumbs UI */}
+              <div className="text-sm text-white/60 mb-2 flex items-center gap-2 flex-wrap">
+                <Link href="/" className="hover:text-white transition">Home</Link>
+                <span>›</span>
+                <Link href="/news" className="hover:text-white transition">News</Link>
+                <span>›</span>
+                <span className="text-white font-medium truncate">{newsItem.title.substring(0, 40)}...</span>
+              </div>
+              
               <Link 
                 href="/news" 
-                className="inline-flex items-center gap-1 text-white/70 hover:text-white transition mb-6 group"
+                className="inline-flex items-center gap-1 text-white/70 hover:text-white transition mb-4 group"
               >
                 <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition" />
                 Back to News
@@ -472,6 +544,7 @@ async function NewsContent({ slug }: { slug: string }) {
                 </span>
               </div>
               
+              {/* ✅ ONLY H1 on the page */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
                 {newsItem.isBreaking && '🔴 '}{newsItem.title}
               </h1>
@@ -488,7 +561,7 @@ async function NewsContent({ slug }: { slug: string }) {
                 <span className="w-1 h-1 bg-white/30 rounded-full"></span>
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-4 h-4" />
-                  {formatDate(newsItem.publishedAt)}
+                  {formatDateStatic(newsItem.publishedAt)}
                 </span>
                 <span className="w-1 h-1 bg-white/30 rounded-full"></span>
                 <span className="flex items-center gap-1.5">
@@ -510,20 +583,33 @@ async function NewsContent({ slug }: { slug: string }) {
             
             <article className="lg:w-2/3">
               
-              {newsItem.featuredImage && (
-                <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video">
-                  <img
+              {/* ✅ Featured Image with Fallback using next/image */}
+              <div className="relative mb-8 rounded-xl overflow-hidden shadow-lg aspect-video bg-gradient-to-br from-gray-200 to-gray-300">
+                {newsItem.featuredImage ? (
+                  <Image
                     src={newsItem.featuredImage}
                     alt={newsItem.title}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
+                    priority
                   />
-                  {newsItem.source && (
-                    <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                      Source: {newsItem.source}
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-24 h-24 rounded-full bg-white/80 shadow-lg flex items-center justify-center mx-auto mb-3">
+                        <Zap className="w-10 h-10 text-red-500" />
+                      </div>
+                      <p className="text-gray-600 font-medium">{newsItem.category}</p>
+                      <p className="text-gray-400 text-sm">News Article</p>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+                {newsItem.source && (
+                  <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                    Source: {newsItem.source}
+                  </div>
+                )}
+              </div>
 
               <TableOfContents headings={headings} />
 
@@ -535,11 +621,11 @@ async function NewsContent({ slug }: { slug: string }) {
                 </div>
               )}
 
+              {/* ✅ Content with sanitized headings (H1 → H2) */}
               <div 
                 className="prose prose-lg max-w-none 
                   prose-headings:text-gray-900 prose-headings:font-bold prose-headings:scroll-mt-24
-                  prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4
-                  prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3
+                  prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
                   prose-p:text-gray-700 prose-p:leading-relaxed 
                   prose-a:text-red-600 prose-a:no-underline hover:prose-a:underline
                   prose-strong:text-gray-900 prose-strong:font-semibold
@@ -547,14 +633,7 @@ async function NewsContent({ slug }: { slug: string }) {
                   prose-img:rounded-lg prose-img:shadow-md
                   prose-blockquote:border-l-red-600 prose-blockquote:bg-gray-50 prose-blockquote:p-4 prose-blockquote:italic"
                 dangerouslySetInnerHTML={{ 
-                  __html: newsItem.content ? newsItem.content.replace(
-                    /<h([2-3])>(.*?)<\/h\1>/gi,
-                    (match, level, content) => {
-                      const text = content.replace(/<[^>]*>/g, '');
-                      const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                      return `<h${level} id="${id}">${content}</h${level}>`;
-                    }
-                  ) : '' 
+                  __html: sanitizedContent
                 }}
               />
 
@@ -582,7 +661,7 @@ async function NewsContent({ slug }: { slug: string }) {
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                      {newsItem.authorName ? newsItem.authorName.charAt(0).toUpperCase() : 'N'}
+                      {newsItem.authorName ? getInitials(newsItem.authorName) : 'NT'}
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{newsItem.authorName || 'NextID Team'}</p>
@@ -600,6 +679,14 @@ async function NewsContent({ slug }: { slug: string }) {
                     ? `${newsItem.authorName} provides authentic education news and updates for Pakistani students.` 
                     : 'NextID.pk delivers trusted education news, exam updates, and admission announcements for Pakistan.'}
                 </p>
+              </div>
+              
+              {/* ✅ Share Buttons in Hero (below content) */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mt-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <span className="text-sm text-gray-500 font-medium">Share this news:</span>
+                  <ShareButtons title={newsItem.title} slug={newsItem.slug} />
+                </div>
               </div>
             </article>
 
@@ -619,19 +706,20 @@ async function NewsContent({ slug }: { slug: string }) {
                           className="flex gap-3 group"
                           rel="nofollow"
                         >
-                          {item.featuredImage ? (
-                            <div className="relative w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                              <img 
+                          <div className="relative w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-gray-100 to-gray-200">
+                            {item.featuredImage ? (
+                              <Image 
                                 src={item.featuredImage} 
                                 alt={item.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                fill
+                                className="object-cover group-hover:scale-105 transition duration-300"
                               />
-                            </div>
-                          ) : (
-                            <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <span className="text-2xl">📰</span>
-                            </div>
-                          )}
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-2xl">📰</span>
+                              </div>
+                            )}
+                          </div>
                           <div className="flex-1">
                             {item.isBreaking && (
                               <span className="inline-block text-xs text-red-600 font-semibold">NEW</span>
@@ -639,7 +727,7 @@ async function NewsContent({ slug }: { slug: string }) {
                             <h4 className="text-sm font-medium text-gray-800 group-hover:text-red-600 transition line-clamp-2">
                               {item.title}
                             </h4>
-                            <p className="text-xs text-gray-400 mt-1">{formatShortDate(item.publishedAt)}</p>
+                            <p className="text-xs text-gray-400 mt-1">{formatShortDateStatic(item.publishedAt)}</p>
                           </div>
                         </Link>
                       ))}
@@ -666,10 +754,17 @@ async function NewsContent({ slug }: { slug: string }) {
                   </h3>
                   <div className="space-y-2 text-sm">
                     <p><span className="font-medium">Category:</span> {newsItem.category}</p>
-                    <p><span className="font-medium">Published:</span> {formatShortDate(newsItem.publishedAt)}</p>
+                    <p><span className="font-medium">Published:</span> {formatShortDateStatic(newsItem.publishedAt)}</p>
                     <p><span className="font-medium">Read Time:</span> {readTime} minutes</p>
                     {newsItem.source && <p><span className="font-medium">Source:</span> {newsItem.source}</p>}
                   </div>
+                </div>
+                
+                {/* ✅ Sidebar Widgets */}
+                <div data-nosnippet>
+                  <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                    <SidebarWidgets />
+                  </Suspense>
                 </div>
               </div>
             </aside>
