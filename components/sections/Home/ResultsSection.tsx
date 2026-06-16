@@ -1,8 +1,9 @@
 // components/sections/Home/ResultsSection.tsx
 
 import Link from 'next/link';
-import {  ChevronRight} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -20,9 +21,10 @@ function formatDate(date: Date | null): string {
 }
 
 export default async function ResultsSection() {
-  const results = await postService.getPostsByType('result', 5);
+  // ✅ NEW: getList function with limit 5
+  const results = await postService.getList('result', 5);
   
-  const items = results.map(post => {
+  const items = results.map((post: ExtendedPost) => {
     const meta = post.meta || {};
     const resultDate = getMetaValue(meta, 'resultDate', null) ? new Date(getMetaValue(meta, 'resultDate', '')) : null;
     
@@ -53,14 +55,14 @@ export default async function ResultsSection() {
         </Link>
       </div>
 
-      {/* Simple List */}
+      {/* Simple List - Sirf 5 items */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
         <div className="divide-y divide-gray-100">
           {items.map((item, index) => (
             <Link key={item.id} href={`/results/${item.slug}`} className="block hover:bg-green-50/30 transition group">
               <div className="p-4">
                 <div className="flex items-center gap-3">
-                  {/* Rank/Number */}
+                  {/* Rank/Number - 1 se 5 tak */}
                   <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm">
                     {index + 1}
                   </div>

@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { 
   Calendar, 
   Building2, 
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface ResultDetail {
@@ -62,11 +64,6 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function getSeoField<T>(obj: Record<string, unknown>, key: string): T | null {
-  const value = obj[key];
-  return value !== undefined && value !== null ? (value as T) : null;
-}
-
 function formatDate(date: Date | null): string {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-PK', {
@@ -76,17 +73,40 @@ function formatDate(date: Date | null): string {
   });
 }
 
-// ============ DATA FETCHING ============
-async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
+// ============ GENERATE STATIC PARAMS ============
+export async function generateStaticParams() {
   try {
-    const post = await postService.getPost(slug);
+    const posts = await postService.getList('result', 100);
+    
+    if (posts && posts.length > 0) {
+      return posts.map((post) => ({
+        slug: post.slug,
+      }));
+    }
+    
+    // Return placeholder for build validation
+    return [{ slug: 'placeholder' }];
+    
+  } catch (error) {
+    console.error('Error generating static params for results:', error);
+    return [{ slug: 'placeholder' }];
+  }
+}
+
+// ============ CACHED DATA FETCHING ============
+async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
+  "use cache";
+  cacheTag(`result-detail-${slug}`);
+  cacheLife("hours");
+  
+  try {
+    const post = await postService.getDetail(slug);
     
     if (!post || post.type !== 'result') {
       return null;
     }
     
     const meta = post.meta || {};
-    const seoPost = post as unknown as Record<string, unknown>;
     
     let resultDate: Date | null = null;
     const resultDateRaw = getMetaValue(meta, 'resultDate', null);
@@ -118,17 +138,17 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       isPopular: getMetaValue(meta, 'isPopular', false),
       status: getMetaValue(meta, 'status', true),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
-      metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
-      metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
-      canonicalUrl: getSeoField<string>(seoPost, 'canonicalUrl'),
-      robots: getSeoField<string>(seoPost, 'robots'),
-      ogTitle: getSeoField<string>(seoPost, 'ogTitle'),
-      ogDescription: getSeoField<string>(seoPost, 'ogDescription'),
-      ogImage: getSeoField<string>(seoPost, 'ogImage') || getSeoField<string>(seoPost, 'featuredImage'),
-      twitterTitle: getSeoField<string>(seoPost, 'twitterTitle'),
-      twitterDescription: getSeoField<string>(seoPost, 'twitterDescription'),
-      featuredImage: getSeoField<string>(seoPost, 'featuredImage'),
+      metaTitle: getMetaValue(meta, 'metaTitle', null),
+      metaDescription: getMetaValue(meta, 'metaDescription', null),
+      metaKeywords: getMetaValue(meta, 'metaKeywords', null),
+      canonicalUrl: getMetaValue(meta, 'canonicalUrl', null),
+      robots: getMetaValue(meta, 'robots', null),
+      ogTitle: getMetaValue(meta, 'ogTitle', null),
+      ogDescription: getMetaValue(meta, 'ogDescription', null),
+      ogImage: getMetaValue(meta, 'ogImage', null),
+      twitterTitle: getMetaValue(meta, 'twitterTitle', null),
+      twitterDescription: getMetaValue(meta, 'twitterDescription', null),
+      featuredImage: post.featuredImage || null,
       publishedAt: post.publishedAt,
       updatedAt: post.updatedAt,
     };
@@ -141,6 +161,16 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
 // ============ METADATA ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  
+  // Handle placeholder
+  if (slug === 'placeholder') {
+    return {
+      title: 'Result Not Found | NextID.pk',
+      description: 'The requested result could not be found.',
+      robots: { index: false },
+    };
+  }
+  
   const result = await getResultBySlug(slug);
 
   if (!result) {
@@ -153,60 +183,30 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const institutionName = result.instituteName || result.boardName || '';
   
-  // ✅ IMPROVED: Better SEO description with actual result data
   const seoTitle = result.metaTitle || `${institutionName} ${result.year} Result - Check Online | NextID.pk`;
   const seoDescription = result.metaDescription || 
-    ` ${institutionName} Class ${result.year} result announced. Check your ${result.boardName || institutionName} result online by roll number. ${result.cityName ? `Board ${result.cityName}.` : ''} Download result card.`;
-  const seoKeywords = result.metaKeywords || `${institutionName} result ${result.year}, ${institutionName} ${result.year} result, ${result.boardName} result, ${result.cityName} board result, Pakistan result ${result.year}`;
+    `${institutionName} Class ${result.year} result announced. Check your ${result.boardName || institutionName} result online by roll number. ${result.cityName ? `Board ${result.cityName}.` : ''} Download result card.`;
   const canonicalUrl = result.canonicalUrl || `https://www.nextid.pk/results/${result.slug}`;
-  const robots = result.robots || 'index, follow';
-  
-  const robotsObj = {
-    index: robots.includes('index'),
-    follow: robots.includes('follow'),
-  };
-  
-  const ogTitle = result.ogTitle || seoTitle;
-  const ogDescription = result.ogDescription || seoDescription;
   const ogImage = result.ogImage || result.featuredImage || '/og-image.png';
-  
-  const twitterTitle = result.twitterTitle || ogTitle;
-  const twitterDescription = result.twitterDescription || ogDescription;
 
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: seoKeywords,
-    metadataBase: new URL('https://www.nextid.pk'),
-    alternates: {
-      canonical: canonicalUrl,
-    },
-    robots: robotsObj,
+    alternates: { canonical: canonicalUrl },
     openGraph: {
-      title: ogTitle,
-      description: ogDescription,
+      title: seoTitle,
+      description: seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
-      images: [
-        {
-          url: ogImage,
-          width: 1200,
-          height: 630,
-          alt: ogTitle,
-        },
-      ],
-      locale: 'en_PK',
+      images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: result.publishedAt?.toISOString(),
-      modifiedTime: result.updatedAt?.toISOString(),
     },
     twitter: {
       card: 'summary_large_image',
-      title: twitterTitle,
-      description: twitterDescription,
+      title: seoTitle,
+      description: seoDescription,
       images: [ogImage],
-      site: '@nextidpk',
-      creator: '@nextidpk',
     },
   };
 }
@@ -232,7 +232,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
   const institutionName = result.instituteName || result.boardName || '';
   const officialWebsite = result.officialLink;
 
-  // ✅ JSON-LD Structured Data
   const jsonLd = generateJsonLd({
     type: 'Article',
     title: result.title,
@@ -248,46 +247,35 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
     ],
   });
 
-  // ✅ Extract first 150 characters from excerpt for better snippet
   const metaDescriptionText = result.excerpt 
     ? result.excerpt.substring(0, 150) 
     : `${institutionName} ${result.year} result. Check online by roll number.`;
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       
-      {/* ✅ Education Event Schema */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "EducationEvent",
-            "name": result.title,
-            "description": result.excerpt,
-            "startDate": result.resultDate?.toISOString(),
-            "location": {
-              "@type": "Place",
-              "name": institutionName,
-              "address": {
-                "@type": "PostalAddress",
-                "addressLocality": result.cityName || 'Pakistan',
-                "addressCountry": "PK"
-              }
-            },
-            "organizer": {
-              "@type": "Organization",
-              "name": institutionName,
-              "url": officialWebsite || undefined
-            }
-          })
-        }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "EducationEvent",
+        "name": result.title,
+        "description": result.excerpt,
+        "startDate": result.resultDate?.toISOString(),
+        "location": {
+          "@type": "Place",
+          "name": institutionName,
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": result.cityName || 'Pakistan',
+            "addressCountry": "PK"
+          }
+        },
+        "organizer": {
+          "@type": "Organization",
+          "name": institutionName,
+          "url": officialWebsite || undefined
+        }
+      }) }} />
       
       <main className="min-h-screen bg-gray-50">
         
@@ -297,7 +285,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
               
-              {/* Back Button */}
               <Link 
                 href="/results" 
                 className="inline-flex items-center gap-1 text-green-200 hover:text-white transition mb-6 group"
@@ -306,7 +293,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                 Back to Results
               </Link>
               
-              {/* Status Badges */}
               <div className="flex flex-wrap gap-2 mb-4">
                 {result.status ? (
                   <span className="inline-flex items-center gap-1 bg-green-500 text-white text-xs px-3 py-1 rounded-full">
@@ -327,17 +313,14 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                 )}
               </div>
               
-              {/* ✅ H1 - IMPROVED: More descriptive for SEO */}
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
                 {result.title}
               </h1>
               
-              {/* ✅ Meta Description hidden div for SEO (Google reads this) */}
               <div className="hidden" aria-hidden="true">
                 {metaDescriptionText}
               </div>
               
-              {/* Meta Info */}
               <div className="flex flex-wrap gap-4 text-green-200">
                 {institutionName && (
                   <div className="flex items-center gap-2">
@@ -374,14 +357,11 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* ✅ MAIN CONTENT - MOVED HIGHER FOR SEO */}
             <div className="lg:w-2/3">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 
-                {/* Content */}
                 <div className="p-6">
                   
-                  {/* ✅ Excerpt - THIS IS WHAT GOOGLE SHOULD SHOW */}
                   {result.excerpt && (
                     <div className="mb-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
                       <p className="text-green-800 text-base leading-relaxed font-medium">
@@ -390,7 +370,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </div>
                   )}
                   
-                  {/* ✅ Result Information Table - SEO FRIENDLY */}
                   <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <FileText className="w-5 h-5 text-green-500" />
                     {institutionName} {result.year} Result Details
@@ -427,7 +406,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </div>
                   </div>
 
-                  {/* Additional Content */}
                   {result.content && (
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3">
@@ -440,7 +418,6 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </div>
                   )}
 
-                  {/* Official Link */}
                   {officialWebsite && (
                     <div className="border-t border-gray-100 pt-6 mt-4">
                       <h3 className="font-semibold text-gray-900 mb-3">Official Result Link</h3>
@@ -460,14 +437,12 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
               </div>
             </div>
 
-            {/* ✅ RIGHT SIDEBAR - ADDED data-nosnippet to hide instructions from Google */}
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
                 
-                {/* ✅ FIXED: How to Check Guide with data-nosnippet */}
                 <div 
                   className="bg-white rounded-xl shadow-sm border border-gray-100 p-5"
-                  data-nosnippet  // 👈 THIS TELLS GOOGLE NOT TO USE THIS IN SNIPPETS
+                  data-nosnippet
                 >
                   <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
@@ -476,7 +451,7 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                   <ol className="space-y-3 text-sm text-gray-600">
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                      <span>Click the &quot;Check Result Online&quot; button above</span>
+                      <span>Click the "Check Result Online" button above</span>
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
@@ -488,13 +463,14 @@ function ResultContent({ resultPromise }: { resultPromise: Promise<ResultDetail 
                     </li>
                     <li className="flex gap-2">
                       <span className="w-5 h-5 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                      <span>Click the &quot;Submit&quot; to view your result</span>
+                      <span>Click the "Submit" to view your result</span>
                     </li>
                   </ol>
                 </div>
                 
-                {/* Sidebar Widgets */}
-                <SidebarWidgets />
+                <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                  <SidebarWidgets />
+                </Suspense>
               </div>
             </aside>
           </div>
@@ -509,6 +485,11 @@ export default async function ResultDetailPage({ params }: { params: Promise<{ s
   const slugPromise = params.then(p => p.slug);
   
   const resultPromise = slugPromise.then(async (slug) => {
+    // Handle placeholder
+    if (slug === 'placeholder') {
+      notFound();
+    }
+    
     const result = await getResultBySlug(slug);
     if (!result) notFound();
     return result;

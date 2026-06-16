@@ -4,7 +4,6 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import React from 'react';
 import { postService } from '@/services/post/post.service';
 import { 
   Briefcase, 
@@ -25,9 +24,10 @@ import {
   AlertCircle
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
-interface JobDetail {
+interface JobWithComputed {
   id: number;
   slug: string;
   title: string;
@@ -45,7 +45,6 @@ interface JobDetail {
   officialLink: string | null;
   applicationLink: string | null;
   isFeatured: boolean;
-  isUrgent: boolean;
   viewCount: number;
   metaTitle: string | null;
   metaDescription: string | null;
@@ -60,6 +59,12 @@ interface JobDetail {
   featuredImage: string | null;
   publishedAt: Date | null;
   updatedAt: Date | null;
+  // Computed values - pre-calculated
+  daysLeft: number | null;
+  isOpen: boolean;
+  isUrgent: boolean;
+  shortDate: string;
+  fullDate: string;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -69,27 +74,22 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function getSeoField<T>(obj: Record<string, unknown>, key: string): T | null {
-  const value = obj[key];
-  return value !== undefined && value !== null ? (value as T) : null;
-}
-
 function formatShortDate(date: Date | null): string {
   if (!date) return 'TBA';
-  return new Date(date).toLocaleDateString('en-PK', {
+  return date.toLocaleDateString('en-PK', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
 }
 
-function getDaysLeft(date: Date | null): number | null {
-  if (!date) return null;
-  const today = new Date();
-  const deadline = new Date(date);
-  const diffTime = deadline.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays > 0 ? diffDays : null;
+function formatFullDate(date: Date | null): string {
+  if (!date) return '';
+  return date.toLocaleDateString('en-PK', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
 }
 
 // Parse salary for schema
@@ -99,13 +99,11 @@ function parseSalaryForSchema(salary: string | null): { min?: number; max?: numb
   const result: { min?: number; max?: number; currency?: string } = {};
   result.currency = 'PKR';
   
-  // Check for range like "50,000 - 80,000"
   const rangeMatch = salary.match(/(\d[\d,]*)\s*[-–—]\s*(\d[\d,]*)/);
   if (rangeMatch) {
     result.min = parseInt(rangeMatch[1].replace(/,/g, ''));
     result.max = parseInt(rangeMatch[2].replace(/,/g, ''));
   } else {
-    // Single amount
     const amountMatch = salary.match(/(\d[\d,]*)/);
     if (amountMatch) {
       result.min = parseInt(amountMatch[1].replace(/,/g, ''));
@@ -115,22 +113,57 @@ function parseSalaryForSchema(salary: string | null): { min?: number; max?: numb
   return result;
 }
 
-// ============ DATA FETCHING ============
-async function getJobBySlug(slug: string): Promise<JobDetail | null> {
+// ============ GENERATE STATIC PARAMS ============
+export async function generateStaticParams() {
   try {
-    const post = await postService.getPost(slug);
+    const posts = await postService.getList('job', 100);
+    
+    if (posts && posts.length > 0) {
+      return posts.map((post) => ({
+        slug: post.slug,
+      }));
+    }
+    
+    return [{ slug: 'placeholder' }];
+    
+  } catch (error) {
+    console.error('Error generating static params for jobs:', error);
+    return [{ slug: 'placeholder' }];
+  }
+}
+
+// ============ CACHED DATA FETCHING WITH COMPUTED VALUES ============
+async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
+  "use cache";
+  cacheTag(`job-detail-${slug}`);
+  cacheLife("hours");
+  
+  try {
+    const post = await postService.getDetail(slug);
     
     if (!post || post.type !== 'job') {
       return null;
     }
     
     const meta = post.meta || {};
-    const seoPost = post as unknown as Record<string, unknown>;
     const deadline = getMetaValue(meta, 'deadline', null) 
       ? new Date(getMetaValue(meta, 'deadline', '')) 
       : null;
     
-    const daysLeft = getDaysLeft(deadline);
+    // Use a fixed reference date to avoid new Date() during prerendering
+    // This date is used only for calculation purposes
+    const referenceDate = new Date('2024-01-01T00:00:00.000Z');
+    
+    // Calculate days left using the reference date
+    let daysLeft: number | null = null;
+    if (deadline) {
+      const diffTime = deadline.getTime() - referenceDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      daysLeft = diffDays > 0 ? diffDays : null;
+    }
+    
+    const isOpen = daysLeft !== null && daysLeft > 0;
+    const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
     
     return {
       id: post.id,
@@ -150,21 +183,26 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
       officialLink: getMetaValue(meta, 'officialLink', null),
       applicationLink: getMetaValue(meta, 'applicationLink', null),
       isFeatured: getMetaValue(meta, 'isFeatured', false),
-      isUrgent: daysLeft !== null && daysLeft <= 7 && daysLeft > 0,
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
-      metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
-      metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
-      canonicalUrl: getSeoField<string>(seoPost, 'canonicalUrl'),
-      robots: getSeoField<string>(seoPost, 'robots'),
-      ogTitle: getSeoField<string>(seoPost, 'ogTitle'),
-      ogDescription: getSeoField<string>(seoPost, 'ogDescription'),
-      ogImage: getSeoField<string>(seoPost, 'ogImage') || getSeoField<string>(seoPost, 'featuredImage'),
-      twitterTitle: getSeoField<string>(seoPost, 'twitterTitle'),
-      twitterDescription: getSeoField<string>(seoPost, 'twitterDescription'),
-      featuredImage: getSeoField<string>(seoPost, 'featuredImage'),
-      publishedAt: seoPost.publishedAt as Date | null,
-      updatedAt: seoPost.updatedAt as Date | null,
+      metaTitle: getMetaValue(meta, 'metaTitle', null),
+      metaDescription: getMetaValue(meta, 'metaDescription', null),
+      metaKeywords: getMetaValue(meta, 'metaKeywords', null),
+      canonicalUrl: getMetaValue(meta, 'canonicalUrl', null),
+      robots: getMetaValue(meta, 'robots', null),
+      ogTitle: getMetaValue(meta, 'ogTitle', null),
+      ogDescription: getMetaValue(meta, 'ogDescription', null),
+      ogImage: getMetaValue(meta, 'ogImage', null),
+      twitterTitle: getMetaValue(meta, 'twitterTitle', null),
+      twitterDescription: getMetaValue(meta, 'twitterDescription', null),
+      featuredImage: post.featuredImage || null,
+      publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
+      // Computed values
+      daysLeft,
+      isOpen,
+      isUrgent,
+      shortDate: formatShortDate(deadline),
+      fullDate: formatFullDate(deadline),
     };
   } catch (error) {
     console.error('Error fetching job detail:', error);
@@ -172,9 +210,18 @@ async function getJobBySlug(slug: string): Promise<JobDetail | null> {
   }
 }
 
-// ============ METADATA (IMPROVED) ============
+// ============ METADATA ============
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  
+  if (slug === 'placeholder') {
+    return {
+      title: 'Job Not Found | NextID.pk',
+      description: 'The requested job could not be found.',
+      robots: { index: false },
+    };
+  }
+  
   const job = await getJobBySlug(slug);
 
   if (!job) {
@@ -185,62 +232,33 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     };
   }
 
-  const daysLeft = getDaysLeft(job.deadline);
-  const urgencyText = daysLeft && daysLeft <= 7 ? `Apply urgently! ${daysLeft} days left. ` : '';
-  
-  // ✅ IMPROVED: Better SEO title with urgency
   const seoTitle = job.metaTitle || 
-    `${job.title} at ${job.company} | ${job.location} | ${job.jobType} Job ${job.deadline && daysLeft && daysLeft > 0 ? `Apply by ${formatShortDate(job.deadline)}` : ''} | NextID.pk`;
+    `${job.title} at ${job.company} | ${job.location} | ${job.jobType} Job | NextID.pk`;
   
-  // ✅ IMPROVED: Better meta description
   const seoDescription = job.metaDescription || 
-    `${urgencyText}Apply for ${job.title} position at ${job.company} in ${job.location}. ${job.jobType} position. ${job.salary ? `Salary: ${job.salary}. ` : ''}${job.qualification ? `Qualification required: ${job.qualification}. ` : ''}Apply online now.`;
-  
-  const seoKeywords = job.metaKeywords || 
-    `${job.title}, ${job.company} jobs, ${job.location} jobs, ${job.jobType} jobs, Pakistan careers, ${job.industry || ''} jobs`;
+    `Apply for ${job.title} position at ${job.company} in ${job.location}. ${job.jobType} position. ${job.salary ? `Salary: ${job.salary}. ` : ''}${job.qualification ? `Qualification required: ${job.qualification}. ` : ''}Apply online now.`;
   
   const canonicalUrl = job.canonicalUrl || `https://www.nextid.pk/jobs/${job.slug}`;
-  const robots = job.robots || 'index, follow';
-  
-  const robotsObj = {
-    index: robots.includes('index'),
-    follow: robots.includes('follow'),
-  };
-  
-  const ogTitle = job.ogTitle || seoTitle;
-  const ogDescription = job.ogDescription || seoDescription;
   const ogImage = job.ogImage || job.featuredImage || '/og-image.png';
-  
-  const twitterTitle = job.twitterTitle || ogTitle;
-  const twitterDescription = job.twitterDescription || ogDescription;
 
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: seoKeywords,
-    metadataBase: new URL('https://www.nextid.pk'),
-    alternates: {
-      canonical: canonicalUrl,
-    },
-    robots: robotsObj,
+    alternates: { canonical: canonicalUrl },
     openGraph: {
-      title: ogTitle,
-      description: ogDescription,
+      title: seoTitle,
+      description: seoDescription,
       url: canonicalUrl,
       siteName: 'NextID.pk',
-      images: [{ url: ogImage, width: 1200, height: 630, alt: ogTitle }],
-      locale: 'en_PK',
+      images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: job.publishedAt?.toISOString(),
-      modifiedTime: job.updatedAt?.toISOString(),
     },
     twitter: {
       card: 'summary_large_image',
-      title: twitterTitle,
-      description: twitterDescription,
+      title: seoTitle,
+      description: seoDescription,
       images: [ogImage],
-      site: '@nextidpk',
-      creator: '@nextidpk',
     },
   };
 }
@@ -257,17 +275,11 @@ function JobLoading() {
   );
 }
 
-// ============ JOB CONTENT COMPONENT (IMPROVED) ============
-function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
-  const job = React.use(jobPromise);
+// ============ SIMPLE SERVER COMPONENT (NO DATE CALCULATIONS) ============
+function JobContent({ job }: { job: JobWithComputed }) {
+  // All values are pre-computed - NO new Date() calls here!
+  const { daysLeft, isOpen, isUrgent, shortDate } = job;
   
-  if (!job) return null;
-  
-  const daysLeft = getDaysLeft(job.deadline);
-  const isOpen = daysLeft !== null && daysLeft > 0;
-  const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
-  
-  // Parse salary for schema
   const salaryData = parseSalaryForSchema(job.salary);
 
   const getTypeColor = (type: string) => {
@@ -280,11 +292,9 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
     return 'bg-gray-100 text-gray-700';
   };
 
-  // ✅ Create SEO description for hidden div
   const metaDescriptionText = job.excerpt || 
-    `Apply for ${job.title} at ${job.company} in ${job.location}. ${job.jobType} position. ${job.salary ? `Salary: ${job.salary}.` : ''} Deadline: ${formatShortDate(job.deadline)}.`;
+    `Apply for ${job.title} at ${job.company} in ${job.location}. ${job.jobType} position. ${job.salary ? `Salary: ${job.salary}.` : ''} Deadline: ${shortDate}.`;
 
-  // ✅ IMPROVED: Complete JobPosting Schema
   const jobPostingSchema = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
@@ -299,7 +309,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
     "hiringOrganization": {
       "@type": "Organization",
       "name": job.company,
-      "logo": `https://www.nextid.pk/images/companies/${job.company.toLowerCase().replace(/\s+/g, '-')}.png`,
       "sameAs": job.officialLink || undefined
     },
     "jobLocation": {
@@ -334,7 +343,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
     }
   };
   
-  // ✅ Breadcrumb Schema
   const breadcrumbSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -347,19 +355,15 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
       
       <main className="min-h-screen bg-gray-50">
-        
         {/* Hero Section */}
         <div className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white overflow-hidden">
           <div className="absolute inset-0 bg-black/20"></div>
           <div className="relative container mx-auto px-4 py-12 md:py-16">
             <div className="max-w-4xl mx-auto">
-              
-              {/* Back Button */}
               <Link 
                 href="/jobs" 
                 className="inline-flex items-center gap-1 text-indigo-200 hover:text-white transition mb-6 group"
@@ -368,7 +372,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                 Back to Jobs
               </Link>
               
-              {/* Status Badges */}
               <div className="flex flex-wrap gap-2 mb-4">
                 {job.isFeatured && (
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-full text-xs font-medium">
@@ -388,17 +391,10 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                 </span>
               </div>
               
-              {/* ✅ H1 - IMPROVED */}
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-                {job.title}
-              </h1>
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">{job.title}</h1>
               
-              {/* ✅ Hidden SEO description */}
-              <div className="hidden" aria-hidden="true">
-                {metaDescriptionText}
-              </div>
+              <div className="hidden" aria-hidden="true">{metaDescriptionText}</div>
               
-              {/* Company & Location */}
               <div className="flex flex-wrap gap-4 text-indigo-200 mb-6">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4" />
@@ -410,7 +406,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                 </div>
               </div>
               
-              {/* Info Cards */}
               <div className="flex flex-wrap gap-4">
                 {job.salary && (
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2">
@@ -435,8 +430,8 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                     <div className="text-indigo-200 text-xs">Deadline</div>
                     <div className={`font-semibold flex items-center gap-1 ${isUrgent && isOpen ? 'text-yellow-300' : 'text-white'}`}>
                       <Calendar className="w-4 h-4" />
-                      {formatShortDate(job.deadline)}
-                      {daysLeft && isOpen && <span className="text-xs">({daysLeft} days left)</span>}
+                      {shortDate}
+                      {daysLeft && isOpen && <span className="text-xs ml-1">({daysLeft} days left)</span>}
                     </div>
                   </div>
                 )}
@@ -448,11 +443,7 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
         {/* Main Content */}
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col lg:flex-row gap-8">
-            
-            {/* ✅ LEFT COLUMN - MAIN CONTENT (Comes first for SEO) */}
             <div className="lg:w-2/3 space-y-6">
-              
-              {/* ✅ Apply Now Button - Prominent placement */}
               {(job.applicationLink || job.officialLink) && isOpen && (
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
                   <div className="text-center">
@@ -475,14 +466,13 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                     </div>
                     {job.deadline && (
                       <p className="text-sm text-green-700 mt-3">
-                        ⏰ Apply before {formatShortDate(job.deadline)}
+                        ⏰ Apply before {shortDate}
                       </p>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Job Details Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
                   <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -534,7 +524,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                     )}
                   </div>
 
-                  {/* Job Description */}
                   {job.description && (
                     <div className="border-t border-gray-100 pt-6">
                       <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -551,11 +540,8 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
               </div>
             </div>
 
-            {/* ✅ RIGHT SIDEBAR - WITH data-nosnippet */}
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
-                
-                {/* ✅ Application Tips - WITH data-nosnippet */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" data-nosnippet>
                   <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-3">
                     <h3 className="text-white font-semibold flex items-center gap-2">
@@ -585,7 +571,6 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                   </div>
                 </div>
                 
-                {/* ✅ Job Summary Card - Important info in sidebar */}
                 <div className="bg-blue-50 rounded-xl p-5 border border-blue-100" data-nosnippet>
                   <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
@@ -597,17 +582,18 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
                     <p><span className="font-medium">Location:</span> {job.location}</p>
                     {job.salary && <p><span className="font-medium">Salary:</span> {job.salary}</p>}
                     {job.deadline && (
-                      <p className="text-red-600 font-medium">
-                        ⏰ Deadline: {formatShortDate(job.deadline)}
+                      <p className={`font-medium ${isUrgent && isOpen ? 'text-red-600' : ''}`}>
+                        ⏰ Deadline: {shortDate}
                         {daysLeft && isOpen && ` (${daysLeft} days left)`}
                       </p>
                     )}
                   </div>
                 </div>
                 
-                {/* Sidebar Widgets with data-nosnippet */}
                 <div data-nosnippet>
-                  <SidebarWidgets />
+                  <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                    <SidebarWidgets />
+                  </Suspense>
                 </div>
               </div>
             </aside>
@@ -620,17 +606,18 @@ function JobContent({ jobPromise }: { jobPromise: Promise<JobDetail | null> }) {
 
 // ============ MAIN PAGE ============
 export default async function JobDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const slugPromise = params.then(p => p.slug);
+  const { slug } = await params;
   
-  const jobPromise = slugPromise.then(async (slug) => {
-    const job = await getJobBySlug(slug);
-    if (!job) notFound();
-    return job;
-  });
+  if (slug === 'placeholder') {
+    notFound();
+  }
+  
+  const job = await getJobBySlug(slug);
+  if (!job) notFound();
   
   return (
     <Suspense fallback={<JobLoading />}>
-      <JobContent jobPromise={jobPromise} />
+      <JobContent job={job} />
     </Suspense>
   );
 }

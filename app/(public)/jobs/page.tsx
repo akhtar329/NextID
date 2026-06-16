@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
-import { unstable_cache } from 'next/cache';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { 
   Briefcase, 
   MapPin, 
@@ -17,9 +17,11 @@ import {
   Filter,
   Building2,
   Calendar,
-  Eye
+  Eye,
+  ChevronRight
 } from 'lucide-react';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface JobItem {
@@ -43,6 +45,14 @@ interface Filters {
   location?: string;
   experience?: string;
   q?: string;
+  page?: number;
+}
+
+interface PaginatedResponse {
+  jobs: JobItem[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
 
 interface Stats {
@@ -54,6 +64,8 @@ interface Stats {
 }
 
 // ============ CONSTANTS ============
+const ITEMS_PER_PAGE = 10;
+
 const JOB_TYPES = [
   { slug: '', name: 'All Types', icon: '💼' },
   { slug: 'full-time', name: 'Full Time', icon: '📅' },
@@ -99,54 +111,62 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-// ============ METADATA (Fixed - No new Date()) ============
-export async function generateMetadata(): Promise<Metadata> {
-  // ✅ Use static year
-  const currentYear = "2026";
-  const allJobs = await postService.getPostsByType('job', 200);
-  const totalJobs = allJobs.length;
+// ============ CACHED DATA FETCHING ============
+async function getAllJobs(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("jobs-all");
+  cacheLife("hours");
   
-  return {
-    title: `Jobs in Pakistan ${currentYear} | ${totalJobs}+ Latest Education & IT Jobs | NextID.pk`,
-    description: `Find ${totalJobs}+ latest jobs in education, IT, management, and administration for ${currentYear}. Full time, part time, remote jobs for fresh and experienced professionals. Apply now!`,
-    keywords: `jobs in Pakistan ${currentYear}, latest jobs ${currentYear}, education jobs, IT jobs, management jobs, fresh jobs, experienced jobs, Pakistan careers`,
-    alternates: {
-      canonical: 'https://www.nextid.pk/jobs',
-    },
-    openGraph: {
-      title: `Jobs in Pakistan ${currentYear} - Latest Career Opportunities | NextID.pk`,
-      description: `Find thousands of jobs in education, IT, management, and administration. Apply online for the latest career opportunities.`,
-      url: 'https://www.nextid.pk/jobs',
-      siteName: 'NextID.pk',
-      images: [
-        {
-          url: '/og-image.png',
-          width: 1200,
-          height: 630,
-          alt: 'Jobs in Pakistan',
-        },
-      ],
-      locale: 'en_PK',
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `Jobs in Pakistan ${currentYear} - Career Opportunities`,
-      description: `Find the latest job opportunities in education, IT, and management sectors.`,
-      images: ['/og-image.png'],
-      site: '@nextidpk',
-      creator: '@nextidpk',
-    },
-  };
+  try {
+    const jobs = await postService.getList('job', 1000);
+    return jobs || [];
+  } catch (error) {
+    console.error('Error fetching all jobs:', error);
+    return [];
+  }
 }
 
-// ============ DATA FETCHING ============
-async function getJobs(filters: Filters): Promise<JobItem[]> {
+async function getPaginatedJobs(filters: Filters): Promise<PaginatedResponse> {
+  "use cache";
+  
+  const cacheKey = `jobs-${filters.page || 1}-${filters.jobType || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
+  cacheTag(cacheKey);
+  cacheLife("hours");
+  
+  const currentPage = filters.page || 1;
+  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  
   try {
-    const allJobs = await postService.getPostsByType('job', 200);
+    let allJobs = await getAllJobs();
     
-    let jobsList: JobItem[] = allJobs.map(post => {
-      const meta = post.meta || {};
+    // Filter by search query
+    if (filters.q) {
+      const query = filters.q.toLowerCase();
+      allJobs = allJobs.filter(job =>
+        job.title.toLowerCase().includes(query) ||
+        getMetaValue(job.meta, 'company', '').toLowerCase().includes(query) ||
+        getMetaValue(job.meta, 'location', '').toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by job type
+    if (filters.jobType && filters.jobType !== '') {
+      allJobs = allJobs.filter(job => {
+        const jobType = getMetaValue(job.meta, 'jobType', 'Full Time');
+        const typeSlug = jobType.toLowerCase().replace(/ /g, '-');
+        return typeSlug === filters.jobType;
+      });
+    }
+    
+    // Filter by location
+    if (filters.location && filters.location !== '') {
+      allJobs = allJobs.filter(job => 
+        getMetaValue(job.meta, 'location', 'Pakistan').toLowerCase() === filters.location?.toLowerCase()
+      );
+    }
+    
+    const jobsList: JobItem[] = allJobs.map(job => {
+      const meta = job.meta || {};
       const deadline = getMetaValue(meta, 'deadline', null) 
         ? new Date(getMetaValue(meta, 'deadline', '')) 
         : null;
@@ -154,10 +174,10 @@ async function getJobs(filters: Filters): Promise<JobItem[]> {
       const daysLeft = getDaysLeft(deadline);
       
       return {
-        id: post.id,
-        slug: post.slug,
-        title: post.title,
-        excerpt: post.excerpt,
+        id: job.id,
+        slug: job.slug,
+        title: job.title,
+        excerpt: job.excerpt,
         company: getMetaValue(meta, 'company', 'Company'),
         location: getMetaValue(meta, 'location', 'Pakistan'),
         jobType: getMetaValue(meta, 'jobType', 'Full Time'),
@@ -178,75 +198,147 @@ async function getJobs(filters: Filters): Promise<JobItem[]> {
       return a.deadline.getTime() - b.deadline.getTime();
     });
     
-    // Filter by job type
-    if (filters.jobType && filters.jobType !== '') {
-      jobsList = jobsList.filter(j => {
-        const typeSlug = j.jobType.toLowerCase().replace(/ /g, '-');
-        return typeSlug === filters.jobType;
-      });
-    }
+    const totalCount = jobsList.length;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    const paginatedJobs = jobsList.slice(offset, offset + ITEMS_PER_PAGE);
     
-    // Filter by location
-    if (filters.location && filters.location !== '') {
-      jobsList = jobsList.filter(j => 
-        j.location.toLowerCase() === filters.location?.toLowerCase()
-      );
-    }
-    
-    // Filter by search query
-    if (filters.q) {
-      const query = filters.q.toLowerCase();
-      jobsList = jobsList.filter(j =>
-        j.title.toLowerCase().includes(query) ||
-        j.company.toLowerCase().includes(query) ||
-        j.location.toLowerCase().includes(query)
-      );
-    }
-    
-    return jobsList;
-  } catch (err) {
-    console.error('Error fetching jobs:', err);
-    return [];
+    return {
+      jobs: paginatedJobs,
+      totalCount,
+      totalPages,
+      currentPage,
+    };
+  } catch (error) {
+    console.error('Error fetching paginated jobs:', error);
+    return {
+      jobs: [],
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: 1,
+    };
   }
 }
 
 async function getStats(): Promise<Stats> {
-  return unstable_cache(
-    async () => {
-      try {
-        const allJobs = await postService.getPostsByType('job', 500);
-        
-        const total = allJobs.length;
-        const featured = allJobs.filter(j => {
-          const meta = j.meta || {};
-          return getMetaValue(meta, 'isFeatured', false);
-        }).length;
-        const urgent = allJobs.filter(j => {
-          const meta = j.meta || {};
-          const deadline = getMetaValue(meta, 'deadline', null);
-          if (!deadline) return false;
-          const daysLeft = getDaysLeft(new Date(deadline));
-          return daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
-        }).length;
-        const fullTime = allJobs.filter(j => {
-          const meta = j.meta || {};
-          return getMetaValue(meta, 'jobType', '').toLowerCase().includes('full');
-        }).length;
-        const remote = allJobs.filter(j => {
-          const meta = j.meta || {};
-          return getMetaValue(meta, 'jobType', '').toLowerCase().includes('remote') ||
-                 getMetaValue(meta, 'location', '').toLowerCase() === 'remote';
-        }).length;
-        
-        return { total, featured, urgent, fullTime, remote };
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-        return { total: 0, featured: 0, urgent: 0, fullTime: 0, remote: 0 };
-      }
+  "use cache";
+  cacheTag("jobs-stats");
+  cacheLife("hours");
+  
+  try {
+    const allJobs = await getAllJobs();
+    
+    const total = allJobs.length;
+    const featured = allJobs.filter(j => getMetaValue(j.meta, 'isFeatured', false)).length;
+    const urgent = allJobs.filter(j => {
+      const deadline = getMetaValue(j.meta, 'deadline', null);
+      if (!deadline) return false;
+      const daysLeft = getDaysLeft(new Date(deadline));
+      return daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
+    }).length;
+    const fullTime = allJobs.filter(j => {
+      const jobType = getMetaValue(j.meta, 'jobType', '');
+      return jobType.toLowerCase().includes('full');
+    }).length;
+    const remote = allJobs.filter(j => {
+      const jobType = getMetaValue(j.meta, 'jobType', '');
+      const location = getMetaValue(j.meta, 'location', '');
+      return jobType.toLowerCase().includes('remote') || location.toLowerCase() === 'remote';
+    }).length;
+    
+    return { total, featured, urgent, fullTime, remote };
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return { total: 0, featured: 0, urgent: 0, fullTime: 0, remote: 0 };
+  }
+}
+
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const currentYear = "2026";
+  const allJobs = await getAllJobs();
+  const totalJobs = allJobs.length;
+  
+  return {
+    title: `Jobs in Pakistan ${currentYear} | ${totalJobs}+ Latest Education & IT Jobs | NextID.pk`,
+    description: `Find ${totalJobs}+ latest jobs in education, IT, management, and administration for ${currentYear}. Full time, part time, remote jobs for fresh and experienced professionals. Apply now!`,
+    keywords: `jobs in Pakistan ${currentYear}, latest jobs ${currentYear}, education jobs, IT jobs, management jobs, fresh jobs, experienced jobs, Pakistan careers`,
+    alternates: { canonical: 'https://www.nextid.pk/jobs' },
+    openGraph: {
+      title: `Jobs in Pakistan ${currentYear} - Latest Career Opportunities | NextID.pk`,
+      description: `Find thousands of jobs in education, IT, management, and administration. Apply online for the latest career opportunities.`,
+      url: 'https://www.nextid.pk/jobs',
+      siteName: 'NextID.pk',
+      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Jobs in Pakistan' }],
+      locale: 'en_PK',
+      type: 'website',
     },
-    ['jobs-stats'],
-    { revalidate: 86400, tags: ['jobs-stats'] }
-  )();
+    twitter: {
+      card: 'summary_large_image',
+      title: `Jobs in Pakistan ${currentYear} - Career Opportunities`,
+      description: `Find the latest job opportunities in education, IT, and management sectors.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
+
+// ============ PAGINATION COMPONENT ============
+function Pagination({ currentPage, totalPages, buildUrl }: { 
+  currentPage: number; 
+  totalPages: number; 
+  buildUrl: (key: string, value: string) => string;
+}) {
+  if (totalPages <= 1) return null;
+
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
+  for (let i = startPage; i <= endPage; i++) pages.push(i);
+
+  return (
+    <div className="flex justify-center mt-8">
+      <nav className="flex items-center gap-2 flex-wrap" aria-label="Pagination">
+        {currentPage > 1 && (
+          <Link href={buildUrl('page', String(currentPage - 1))} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
+            ← Previous
+          </Link>
+        )}
+        {startPage > 1 && (
+          <>
+            <Link href={buildUrl('page', '1')} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">1</Link>
+            {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+          </>
+        )}
+        {pages.map(page => (
+          <Link 
+            key={page} 
+            href={buildUrl('page', String(page))} 
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              page === currentPage 
+                ? 'bg-indigo-600 text-white' 
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {page}
+          </Link>
+        ))}
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+            <Link href={buildUrl('page', String(totalPages))} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">{totalPages}</Link>
+          </>
+        )}
+        {currentPage < totalPages && (
+          <Link href={buildUrl('page', String(currentPage + 1))} className="px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">
+            Next →
+          </Link>
+        )}
+      </nav>
+    </div>
+  );
 }
 
 // ============ LOADING COMPONENT ============
@@ -284,20 +376,24 @@ function JobsLoading() {
 }
 
 // ============ JOBS CONTENT COMPONENT ============
-async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const params = await searchParamsPromise;
+function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promise<{ [key: string]: string | string[] | undefined }> }) {
+  const searchParams = React.use(searchParamsPromise);
   
+  const currentPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page) : 1;
   const filters: Filters = {
-    jobType: typeof params.jobType === 'string' ? params.jobType : '',
-    location: typeof params.location === 'string' ? params.location : '',
-    experience: typeof params.experience === 'string' ? params.experience : '',
-    q: typeof params.q === 'string' ? params.q : '',
+    jobType: typeof searchParams.jobType === 'string' ? searchParams.jobType : '',
+    location: typeof searchParams.location === 'string' ? searchParams.location : '',
+    experience: typeof searchParams.experience === 'string' ? searchParams.experience : '',
+    q: typeof searchParams.q === 'string' ? searchParams.q : '',
+    page: currentPage,
   };
 
-  const [jobs, stats] = await Promise.all([
-    getJobs(filters),
+  const [paginatedData, stats] = React.use(Promise.all([
+    getPaginatedJobs(filters),
     getStats(),
-  ]);
+  ]));
+
+  const { jobs, totalCount, totalPages, currentPage: page } = paginatedData;
 
   const buildUrl = (key: string, value: string): string => {
     const urlParams = new URLSearchParams();
@@ -305,18 +401,17 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     if (filters.location && key !== 'location') urlParams.set('location', filters.location);
     if (filters.experience && key !== 'experience') urlParams.set('experience', filters.experience);
     if (filters.q && key !== 'q') urlParams.set('q', filters.q);
+    if (page !== 1 && key !== 'page') urlParams.set('page', page.toString());
     if (value) urlParams.set(key, value);
     return urlParams.toString() ? `/jobs?${urlParams.toString()}` : '/jobs';
   };
 
-  // ✅ Use static year
   const currentYear = "2026";
 
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
     title: `Jobs in ${currentYear} - Career Opportunities Pakistan`,
-    description: `Find ${jobs.length} latest job opportunities in education, IT, and management sectors`,
+    description: `Find ${totalCount} latest job opportunities in education, IT, and management sectors`,
     url: 'https://www.nextid.pk/jobs',
     breadcrumbs: [
       { name: 'Home', url: '/' },
@@ -324,13 +419,12 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     ],
   });
 
-  // ✅ ItemList Schema for jobs listing
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
     "name": `Jobs in Pakistan ${currentYear}`,
-    "description": `List of ${jobs.length} latest job opportunities in education, IT, and management sectors`,
-    "numberOfItems": jobs.length,
+    "description": `List of ${totalCount} latest job opportunities in education, IT, and management sectors`,
+    "numberOfItems": totalCount,
     "url": "https://www.nextid.pk/jobs",
     "itemListElement": jobs.slice(0, 10).map((job, index) => ({
       "@type": "ListItem",
@@ -342,15 +436,8 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <div className="flex flex-col lg:flex-row gap-8">
         
@@ -363,7 +450,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
               Filter Jobs
             </h2>
             
-            {/* Search */}
             <div className="mb-6">
               <form action="/jobs" method="GET" className="relative">
                 <input 
@@ -377,7 +463,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
               </form>
             </div>
 
-            {/* Job Type */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Job Type</h3>
               <div className="space-y-1">
@@ -398,7 +483,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
               </div>
             </div>
 
-            {/* Location */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Location</h3>
               <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -419,7 +503,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
               </div>
             </div>
 
-            {/* Clear Filters */}
             {(filters.jobType || filters.location || filters.experience || filters.q) && (
               <Link 
                 href="/jobs" 
@@ -434,22 +517,21 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
         {/* MAIN CONTENT */}
         <div className="flex-1">
           
-          {/* Stats Bar */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-indigo-500" />
-                {jobs.length} Jobs Found
+                Showing {jobs.length} of {totalCount} Jobs
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
                 <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-red-500" /> {stats.urgent} Urgent</span>
                 <span className="flex items-center gap-1"><Building2 className="w-3 h-3" /> {stats.fullTime} Full Time</span>
+                <span>Page {page} of {totalPages}</span>
               </div>
             </div>
           </div>
 
-          {/* Jobs List */}
           <div className="space-y-4">
             {jobs.length > 0 ? (
               jobs.map((job) => {
@@ -471,7 +553,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                     <div className="p-5">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                         <div className="flex-1">
-                          {/* Badges */}
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {job.isFeatured && (
                               <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
@@ -488,18 +569,15 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                             </span>
                           </div>
                           
-                          {/* Title */}
                           <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-indigo-600 transition-colors">
                             <Link href={`/jobs/${job.slug}`}>{job.title}</Link>
                           </h3>
                           
-                          {/* Company */}
                           <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                             <Building2 className="w-3 h-3" />
                             {job.company}
                           </p>
                           
-                          {/* Details */}
                           <div className="flex flex-wrap gap-3 mb-3 text-sm text-gray-500">
                             <span className="flex items-center gap-1">
                               <MapPin className="w-3.5 h-3.5" /> {job.location}
@@ -519,7 +597,6 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                             </span>
                           </div>
                           
-                          {/* Deadline */}
                           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                               <Calendar className="w-3.5 h-3.5" />
@@ -536,12 +613,11 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                           </div>
                         </div>
                         
-                        {/* Action Button */}
                         <Link 
                           href={`/jobs/${job.slug}`} 
-                          className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium text-center whitespace-nowrap"
+                          className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium text-center whitespace-nowrap inline-flex items-center gap-1"
                         >
-                          View Details →
+                          View Details <ChevronRight className="w-3 h-3" />
                         </Link>
                       </div>
                     </div>
@@ -559,6 +635,8 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
               </div>
             )}
           </div>
+          
+          <Pagination currentPage={page} totalPages={totalPages} buildUrl={buildUrl} />
         </div>
       </div>
     </>
@@ -567,13 +645,11 @@ async function JobsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
 // ============ MAIN PAGE ============
 export default async function JobsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  // ✅ Use static year
   const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section - Professional */}
       <div className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 py-16">
@@ -589,7 +665,6 @@ export default async function JobsPage({ searchParams }: { searchParams?: Promis
               Teaching, IT, Management, and Administrative positions across Pakistan
             </p>
             
-            {/* Hero Search */}
             <div className="max-w-2xl mx-auto mt-8">
               <form action="/jobs" method="GET" className="relative">
                 <input 
@@ -611,7 +686,6 @@ export default async function JobsPage({ searchParams }: { searchParams?: Promis
         </div>
       </div>
 
-      {/* Content Container */}
       <div className="container mx-auto px-4 py-12">
         <Suspense fallback={<JobsLoading />}>
           <JobsContent searchParamsPromise={searchParams || Promise.resolve({})} />

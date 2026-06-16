@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Calendar, ChevronRight, FileText, Clock, ExternalLink } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -20,9 +21,10 @@ function formatDate(date: Date | null): string {
 }
 
 export default async function DateSheetSection() {
-  const dateSheets = await postService.getPostsByType('date_sheet', 5);
+  // ✅ NEW: getList function with limit 5
+  const dateSheets = await postService.getList('date_sheet', 5);
   
-  const items = dateSheets.map(post => {
+  const items = dateSheets.map((post: ExtendedPost) => {
     const meta = post.meta || {};
     const examStartDate = getMetaValue(meta, 'examStartDate', null) ? new Date(getMetaValue(meta, 'examStartDate', '')) : null;
     const examEndDate = getMetaValue(meta, 'examEndDate', null) ? new Date(getMetaValue(meta, 'examEndDate', '')) : null;

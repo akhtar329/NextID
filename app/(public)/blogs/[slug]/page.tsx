@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { 
   Calendar, 
   User, 
@@ -23,6 +24,7 @@ import {
   List
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface BlogDetail {
@@ -74,11 +76,6 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   if (!meta) return defaultValue;
   const value = meta[key] as T;
   return value !== undefined && value !== null ? value : defaultValue;
-}
-
-function getSeoField<T>(obj: Record<string, unknown>, key: string): T | null {
-  const value = obj[key];
-  return value !== undefined && value !== null ? (value as T) : null;
 }
 
 function formatDate(date: Date | null): string {
@@ -133,139 +130,6 @@ function extractHeadings(content: string | null): Heading[] {
   }
   
   return headings.slice(0, 8);
-}
-
-// ============ DATA FETCHING WITH FIX ============
-async function getBlogBySlug(slug: string): Promise<BlogDetail | null> {
-  try {
-    const post = await postService.getPost(slug);
-    
-    if (!post || post.type !== 'blog') {
-      return null;
-    }
-    
-    const meta = post.meta || {};
-    const seoPost = post as unknown as Record<string, unknown>;
-    
-    return {
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      content: post.content,
-      excerpt: post.excerpt,
-      featuredImage: post.featuredImage,
-      category: getMetaValue(meta, 'category', 'General'),
-      tags: getMetaValue(meta, 'tags', null),
-      authorName: getMetaValue(meta, 'authorName', null),
-      isFeatured: getMetaValue(meta, 'isFeatured', false),
-      isPopular: getMetaValue(meta, 'isPopular', false),
-      viewCount: getMetaValue(meta, 'viewCount', 0),
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      metaTitle: getSeoField<string>(seoPost, 'metaTitle'),
-      metaDescription: getSeoField<string>(seoPost, 'metaDescription'),
-      metaKeywords: getSeoField<string>(seoPost, 'metaKeywords'),
-      canonicalUrl: getSeoField<string>(seoPost, 'canonicalUrl'),
-      robots: getSeoField<string>(seoPost, 'robots'),
-      ogTitle: getSeoField<string>(seoPost, 'ogTitle'),
-      ogDescription: getSeoField<string>(seoPost, 'ogDescription'),
-      ogImage: getSeoField<string>(seoPost, 'ogImage') || getSeoField<string>(seoPost, 'featuredImage'),
-      twitterTitle: getSeoField<string>(seoPost, 'twitterTitle'),
-      twitterDescription: getSeoField<string>(seoPost, 'twitterDescription'),
-    };
-  } catch (error) {
-    console.error('Error fetching blog detail:', error);
-    return null;
-  }
-}
-
-// ✅ COMPLETELY FIXED: Safe array handling for void/null/undefined
-async function getRelatedBlogs(currentId: number, category: string): Promise<RelatedBlog[]> {
-  try {
-    const result = await postService.getPostsByType('blog', 20);
-    
-    // Safe check for void/null/undefined
-    if (result === null || result === undefined) {
-      return [];
-    }
-    
-    // Check if array
-    if (!Array.isArray(result)) {
-      return [];
-    }
-    
-    if (result.length === 0) {
-      return [];
-    }
-    
-    return result
-      .filter(post => {
-        if (!post || !post.id) return false;
-        const postCategory = getMetaValue(post.meta || {}, 'category', 'General');
-        return post.id !== currentId && postCategory === category;
-      })
-      .slice(0, 3)
-      .map(post => {
-        const meta = post.meta || {};
-        return {
-          id: post.id,
-          slug: post.slug,
-          title: post.title || 'Untitled',
-          excerpt: post.excerpt,
-          featuredImage: post.featuredImage,
-          publishedAt: post.publishedAt,
-          category: getMetaValue(meta, 'category', 'General'),
-        };
-      });
-  } catch (error) {
-    console.error('Error fetching related blogs:', error);
-    return [];
-  }
-}
-
-// ============ METADATA ============
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const blog = await getBlogBySlug(slug);
-
-  if (!blog) {
-    return {
-      title: 'Article Not Found | NextID.pk',
-      description: 'The requested article could not be found.',
-      robots: { index: false },
-    };
-  }
-
-  const readTime = getReadTime(blog.content);
-  const seoTitle = blog.metaTitle || `${blog.title} | ${blog.category} Guide | NextID.pk`;
-  const seoDescription = blog.metaDescription || 
-    blog.excerpt || 
-    `${blog.title}. ${blog.category} article for Pakistani students. Read time: ${readTime} min.`;
-  
-  const canonicalUrl = blog.canonicalUrl || `https://www.nextid.pk/blog/${blog.slug}`;
-  const ogImage = blog.ogImage || blog.featuredImage || '/og-image.png';
-
-  return {
-    title: seoTitle,
-    description: seoDescription,
-    alternates: { canonical: canonicalUrl },
-    openGraph: {
-      title: seoTitle,
-      description: seoDescription,
-      url: canonicalUrl,
-      siteName: 'NextID.pk',
-      images: [{ url: ogImage, width: 1200, height: 630 }],
-      type: 'article',
-      publishedTime: blog.publishedAt?.toISOString(),
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: seoTitle,
-      description: seoDescription,
-      images: [ogImage],
-    },
-  };
 }
 
 // ============ SHARE BUTTONS ============
@@ -331,6 +195,175 @@ function BlogLoading() {
       </div>
     </div>
   );
+}
+
+// ============ CACHED DATA FETCHING ============
+async function getBlogBySlug(slug: string): Promise<BlogDetail | null> {
+  "use cache";
+  cacheTag(`blog-detail-${slug}`);
+  cacheLife("hours");
+  
+  try {
+    const post = await postService.getDetail(slug);
+    
+    if (!post || post.type !== 'blog') {
+      return null;
+    }
+    
+    const meta = post.meta || {};
+    
+    return {
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      content: post.content,
+      excerpt: post.excerpt,
+      featuredImage: post.featuredImage,
+      category: getMetaValue(meta, 'category', 'General'),
+      tags: getMetaValue(meta, 'tags', null),
+      authorName: getMetaValue(meta, 'authorName', null),
+      isFeatured: getMetaValue(meta, 'isFeatured', false),
+      isPopular: getMetaValue(meta, 'isPopular', false),
+      viewCount: getMetaValue(meta, 'viewCount', 0),
+      publishedAt: post.publishedAt,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      metaTitle: getMetaValue(meta, 'metaTitle', null),
+      metaDescription: getMetaValue(meta, 'metaDescription', null),
+      metaKeywords: getMetaValue(meta, 'metaKeywords', null),
+      canonicalUrl: getMetaValue(meta, 'canonicalUrl', null),
+      robots: getMetaValue(meta, 'robots', null),
+      ogTitle: getMetaValue(meta, 'ogTitle', null),
+      ogDescription: getMetaValue(meta, 'ogDescription', null),
+      ogImage: getMetaValue(meta, 'ogImage', null),
+      twitterTitle: getMetaValue(meta, 'twitterTitle', null),
+      twitterDescription: getMetaValue(meta, 'twitterDescription', null),
+    };
+  } catch (error) {
+    console.error('Error fetching blog detail:', error);
+    return null;
+  }
+}
+
+async function getAllBlogs(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("blogs-all");
+  cacheLife("hours");
+  
+  try {
+    const blogs = await postService.getList('blog', 500);
+    return blogs || [];
+  } catch (error) {
+    console.error('Error fetching all blogs:', error);
+    return [];
+  }
+}
+
+async function getRelatedBlogs(currentId: number, category: string): Promise<RelatedBlog[]> {
+  "use cache";
+  cacheTag(`blog-related-${currentId}`);
+  cacheLife("hours");
+  
+  try {
+    const allBlogs = await getAllBlogs();
+    
+    if (!allBlogs || !Array.isArray(allBlogs)) {
+      return [];
+    }
+    
+    return allBlogs
+      .filter(blog => blog && blog.id && blog.id !== currentId)
+      .slice(0, 3)
+      .map(blog => {
+        const meta = blog.meta || {};
+        return {
+          id: blog.id,
+          slug: blog.slug,
+          title: blog.title || 'Untitled',
+          excerpt: blog.excerpt,
+          featuredImage: blog.featuredImage,
+          publishedAt: blog.publishedAt,
+          category: getMetaValue(meta, 'category', 'General'),
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching related blogs:', error);
+    return [];
+  }
+}
+
+// ============ GENERATE STATIC PARAMS (FIXED) ============
+export async function generateStaticParams() {
+  try {
+    const posts = await postService.getList('blog', 100);
+    
+    if (posts && posts.length > 0) {
+      return posts.map((post) => ({
+        slug: post.slug,
+      }));
+    }
+    
+    // ✅ Return placeholder for build validation
+    return [{ slug: 'placeholder' }];
+    
+  } catch (error) {
+    console.error('Error generating static params for blogs:', error);
+    return [{ slug: 'placeholder' }];
+  }
+}
+
+// ============ METADATA ============
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  
+  // ✅ Handle placeholder
+  if (slug === 'placeholder') {
+    return {
+      title: 'Article Not Found | NextID.pk',
+      description: 'The requested article could not be found.',
+      robots: { index: false },
+    };
+  }
+  
+  const blog = await getBlogBySlug(slug);
+
+  if (!blog) {
+    return {
+      title: 'Article Not Found | NextID.pk',
+      description: 'The requested article could not be found.',
+      robots: { index: false },
+    };
+  }
+
+  const readTime = getReadTime(blog.content);
+  const seoTitle = blog.metaTitle || `${blog.title} | ${blog.category} Guide | NextID.pk`;
+  const seoDescription = blog.metaDescription || 
+    blog.excerpt || 
+    `${blog.title}. ${blog.category} article for Pakistani students. Read time: ${readTime} min.`;
+  
+  const canonicalUrl = blog.canonicalUrl || `https://www.nextid.pk/blog/${blog.slug}`;
+  const ogImage = blog.ogImage || blog.featuredImage || '/og-image.png';
+
+  return {
+    title: seoTitle,
+    description: seoDescription,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title: seoTitle,
+      description: seoDescription,
+      url: canonicalUrl,
+      siteName: 'NextID.pk',
+      images: [{ url: ogImage, width: 1200, height: 630 }],
+      type: 'article',
+      publishedTime: blog.publishedAt?.toISOString(),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: seoTitle,
+      description: seoDescription,
+      images: [ogImage],
+    },
+  };
 }
 
 // ============ BLOG CONTENT COMPONENT ============
@@ -490,7 +523,9 @@ function BlogContent({ blogPromise }: { blogPromise: Promise<BlogDetail | null> 
             <aside className="lg:w-1/3">
               <div className="sticky top-24 space-y-6">
                 <div data-nosnippet>
-                  <SidebarWidgets />
+                  <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                    <SidebarWidgets />
+                  </Suspense>
                 </div>
                 
                 {!loadingRelated && relatedBlogs.length > 0 && (
@@ -537,6 +572,11 @@ export default async function BlogDetailPage({ params }: { params: Promise<{ slu
   const slugPromise = params.then(p => p.slug);
   
   const blogPromise = slugPromise.then(async (slug) => {
+    // ✅ Handle placeholder
+    if (slug === 'placeholder') {
+      notFound();
+    }
+    
     const blog = await getBlogBySlug(slug);
     if (!blog) notFound();
     return blog;

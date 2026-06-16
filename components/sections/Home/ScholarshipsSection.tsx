@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Award, ChevronRight, DollarSign } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -20,9 +21,10 @@ function formatDate(date: Date | null): string {
 }
 
 export default async function ScholarshipsSection() {
-  const scholarships = await postService.getPostsByType('scholarship', 4);
+  // ✅ NEW: getList function with limit 4
+  const scholarships = await postService.getList('scholarship', 4);
   
-  const items = scholarships.map(post => {
+  const items = scholarships.map((post: ExtendedPost) => {
     const meta = post.meta || {};
     const deadline = getMetaValue(meta, 'deadline', null) ? new Date(getMetaValue(meta, 'deadline', '')) : null;
     

@@ -1,6 +1,5 @@
 // app/(public)/news/page.tsx
 
-
 import { notFound } from "next/navigation";
 import type { Metadata } from 'next';
 import Link from "next/link";
@@ -19,8 +18,10 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -38,6 +39,13 @@ interface NewsItem {
   publishedAt: Date | null;
   createdAt: Date | null;
   authorName: string | null;
+}
+
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
 }
 
 // ============ HELPER FUNCTIONS ============
@@ -67,7 +75,9 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// ============ CATEGORY OPTIONS ============
+// ============ CONSTANTS ============
+const ITEMS_PER_PAGE = 12;
+
 const CATEGORY_OPTIONS = [
   { value: "", label: "All News", icon: "📰" },
   { value: "Admissions", label: "Admissions", icon: "🎓" },
@@ -80,54 +90,32 @@ const CATEGORY_OPTIONS = [
   { value: "General", label: "General", icon: "📰" },
 ];
 
-// ============ METADATA (Fixed - No new Date()) ============
-export async function generateMetadata(): Promise<Metadata> {
-  const allNews = await postService.getPostsByType('news', 200);
-  const totalNews = allNews.length;
+// ============ CACHED DATA FETCHING ============
+async function getAllNews(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("news-all");
+  cacheLife("hours");
   
-  // ✅ Use static year instead of new Date()
-  const currentYear = "2026";
-  
-  return {
-    title: `Latest Education News ${currentYear} | Pakistan Admissions, Results & Updates | NextID.pk`,
-    description: `Get ${totalNews}+ latest education news, breaking updates on admissions, board results, scholarships, and educational events from across Pakistan. Stay informed with NextID.pk.`,
-    keywords: `education news ${currentYear}, Pakistan education news, admission news, result news, scholarship news, breaking news Pakistan, educational updates`,
-    alternates: {
-      canonical: 'https://www.nextid.pk/news',
-    },
-    openGraph: {
-      title: `Latest Education News ${currentYear} - Pakistan Updates | NextID.pk`,
-      description: `Breaking news, admissions, results, scholarships and educational events from across Pakistan.`,
-      url: 'https://www.nextid.pk/news',
-      siteName: 'NextID.pk',
-      images: [
-        {
-          url: '/og-image.png',
-          width: 1200,
-          height: 630,
-          alt: 'Education News Pakistan',
-        },
-      ],
-      locale: 'en_PK',
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `Latest Education News ${currentYear} - Pakistan Updates`,
-      description: `Get the latest education news, admissions, and results updates from across Pakistan.`,
-      images: ['/og-image.png'],
-      site: '@nextidpk',
-      creator: '@nextidpk',
-    },
-  };
+  try {
+    const news = await postService.getList('news', 1000);
+    return news || [];
+  } catch (error) {
+    console.error('Error fetching all news:', error);
+    return [];
+  }
 }
 
-// ============ DATA FETCHING ============
-async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: { currentPage: number; totalPages: number; totalItems: number; itemsPerPage: number } }> {
+async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: PaginationInfo }> {
+  "use cache";
+  
+  const cacheKey = `news-${page}-${category || 'all'}-${searchQuery || 'none'}`;
+  cacheTag(cacheKey);
+  cacheLife("hours");
+  
   try {
-    const allNews = await postService.getPostsByType('news', 200);
+    let allNews = await getAllNews();
     
-    let newsList: NewsItem[] = allNews.map(post => {
+    let newsList: NewsItem[] = allNews.map((post: ExtendedPost) => {
       const meta = post.meta || {};
       return {
         id: post.id,
@@ -192,10 +180,41 @@ async function getNewsData(page: number = 1, limit: number = 20, searchQuery?: s
         currentPage: 1,
         totalPages: 0,
         totalItems: 0,
-        itemsPerPage: 20
+        itemsPerPage: ITEMS_PER_PAGE
       }
     };
   }
+}
+
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const allNews = await getAllNews();
+  const totalNews = allNews.length;
+  const currentYear = "2026";
+  
+  return {
+    title: `Latest Education News ${currentYear} | Pakistan Admissions, Results & Updates | NextID.pk`,
+    description: `Get ${totalNews}+ latest education news, breaking updates on admissions, board results, scholarships, and educational events from across Pakistan. Stay informed with NextID.pk.`,
+    keywords: `education news ${currentYear}, Pakistan education news, admission news, result news, scholarship news, breaking news Pakistan, educational updates`,
+    alternates: { canonical: 'https://www.nextid.pk/news' },
+    openGraph: {
+      title: `Latest Education News ${currentYear} - Pakistan Updates | NextID.pk`,
+      description: `Breaking news, admissions, results, scholarships and educational events from across Pakistan.`,
+      url: 'https://www.nextid.pk/news',
+      siteName: 'NextID.pk',
+      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Education News Pakistan' }],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Latest Education News ${currentYear} - Pakistan Updates`,
+      description: `Get the latest education news, admissions, and results updates from across Pakistan.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
 }
 
 // ============ LOADING COMPONENT ============
@@ -217,7 +236,7 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   const searchQuery = params.search || undefined;
   const selectedCategory = params.category || "";
   
-  const { news: newsList, pagination } = await getNewsData(page, 20, searchQuery, selectedCategory);
+  const { news: newsList, pagination } = await getNewsData(page, ITEMS_PER_PAGE, searchQuery, selectedCategory);
   
   if (newsList.length === 0 && page === 1 && !searchQuery && !selectedCategory) {
     notFound();
@@ -226,13 +245,11 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
   // Split news for different sections
   const heroNews = newsList[0];
   const topStories = newsList.slice(1, 4);
-  const latestNews = newsList.slice(8, 16);
+  const latestNews = newsList.slice(4, 12);
   const popularNews = [...newsList].sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
   
-  // ✅ Use static year
   const currentYear = "2026";
   
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
     title: `Latest Education News ${currentYear} - Pakistan Updates`,
@@ -244,7 +261,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     ],
   });
   
-  // ✅ ItemList Schema for news listing
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -260,26 +276,28 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     }))
   };
   
+  // Build URL function for pagination with filters
+  const buildUrl = (newPage: number) => {
+    const urlParams = new URLSearchParams();
+    if (selectedCategory) urlParams.set('category', selectedCategory);
+    if (searchQuery) urlParams.set('search', searchQuery);
+    if (newPage > 1) urlParams.set('page', newPage.toString());
+    return urlParams.toString() ? `/news?${urlParams.toString()}` : '/news';
+  };
+
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <main className="min-h-screen bg-gray-50">
         
-        {/* ============ BREAKING NEWS TICKER ============ */}
+        {/* BREAKING NEWS TICKER */}
         {newsList.filter(n => n.isBreaking).length > 0 && (
-          <div className="bg-red-600 text-white py-2">
+          <div className="bg-red-600 text-white py-2 overflow-hidden">
             <div className="container mx-auto px-4">
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full">
+                <div className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full flex-shrink-0">
                   <Flame className="w-3.5 h-3.5 text-yellow-400" />
                   <span className="font-bold text-xs uppercase tracking-wider">Breaking</span>
                 </div>
@@ -297,7 +315,7 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
           </div>
         )}
 
-        {/* ============ HERO SECTION ============ */}
+        {/* HERO SECTION */}
         <div className="bg-gradient-to-r from-red-600 to-red-700 text-white py-12">
           <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto text-center">
@@ -317,7 +335,7 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
         <div className="container mx-auto px-4 py-12 max-w-7xl">
           
-          {/* ============ CATEGORY FILTER BAR ============ */}
+          {/* CATEGORY FILTER BAR */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-8">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-gray-500 mr-2">Filter:</span>
@@ -348,13 +366,12 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
             </div>
           </div>
           
-          {/* ============ HERO MAIN STORY ============ */}
+          {/* HERO MAIN STORY */}
           {heroNews && (
             <div className="mb-10">
               <Link href={`/news/${heroNews.slug}`} className="group">
                 <div className="relative overflow-hidden rounded-xl shadow-lg bg-white">
                   <div className="grid grid-cols-1 lg:grid-cols-2">
-                    {/* Image */}
                     <div className="relative h-64 lg:h-80 overflow-hidden">
                       {heroNews.featuredImage ? (
                         <Image
@@ -371,7 +388,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                       )}
                     </div>
                     
-                    {/* Content */}
                     <div className="p-6 lg:p-8 flex flex-col justify-center">
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
@@ -407,7 +423,7 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
           {newsList.length > 0 && (
             <div className="flex flex-col lg:flex-row gap-8">
               
-              {/* ============ MAIN CONTENT ============ */}
+              {/* MAIN CONTENT */}
               <main className="lg:w-2/3 space-y-8">
                 
                 {/* Top Stories Grid */}
@@ -468,7 +484,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                       <Link key={news.id} href={`/news/${news.slug}`} className="block group">
                         <div className="bg-white rounded-lg border border-gray-100 hover:shadow-md transition-all p-4">
                           <div className="flex gap-4">
-                            {/* Thumbnail */}
                             <div className="flex-shrink-0 w-20 h-20 md:w-24 md:h-24 overflow-hidden rounded-lg bg-gray-100">
                               {news.featuredImage ? (
                                 <Image
@@ -485,7 +500,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                               )}
                             </div>
                             
-                            {/* Content */}
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">
@@ -511,23 +525,53 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                 </div>
                 
                 {/* Pagination */}
-                {pagination.totalPages > 1 && !searchQuery && !selectedCategory && (
+                {pagination.totalPages > 1 && (
                   <div className="flex justify-center items-center gap-2 pt-4">
                     {pagination.currentPage > 1 && (
                       <Link
-                        href={`/news?page=${pagination.currentPage - 1}`}
+                        href={buildUrl(pagination.currentPage - 1)}
                         className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
                       >
                         <ChevronLeft className="w-4 h-4" />
                         Previous
                       </Link>
                     )}
-                    <span className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm">
-                      {pagination.currentPage}
-                    </span>
+                    
+                    {/* Page numbers */}
+                    <div className="flex gap-1">
+                      {(() => {
+                        const pages = [];
+                        const maxVisible = 5;
+                        let startPage = Math.max(1, pagination.currentPage - Math.floor(maxVisible / 2));
+                        let endPage = Math.min(pagination.totalPages, startPage + maxVisible - 1);
+                        
+                        if (endPage - startPage + 1 < maxVisible) {
+                          startPage = Math.max(1, endPage - maxVisible + 1);
+                        }
+                        
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(i);
+                        }
+                        
+                        return pages.map((pageNum) => (
+                          <Link
+                            key={pageNum}
+                            href={buildUrl(pageNum)}
+                            className={`px-3 py-2 rounded-lg font-medium text-sm transition ${
+                              pageNum === pagination.currentPage
+                                ? 'bg-red-600 text-white'
+                                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                            }`}
+                          >
+                            {pageNum}
+                          </Link>
+                        ));
+                      })()}
+                    </div>
+                    
                     {pagination.currentPage < pagination.totalPages && (
                       <Link
-                        href={`/news?page=${pagination.currentPage + 1}`}
+                        href={buildUrl(pagination.currentPage + 1)}
                         className="flex items-center gap-1 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition font-medium text-sm"
                       >
                         Next
@@ -538,7 +582,7 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                 )}
               </main>
               
-              {/* ============ RIGHT SIDEBAR ============ */}
+              {/* RIGHT SIDEBAR */}
               <aside className="lg:w-1/3">
                 <div className="sticky top-24 space-y-6">
                   
@@ -582,7 +626,9 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                   </div>
                   
                   {/* Sidebar Widgets */}
-                  <SidebarWidgets />
+                  <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                    <SidebarWidgets />
+                  </Suspense>
                 </div>
               </aside>
             </div>

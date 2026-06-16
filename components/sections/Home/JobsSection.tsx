@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Briefcase, MapPin, Calendar, ChevronRight } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -19,9 +20,10 @@ function formatDate(date: Date | null): string {
 }
 
 export default async function JobsSection() {
-  const jobs = await postService.getPostsByType('job', 5);
+  // ✅ NEW: getList function with limit 5
+  const jobs = await postService.getList('job', 5);
   
-  const items = jobs.map(post => {
+  const items = jobs.map((post: ExtendedPost) => {
     const meta = post.meta || {};
     const lastDate = getMetaValue(meta, 'lastDate', null) ? new Date(getMetaValue(meta, 'lastDate', '')) : null;
     

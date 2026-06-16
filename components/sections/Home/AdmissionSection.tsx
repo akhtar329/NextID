@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { GraduationCap, MapPin, Calendar, ChevronRight } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
   if (!meta) return defaultValue;
@@ -21,9 +22,10 @@ function formatDate(date: Date | null): string {
 }
 
 export default async function AdmissionSection() {
-  const admissions = await postService.getPostsByType('admission', 4);
+  // ✅ NEW: getList function with limit 4
+  const admissions = await postService.getList('admission', 4);
   
-  const items = admissions.map(post => {
+  const items = admissions.map((post: ExtendedPost) => {
     const meta = post.meta || {};
     const closeDate = getMetaValue(meta, 'closeDate', null) ? new Date(getMetaValue(meta, 'closeDate', '')) : null;
     

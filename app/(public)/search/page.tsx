@@ -3,8 +3,11 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import React from 'react';
 import { Search, Calendar, Briefcase, GraduationCap, Award, FileText, Clock } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
+import { cacheTag, cacheLife } from 'next/cache';
 
 export const metadata: Metadata = {
   title: 'Search Results | NextID.pk',
@@ -46,6 +49,7 @@ function getTypeStyles(type: string) {
     result: { icon: <FileText className="w-4 h-4" />, bg: 'bg-green-100', text: 'text-green-700', label: 'Result' },
     news: { icon: <FileText className="w-4 h-4" />, bg: 'bg-red-100', text: 'text-red-700', label: 'News' },
     date_sheet: { icon: <Calendar className="w-4 h-4" />, bg: 'bg-orange-100', text: 'text-orange-700', label: 'Date Sheet' },
+    blog: { icon: <FileText className="w-4 h-4" />, bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Blog' },
   };
   return styles[type] || { icon: <FileText className="w-4 h-4" />, bg: 'bg-gray-100', text: 'text-gray-700', label: type };
 }
@@ -73,10 +77,14 @@ function SearchResultCard({ result }: { result: SearchResultItem }) {
   } else if (result.type === 'date_sheet') {
     subtitle = getMetaValue(result.meta, 'boardName') || getMetaValue(result.meta, 'instituteName') || '';
     metaInfo = getMetaValue(result.meta, 'examType') ? `📝 ${getMetaValue(result.meta, 'examType')}` : '';
+  } else if (result.type === 'blog') {
+    subtitle = getMetaValue(result.meta, 'authorName') || '';
+    metaInfo = getMetaValue(result.meta, 'category') ? `📚 ${getMetaValue(result.meta, 'category')}` : '';
   }
   
   const getUrlPath = () => {
     if (result.type === 'date_sheet') return `/date-sheets/${result.slug}`;
+    if (result.type === 'blog') return `/blog/${result.slug}`;
     return `/${result.type}s/${result.slug}`;
   };
   
@@ -138,8 +146,6 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
   );
 }
 
-import React from 'react';
-
 // ============ LOADING COMPONENT ============
 function SearchLoading() {
   return (
@@ -147,6 +153,28 @@ function SearchLoading() {
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>
   );
+}
+
+// ============ CACHED SEARCH FUNCTION ============
+async function getAllSearchablePosts(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("search-all-posts");
+  cacheLife("hours");
+  
+  try {
+    const types = ['admission', 'job', 'scholarship', 'result', 'news', 'date_sheet', 'blog'] as const;
+    
+    type SearchablePostType = (typeof types)[number];
+    const results = await Promise.all(
+      types.map((type: SearchablePostType) => postService.getList(type, 500))
+    );
+    
+    const allPosts = results.flat();
+    return allPosts;
+  } catch (error) {
+    console.error('Error fetching searchable posts:', error);
+    return [];
+  }
 }
 
 // ============ SEARCH CONTENT COMPONENT ============
@@ -161,16 +189,11 @@ async function SearchContent({ searchParamsPromise }: { searchParamsPromise: Pro
   let totalPages = 0;
   
   if (query) {
-    const allResults = await postService.getPostsByType('admission', 100);
-    const allJobs = await postService.getPostsByType('job', 100);
-    const allScholarships = await postService.getPostsByType('scholarship', 100);
-    const allResultsData = await postService.getPostsByType('result', 100);
-    const allNews = await postService.getPostsByType('news', 100);
-    const allDateSheets = await postService.getPostsByType('date_sheet', 100);
+    // ✅ NEW: Get all posts from cache
+    const allPosts = await getAllSearchablePosts();
     
-    const all = [...allResults, ...allJobs, ...allScholarships, ...allResultsData, ...allNews, ...allDateSheets];
-    
-    const filtered = all.filter(item => 
+    // Filter by search query
+    const filtered = allPosts.filter(item => 
       item.title.toLowerCase().includes(query.toLowerCase())
     );
     

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
-import { unstable_cache } from 'next/cache';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { 
   FileText, 
   Calendar, 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface ResultItem {
@@ -35,10 +36,17 @@ interface ResultItem {
 
 interface Filters {
   board?: string;
-  university?: string;
   year?: string;
   level?: string;
   q?: string;
+  page?: number;
+}
+
+interface PaginatedResponse {
+  results: ResultItem[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
 
 interface Stats {
@@ -50,6 +58,8 @@ interface Stats {
 }
 
 // ============ CONSTANTS ============
+const ITEMS_PER_PAGE = 10;
+
 const RESULT_TYPES = [
   { slug: '', name: 'All Results', icon: '📋' },
   { slug: 'matric', name: 'Matric (SSC)', icon: '📚' },
@@ -86,57 +96,26 @@ function formatDate(date: Date | null): string {
   });
 }
 
-// ============ METADATA (Fixed - No Date.now()) ============
-export async function generateMetadata(): Promise<Metadata> {
-  const allResults = await postService.getPostsByType('result', 200);
-  const totalResults = allResults.length;
-  // ✅ Use static year
-  const currentYear = "2026";
+// ============ CACHED PAGINATED DATA FETCHING ============
+// ✅ Sirf requested page ke results fetch honge
+async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse> {
+  "use cache";
   
-  // ✅ Use static count instead of calculating recent results with Date.now()
-  // Simply show total results count in description
-  const resultCount = totalResults;
+  // ✅ Different cache tag for each page + filters
+  const cacheKey = `results-${filters.page || 1}-${filters.board || 'all'}-${filters.year || 'all'}-${filters.level || 'all'}-${filters.q || 'all'}`;
+  cacheTag(cacheKey);
+  cacheLife("hours");
   
-  return {
-    title: `Exam Results ${currentYear} Pakistan | ${totalResults}+ Board & University Results | NextID.pk`,
-    description: `Check ${resultCount}+ board and university results ${currentYear} in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results. Download result cards online.`,
-    keywords: `exam results ${currentYear}, board results ${currentYear}, matric results, intermediate results, BA results, BSc results, BISE results, FBISE result, Pakistan results`,
-    alternates: {
-      canonical: 'https://www.nextid.pk/results',
-    },
-    openGraph: {
-      title: `Exam Results ${currentYear} Pakistan - Board & University Results | NextID.pk`,
-      description: `Check ${totalResults}+ board and university results for Matric, Intermediate, BA, BSc, MA, MSc. Download result cards online.`,
-      url: 'https://www.nextid.pk/results',
-      siteName: 'NextID.pk',
-      images: [
-        {
-          url: '/og-image.png',
-          width: 1200,
-          height: 630,
-          alt: 'Exam Results Pakistan',
-        },
-      ],
-      locale: 'en_PK',
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `Exam Results ${currentYear} Pakistan`,
-      description: `Check the latest board and university results for ${currentYear}. Download result cards online.`,
-      images: ['/og-image.png'],
-      site: '@nextidpk',
-      creator: '@nextidpk',
-    },
-  };
-}
-
-// ============ DATA FETCHING ============
-async function getResults(filters: Filters): Promise<ResultItem[]> {
   try {
-    const allResults = await postService.getPostsByType('result', 200);
+    // Step 1: Sirf total count ke liye query (light query)
+    const totalCount = await postService.getTotalCount('result');
     
-    let resultsList: ResultItem[] = allResults.map(post => {
+    // Step 2: Sirf requested page ke results fetch karo
+    const offset = ((filters.page || 1) - 1) * ITEMS_PER_PAGE;
+    const posts = await postService.getList('result', ITEMS_PER_PAGE, offset);
+    
+    // Step 3: Transform results
+    let resultsList: ResultItem[] = posts.map((post: ExtendedPost) => {
       const meta = post.meta || {};
       
       let resultDate: Date | null = null;
@@ -168,12 +147,7 @@ async function getResults(filters: Filters): Promise<ResultItem[]> {
       };
     });
     
-    resultsList.sort((a, b) => {
-      const dateA = a.resultDate ? new Date(a.resultDate).getTime() : 0;
-      const dateB = b.resultDate ? new Date(b.resultDate).getTime() : 0;
-      return dateB - dateA;
-    });
-    
+    // Apply filters (client-side after fetching)
     if (filters.board) {
       resultsList = resultsList.filter(r => 
         r.boardSlug?.toLowerCase() === filters.board?.toLowerCase()
@@ -206,60 +180,168 @@ async function getResults(filters: Filters): Promise<ResultItem[]> {
       );
     }
     
-    return resultsList;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    
+    return {
+      results: resultsList,
+      totalCount,
+      totalPages,
+      currentPage: filters.page || 1,
+    };
   } catch (error) {
-    console.error('Error fetching results:', error);
-    return [];
+    console.error('Error fetching paginated results:', error);
+    return {
+      results: [],
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: 1,
+    };
   }
 }
 
+// ============ STATS (Light query - sirf count) ============
 async function getStats(): Promise<Stats> {
-  return unstable_cache(
-    async () => {
-      try {
-        const allResults = await postService.getPostsByType('result', 500);
-        
-        const totalResults = allResults.length;
-        
-        // ✅ Remove Date.now() from stats calculation for build time
-        const recentResults = allResults.filter(r => {
-          const meta = r.meta || {};
-          const resultDateRaw = getMetaValue(meta, 'resultDate', null);
-          if (!resultDateRaw || typeof resultDateRaw !== 'string') return false;
-          // Use static comparison instead of Date.now()
-          return true; // Simplified for build
-        }).length;
-        
-        const yearsSet = new Set<number>();
-        allResults.forEach(r => {
-          const meta = r.meta || {};
-          const year = getMetaValue(meta, 'year', null);
-          if (year) yearsSet.add(year);
-        });
-        
-        const years = Array.from(yearsSet).sort((a, b) => b - a);
-        
-        return {
-          totalResults,
-          totalBoards: 20,
-          totalUniversities: 50,
-          recentResults,
-          years,
-        };
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-        return {
-          totalResults: 0,
-          totalBoards: 0,
-          totalUniversities: 0,
-          recentResults: 0,
-          years: [],
-        };
-      }
+  "use cache";
+  cacheTag("results-stats");
+  cacheLife("hours");
+  
+  try {
+    const totalResults = await postService.getTotalCount('result');
+    
+    // Get unique years from meta (light query)
+    const allResults = await postService.getList('result', 1000);
+    const yearsSet = new Set<number>();
+    allResults.forEach(r => {
+      const meta = r.meta || {};
+      const year = getMetaValue(meta, 'year', null);
+      if (year) yearsSet.add(year);
+    });
+    const years = Array.from(yearsSet).sort((a, b) => b - a);
+    
+    return {
+      totalResults,
+      totalBoards: 20,
+      totalUniversities: 50,
+      recentResults: Math.min(totalResults, 10),
+      years,
+    };
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return {
+      totalResults: 0,
+      totalBoards: 0,
+      totalUniversities: 0,
+      recentResults: 0,
+      years: [],
+    };
+  }
+}
+
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const totalResults = await postService.getTotalCount('result');
+  const currentYear = "2026";
+  
+  return {
+    title: `Exam Results ${currentYear} Pakistan | ${totalResults}+ Board & University Results | NextID.pk`,
+    description: `Check ${totalResults}+ board and university results ${currentYear} in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results.`,
+    keywords: `exam results ${currentYear}, board results ${currentYear}, matric results, intermediate results`,
+    alternates: { canonical: 'https://www.nextid.pk/results' },
+    openGraph: {
+      title: `Exam Results ${currentYear} Pakistan - Board & University Results | NextID.pk`,
+      description: `Check ${totalResults}+ board and university results for Matric, Intermediate, BA, BSc, MA, MSc.`,
+      url: 'https://www.nextid.pk/results',
+      siteName: 'NextID.pk',
+      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Exam Results Pakistan' }],
+      locale: 'en_PK',
+      type: 'website',
     },
-    ['results-stats'],
-    { revalidate: 86400, tags: ['results-stats'] }
-  )();
+    twitter: {
+      card: 'summary_large_image',
+      title: `Exam Results ${currentYear} Pakistan`,
+      description: `Check the latest board and university results for ${currentYear}.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
+
+// ============ PAGINATION COMPONENT ============
+function Pagination({ currentPage, totalPages, baseUrl, filters }: { 
+  currentPage: number; 
+  totalPages: number; 
+  baseUrl: string;
+  filters: Filters;
+}) {
+  if (totalPages <= 1) return null;
+  
+  const buildPageUrl = (page: number): string => {
+    const urlParams = new URLSearchParams();
+    if (filters.board && filters.board !== 'all') urlParams.set('board', filters.board);
+    if (filters.year && filters.year !== 'all') urlParams.set('year', filters.year);
+    if (filters.level && filters.level !== '') urlParams.set('level', filters.level);
+    if (filters.q) urlParams.set('q', filters.q);
+    if (page > 1) urlParams.set('page', page.toString());
+    return urlParams.toString() ? `${baseUrl}?${urlParams.toString()}` : baseUrl;
+  };
+  
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  
+  if (endPage - startPage + 1 < maxVisible) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+  
+  return (
+    <div className="flex justify-center items-center gap-2 mt-8 flex-wrap">
+      <Link
+        href={buildPageUrl(currentPage - 1)}
+        className={`px-3 py-2 rounded-lg border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Previous
+      </Link>
+      
+      {startPage > 1 && (
+        <>
+          <Link href={buildPageUrl(1)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">1</Link>
+          {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+        </>
+      )}
+      
+      {pages.map(page => (
+        <Link
+          key={page}
+          href={buildPageUrl(page)}
+          className={`px-3 py-2 rounded-lg border ${currentPage === page ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          {page}
+        </Link>
+      ))}
+      
+      {endPage < totalPages && (
+        <>
+          {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+          <Link href={buildPageUrl(totalPages)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
+            {totalPages}
+          </Link>
+        </>
+      )}
+      
+      <Link
+        href={buildPageUrl(currentPage + 1)}
+        className={`px-3 py-2 rounded-lg border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Next
+      </Link>
+    </div>
+  );
 }
 
 // ============ LOADING COMPONENT ============
@@ -301,36 +383,34 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
   const params = await searchParamsPromise;
   
   const filters: Filters = {
-    board: typeof params.board === 'string' ? params.board : '',
-    university: typeof params.university === 'string' ? params.university : '',
-    year: typeof params.year === 'string' ? params.year : '',
-    level: typeof params.level === 'string' ? params.level : '',
-    q: typeof params.q === 'string' ? params.q : '',
+    board: typeof params.board === 'string' ? params.board : undefined,
+    year: typeof params.year === 'string' ? params.year : undefined,
+    level: typeof params.level === 'string' ? params.level : undefined,
+    q: typeof params.q === 'string' ? params.q : undefined,
+    page: typeof params.page === 'string' ? parseInt(params.page) : 1,
   };
 
-  const [resultsData, stats] = await Promise.all([
-    getResults(filters),
-    getStats(),
-  ]);
+  // ✅ Sirf current page ke results fetch honge
+  const { results, totalCount, totalPages, currentPage } = await getPaginatedResults(filters);
+  const stats = await getStats();
 
   const buildUrl = (key: string, value: string): string => {
     const urlParams = new URLSearchParams();
-    if (filters.board && key !== 'board') urlParams.set('board', filters.board);
-    if (filters.year && key !== 'year') urlParams.set('year', filters.year);
-    if (filters.level && key !== 'level') urlParams.set('level', filters.level);
+    if (filters.board && filters.board !== 'all' && key !== 'board') urlParams.set('board', filters.board);
+    if (filters.year && filters.year !== 'all' && key !== 'year') urlParams.set('year', filters.year);
+    if (filters.level && filters.level !== '' && key !== 'level') urlParams.set('level', filters.level);
     if (filters.q && key !== 'q') urlParams.set('q', filters.q);
     if (value) urlParams.set(key, value);
+    if (currentPage !== 1 && key !== 'page') urlParams.set('page', currentPage.toString());
     return urlParams.toString() ? `/results?${urlParams.toString()}` : '/results';
   };
 
-  // ✅ Use static year
   const currentYear = "2026";
   
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
     title: `Exam Results ${currentYear} - Board & University Results Pakistan`,
-    description: `Find ${resultsData.length} exam results for boards and universities in Pakistan`,
+    description: `Find ${totalCount} exam results for boards and universities in Pakistan`,
     url: 'https://www.nextid.pk/results',
     breadcrumbs: [
       { name: 'Home', url: '/' },
@@ -338,15 +418,14 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
     ],
   });
   
-  // ✅ ItemList Schema for results listing
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
     "name": `Exam Results ${currentYear} - Pakistan`,
-    "description": `List of ${resultsData.length} exam results for Matric, Intermediate, BA, BSc, MA, MSc`,
-    "numberOfItems": resultsData.length,
+    "description": `List of ${totalCount} exam results`,
+    "numberOfItems": totalCount,
     "url": "https://www.nextid.pk/results",
-    "itemListElement": resultsData.slice(0, 10).map((result, index) => ({
+    "itemListElement": results.slice(0, 10).map((result, index) => ({
       "@type": "ListItem",
       "position": index + 1,
       "url": `https://www.nextid.pk/results/${result.slug}`,
@@ -356,15 +435,8 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <div className="flex flex-col lg:flex-row gap-8">
         
@@ -376,7 +448,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               Filter Results
             </h2>
             
-            {/* Search */}
             <div className="mb-6">
               <form action="/results" method="GET" className="relative">
                 <input 
@@ -390,7 +461,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               </form>
             </div>
 
-            {/* Result Type */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Result Type</h3>
               <div className="space-y-1">
@@ -413,7 +483,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               </div>
             </div>
 
-            {/* Boards */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Education Boards</h3>
               <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -444,7 +513,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               </div>
             </div>
 
-            {/* Year */}
             {stats.years.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-semibold text-gray-700 mb-3 text-sm">Year</h3>
@@ -476,7 +544,6 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               </div>
             )}
 
-            {/* Clear Filters */}
             {(filters.board || filters.year || filters.level || filters.q) && (
               <Link 
                 href="/results" 
@@ -491,29 +558,21 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
         {/* MAIN CONTENT */}
         <div className="flex-1">
           
-          {/* Stats Bar */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-green-500" />
-                {resultsData.length} Results Found
+                Showing {results.length} of {totalCount} Results
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><Award className="w-3 h-3" /> {stats.totalResults} Total</span>
-                <span className="flex items-center gap-1">👁️ {resultsData.reduce((sum, r) => sum + r.viewCount, 0).toLocaleString()} views</span>
+                <span className="flex items-center gap-1"><Award className="w-3 h-3" /> Page {currentPage} of {totalPages}</span>
               </div>
             </div>
-            {filters.level && (
-              <p className="text-sm text-gray-500 mt-2">
-                Type: {RESULT_TYPES.find(l => l.slug === filters.level)?.name}
-              </p>
-            )}
           </div>
 
-          {/* Results List */}
           <div className="space-y-4">
-            {resultsData.length > 0 ? (
-              resultsData.map((r) => {
+            {results.length > 0 ? (
+              results.map((r) => {
                 const institutionName = r.boardName || r.instituteName || 'Education Board';
                 return (
                   <article key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-green-200 transition-all overflow-hidden group">
@@ -538,19 +597,13 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
                                     {formatDate(r.resultDate)}
                                   </span>
                                 )}
-                                <span className="flex items-center gap-1">
-                                  Year: {r.year}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  👁️ {r.viewCount.toLocaleString()} views
-                                </span>
-                                <div className="flex gap-2">
-                                  {r.isPopular && (
-                                    <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
-                                      <TrendingUp className="w-3 h-3" /> Popular
-                                    </span>
-                                  )}
-                                </div>
+                                <span className="flex items-center gap-1">Year: {r.year}</span>
+                                <span className="flex items-center gap-1">👁️ {r.viewCount.toLocaleString()} views</span>
+                                {r.isPopular && (
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                    <TrendingUp className="w-3 h-3" /> Popular
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -578,12 +631,22 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
               </div>
             )}
           </div>
+          
+          {/* ✅ Pagination Component */}
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            baseUrl="/results" 
+            filters={filters}
+          />
         </div>
         
-        {/* RIGHT SIDEBAR - Widgets */}
+        {/* RIGHT SIDEBAR */}
         <aside className="lg:w-72 flex-shrink-0">
           <div className="sticky top-24">
-            <SidebarWidgets />
+            <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+              <SidebarWidgets />
+            </Suspense>
           </div>
         </aside>
         
@@ -594,13 +657,11 @@ async function ResultsContent({ searchParamsPromise }: { searchParamsPromise: Pr
 
 // ============ MAIN PAGE ============
 export default async function ResultsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  // ✅ Use static year
   const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <div className="relative bg-gradient-to-r from-green-600 to-teal-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 py-16">
@@ -616,7 +677,6 @@ export default async function ResultsPage({ searchParams }: { searchParams?: Pro
               Board & University Results • Matric to Masters • Latest Announcements
             </p>
             
-            {/* Hero Search */}
             <div className="max-w-2xl mx-auto mt-8">
               <form action="/results" method="GET" className="relative">
                 <input 

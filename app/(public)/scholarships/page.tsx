@@ -1,12 +1,11 @@
 // app/(public)/scholarships/page.tsx
 
-
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
-import { unstable_cache } from 'next/cache';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { 
   GraduationCap, 
   Calendar, 
@@ -22,6 +21,33 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
+
+// ============ CONSTANTS ============
+const ITEMS_PER_PAGE = 10;
+
+const STUDY_LEVELS = [
+  { slug: '', name: 'All Levels', icon: '📚' },
+  { slug: 'matric', name: 'Matric', icon: '📖' },
+  { slug: 'inter', name: 'Intermediate', icon: '📘' },
+  { slug: 'bs', name: 'Bachelor (BS)', icon: '🎓' },
+  { slug: 'ms', name: 'Master (MS/MPhil)', icon: '🎓' },
+  { slug: 'phd', name: 'PhD', icon: '🔬' },
+];
+
+const SCHOLARSHIP_TYPES = [
+  { slug: '', name: 'All Types', icon: '💰' },
+  { slug: 'fully-funded', name: 'Fully Funded', icon: '💎' },
+  { slug: 'partial', name: 'Partial', icon: '📖' },
+  { slug: 'merit-based', name: 'Merit Based', icon: '⭐' },
+  { slug: 'need-based', name: 'Need Based', icon: '🤝' },
+];
+
+const LOCATIONS = [
+  { slug: '', name: 'All Locations', icon: '🌍' },
+  { slug: 'pakistan', name: 'Pakistan', icon: '🇵🇰' },
+  { slug: 'abroad', name: 'Abroad', icon: '✈️' },
+];
 
 // ============ TYPES ============
 interface ScholarshipItem {
@@ -45,6 +71,14 @@ interface Filters {
   type?: string;
   location?: string;
   q?: string;
+  page?: number;
+}
+
+interface PaginatedResponse {
+  scholarships: ScholarshipItem[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
 }
 
 interface Stats {
@@ -53,30 +87,6 @@ interface Stats {
   abroad: number;
   fullyFunded: number;
 }
-
-// ============ CONSTANTS ============
-const STUDY_LEVELS = [
-  { slug: '', name: 'All Levels', icon: '📚' },
-  { slug: 'matric', name: 'Matric', icon: '📖' },
-  { slug: 'inter', name: 'Intermediate', icon: '📘' },
-  { slug: 'bs', name: 'Bachelor (BS)', icon: '🎓' },
-  { slug: 'ms', name: 'Master (MS/MPhil)', icon: '🎓' },
-  { slug: 'phd', name: 'PhD', icon: '🔬' },
-];
-
-const SCHOLARSHIP_TYPES = [
-  { slug: '', name: 'All Types', icon: '💰' },
-  { slug: 'fully-funded', name: 'Fully Funded', icon: '💎' },
-  { slug: 'partial', name: 'Partial', icon: '📖' },
-  { slug: 'merit-based', name: 'Merit Based', icon: '⭐' },
-  { slug: 'need-based', name: 'Need Based', icon: '🤝' },
-];
-
-const LOCATIONS = [
-  { slug: '', name: 'All Locations', icon: '🌍' },
-  { slug: 'pakistan', name: 'Pakistan', icon: '🇵🇰' },
-  { slug: 'abroad', name: 'Abroad', icon: '✈️' },
-];
 
 // ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
@@ -103,59 +113,60 @@ function getDaysLeft(date: Date | null): number | null {
   return diffDays > 0 ? diffDays : null;
 }
 
-// ============ METADATA (Fixed - No new Date()) ============
-export async function generateMetadata(): Promise<Metadata> {
-  const allScholarships = await postService.getPostsByType('scholarship', 200);
-  const totalScholarships = allScholarships.length;
-  // ✅ Use static year instead of new Date()
-  const currentYear = "2026";
+// ============ CACHED DATA FETCHING ============
+async function getAllScholarships(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("scholarships-all");
+  cacheLife("hours");
   
-  // Count fully funded scholarships
-  const fullyFunded = allScholarships.filter(s => {
-    const meta = s.meta || {};
-    return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
-  }).length;
-  
-  return {
-    title: `Scholarships ${currentYear} in Pakistan | ${totalScholarships}+ Fully Funded & Partial | NextID.pk`,
-    description: `Find ${fullyFunded}+ fully funded and ${totalScholarships - fullyFunded}+ partial scholarships for Pakistani students ${currentYear}. Merit-based, need-based scholarships for Matric to PhD. Apply now!`,
-    keywords: `scholarships ${currentYear}, scholarships in Pakistan, fully funded scholarships, merit scholarships, need-based scholarships, study abroad scholarships, ${currentYear} scholarships`,
-    alternates: {
-      canonical: 'https://www.nextid.pk/scholarships',
-    },
-    openGraph: {
-      title: `Scholarships ${currentYear} Pakistan - Fully Funded & Partial | NextID.pk`,
-      description: `Find ${totalScholarships}+ scholarships for Pakistani students including fully funded, merit-based, and need-based opportunities.`,
-      url: 'https://www.nextid.pk/scholarships',
-      siteName: 'NextID.pk',
-      images: [
-        {
-          url: '/og-image.png',
-          width: 1200,
-          height: 630,
-          alt: 'Scholarships in Pakistan',
-        },
-      ],
-      locale: 'en_PK',
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `Scholarships ${currentYear} Pakistan`,
-      description: `Find the best scholarship opportunities for Pakistani students. Apply now for fully funded and partial scholarships.`,
-      images: ['/og-image.png'],
-      site: '@nextidpk',
-      creator: '@nextidpk',
-    },
-  };
+  try {
+    const scholarships = await postService.getList('scholarship', 1000);
+    return scholarships || [];
+  } catch (error) {
+    console.error('Error fetching all scholarships:', error);
+    return [];
+  }
 }
 
-// ============ DATA FETCHING ============
-async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
+async function getStats(): Promise<Stats> {
+  "use cache";
+  cacheTag("scholarships-stats");
+  cacheLife("hours");
+  
   try {
-    const allScholarships = await postService.getPostsByType('scholarship', 200);
+    const allScholarships = await getAllScholarships();
+    const total = allScholarships.length;
+    const featured = allScholarships.filter(s => {
+      const meta = s.meta || {};
+      return getMetaValue(meta, 'isFeatured', false);
+    }).length;
+    const abroad = allScholarships.filter(s => {
+      const meta = s.meta || {};
+      return getMetaValue(meta, 'location', '').toLowerCase() === 'abroad';
+    }).length;
+    const fullyFunded = allScholarships.filter(s => {
+      const meta = s.meta || {};
+      return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
+    }).length;
     
-    let scholarshipsList: ScholarshipItem[] = allScholarships.map(post => {
+    return { total, featured, abroad, fullyFunded };
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return { total: 0, featured: 0, abroad: 0, fullyFunded: 0 };
+  }
+}
+
+async function getPaginatedScholarships(filters: Filters): Promise<PaginatedResponse> {
+  "use cache";
+  
+  const cacheKey = `scholarships-${filters.page || 1}-${filters.level || 'all'}-${filters.type || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
+  cacheTag(cacheKey);
+  cacheLife("hours");
+  
+  try {
+    const allScholarships = await getAllScholarships();
+    
+    let scholarshipsList: ScholarshipItem[] = allScholarships.map((post: ExtendedPost) => {
       const meta = post.meta || {};
       
       let deadline: Date | null = null;
@@ -188,6 +199,7 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       };
     });
     
+    // Sort by deadline (nearest first)
     scholarshipsList.sort((a, b) => {
       if (!a.deadline && !b.deadline) return 0;
       if (!a.deadline) return 1;
@@ -195,6 +207,7 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       return a.deadline.getTime() - b.deadline.getTime();
     });
     
+    // Apply filters
     if (filters.level && filters.level !== '') {
       const levelMap: Record<string, string[]> = {
         'matric': ['matric', 'ssc', 'secondary'],
@@ -231,42 +244,140 @@ async function getScholarships(filters: Filters): Promise<ScholarshipItem[]> {
       );
     }
     
-    return scholarshipsList;
-  } catch (err) {
-    console.error('Error fetching scholarships:', err);
-    return [];
+    const totalCount = scholarshipsList.length;
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+    const currentPage = filters.page || 1;
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const paginatedScholarships = scholarshipsList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    
+    return {
+      scholarships: paginatedScholarships,
+      totalCount,
+      totalPages,
+      currentPage,
+    };
+  } catch (error) {
+    console.error('Error fetching paginated scholarships:', error);
+    return {
+      scholarships: [],
+      totalCount: 0,
+      totalPages: 0,
+      currentPage: 1,
+    };
   }
 }
 
-async function getStats(): Promise<Stats> {
-  return unstable_cache(
-    async () => {
-      try {
-        const allScholarships = await postService.getPostsByType('scholarship', 500);
-        
-        const total = allScholarships.length;
-        const featured = allScholarships.filter(s => {
-          const meta = s.meta || {};
-          return getMetaValue(meta, 'isFeatured', false);
-        }).length;
-        const abroad = allScholarships.filter(s => {
-          const meta = s.meta || {};
-          return getMetaValue(meta, 'location', '').toLowerCase() === 'abroad';
-        }).length;
-        const fullyFunded = allScholarships.filter(s => {
-          const meta = s.meta || {};
-          return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
-        }).length;
-        
-        return { total, featured, abroad, fullyFunded };
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-        return { total: 0, featured: 0, abroad: 0, fullyFunded: 0 };
-      }
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const allScholarships = await getAllScholarships();
+  const totalScholarships = allScholarships.length;
+  const currentYear = "2026";
+  
+  const fullyFunded = allScholarships.filter(s => {
+    const meta = s.meta || {};
+    return getMetaValue(meta, 'type', '').toLowerCase().includes('full');
+  }).length;
+  
+  return {
+    title: `Scholarships ${currentYear} in Pakistan | ${totalScholarships}+ Fully Funded & Partial | NextID.pk`,
+    description: `Find ${fullyFunded}+ fully funded and ${totalScholarships - fullyFunded}+ partial scholarships for Pakistani students ${currentYear}. Merit-based, need-based scholarships for Matric to PhD. Apply now!`,
+    keywords: `scholarships ${currentYear}, scholarships in Pakistan, fully funded scholarships, merit scholarships, need-based scholarships, study abroad scholarships`,
+    alternates: { canonical: 'https://www.nextid.pk/scholarships' },
+    openGraph: {
+      title: `Scholarships ${currentYear} Pakistan - Fully Funded & Partial | NextID.pk`,
+      description: `Find ${totalScholarships}+ scholarships for Pakistani students including fully funded, merit-based, and need-based opportunities.`,
+      url: 'https://www.nextid.pk/scholarships',
+      siteName: 'NextID.pk',
+      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Scholarships in Pakistan' }],
+      locale: 'en_PK',
+      type: 'website',
     },
-    ['scholarships-stats'],
-    { revalidate: 86400, tags: ['scholarships-stats'] }
-  )();
+    twitter: {
+      card: 'summary_large_image',
+      title: `Scholarships ${currentYear} Pakistan`,
+      description: `Find the best scholarship opportunities for Pakistani students. Apply now for fully funded and partial scholarships.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
+}
+
+// ============ PAGINATION COMPONENT ============
+function Pagination({ currentPage, totalPages, baseUrl, filters }: { 
+  currentPage: number; 
+  totalPages: number; 
+  baseUrl: string;
+  filters: Filters;
+}) {
+  if (totalPages <= 1) return null;
+  
+  const buildPageUrl = (page: number): string => {
+    const urlParams = new URLSearchParams();
+    if (filters.level && filters.level !== '') urlParams.set('level', filters.level);
+    if (filters.type && filters.type !== '') urlParams.set('type', filters.type);
+    if (filters.location && filters.location !== '') urlParams.set('location', filters.location);
+    if (filters.q) urlParams.set('q', filters.q);
+    if (page > 1) urlParams.set('page', page.toString());
+    return urlParams.toString() ? `${baseUrl}?${urlParams.toString()}` : baseUrl;
+  };
+  
+  const pages = [];
+  const maxVisible = 5;
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+  
+  if (endPage - startPage + 1 < maxVisible) {
+    startPage = Math.max(1, endPage - maxVisible + 1);
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+  
+  return (
+    <div className="flex justify-center items-center gap-2 mt-8 flex-wrap">
+      <Link
+        href={buildPageUrl(currentPage - 1)}
+        className={`px-3 py-2 rounded-lg border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Previous
+      </Link>
+      
+      {startPage > 1 && (
+        <>
+          <Link href={buildPageUrl(1)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">1</Link>
+          {startPage > 2 && <span className="px-2 text-gray-400">...</span>}
+        </>
+      )}
+      
+      {pages.map(page => (
+        <Link
+          key={page}
+          href={buildPageUrl(page)}
+          className={`px-3 py-2 rounded-lg border ${currentPage === page ? 'bg-teal-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          {page}
+        </Link>
+      ))}
+      
+      {endPage < totalPages && (
+        <>
+          {endPage < totalPages - 1 && <span className="px-2 text-gray-400">...</span>}
+          <Link href={buildPageUrl(totalPages)} className="px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
+            {totalPages}
+          </Link>
+        </>
+      )}
+      
+      <Link
+        href={buildPageUrl(currentPage + 1)}
+        className={`px-3 py-2 rounded-lg border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Next
+      </Link>
+    </div>
+  );
 }
 
 // ============ LOADING COMPONENT ============
@@ -312,31 +423,33 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
     type: typeof params.type === 'string' ? params.type : '',
     location: typeof params.location === 'string' ? params.location : '',
     q: typeof params.q === 'string' ? params.q : '',
+    page: typeof params.page === 'string' ? parseInt(params.page) : 1,
   };
 
-  const [scholarships, stats] = await Promise.all([
-    getScholarships(filters),
+  const [paginatedData, stats] = await Promise.all([
+    getPaginatedScholarships(filters),
     getStats(),
   ]);
 
+  const { scholarships, totalCount, totalPages, currentPage } = paginatedData;
+
   const buildUrl = (key: string, value: string): string => {
     const urlParams = new URLSearchParams();
-    if (filters.level && key !== 'level') urlParams.set('level', filters.level);
-    if (filters.type && key !== 'type') urlParams.set('type', filters.type);
-    if (filters.location && key !== 'location') urlParams.set('location', filters.location);
+    if (filters.level && filters.level !== '' && key !== 'level') urlParams.set('level', filters.level);
+    if (filters.type && filters.type !== '' && key !== 'type') urlParams.set('type', filters.type);
+    if (filters.location && filters.location !== '' && key !== 'location') urlParams.set('location', filters.location);
     if (filters.q && key !== 'q') urlParams.set('q', filters.q);
+    if (currentPage !== 1 && key !== 'page') urlParams.set('page', currentPage.toString());
     if (value) urlParams.set(key, value);
     return urlParams.toString() ? `/scholarships?${urlParams.toString()}` : '/scholarships';
   };
 
-  // ✅ Use static year
   const currentYear = "2026";
   
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
     title: `Scholarships ${currentYear} - Study Opportunities for Pakistani Students`,
-    description: `Find ${scholarships.length} scholarship opportunities for Pakistani students`,
+    description: `Find ${totalCount} scholarship opportunities for Pakistani students`,
     url: 'https://www.nextid.pk/scholarships',
     breadcrumbs: [
       { name: 'Home', url: '/' },
@@ -344,13 +457,12 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
     ],
   });
   
-  // ✅ ItemList Schema for scholarships listing
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
     "name": `Scholarships ${currentYear} for Pakistani Students`,
-    "description": `List of ${scholarships.length} scholarship opportunities including fully funded and partial scholarships`,
-    "numberOfItems": scholarships.length,
+    "description": `List of ${totalCount} scholarship opportunities including fully funded and partial scholarships`,
+    "numberOfItems": totalCount,
     "url": "https://www.nextid.pk/scholarships",
     "itemListElement": scholarships.slice(0, 10).map((scholarship, index) => ({
       "@type": "ListItem",
@@ -362,15 +474,8 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <div className="flex flex-col lg:flex-row gap-8">
         
@@ -382,7 +487,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               Filter Scholarships
             </h2>
             
-            {/* Search */}
             <div className="mb-6">
               <form action="/scholarships" method="GET" className="relative">
                 <input 
@@ -396,7 +500,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               </form>
             </div>
 
-            {/* Study Level */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Study Level</h3>
               <div className="space-y-1">
@@ -417,7 +520,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               </div>
             </div>
 
-            {/* Scholarship Type */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Scholarship Type</h3>
               <div className="space-y-1">
@@ -438,7 +540,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               </div>
             </div>
 
-            {/* Location */}
             <div className="mb-6">
               <h3 className="font-semibold text-gray-700 mb-3 text-sm">Location</h3>
               <div className="space-y-1">
@@ -459,7 +560,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               </div>
             </div>
 
-            {/* Clear Filters */}
             {(filters.level || filters.type || filters.location || filters.q) && (
               <Link 
                 href="/scholarships" 
@@ -474,26 +574,21 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
         {/* MAIN CONTENT */}
         <div className="flex-1">
           
-          {/* Stats Bar */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-4 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <Award className="w-5 h-5 text-teal-500" />
-                {scholarships.length} Scholarships Found
+                Showing {scholarships.length} of {totalCount} Scholarships
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {stats.featured} Featured</span>
                 <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {stats.abroad} Abroad</span>
                 <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> {stats.fullyFunded} Fully Funded</span>
-                <span className="flex items-center gap-1">👁️ {scholarships.reduce((sum, s) => sum + s.viewCount, 0).toLocaleString()} views</span>
+                <span className="flex items-center gap-1">Page {currentPage} of {totalPages}</span>
               </div>
             </div>
-            {filters.level && (
-              <p className="text-sm text-gray-500 mt-2">Level: {STUDY_LEVELS.find(l => l.slug === filters.level)?.name}</p>
-            )}
           </div>
 
-          {/* Scholarships List */}
           <div className="space-y-4">
             {scholarships.length > 0 ? (
               scholarships.map((s) => {
@@ -505,7 +600,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                     <div className="p-5">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                         <div className="flex-1">
-                          {/* Badges */}
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {s.isFeatured && (
                               <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
@@ -524,18 +618,15 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                             )}
                           </div>
                           
-                          {/* Title */}
                           <h3 className="text-lg font-bold text-gray-900 mb-1 group-hover:text-teal-600 transition-colors">
                             <Link href={`/scholarships/${s.slug}`}>{s.title}</Link>
                           </h3>
                           
-                          {/* Provider */}
                           <p className="text-sm text-gray-500 mb-2 flex items-center gap-1">
                             <GraduationCap className="w-3.5 h-3.5" />
                             {s.provider}
                           </p>
                           
-                          {/* Tags */}
                           <div className="flex flex-wrap gap-2 mb-3">
                             <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.studyLevel}</span>
                             <span className="px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-xs font-medium">{s.type}</span>
@@ -552,7 +643,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                             </span>
                           </div>
                           
-                          {/* Deadline */}
                           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                               <Calendar className="w-3.5 h-3.5" />
@@ -566,7 +656,6 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
                           </div>
                         </div>
                         
-                        {/* Action Button */}
                         <Link 
                           href={`/scholarships/${s.slug}`} 
                           className="flex-shrink-0 px-5 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm font-medium inline-flex items-center gap-2"
@@ -590,12 +679,20 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
               </div>
             )}
           </div>
+          
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            baseUrl="/scholarships" 
+            filters={filters}
+          />
         </div>
         
-        {/* RIGHT SIDEBAR - Widgets */}
         <aside className="lg:w-72 flex-shrink-0">
           <div className="sticky top-24">
-            <SidebarWidgets />
+            <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+              <SidebarWidgets />
+            </Suspense>
           </div>
         </aside>
         
@@ -606,13 +703,11 @@ async function ScholarshipsContent({ searchParamsPromise }: { searchParamsPromis
 
 // ============ MAIN PAGE ============
 export default async function ScholarshipsPage({ searchParams }: { searchParams?: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  // ✅ Use static year instead of new Date()
   const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">
       
-      {/* Hero Section */}
       <div className="relative bg-gradient-to-r from-teal-600 to-emerald-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 py-16">
@@ -628,7 +723,6 @@ export default async function ScholarshipsPage({ searchParams }: { searchParams?
               Find fully funded, partial, and merit-based scholarships for Pakistani students
             </p>
             
-            {/* Hero Search */}
             <div className="max-w-2xl mx-auto mt-8">
               <form action="/scholarships" method="GET" className="relative">
                 <input 

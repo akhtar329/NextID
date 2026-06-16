@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import React from 'react';
 import { postService } from '@/services/post/post.service';
+import type { ExtendedPost } from '@/services/post/post.service';
 import { generateJsonLd } from '@/lib/seo';
+import { cacheTag, cacheLife } from 'next/cache';
 
 // ============================================
 // INTERFACE DEFINITIONS
@@ -74,58 +76,35 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// ============ METADATA (Fixed - No new Date()) ============
-export async function generateMetadata(): Promise<Metadata> {
-  const allSheets = await postService.getPostsByType('date_sheet', 1000);
-  const totalSheets = allSheets.length;
-  // ✅ Use static year
-  const currentYear = "2026";
+// ============ CACHED DATA FETCHING ============
+async function getAllDateSheets(): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag("date-sheets-all");
+  cacheLife("hours");
   
-  return {
-    title: `Date Sheets ${currentYear} in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk`,
-    description: `Download ${totalSheets}+ date sheets for Matric, Intermediate, and University exams ${currentYear}. Complete exam schedules for all BISE boards and universities in Pakistan.`,
-    keywords: `date sheets ${currentYear}, exam schedules ${currentYear}, BISE date sheets, FBISE date sheet, Matric exam schedule, Intermediate exam dates, university date sheets, Pakistan exams`,
-    alternates: {
-      canonical: 'https://www.nextid.pk/date-sheets',
-    },
-    openGraph: {
-      title: `Date Sheets ${currentYear} – Exam Schedules Pakistan | NextID.pk`,
-      description: `Download complete exam schedules for Matric, Intermediate, and University exams across Pakistan.`,
-      url: 'https://www.nextid.pk/date-sheets',
-      siteName: 'NextID.pk',
-      images: [
-        {
-          url: '/og-image.png',
-          width: 1200,
-          height: 630,
-          alt: 'Date Sheets Pakistan',
-        },
-      ],
-      locale: 'en_PK',
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `Date Sheets ${currentYear} – Exam Schedules`,
-      description: `Download complete exam schedules for all boards and universities in Pakistan.`,
-      images: ['/og-image.png'],
-      site: '@nextidpk',
-      creator: '@nextidpk',
-    },
-  };
+  try {
+    const sheets = await postService.getList('date_sheet', 1000);
+    return sheets || [];
+  } catch (error) {
+    console.error('Error fetching date sheets:', error);
+    return [];
+  }
 }
 
-// ============================================
-// DATA FETCHING FUNCTIONS
-// ============================================
-
 async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResult> {
+  "use cache";
+  
+  const cacheKey = `date-sheets-${filters.page || 1}-${filters.board || 'all'}-${filters.examType || 'all'}-${filters.year || 'all'}-${filters.q || 'all'}`;
+  cacheTag(cacheKey);
+  cacheLife("hours");
+  
   const currentPage = filters.page || 1;
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
   try {
-    let allSheets = await postService.getPostsByType('date_sheet', 1000);
+    let allSheets = await getAllDateSheets();
     
+    // Apply filters
     if (filters.q) {
       const query = filters.q.toLowerCase();
       allSheets = allSheets.filter(sheet => 
@@ -183,6 +162,7 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
       };
     });
     
+    // Sort: popular first, then by year
     const sortedSheets = dateSheets.sort((a, b) => {
       if (a.isPopular && !b.isPopular) return -1;
       if (!a.isPopular && b.isPopular) return 1;
@@ -201,8 +181,12 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
 }
 
 async function getStats(): Promise<StatsResult> {
+  "use cache";
+  cacheTag("date-sheets-stats");
+  cacheLife("hours");
+  
   try {
-    const allSheets = await postService.getPostsByType('date_sheet', 1000);
+    const allSheets = await getAllDateSheets();
     
     const totalSheets = allSheets.length;
     const popularSheets = allSheets.filter(s => getMetaValue(s.meta, 'isPopular', false)).length;
@@ -218,6 +202,37 @@ async function getStats(): Promise<StatsResult> {
     console.error('Failed to fetch stats:', error);
     return { totalSheets: 0, popularSheets: 0, biseSheets: 0, universitySheets: 0, totalViews: 0, availableYears: [] };
   }
+}
+
+// ============ METADATA ============
+export async function generateMetadata(): Promise<Metadata> {
+  const allSheets = await getAllDateSheets();
+  const totalSheets = allSheets.length;
+  const currentYear = "2026";
+  
+  return {
+    title: `Date Sheets ${currentYear} in Pakistan – BISE, FBISE & University Exam Schedules | NextID.pk`,
+    description: `Download ${totalSheets}+ date sheets for Matric, Intermediate, and University exams ${currentYear}. Complete exam schedules for all BISE boards and universities in Pakistan.`,
+    keywords: `date sheets ${currentYear}, exam schedules ${currentYear}, BISE date sheets, FBISE date sheet, Matric exam schedule, Intermediate exam dates, university date sheets, Pakistan exams`,
+    alternates: { canonical: 'https://www.nextid.pk/date-sheets' },
+    openGraph: {
+      title: `Date Sheets ${currentYear} – Exam Schedules Pakistan | NextID.pk`,
+      description: `Download complete exam schedules for Matric, Intermediate, and University exams across Pakistan.`,
+      url: 'https://www.nextid.pk/date-sheets',
+      siteName: 'NextID.pk',
+      images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Date Sheets Pakistan' }],
+      locale: 'en_PK',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `Date Sheets ${currentYear} – Exam Schedules`,
+      description: `Download complete exam schedules for all boards and universities in Pakistan.`,
+      images: ['/og-image.png'],
+      site: '@nextidpk',
+      creator: '@nextidpk',
+    },
+  };
 }
 
 // ============================================
@@ -382,7 +397,6 @@ function FilterSidebar({ filters, stats, buildUrl }: { filters: DateSheetFilters
 function Pagination({ currentPage, totalPages, buildUrl }: { 
   currentPage: number; 
   totalPages: number; 
-  filters: DateSheetFilters;
   buildUrl: (key: string, value: string) => string;
 }) {
   if (totalPages <= 1) return null;
@@ -464,10 +478,8 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     return urlParams.toString() ? `/date-sheets?${urlParams.toString()}` : '/date-sheets';
   };
 
-  // ✅ Use static year
   const currentYear = "2026";
 
-  // ✅ Generate JSON-LD Structured Data for SEO
   const jsonLd = generateJsonLd({
     type: 'WebPage',
     title: `Date Sheets ${currentYear} - Exam Schedules Pakistan`,
@@ -479,7 +491,6 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     ],
   });
 
-  // ✅ ItemList Schema for date sheets listing
   const itemListSchema = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -497,39 +508,29 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
 
   return (
     <>
-      {/* ✅ JSON-LD Structured Data */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListSchema) }} />
       
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left Filter Sidebar */}
         <aside className="lg:w-72 flex-shrink-0">
           <FilterSidebar filters={filters} stats={stats} buildUrl={buildUrl} />
         </aside>
 
-        {/* Right Content */}
         <div className="flex-1">
-          {/* Stats Bar */}
           <div className="bg-white rounded-xl shadow-sm p-4 mb-6 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-bold text-gray-800">
-                {dateSheetsResult.totalCount} Date Sheets Found
+                Showing {dateSheetsResult.dateSheets.length} of {dateSheetsResult.totalCount} Date Sheets
               </h2>
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span>📊 {stats.totalSheets} Total</span>
                 <span>🔥 {stats.popularSheets} Popular</span>
                 <span>👁️ {stats.totalViews.toLocaleString()} Views</span>
+                <span>Page {dateSheetsResult.currentPage} of {dateSheetsResult.totalPages}</span>
               </div>
             </div>
           </div>
 
-          {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {dateSheetsResult.dateSheets.length > 0 ? (
               dateSheetsResult.dateSheets.map((sheet) => <DateSheetCard key={sheet.id} sheet={sheet} />)
@@ -542,7 +543,7 @@ function DateSheetsContent({ searchParamsPromise }: { searchParamsPromise: Promi
             )}
           </div>
 
-          <Pagination currentPage={dateSheetsResult.currentPage} totalPages={dateSheetsResult.totalPages} filters={filters} buildUrl={buildUrl} />
+          <Pagination currentPage={dateSheetsResult.currentPage} totalPages={dateSheetsResult.totalPages} buildUrl={buildUrl} />
         </div>
       </div>
     </>
@@ -588,12 +589,10 @@ function DateSheetsLoading() {
 
 // ============ MAIN PAGE ============
 export default async function DateSheetsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  // ✅ Use static year
   const currentYear = "2026";
   
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Hero Section - Matching Theme */}
       <div className="relative bg-gradient-to-r from-orange-600 to-amber-600 text-white overflow-hidden">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 py-16">

@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { postService } from '@/services/post/post.service';
-import type { Post } from '@/types/post';
-import { cacheLife } from 'next/cache';
+import type { ExtendedPost } from '@/services/post/post.service';
 
 // ==================== TYPES ====================
 interface NewsItem {
@@ -32,16 +31,16 @@ function getExcerpt(content: string | null, maxLength: number = 100): string {
   return plainText.length > maxLength ? plainText.substring(0, maxLength) + "..." : plainText;
 }
 
-// ==================== MAIN COMPONENT WITH CACHE ====================
+// ==================== MAIN COMPONENT ====================
+// ❌ Component par 'use cache' nahi lagana - service already cached hai
 export default async function ProfessionalNewsSection() {
-  'use cache';
-  cacheLife('minutes'); // Cache for 15 minutes
-
-  // ✅ ONLY fetch news posts (not admissions or results)
-  const newsPosts = await postService.getPostsByType('news', 50);
+  
+  // ✅ NEW: getList function use karo
+  // Sirf 5 news chahiye home page ke liye (50 nahi)
+  const newsPosts = await postService.getList('news', 5);  // 5 news enough hain
 
   // Transform to NewsItem
-  const newsItems: NewsItem[] = newsPosts.map((post: Post) => ({
+  const newsItems: NewsItem[] = newsPosts.map((post: ExtendedPost) => ({
     id: post.id,
     title: post.title,
     slug: post.slug,
@@ -53,16 +52,7 @@ export default async function ProfessionalNewsSection() {
     imageUrl: post.featuredImage,
   }));
 
-  // Sort by published date (newest first)
-  const sortedNews = newsItems
-    .filter(p => p.publishedAt)
-    .sort((a, b) => {
-      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-      return dateB - dateA;
-    });
-
-  if (sortedNews.length === 0) {
+  if (newsItems.length === 0) {
     return (
       <div className="bg-gray-100 rounded-2xl p-12 text-center">
         <p className="text-gray-400">No news available at the moment</p>
@@ -70,14 +60,14 @@ export default async function ProfessionalNewsSection() {
     );
   }
 
-  // Get main featured news (first item)
-  const mainNews = sortedNews[0];
+  // Main news (first item)
+  const mainNews = newsItems[0];
   
-  // Get next 2 news for right side
-  const rightNews = sortedNews.slice(1, 3);
+  // Next 2 news for right side
+  const rightNews = newsItems.slice(1, 3);
   
-  // Get bottom 2 news
-  const bottomNews = sortedNews.slice(3, 5);
+  // Bottom 2 news
+  const bottomNews = newsItems.slice(3, 5);
 
   return (
     <section className="w-full bg-gradient-to-br from-slate-50 via-white to-blue-50/20 py-8">
@@ -119,11 +109,9 @@ export default async function ProfessionalNewsSection() {
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-700" />
               )}
               
-              {/* Overlay Gradient */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent" />
               
-              {/* Content */}
               <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   {mainNews.isBreaking && (
@@ -158,7 +146,6 @@ export default async function ProfessionalNewsSection() {
             {rightNews.map((news) => (
               <Link key={news.id} href={`/news/${news.slug}`} className="block group">
                 <div className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex h-[180px]">
-                  {/* Image Section */}
                   <div className="relative w-2/5">
                     {news.imageUrl ? (
                       <img
@@ -173,7 +160,6 @@ export default async function ProfessionalNewsSection() {
                     )}
                   </div>
                   
-                  {/* Content Section */}
                   <div className="flex-1 p-4 flex flex-col justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -203,7 +189,6 @@ export default async function ProfessionalNewsSection() {
             {bottomNews.map((news) => (
               <Link key={news.id} href={`/news/${news.slug}`} className="block group">
                 <div className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex h-[140px]">
-                  {/* Image Section */}
                   <div className="relative w-1/3">
                     {news.imageUrl ? (
                       <img
@@ -218,7 +203,6 @@ export default async function ProfessionalNewsSection() {
                     )}
                   </div>
                   
-                  {/* Content Section */}
                   <div className="flex-1 p-4">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       {news.isBreaking && (
