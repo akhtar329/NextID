@@ -5,12 +5,10 @@ import { posts } from '@/db/schema';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
-// ==================== GET SESSION FROM COOKIE (FIXED) ====================
+// ==================== GET SESSION FROM COOKIE ====================
 async function getSessionFromCookie(): Promise<{ userId: number; userName: string } | null> {
   try {
     const cookieStore = await cookies();
-    
-    // ✅ Read 'authToken' cookie (match karo login ke saath)
     const authToken = cookieStore.get('authToken')?.value;
     
     if (!authToken) {
@@ -18,7 +16,6 @@ async function getSessionFromCookie(): Promise<{ userId: number; userName: strin
       return null;
     }
     
-    // ✅ Verify and decode JWT token
     try {
       const decoded = jwt.verify(authToken, process.env.JWT_SECRET!) as {
         id: number;
@@ -46,7 +43,6 @@ async function getSessionFromCookie(): Promise<{ userId: number; userName: strin
 // ==================== API ROUTE ====================
 export async function POST(req: NextRequest) {
   try {
-    // ✅ Get session from cookie
     const session = await getSessionFromCookie();
     
     if (!session) {
@@ -68,37 +64,84 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ✅ Parse galleryImages (if string, parse it)
+    let galleryImages = body.galleryImages || [];
+    if (typeof galleryImages === 'string') {
+      try {
+        galleryImages = JSON.parse(galleryImages);
+      } catch {
+        galleryImages = [];
+      }
+    }
+
+    // ✅ Build meta object with deadline (for frontend use)
+    const metaData = {
+      ...(body.meta || {}),
+      deadline: body.deadline || null, // ✅ Meta mein bhi save for reference
+    };
+
     const postData = {
+      // ========== BASIC INFO ==========
       slug: body.slug,
       type: body.type,
       title: body.title,
       content: body.content,
       excerpt: body.excerpt || null,
-      authorId: session.userId,
+      
+      // ========== AUTHOR ==========
       authorName: body.authorName || session.userName,
+      
+      // ========== MEDIA ==========
       featuredImage: body.featuredImage || null,
+      actualImage: body.actualImage || null,
+      galleryImages: galleryImages.length > 0 ? galleryImages : null,
+      
+      // ========== STATUS & FLAGS ==========
+      status: body.status || 'draft',
+      isFeatured: body.isFeatured || false,
+      isPopular: body.isPopular || false,
+      isBreaking: body.isBreaking || false,
+      
+      // ========== META TAGS ==========
       metaTitle: body.metaTitle || null,
       metaDescription: body.metaDescription || null,
       metaKeywords: body.metaKeywords || null,
       focusKeyword: body.focusKeyword || null,
       canonicalUrl: body.canonicalUrl || null,
       robots: body.robots || 'index, follow',
-      ogTitle: body.ogTitle || null,
-      ogDescription: body.ogDescription || null,
+      
+      // ========== OPEN GRAPH ==========
+      ogTitle: body.ogTitle || body.metaTitle || null,
+      ogDescription: body.ogDescription || body.metaDescription || null,
       ogImage: body.ogImage || body.featuredImage || null,
       ogType: body.ogType || 'article',
+      
+      // ========== TWITTER ==========
       twitterCard: body.twitterCard || 'summary_large_image',
-      twitterTitle: body.twitterTitle || body.ogTitle || null,
-      twitterDescription: body.twitterDescription || body.ogDescription || null,
+      twitterTitle: body.twitterTitle || body.ogTitle || body.metaTitle || null,
+      twitterDescription: body.twitterDescription || body.ogDescription || body.metaDescription || null,
       twitterImage: body.twitterImage || body.ogImage || body.featuredImage || null,
-      status: body.status || 'draft',
-      isFeatured: body.isFeatured || false,
-      isPopular: body.isPopular || false,
-      isBreaking: body.isBreaking || false,
-      meta: body.meta || {},
+      
+      // ========== STRUCTURED DATA ==========
+      schemaMarkup: body.schemaMarkup || null,
+      
+      // ========== EXTRA SEO ==========
+      breadcrumbTitle: body.breadcrumbTitle || body.title || null,
+      priority: body.priority || '0.5',
+      changefreq: body.changefreq || 'weekly',
+      
+      // ========== REDIRECT ==========
+      oldSlug: body.oldSlug || null,
+      
+      // ========== META & TAGS ==========
+      meta: metaData,
       tags: body.tags || [],
+      
+      // ========== TIMESTAMPS ==========
       publishedAt: body.publishedAt ? new Date(body.publishedAt) : new Date(),
-      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      
+      // ✅ FIXED: Deadline = ExpiresAt
+      expiresAt: body.deadline ? new Date(body.deadline) : null,  // ✅ YAHAN SAVE HOGA
     };
 
     const [newPost] = await db.insert(posts).values(postData).returning();

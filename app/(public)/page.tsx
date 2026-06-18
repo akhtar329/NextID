@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   ],
 
   alternates: {
-    canonical: "https://nextid.pk",
+    canonical: "https://www.nextid.pk",
   },
 
   robots: {
@@ -54,13 +54,13 @@ export const metadata: Metadata = {
       "NextID.pk - Admissions, Results, Date Sheets, Scholarships & Jobs",
     description:
       "Latest educational updates from universities, colleges and boards across Pakistan.",
-    url: "https://nextid.pk",
+    url: "https://www.nextid.pk",
     siteName: "NextID.pk",
     locale: "en_PK",
     type: "website",
     images: [
       {
-        url: "https://nextid.pk/og-image.jpg",
+        url: "https://www.nextid.pk/og-image.jpg",
         width: 1200,
         height: 630,
         alt: "NextID.pk",
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
       "NextID.pk - Admissions, Results, Date Sheets, Scholarships & Jobs",
     description:
       "Latest educational updates from universities and boards across Pakistan.",
-    images: ["https://nextid.pk/og-image.jpg"],
+    images: ["https://www.nextid.pk/og-image.jpg"],
   },
 };
 
@@ -84,12 +84,12 @@ const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "NextID.pk",
-  url: "https://nextid.pk",
+  url: "https://www.nextid.pk",
   description:
     "Educational platform providing admissions, results, jobs, scholarships and date sheets.",
   potentialAction: {
     "@type": "SearchAction",
-    target: "https://nextid.pk/search?q={search_term_string}",
+    target: "https://www.nextid.pk/search?q={search_term_string}",
     "query-input": "required name=search_term_string",
   },
 };
@@ -98,8 +98,8 @@ const organizationSchema = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "NextID.pk",
-  url: "https://nextid.pk",
-  logo: "https://nextid.pk/logo.png",
+  url: "https://www.nextid.pk",
+  logo: "https://www.nextid.pk/logo.png",
   sameAs: [],
 };
 
@@ -111,7 +111,7 @@ const breadcrumbSchema = {
       "@type": "ListItem",
       position: 1,
       name: "Home",
-      item: "https://nextid.pk",
+      item: "https://www.nextid.pk",
     },
   ],
 };
