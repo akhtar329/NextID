@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import GoogleAnalytics from "@/components/google/GoogleAnalytics";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,35 +22,44 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* ✅ PRECONNECT & DNS-PREFETCH — IMPROVES LCP */}
-        <link 
-          rel="preconnect" 
-          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech" 
+        {/* PRECONNECT & DNS PREFETCH */}
+        <link
+          rel="preconnect"
+          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech"
         />
-        <link 
-          rel="dns-prefetch" 
-          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech" 
+        <link
+          rel="dns-prefetch"
+          href="https://ep-round-resonance-ahwsjtcv-pooler.us-east-1.aws.neon.tech"
         />
         <link rel="preconnect" href="https://www.nextid.pk" />
         <link rel="dns-prefetch" href="https://www.nextid.pk" />
-        
-        {/* ✅ PRECONNECT FOR GOOGLE ADS (non-blocking) */}
-        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
-        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
+
+        {/* GOOGLE ADS PREFETCH */}
+        <link
+          rel="preconnect"
+          href="https://pagead2.googlesyndication.com"
+        />
+        <link
+          rel="dns-prefetch"
+          href="https://pagead2.googlesyndication.com"
+        />
       </head>
+
       <body className={`${inter.className} antialiased`}>
-        {/* MAIN CONTENT FIRST (IMPORTANT FOR LCP) */}
         {children}
 
-        {/* Toast (keep light) */}
+        {/* GA TRACKING */}
+        <GoogleAnalytics />
+
+        {/* TOAST */}
         <Toaster position="top-right" richColors />
 
-        {/* SpeedInsights (DELAYED - NOT blocking) */}
+        {/* SPEED INSIGHTS (non-blocking) */}
         <div style={{ display: "none" }}>
           <SpeedInsights />
         </div>
 
-        {/* 🚨 ADSENSE DELAYED (BIG FIX) */}
+        {/* ADSENSE */}
         <Script
           id="adsense-script"
           strategy="lazyOnload"
@@ -57,22 +67,10 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
 
-        {/* Google tag (gtag.js) */}
+        {/* GOOGLE ANALYTICS SCRIPT (ONLY ONCE) */}
         <Script
           strategy="afterInteractive"
           src="https://www.googletagmanager.com/gtag/js?id=G-2VNFCBN0SG"
-        />
-        <Script
-          id="google-analytics"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-2VNFCBN0SG');
-            `,
-          }}
         />
       </body>
     </html>
