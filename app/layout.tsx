@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Suspense } from "react";
 import GoogleAnalytics from "@/components/google/GoogleAnalytics";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -35,21 +36,17 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.nextid.pk" />
 
         {/* GOOGLE ADS PREFETCH */}
-        <link
-          rel="preconnect"
-          href="https://pagead2.googlesyndication.com"
-        />
-        <link
-          rel="dns-prefetch"
-          href="https://pagead2.googlesyndication.com"
-        />
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+        <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
       </head>
 
       <body className={`${inter.className} antialiased`}>
         {children}
 
         {/* GA TRACKING */}
-        <GoogleAnalytics />
+        <Suspense fallback={null}>
+          <GoogleAnalytics />
+        </Suspense>
 
         {/* TOAST */}
         <Toaster position="top-right" richColors />
