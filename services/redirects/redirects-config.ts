@@ -46,6 +46,11 @@ const redirectRules: RedirectRule[] = [
     to: '/admissions',
     status: 301,
   },
+   {
+    from: /^\/universities\//,
+    to: '/admissions',
+    status: 301,
+  },
 
   {
     from: /^\/questions\//,
