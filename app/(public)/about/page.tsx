@@ -100,21 +100,21 @@ const TEAM_MEMBERS = [
     name: 'Pervez Akhtar',
     role: 'Founder & CEO',
     bio: 'Education enthusiast with 15+ years of experience in educational technology.',
-    initials: 'Sahazad A',
+    initials: 'PA',
     color: 'from-indigo-500 to-purple-500',
   },
   {
     name: 'Rabail',
     role: 'Chief Operating Officer (COO)',
     bio: 'Driving operational excellence and scaling NextID.pk\'s impact across Pakistan\'s education sector.',
-    initials: 'Rabail',
+    initials: 'R',
     color: 'from-pink-500 to-rose-500',
   },
   {
     name: 'Fatima',
     role: 'Student Success Manager',
     bio: 'Dedicated to helping students find the right educational opportunities and supporting them throughout their journey.',
-    initials: 'Fatima',
+    initials: 'F',
     color: 'from-emerald-500 to-teal-500',
   },
 ];
@@ -356,16 +356,21 @@ function TeamSection() {
           </p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {TEAM_MEMBERS.map((member, index) => (
-            <div key={index} className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 text-center">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-indigo-600">
-                  {member.name.split(' ').map(n => n[0]).join('')}
+            <div 
+              key={index} 
+              className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 text-center group"
+            >
+              <div className={`w-24 h-24 rounded-full bg-gradient-to-br ${member.color} flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                <span className="text-2xl font-bold text-white">
+                  {member.initials}
                 </span>
               </div>
               <h3 className="text-lg font-bold text-gray-900">{member.name}</h3>
-              <p className="text-sm text-indigo-600 font-medium mb-2">{member.role}</p>
+              <p className={`text-sm font-medium mb-2 ${member.role === 'Chief Operating Officer (COO)' ? 'text-pink-600' : 'text-indigo-600'}`}>
+                {member.role}
+              </p>
               <p className="text-sm text-gray-500 leading-relaxed">{member.bio}</p>
             </div>
           ))}

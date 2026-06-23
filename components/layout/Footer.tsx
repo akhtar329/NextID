@@ -116,7 +116,7 @@ export default function Footer() {
           <div className="md:col-span-4">
             <div className="flex items-center space-x-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
-                N
+              LA
               </div>
               <div>
                 <div className="text-xl font-bold text-gray-900">

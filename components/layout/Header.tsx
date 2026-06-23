@@ -32,7 +32,7 @@ export default function Header() {
       <div className="container mx-auto px-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">N</span>
+            <span className="text-white font-bold text-lg">LA</span>
           </div>
           <span className="font-bold text-xl text-gray-800">NextID</span>
         </Link>
