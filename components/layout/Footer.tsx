@@ -219,22 +219,6 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-
-            {/* ✅ Popular Categories (Improved internal linking) */}
-            <h3 className="font-semibold mb-2 text-gray-900 text-sm">
-              Popular Categories
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {popularCategories.map((cat) => (
-                <Link
-                  key={cat.name}
-                  href={cat.href}
-                  className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-blue-100 hover:text-blue-600 transition-colors"
-                >
-                  {cat.name}
-                </Link>
-              ))}
-            </div>
           </div>
         </div>
 

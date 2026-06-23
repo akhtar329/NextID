@@ -1,7 +1,9 @@
+// proxy.ts
+
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import jwt from "jsonwebtoken";
-import { getRedirect } from "@/services/redirects-config";
+import { getRedirect } from "@/services/redirects-config"; // ✅ IMPORT ADDED
 
 // =====================
 // CONFIG
@@ -61,20 +63,27 @@ function isAuthenticated(req: NextRequest) {
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. SEO redirects first
-  const redirect = getRedirect(pathname);
-  if (redirect) {
-    return NextResponse.redirect(new URL(redirect.to, req.url), {
-      status: redirect.status,
+  // =====================
+  // 1. SEO REDIRECTS (From Separate File)
+  // =====================
+  const seoRedirect = getRedirect(pathname);
+  if (seoRedirect) {
+    console.log(`🔄 SEO Redirect: ${pathname} → ${seoRedirect.to}`);
+    return NextResponse.redirect(new URL(seoRedirect.to, req.url), {
+      status: seoRedirect.status,
     });
   }
 
-  // 2. Maintenance mode (block everything except allowed)
+  // =====================
+  // 2. MAINTENANCE MODE
+  // =====================
   if (isMaintenanceMode() && !isPublicPath(pathname)) {
     return NextResponse.redirect(new URL("/maintenance", req.url));
   }
 
-  // 3. Admin protection
+  // =====================
+  // 3. ADMIN PROTECTION
+  // =====================
   if (isAdminPath(pathname) && !isPublicPath(pathname)) {
     if (!isAuthenticated(req)) {
       // API request
@@ -92,7 +101,9 @@ export default function middleware(req: NextRequest) {
     }
   }
 
-  // 4. Allow request
+  // =====================
+  // 4. ALLOW REQUEST
+  // =====================
   return NextResponse.next();
 }
 
