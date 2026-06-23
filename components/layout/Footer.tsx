@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 
-
-// ==================== STATIC DATA (No DB calls) ====================
+// ==================== STATIC DATA ====================
 const quickLinks = [
   { name: "Home", href: "/" },
   { name: "Admissions", href: "/admissions" },
@@ -12,34 +11,27 @@ const quickLinks = [
   { name: "Scholarships", href: "/scholarships" },
   { name: "Jobs", href: "/jobs" },
   { name: "News", href: "/news" },
+  { name: "Blog", href: "/blog" },
 ];
 
 const resources = [
-  { name: "Blog", href: "/blog" },
   { name: "About Us", href: "/about" },
   { name: "Contact Us", href: "/contact" },
+  { name: "FAQ", href: "/faq" },
   { name: "Sitemap", href: "/sitemap.xml" },
   { name: "Privacy Policy", href: "/privacy" },
 ];
 
-// ✅ SEO-FRIENDLY LINKS (Important for Google)
-const seoLinks = [
-  { name: "Admission 2026", href: "/admissions/2026" },
-  { name: "Latest Results", href: "/results/latest" },
-  { name: "BISE Boards", href: "/boards" },
-  { name: "Universities in Pakistan", href: "/universities" },
-  { name: "Study Abroad", href: "/study-abroad" },
-  { name: "Career Counseling", href: "/career-counseling" },
-];
-
-// ✅ Popular Categories (for better internal linking)
-const popularCategories = [
-  { name: "Intermediate", href: "/category/intermediate" },
-  { name: "Bachelor", href: "/category/bachelor" },
-  { name: "Master", href: "/category/master" },
-  { name: "PhD", href: "/category/phd" },
-  { name: "Diploma", href: "/category/diploma" },
-  { name: "Certificate", href: "/category/certificate" },
+// ✅ TRENDING TOPICS (Different from Quick Links)
+const trendingTopics = [
+  { name: "Admissions 2026", href: "/admissions" },
+  { name: "Latest Board Results", href: "/results" },
+  { name: "Fully Funded Scholarships", href: "/scholarships" },
+  { name: "Government Jobs 2026", href: "/jobs" },
+  { name: "Exam Date Sheets", href: "/date-sheets" },
+  { name: "Study Tips & Guides", href: "/blog" },
+  { name: "Career Counseling", href: "/blog" },
+  { name: "Education News Today", href: "/news" },
 ];
 
 const socialLinks = [
@@ -75,7 +67,7 @@ const socialLinks = [
   },
   {
     name: "WhatsApp",
-    href: "https://wa.me/1234567890",
+    href: "https://wa.me/+923425537329",
     icon: "💬",
     bgColor: "#25D366",
   },
@@ -116,7 +108,7 @@ export default function Footer() {
           <div className="md:col-span-4">
             <div className="flex items-center space-x-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
-              LA
+                LA
               </div>
               <div>
                 <div className="text-xl font-bold text-gray-900">
@@ -151,7 +143,7 @@ export default function Footer() {
               ))}
             </div>
 
-            {/* ✅ Newsletter Signup for SEO (increases engagement) */}
+            {/* Newsletter Signup */}
             <div className="mt-4">
               <p className="text-xs text-gray-600 mb-2">Subscribe for updates:</p>
               <form className="flex gap-2">
@@ -188,11 +180,11 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* ✅ SEO Links (New - Important for Google) */}
+          {/* ✅ TRENDING TOPICS (Instead of Popular Categories) - 3 columns */}
           <div className="md:col-span-3">
-            <h3 className="font-semibold mb-4 text-gray-900">Trending Now</h3>
+            <h3 className="font-semibold mb-4 text-gray-900">Trending Topics</h3>
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-              {seoLinks.map((l) => (
+              {trendingTopics.map((l) => (
                 <Link
                   key={l.name}
                   href={l.href}
@@ -204,10 +196,10 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Resources & Categories - 3 columns */}
+          {/* Resources - 3 columns */}
           <div className="md:col-span-3">
             <h3 className="font-semibold mb-4 text-gray-900">Resources</h3>
-            <ul className="space-y-2 mb-4">
+            <ul className="space-y-2">
               {resources.map((l) => (
                 <li key={l.name}>
                   <Link
@@ -222,7 +214,7 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* ✅ SEO-Friendly Bottom Bar with Keywords */}
+        {/* Bottom Bar */}
         <div className="border-t border-gray-200 mt-8 pt-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-center">
             <div className="text-sm text-gray-500">
@@ -232,7 +224,7 @@ export default function Footer() {
               </p>
             </div>
             
-            {/* ✅ Important SEO Keywords in Footer */}
+            {/* SEO Keywords */}
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-gray-400">
               <span>#EducationPakistan</span>
               <span>#Admission2026</span>
@@ -242,7 +234,7 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* ✅ Trust Badges for SEO (Improves credibility) */}
+          {/* Trust Badges */}
           <div className="mt-6 flex flex-wrap justify-center gap-6 text-center">
             <div className="text-xs text-gray-400">
               <span className="font-bold text-green-600">✓</span> 100% Verified

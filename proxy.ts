@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import jwt from "jsonwebtoken";
-import { getRedirect } from "@/services/redirects-config"; // ✅ IMPORT ADDED
+import { getRedirect } from "@/services/redirects/redirects-config"; // ✅ IMPORT ADDED
 
 // =====================
 // CONFIG
