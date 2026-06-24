@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllRedirectRules } from "@/services/redirects/redirects-config";
-
-interface RedirectRule {
-  from: string;
-  to: string;
-  status: 301 | 302;
-}
+import {
+  redirects as initialRedirects,
+  type RedirectRule,
+} from "@/services/redirects/redirects-config";
 
 interface SaveRedirectsBody {
   redirects: RedirectRule[];
 }
 
-let currentRedirects: RedirectRule[] = getAllRedirectRules().map((rule) => ({
-  from:
-    rule.from instanceof RegExp
-      ? rule.from.toString()
-      : String(rule.from),
-  to: rule.to,
-  status: rule.status,
-}));
+let currentRedirects: RedirectRule[] = [...initialRedirects];
 
 export async function GET() {
   try {
@@ -29,19 +19,21 @@ export async function GET() {
   } catch (error) {
     console.error("GET redirects error:", error);
 
-    return NextResponse.json({
-      success: false,
-      data: [],
-    });
+    return NextResponse.json(
+      {
+        success: false,
+        data: [],
+      },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as SaveRedirectsBody;
-    const { redirects } = body;
 
-    if (!Array.isArray(redirects)) {
+    if (!Array.isArray(body.redirects)) {
       return NextResponse.json(
         {
           success: false,
@@ -51,22 +43,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const redirects = body.redirects;
+
     for (const rule of redirects) {
-      if (!rule.from || typeof rule.from !== "string") {
+      if (!rule.from?.trim()) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Missing or invalid "from" field',
+            error: '"from" field is required',
           },
           { status: 400 }
         );
       }
 
-      if (!rule.to || typeof rule.to !== "string") {
+      if (!rule.to?.trim()) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Missing or invalid "to" field',
+            error: '"to" field is required',
           },
           { status: 400 }
         );
@@ -84,8 +78,10 @@ export async function POST(request: NextRequest) {
     }
 
     const duplicatePaths = redirects
-      .map((r) => r.from)
-      .filter((item, index, arr) => arr.indexOf(item) !== index);
+      .map((r) => r.from.trim())
+      .filter(
+        (path, index, array) => array.indexOf(path) !== index
+      );
 
     if (duplicatePaths.length > 0) {
       return NextResponse.json(
@@ -101,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${redirects.length} redirects updated`,
+      message: `${redirects.length} redirects updated successfully`,
       count: redirects.length,
     });
   } catch (error) {
