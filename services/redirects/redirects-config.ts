@@ -62,6 +62,11 @@ const redirectRules: RedirectRule[] = [
     to: '/blog',
     status: 301,
   },
+    {
+    from: /^\/blogs\//,
+    to: '/blog',
+    status: 301,
+  },
 
   // ========== SPECIFIC PAGE REDIRECTS ==========
   {
