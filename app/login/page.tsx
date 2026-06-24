@@ -1,4 +1,5 @@
-"use client";
+// app/login/page.tsx
+'use client';
 
 import { useState, FormEvent, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -204,7 +205,7 @@ export default function LoginPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4">
         <div className="text-center">
           <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <span className="text-white font-bold text-xl">N</span>
+            <span className="text-white font-bold text-xl">ID</span>
           </div>
           <p className="text-gray-500">Loading...</p>
         </div>

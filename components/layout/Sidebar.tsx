@@ -98,7 +98,7 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
         <div className="flex items-center justify-between">
           <Link href="/admin" className={`flex items-center gap-2 ${collapsed ? "justify-center w-full" : ""}`}>
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
-              <span className="text-white font-bold">LA</span>
+              <span className="text-white font-bold">ID</span>
             </div>
             {!collapsed && (
               <div className="overflow-hidden">
