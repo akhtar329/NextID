@@ -688,7 +688,7 @@ useEffect(() => {
     setIsAutoRefreshing(true);
     
     Promise.all([fetchLogs(), fetchStats()]).finally(() => {
-      setIsAutoRefing(false);
+      setIsAutoRefreshing(false);
       setCountdown(AUTO_REFRESH_INTERVAL);
     });
   }, AUTO_REFRESH_INTERVAL * 1000);
