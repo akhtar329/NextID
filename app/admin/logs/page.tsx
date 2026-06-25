@@ -648,44 +648,75 @@ export default function LogsPage() {
     if (autoRefreshEnabled) setCountdown(AUTO_REFRESH_INTERVAL);
   }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
 
-  // ============================================================
-  // USE EFFECTS
-  // ============================================================
+// ============================================================
+// USE EFFECTS
+// ============================================================
 
-  // ✅ Initial load + refresh - wrapped in a cleanup function
-  useEffect(() => {
-    let isMounted = true;
-    
-    const loadData = async () => {
-      if (isMounted) {
-        await fetchLogs();
-        await fetchStats();
-      }
-    };
-    
-    loadData();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [refreshKey]); // ✅ Only depends on refreshKey
+// ✅ Initial load + refresh
+useEffect(() => {
+  let isMounted = true;
+  
+  const loadData = async () => {
+    if (isMounted) {
+      await fetchLogs();
+      await fetchStats();
+    }
+  };
+  
+  loadData();
+  
+  return () => {
+    isMounted = false;
+  };
+}, [refreshKey, fetchLogs, fetchStats]); // ✅ Added missing dependencies
 
-  // ✅ Auto-refresh when filters change
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchLogs();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [filterType, search, limit, fetchLogs]);
+// ✅ Auto-refresh when filters change
+useEffect(() => {
+  const timer = setTimeout(() => {
+    fetchLogs();
+  }, 300);
+  return () => clearTimeout(timer);
+}, [filterType, search, limit, fetchLogs]); // ✅ Added fetchLogs
 
-  // ✅ Start auto-refresh on mount
-  useEffect(() => {
-    const t = setTimeout(() => startAutoRefresh(), 0);
-    return () => {
-      clearTimeout(t);
-      stopAutoRefresh();
-    };
-  }, [startAutoRefresh, stopAutoRefresh]);
+// ✅ Auto-refresh timer - FIXED
+useEffect(() => {
+  // ✅ Don't start if auto-refresh is disabled
+  if (!autoRefreshEnabled) return;
+  
+  const interval = setInterval(() => {
+    console.log("🔄 Auto-refreshing logs at:", new Date().toLocaleTimeString());
+    setIsAutoRefreshing(true);
+    
+    Promise.all([fetchLogs(), fetchStats()]).finally(() => {
+      setIsAutoRefing(false);
+      setCountdown(AUTO_REFRESH_INTERVAL);
+    });
+  }, AUTO_REFRESH_INTERVAL * 1000);
+
+  return () => {
+    clearInterval(interval);
+    setIsAutoRefreshing(false);
+  };
+}, [fetchLogs, fetchStats, autoRefreshEnabled, AUTO_REFRESH_INTERVAL]); // ✅ All dependencies
+
+// ✅ Countdown timer - separate effect
+useEffect(() => {
+  if (!autoRefreshEnabled) {
+    setCountdown(0);
+    return;
+  }
+
+  setCountdown(AUTO_REFRESH_INTERVAL);
+  
+  const countdownInterval = setInterval(() => {
+    setCountdown(prev => {
+      if (prev <= 1) return 0;
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(countdownInterval);
+}, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]); // ✅ All dependencies
 
   // ============================================================
   // RENDER

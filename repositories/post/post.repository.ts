@@ -132,7 +132,7 @@ export class PostRepository {
 
     const cached = cache.get<Post[]>(cacheKey);
     if (cached) {
-      writeLog({
+      await writeLog({
         id: `cache_hit_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_HIT",
@@ -149,7 +149,7 @@ export class PostRepository {
       return cached;
     }
 
-    writeLog({
+    await writeLog({
       id: `cache_miss_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "CACHE_MISS",
@@ -182,7 +182,7 @@ export class PostRepository {
 
       cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
 
-      writeLog({
+      await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -199,7 +199,7 @@ export class PostRepository {
         },
       });
 
-      writeLog({
+      await writeLog({
         id: `cache_save_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_SAVE",
@@ -214,7 +214,7 @@ export class PostRepository {
 
       return result;
     } catch (error) {
-      writeLog({
+      await writeLog({
         id: `db_err_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -245,7 +245,7 @@ export class PostRepository {
 
     const cached = cache.get<Post>(cacheKey);
     if (cached) {
-      writeLog({
+      await writeLog({
         id: `cache_hit_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_HIT",
@@ -257,7 +257,7 @@ export class PostRepository {
       return cached;
     }
 
-    writeLog({
+    await writeLog({
       id: `cache_miss_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "CACHE_MISS",
@@ -278,7 +278,7 @@ export class PostRepository {
 
       cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
 
-      writeLog({
+      await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -292,7 +292,7 @@ export class PostRepository {
         },
       });
 
-      writeLog({
+      await writeLog({
         id: `cache_save_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_SAVE",
@@ -307,7 +307,7 @@ export class PostRepository {
 
       return result;
     } catch (error) {
-      writeLog({
+      await writeLog({
         id: `db_err_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -339,7 +339,7 @@ export class PostRepository {
 
     const cached = cache.get<Post[]>(cacheKey);
     if (cached) {
-      writeLog({
+      await writeLog({
         id: `cache_hit_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_HIT",
@@ -351,7 +351,7 @@ export class PostRepository {
       return cached;
     }
 
-    writeLog({
+    await writeLog({
       id: `cache_miss_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "CACHE_MISS",
@@ -379,7 +379,7 @@ export class PostRepository {
 
       cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
 
-      writeLog({
+      await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -395,7 +395,7 @@ export class PostRepository {
         },
       });
 
-      writeLog({
+      await writeLog({
         id: `cache_save_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_SAVE",
@@ -410,7 +410,7 @@ export class PostRepository {
 
       return result;
     } catch (error) {
-      writeLog({
+      await writeLog({
         id: `db_err_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -443,7 +443,7 @@ export class PostRepository {
 
     const cached = cache.get<Record<PostType, Post[]>>(cacheKey);
     if (cached) {
-      writeLog({
+      await writeLog({
         id: `cache_hit_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_HIT",
@@ -455,7 +455,7 @@ export class PostRepository {
       return cached;
     }
 
-    writeLog({
+    await writeLog({
       id: `cache_miss_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "CACHE_MISS",
@@ -496,7 +496,7 @@ export class PostRepository {
         Object.entries(grouped).map(([key, val]) => [key, val.length])
       );
 
-      writeLog({
+      await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -512,7 +512,7 @@ export class PostRepository {
         },
       });
 
-      writeLog({
+      await writeLog({
         id: `cache_save_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_SAVE",
@@ -527,7 +527,7 @@ export class PostRepository {
 
       return grouped;
     } catch (error) {
-      writeLog({
+      await writeLog({
         id: `db_err_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -559,7 +559,7 @@ export class PostRepository {
 
     const cached = cache.get<number>(cacheKey);
     if (cached !== null) {
-      writeLog({
+      await writeLog({
         id: `cache_hit_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_HIT",
@@ -571,7 +571,7 @@ export class PostRepository {
       return cached;
     }
 
-    writeLog({
+    await writeLog({
       id: `cache_miss_${Date.now()}`,
       timestamp: new Date().toISOString(),
       type: "CACHE_MISS",
@@ -597,7 +597,7 @@ export class PostRepository {
 
       cache.set(cacheKey, count, 3600 * 1000); // 1 hour TTL
 
-      writeLog({
+      await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
@@ -607,7 +607,7 @@ export class PostRepository {
         data: { type, count },
       });
 
-      writeLog({
+      await writeLog({
         id: `cache_save_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "CACHE_SAVE",
@@ -619,7 +619,7 @@ export class PostRepository {
 
       return count;
     } catch (error) {
-      writeLog({
+      await writeLog({
         id: `db_err_${Date.now()}`,
         timestamp: new Date().toISOString(),
         type: "DATABASE_QUERY",
