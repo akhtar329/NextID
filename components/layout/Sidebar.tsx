@@ -45,6 +45,7 @@ const adminNavItems = [
   { name: "Settings", href: "/admin/settings", icon: Settings },
   { name: "Maintenance", href: "/admin/settings/maintenance", icon: Wrench },
   { name: "SEO Redirects", href: "/admin/settings/redirects", icon: RefreshCw },
+  { name: "Performance Logs", href: "/admin/logs", icon: RefreshCw }, // ✅ ADDED
 ];
 
 // ✅ Editor ke liye limited menu items
@@ -60,7 +61,7 @@ const editorNavItems = [
   { name: "Tags", href: "/admin/tags", icon: Tag },
   
   // ==================== SYSTEM (Limited) ====================
-  // ❌ No Users, No Settings, No Maintenance for Editor
+  // ❌ No Users, No Settings, No Maintenance, No Logs for Editor
 ];
 
 export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: SidebarProps) {
@@ -83,6 +84,9 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
       return pathname === "/admin/settings" || 
              pathname === "/admin/settings/maintenance" || 
              pathname === "/admin/settings/redirects";
+    }
+    if (href === "/admin/logs") {
+      return pathname === "/admin/logs";
     }
     if (href === "/admin/media") {
       return pathname === "/admin/media" || pathname.startsWith("/admin/media/");
@@ -193,7 +197,6 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
       {!collapsed ? (
         <div className="p-4 border-t border-gray-100">
           <div className="text-xs text-center">
-
             <p className="mt-1 text-gray-400">
               Version {appVersion}
             </p>
