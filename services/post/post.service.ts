@@ -161,6 +161,81 @@ export async function isOpen(deadline: Date | string | null): Promise<boolean> {
 
 // ============ MAIN POST SERVICE ============
 
+// ✅ Separate function for getList (used by preCache functions)
+async function getListInternal(
+  type: PostType | 'all',
+  limit: number = 10,
+  offset: number = 0,
+  filters?: { featured?: boolean; popular?: boolean; breaking?: boolean }
+): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag(`list-${type}-${limit}-${offset}`);
+  cacheLife({ revalidate: 3600 });
+  
+  const posts = await postRepository.getList(type, limit, offset, filters);
+  return posts.map(mapPost);
+}
+
+async function getDetailInternal(slug: string): Promise<ExtendedPost | null> {
+  "use cache";
+  cacheTag(`detail-${slug}`);
+  cacheLife({ revalidate: 3600 });
+  
+  const post = await postRepository.getDetail(slug);
+  return post ? mapPost(post) : null;
+}
+
+async function getRelatedInternal(
+  currentId: number,
+  type: PostType,
+  limit: number = 5
+): Promise<ExtendedPost[]> {
+  "use cache";
+  cacheTag(`related-${currentId}-${type}`);
+  cacheLife({ revalidate: 3600 });
+  
+  const posts = await postRepository.getRelated(currentId, type, limit);
+  return posts.map(mapPost);
+}
+
+async function getTotalCountInternal(type: PostType | 'all'): Promise<number> {
+  "use cache";
+  cacheTag(`count-${type}`);
+  cacheLife({ revalidate: 3600 });
+  
+  return await postRepository.getTotalCount(type);
+}
+
+// ✅ Pre-cache functions without "use cache" (they call internal cached functions)
+async function preCacheAllTypesInternal(limit: number = 100): Promise<void> {
+  const types: PostType[] = [
+    'admission',
+    'result', 
+    'news',
+    'date_sheet',
+    'scholarship',
+    'job',
+    'blog'
+  ];
+  
+  // ✅ Parallel fetch all types (each has "use cache" internally)
+  await Promise.all(
+    types.map(type => getListInternal(type, limit, 0, {}))
+  );
+}
+
+async function preCacheTypeInternal(type: PostType, limit: number = 100): Promise<void> {
+  await getListInternal(type, limit, 0, {});
+}
+
+async function preCacheCustomInternal(types: PostType[], limit: number = 100): Promise<void> {
+  await Promise.all(
+    types.map(type => getListInternal(type, limit, 0, {}))
+  );
+}
+
+// ============ EXPORTED SERVICE ============
+
 export const postService = {
   async getList(
     type: PostType | 'all',
@@ -168,38 +243,23 @@ export const postService = {
     offset: number = 0,
     filters?: { featured?: boolean; popular?: boolean; breaking?: boolean }
   ): Promise<ExtendedPost[]> {
-    "use cache";
-    cacheTag(`list-${type}-${limit}-${offset}`);
-    cacheLife({ revalidate: 3600 });
-    
-    const posts = await postRepository.getList(type, limit, offset, filters);
-    return posts.map(mapPost);
+    return getListInternal(type, limit, offset, filters);
   },
 
   async getDetail(slug: string): Promise<ExtendedPost | null> {
-    "use cache";
-    cacheTag(`detail-${slug}`);
-    cacheLife({ revalidate: 3600 });
-    
-    const post = await postRepository.getDetail(slug);
-    return post ? mapPost(post) : null;
+    return getDetailInternal(slug);
   },
 
-  async getRelated(currentId: number, type: PostType, limit: number = 5): Promise<ExtendedPost[]> {
-    "use cache";
-    cacheTag(`related-${currentId}-${type}`);
-    cacheLife({ revalidate: 3600 });
-    
-    const posts = await postRepository.getRelated(currentId, type, limit);
-    return posts.map(mapPost);
+  async getRelated(
+    currentId: number,
+    type: PostType,
+    limit: number = 5
+  ): Promise<ExtendedPost[]> {
+    return getRelatedInternal(currentId, type, limit);
   },
 
   async getTotalCount(type: PostType | 'all'): Promise<number> {
-    "use cache";
-    cacheTag(`count-${type}`);
-    cacheLife({ revalidate: 3600 });
-    
-    return await postRepository.getTotalCount(type);
+    return getTotalCountInternal(type);
   },
 
   async clearCache(slug?: string) {
@@ -207,5 +267,31 @@ export const postService = {
       revalidateTag(`detail-${slug}`, "page");
     }
     revalidateTag("homepage", "page");
+  },
+
+  // ============================================================
+  // ✅ PRE-CACHE FUNCTIONS
+  // ============================================================
+
+  /**
+   * Pre-cache all post types (admission, result, news, etc.)
+   * Call this from homepage or layout to preload cache
+   */
+  async preCacheAllTypes(limit: number = 100): Promise<void> {
+    await preCacheAllTypesInternal(limit);
+  },
+
+  /**
+   * Pre-cache a specific type
+   */
+  async preCacheType(type: PostType, limit: number = 100): Promise<void> {
+    await preCacheTypeInternal(type, limit);
+  },
+
+  /**
+   * Pre-cache with custom limit and types
+   */
+  async preCacheCustom(types: PostType[], limit: number = 100): Promise<void> {
+    await preCacheCustomInternal(types, limit);
   },
 };

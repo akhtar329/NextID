@@ -6,24 +6,29 @@ const nextConfig: NextConfig = {
   // ✅ Enable cache components
   cacheComponents: true,
 
-  // ✅ Remove console logs in production (reduces bundle size)
+  // ✅ Remove console logs in production
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
 
   // ✅ Images configuration
   images: {
-    // Image formats for modern browsers
     formats: ["image/avif", "image/webp"],
-    
-    // Device sizes for responsive images
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
-    
-    // Image sizes for different layouts
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    
-    // Remote patterns for external images
     remotePatterns: [
+      // ✅ Instagram
+      {
+        protocol: "https",
+        hostname: "scontent.cdninstagram.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "*.cdninstagram.com",
+        pathname: "/**",
+      },
+      // ✅ Google / Blogger
       {
         protocol: "https",
         hostname: "encrypted-tbn0.gstatic.com",
@@ -69,11 +74,13 @@ const nextConfig: NextConfig = {
         hostname: "lh3.googleusercontent.com",
         pathname: "/**",
       },
+      // ✅ Your domain
       {
         protocol: "https",
         hostname: "www.nextid.pk",
         pathname: "/**",
       },
+      // ✅ Local development
       {
         protocol: "http",
         hostname: "localhost",
@@ -86,6 +93,7 @@ const nextConfig: NextConfig = {
         port: "3000",
         pathname: "/uploads/**",
       },
+      // ✅ Vercel deployment
       {
         protocol: "https",
         hostname: "*.vercel.app",
@@ -94,16 +102,14 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // ✅ Redirects configuration
+  // ✅ Redirects
   async redirects() {
     return [
-      // ✅ NEW: Redirect /newss/* to /news/*
       {
         source: "/newss/:path*",
         destination: "/news/:path*",
         permanent: true,
       },
-      // Existing redirect (nextid.pk to www)
       {
         source: "/:path*",
         has: [{ type: "host", value: "nextid.pk" }],
@@ -113,17 +119,14 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // ✅ Headers configuration (caching + security)
+  // ✅ Headers
   async headers() {
     return [
       {
         source: "/_next/static/:path*",
         headers: [
           { key: "X-Robots-Tag", value: "noindex" },
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],
       },
       {
@@ -132,47 +135,25 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/uploads/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
       {
         source: "/images/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
-      // ✅ Security headers
       {
         source: "/:path*",
         headers: [
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
-            key: "X-XSS-Protection",
-            value: "1; mode=block",
-          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-XSS-Protection", value: "1; mode=block" },
         ],
       },
     ];
   },
 
-  // ✅ Enable React strict mode
   reactStrictMode: true,
 
-  // ✅ Experimental features for better performance
   experimental: {
     optimizePackageImports: [
       "lucide-react",

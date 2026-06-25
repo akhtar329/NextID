@@ -75,7 +75,6 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// ✅ FIXED: Static date with reference
 function formatDateStatic(date: Date | null): string {
   if (!date) return 'Recent';
   
@@ -96,7 +95,6 @@ function formatDateStatic(date: Date | null): string {
   });
 }
 
-// ✅ FIXED: Get date for sorting
 function getDateSortValue(date: Date | null): number {
   if (!date) return 0;
   return date.getTime();
@@ -139,7 +137,8 @@ async function getAllNews(): Promise<ExtendedPost[]> {
   cacheLife("hours");
   
   try {
-    const news = await postService.getList('news', 1000);
+    // ✅ FIXED: 1000 → 100 (matches pre-cache limit)
+    const news = await postService.getList('news', 100);
     return news || [];
   } catch (error) {
     console.error('Error fetching all news:', error);
@@ -177,21 +176,18 @@ async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, sea
       };
     });
     
-    // ✅ FIXED: Sort using static function (no new Date())
     newsList.sort((a, b) => {
       const dateA = getDateSortValue(a.publishedAt);
       const dateB = getDateSortValue(b.publishedAt);
       return dateB - dateA;
     });
     
-    // Filter by category
     if (category && category !== '') {
       newsList = newsList.filter(news => 
         news.category.toLowerCase() === category.toLowerCase()
       );
     }
     
-    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       newsList = newsList.filter(news => 
@@ -238,15 +234,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Latest Education News ${currentYear} | Pakistan Admissions, Results & Updates | NextID.pk`,
     description: `Get ${totalNews}+ latest education news, breaking updates on admissions, board results, scholarships, and educational events from across Pakistan. Stay informed with NextID.pk.`,
     keywords: `education news ${currentYear}, Pakistan education news, admission news, result news, scholarship news, breaking news Pakistan, educational updates`,
-    robots: 'index, follow', // ✅ ADDED
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/news',
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': 'https://www.nextid.pk/news',
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Latest Education News ${currentYear} - Pakistan Updates | NextID.pk`,
       description: `Breaking news, admissions, results, scholarships and educational events from across Pakistan.`,
@@ -255,7 +251,6 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Education News Pakistan' }],
       locale: 'en_PK',
       type: 'website',
-
     },
     twitter: {
       card: 'summary_large_image',
@@ -313,14 +308,12 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     notFound();
   }
   
-  // Calculate stats
   const stats = {
     total: pagination.totalItems,
     featured: newsList.filter(n => n.isFeatured).length,
     breaking: newsList.filter(n => n.isBreaking).length,
   };
   
-  // Split news for different sections
   const heroNews = newsList[0];
   const topStories = newsList.slice(1, 4);
   const latestNews = newsList.slice(4, 12);
@@ -356,7 +349,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
     }))
   };
   
-  // Build URL function for pagination with filters
   const buildUrl = (newPage: number) => {
     const urlParams = new URLSearchParams();
     if (selectedCategory) urlParams.set('category', selectedCategory);
@@ -372,7 +364,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
       
       <main className="min-h-screen bg-gray-50">
         
-        {/* BREAKING NEWS TICKER */}
         {newsList.filter(n => n.isBreaking).length > 0 && (
           <div className="bg-red-600 text-white py-2 overflow-hidden">
             <div className="container mx-auto px-4">
@@ -395,7 +386,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
           </div>
         )}
 
-        {/* HERO SECTION */}
         <div className="bg-gradient-to-r from-red-600 to-red-700 text-white py-12">
           <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto text-center">
@@ -413,16 +403,17 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
           </div>
         </div>
 
-        <div className="container mx-auto px-4 py-12 max-w-7xl">
+        <div 
+          className="container mx-auto px-4 py-12 max-w-7xl"
+          suppressHydrationWarning
+        >
           
-          {/* ✅ Breadcrumbs UI */}
           <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
             <Link href="/" className="hover:text-red-600 transition">Home</Link>
             <span>›</span>
             <span className="text-gray-700 font-medium">News</span>
           </div>
           
-          {/* CATEGORY FILTER BAR */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-8">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-gray-500 mr-2">Filter:</span>
@@ -453,10 +444,8 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
             </div>
           </div>
           
-          {/* ✅ Stats Cards */}
           <StatsCards stats={stats} />
           
-          {/* ✅ Share Buttons */}
           <div className="bg-white rounded-xl shadow-sm p-3 mb-6 border border-gray-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-sm text-gray-500 font-medium">Share this page:</span>
@@ -464,7 +453,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
             </div>
           </div>
           
-          {/* HERO MAIN STORY */}
           {heroNews && (
             <div className="mb-10">
               <Link href={`/news/${heroNews.slug}`} className="group">
@@ -521,10 +509,8 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
           {newsList.length > 0 && (
             <div className="flex flex-col lg:flex-row gap-8">
               
-              {/* MAIN CONTENT */}
               <main className="lg:w-2/3 space-y-8">
                 
-                {/* Top Stories Grid */}
                 {topStories.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-4">
@@ -570,7 +556,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                   </div>
                 )}
 
-                {/* Latest News List */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1 h-5 bg-gradient-to-b from-red-500 to-red-600 rounded-full"></div>
@@ -622,7 +607,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                   </div>
                 </div>
                 
-                {/* Pagination */}
                 {pagination.totalPages > 1 && (
                   <div className="flex justify-center items-center gap-2 pt-4">
                     {pagination.currentPage > 1 && (
@@ -679,11 +663,9 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                 )}
               </main>
               
-              {/* RIGHT SIDEBAR */}
               <aside className="lg:w-1/3">
                 <div className="sticky top-24 space-y-6">
                   
-                  {/* Search Bar */}
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                     <form action="/news" method="get">
                       {selectedCategory && (
@@ -702,7 +684,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                     </form>
                   </div>
                   
-                  {/* Most Popular */}
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                     <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
                       <TrendingUp className="w-4 h-4 text-red-600" />
@@ -722,7 +703,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
                     </div>
                   </div>
                   
-                  {/* Sidebar Widgets */}
                   <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
                     <SidebarWidgets />
                   </Suspense>
@@ -731,7 +711,6 @@ async function NewsContent({ searchParamsPromise }: { searchParamsPromise: Promi
             </div>
           )}
           
-          {/* No results message */}
           {newsList.length === 0 && (
             <div className="text-center py-16 bg-white rounded-xl">
               <Newspaper className="w-16 h-16 text-gray-300 mx-auto mb-4" />
