@@ -1,5 +1,4 @@
 // proxy.ts
-
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import jwt from "jsonwebtoken";
@@ -13,6 +12,15 @@ const PUBLIC_PATHS = [
 
 const ADMIN_PREFIX = "/admin";
 const ADMIN_API_PREFIX = "/api/admin";
+
+const SKIP_QUERY_HANDLING = [
+  "/api",
+  "/_next",
+  "/admin",
+  "/login",
+  "/maintenance",
+  "/favicon.ico",
+];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname.startsWith(path));
@@ -48,24 +56,47 @@ function isAuthenticated(req: NextRequest) {
   return verifyToken(token);
 }
 
+function shouldSkipQueryHandling(pathname: string) {
+  return SKIP_QUERY_HANDLING.some((path) => pathname.startsWith(path));
+}
+
 export default function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
+  const searchParams = req.nextUrl.searchParams;
 
+  // ============================================================
+  // ✅ STEP 1: SEO Redirects FIRST (With query params)
+  // ============================================================
+  // ⚠️ IMPORTANT: Check redirects WITH query params first
   const seoRedirect = getRedirect(pathname);
-
   if (seoRedirect) {
-    return NextResponse.redirect(
-      new URL(seoRedirect.to, req.url),
-      seoRedirect.status
-    );
+    const url = new URL(seoRedirect.to, req.url);
+    console.log(`🔄 SEO Redirect: ${pathname}${search} → ${seoRedirect.to}`);
+    return NextResponse.redirect(url, seoRedirect.status);
   }
 
+  // ============================================================
+  // ✅ STEP 2: Query Parameter Cleanup (Now only if no redirect)
+  // ============================================================
+  if (!shouldSkipQueryHandling(pathname) && searchParams.size > 0) {
+    const url = req.nextUrl.clone();
+    url.search = "";
+    console.log(`🧹 Removing query params: ${pathname}${search} → ${pathname}`);
+    return NextResponse.redirect(url, 301);
+  }
+
+  // ============================================================
+  // ✅ STEP 3: Maintenance Mode
+  // ============================================================
   if (isMaintenanceMode() && !isPublicPath(pathname)) {
     return NextResponse.redirect(
       new URL("/maintenance", req.url)
     );
   }
 
+  // ============================================================
+  // ✅ STEP 4: Admin Authentication
+  // ============================================================
   if (isAdminPath(pathname) && !isPublicPath(pathname)) {
     if (!isAuthenticated(req)) {
       if (pathname.startsWith("/api/admin")) {
@@ -92,6 +123,6 @@ export default function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

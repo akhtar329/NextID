@@ -1,0 +1,112 @@
+[
+  {
+    "from": "/newss*",
+    "to": "/news",
+    "status": 301
+  },
+  {
+    "from": "/city/*",
+    "to": "/",
+    "status": 301
+  },
+  {
+    "from": "/institutes*",
+    "to": "/news",
+    "status": 301
+  },
+  {
+    "from": "/boards*",
+    "to": "/news",
+    "status": 301
+  },
+  {
+    "from": "/programs*",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/category/*",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/universities",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/universities/*",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/questions/*",
+    "to": "/faq",
+    "status": 301
+  },
+  {
+    "from": "/tutors/*",
+    "to": "/blog",
+    "status": 301
+  },
+  {
+    "from": "/blogs/*",
+    "to": "/blog",
+    "status": 301
+  },
+  {
+    "from": "/degrees/*",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/study-abroad",
+    "to": "/scholarships",
+    "status": 301
+  },
+  {
+    "from": "/career-counseling",
+    "to": "/blog",
+    "status": 301
+  },
+  {
+    "from": "/career-guide",
+    "to": "/blog",
+    "status": 301
+  },
+  {
+    "from": "/admissions?*",
+    "to": "/admissions",
+    "status": 301
+  },
+  {
+    "from": "/results?*",
+    "to": "/results",
+    "status": 301
+  },
+  {
+    "from": "/news?*",
+    "to": "/news",
+    "status": 301
+  },
+  {
+    "from": "/date-sheets?*",
+    "to": "/date-sheets",
+    "status": 301
+  },
+  {
+    "from": "/scholarships?*",
+    "to": "/scholarships",
+    "status": 301
+  },
+  {
+    "from": "/jobs?*",
+    "to": "/jobs",
+    "status": 301
+  },
+  {
+    "from": "/blog?*",
+    "to": "/blog",
+    "status": 301
+  }
+]

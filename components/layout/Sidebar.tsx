@@ -18,10 +18,13 @@ import {
   Tag,
 } from "lucide-react";
 
+// ✅ Import package.json dynamically
+import packageJson from "@/package.json";
+
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
-  userRole?: string;  // ✅ New prop for role-based menu
+  userRole?: string;
 }
 
 // ✅ Admin ke liye full menu items
@@ -44,7 +47,7 @@ const adminNavItems = [
   { name: "SEO Redirects", href: "/admin/settings/redirects", icon: RefreshCw },
 ];
 
-// ✅ Editor ke liye limited menu items (no users, no settings)
+// ✅ Editor ke liye limited menu items
 const editorNavItems = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   
@@ -66,6 +69,9 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
   // ✅ Choose menu based on role
   const isEditor = userRole === "Editor";
   const navItems = isEditor ? editorNavItems : adminNavItems;
+
+  // ✅ Get version from package.json
+  const appVersion = packageJson.version || "1.0.0";
 
   const isActive = (href: string) => {
     if (href === "#") return false;
@@ -183,17 +189,14 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
         </div>
       </nav>
 
-      {/* Footer Info with Role Badge */}
+      {/* Footer Info with Role Badge and Dynamic Version */}
       {!collapsed ? (
         <div className="p-4 border-t border-gray-100">
-          <div className={`text-xs text-center ${isEditor ? "text-orange-600" : "text-gray-400"}`}>
-            <p>NextID Admin Panel</p>
-            <div className={`mt-2 px-2 py-1 rounded-lg ${isEditor ? "bg-orange-50" : "bg-gray-50"}`}>
-              <span className={`text-xs font-medium ${isEditor ? "text-orange-600" : "text-gray-500"}`}>
-                Role: {userRole}
-              </span>
-            </div>
-            <p className="mt-1 text-gray-400">Version 1.0.0</p>
+          <div className="text-xs text-center">
+
+            <p className="mt-1 text-gray-400">
+              Version {appVersion}
+            </p>
           </div>
         </div>
       ) : (
@@ -202,6 +205,9 @@ export default function Sidebar({ collapsed, onToggle, userRole = "Admin" }: Sid
             <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
               <span className="text-xs text-gray-500">{userRole === "Editor" ? "E" : "A"}</span>
             </div>
+          </div>
+          <div className="text-center mt-1">
+            <span className="text-[10px] text-gray-400">v{appVersion}</span>
           </div>
         </div>
       )}
