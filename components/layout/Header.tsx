@@ -18,7 +18,7 @@ export default function Header() {
     { name: "Jobs", href: "/jobs" },
     { name: "Scholarships", href: "/scholarships" },
     { name: "News", href: "/news" },
-    { name: "Blogs", href: "/blogs" },
+    { name: "Blogs", href: "/blog" },
   ];
 
   const isActive = (href: string) => {
