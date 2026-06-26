@@ -7,8 +7,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { groupId, groupName } = body;
-    
-    console.log(`🗑️ Clearing cache for: ${groupName || groupId}`);
+
     
     // Define paths to clear based on group
     let pathsToClear: string[] = [];
@@ -46,7 +45,6 @@ export async function POST(request: Request) {
     for (const path of pathsToClear) {
       try {
         revalidatePath(path);
-        console.log(`  ✅ Revalidated: ${path}`);
       } catch (error) {
         console.warn(`  ⚠️ Failed to revalidate: ${path}`, error);
       }

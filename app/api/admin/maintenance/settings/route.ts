@@ -22,8 +22,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    
-    console.log('Saving settings:', body); // Debug
+  
     
     // Update in-memory
     if (body.title !== undefined) maintenanceConfig.title = body.title;
@@ -60,7 +59,6 @@ export async function PUT(request: NextRequest) {
       process.env.MAINTENANCE_MESSAGE = maintenanceConfig.message;
       process.env.MAINTENANCE_ESTIMATED_TIME = maintenanceConfig.estimatedTime;
       
-      console.log('.env file updated successfully');
       
     } catch (fileError) {
       console.error('Could not update .env file:', fileError);

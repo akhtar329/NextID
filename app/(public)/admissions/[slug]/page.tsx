@@ -77,9 +77,21 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ FIXED: Format date - handles both Date and string
+function formatDate(date: Date | string | null): string {
   if (!date) return 'TBA';
-  return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
+  
+  // ✅ Convert to Date object if string
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // ✅ Check if valid date
+  if (isNaN(dateObj.getTime())) return 'TBA';
+  
+  return dateObj.toLocaleDateString('en-PK', { 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
 }
 
 function getInitials(name: string): string {
@@ -110,7 +122,7 @@ function sanitizeContent(html: string | null): string {
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('admission', 100);
+    const posts = await postService.getList('admission', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -127,6 +139,7 @@ export async function generateStaticParams() {
 }
 
 // ============ CACHED DATA FETCHING ============
+
 async function getAdmissionBySlug(slug: string): Promise<AdmissionWithComputed | null> {
   "use cache";
   cacheTag(`admission-detail-${slug}`);
@@ -141,13 +154,17 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithComputed |
     
     const meta = post.meta || {};
     
-    // Parse dates
+    // ✅ Parse dates - CONVERT TO DATE OBJECT
     const openDate = getMetaValue(meta, 'openDate', null) 
       ? new Date(getMetaValue(meta, 'openDate', '')) 
       : null;
     const closeDate = getMetaValue(meta, 'closeDate', null) 
       ? new Date(getMetaValue(meta, 'closeDate', '')) 
       : null;
+    
+    // ✅ FIX: Convert publishedAt and updatedAt to Date objects
+    const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : null;
     
     // Get programs
     const programs = getMetaValue(meta, 'programs', []) as Program[];
@@ -177,8 +194,8 @@ async function getAdmissionBySlug(slug: string): Promise<AdmissionWithComputed |
       excerpt: post.excerpt,
       featuredImage: post.featuredImage || null,
       isFeatured: post.isFeatured || getMetaValue(meta, 'isFeatured', false),
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt, // ✅ Now Date object
+      updatedAt: updatedAt,     // ✅ Now Date object
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),

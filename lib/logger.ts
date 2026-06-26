@@ -102,7 +102,6 @@ export async function writeLog(entry: LogEntry): Promise<void> {
         access: "public",
         contentType: "application/json",
       });
-      console.log(`📝 LOG: ${entry.type} - ${entry.operation}`);
       return;
     }
 
@@ -110,7 +109,6 @@ export async function writeLog(entry: LogEntry): Promise<void> {
     ensureLogDir();
     const logLine = JSON.stringify(entry) + "\n";
     fs.appendFileSync(LOG_FILE, logLine, "utf-8");
-    console.log(`📝 LOG: ${entry.type} - ${entry.operation}`);
   } catch (error) {
     console.error("Error writing log:", error);
   }
@@ -157,14 +155,12 @@ export async function clearLogs(): Promise<void> {
     // ✅ Vercel: Delete Blob
     if (isVercel) {
       await del(LOG_KEY);
-      console.log("🧹 All logs cleared (Vercel Blob)");
       return;
     }
 
     // ✅ Local: Clear file
     ensureLogDir();
     fs.writeFileSync(LOG_FILE, "", "utf-8");
-    console.log("🧹 All logs cleared (Local)");
   } catch (error) {
     console.error("Error clearing logs:", error);
   }

@@ -12,7 +12,6 @@ async function getSessionFromCookie(): Promise<{ userId: number; userName: strin
     const authToken = cookieStore.get('authToken')?.value;
     
     if (!authToken) {
-      console.log('❌ No authToken cookie found');
       return null;
     }
     
@@ -24,7 +23,6 @@ async function getSessionFromCookie(): Promise<{ userId: number; userName: strin
         role: string;
       };
       
-      console.log('✅ Token verified for user:', decoded.email);
       
       return { 
         userId: decoded.id, 

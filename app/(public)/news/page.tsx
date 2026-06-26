@@ -75,10 +75,26 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDateStatic(date: Date | null): string {
+// ✅ FIXED: Safe date formatter with type checking
+function formatDateStatic(date: Date | string | null): string {
   if (!date) return 'Recent';
   
-  const diffMs = REFERENCE_DATE.getTime() - date.getTime();
+  // ✅ Convert string to Date if needed
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return 'Recent';
+  }
+  
+  // ✅ Check if valid date
+  if (isNaN(dateObj.getTime())) {
+    return 'Recent';
+  }
+  
+  const diffMs = REFERENCE_DATE.getTime() - dateObj.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
@@ -88,16 +104,53 @@ function formatDateStatic(date: Date | null): string {
   if (diffHours < 24) return `${diffHours} hours ago`;
   if (diffDays < 7) return `${diffDays} days ago`;
   
-  return date.toLocaleDateString('en-PK', {
+  return dateObj.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
 }
 
-function getDateSortValue(date: Date | null): number {
+// ✅ FIXED: Safe date sort value with type checking
+function getDateSortValue(date: Date | string | null): number {
   if (!date) return 0;
-  return date.getTime();
+  
+  // ✅ Convert string to Date if needed
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return 0;
+  }
+  
+  // ✅ Check if valid date
+  if (isNaN(dateObj.getTime())) {
+    return 0;
+  }
+  
+  return dateObj.getTime();
+}
+
+// ✅ Helper to safely convert date to Date object
+function safeParseDate(date: Date | string | null): Date | null {
+  if (!date) return null;
+  
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return null;
+  }
+  
+  if (isNaN(dateObj.getTime())) {
+    return null;
+  }
+  
+  return dateObj;
 }
 
 // ============ SHARE BUTTONS ============
@@ -137,7 +190,6 @@ async function getAllNews(): Promise<ExtendedPost[]> {
   cacheLife("hours");
   
   try {
-    // ✅ FIXED: 1000 → 100 (matches pre-cache limit)
     const news = await postService.getList('news', 10);
     return news || [];
   } catch (error) {
@@ -158,6 +210,11 @@ async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, sea
     
     let newsList: NewsItem[] = allNews.map((post: ExtendedPost) => {
       const meta = post.meta || {};
+      
+      // ✅ Safely convert dates
+      const publishedAt = safeParseDate(post.publishedAt);
+      const createdAt = safeParseDate(post.createdAt);
+      
       return {
         id: post.id,
         slug: post.slug,
@@ -170,12 +227,13 @@ async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, sea
         isFeatured: getMetaValue(meta, 'isFeatured', false),
         isBreaking: getMetaValue(meta, 'isBreaking', false),
         viewCount: getMetaValue(meta, 'viewCount', 0),
-        publishedAt: post.publishedAt,
-        createdAt: post.createdAt,
+        publishedAt: publishedAt, // ✅ Now Date object or null
+        createdAt: createdAt,     // ✅ Now Date object or null
         authorName: getMetaValue(meta, 'authorName', null),
       };
     });
     
+    // ✅ Sort using safe date function
     newsList.sort((a, b) => {
       const dateA = getDateSortValue(a.publishedAt);
       const dateB = getDateSortValue(b.publishedAt);

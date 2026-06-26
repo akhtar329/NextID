@@ -277,6 +277,11 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
     
     const meta = post.meta || {};
     
+    // ✅ Convert dates to Date objects
+    const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
+    const createdAt = post.createdAt ? new Date(post.createdAt) : null;
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : null;
+    
     return {
       id: post.id,
       title: post.title,
@@ -289,8 +294,8 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       isBreaking: getMetaValue(meta, 'isBreaking', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
+      publishedAt: publishedAt, // ✅ Now Date object
+      createdAt: createdAt,     // ✅ Now Date object
       category: getMetaValue(meta, 'category', 'General'),
       tags: getMetaValue(meta, 'tags', null),
       metaTitle: getMetaValue(meta, 'metaTitle', null),
@@ -303,7 +308,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       ogImage: getMetaValue(meta, 'ogImage', null),
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
-      updatedAt: post.updatedAt,
+      updatedAt: updatedAt, // ✅ Now Date object
     };
   } catch (error) {
     console.error('Error fetching news detail:', error);
@@ -342,13 +347,15 @@ async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
       .slice(0, 3)
       .map(post => {
         const meta = post.meta || {};
+        // ✅ Convert publishedAt to Date object
+        const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
         return {
           id: post.id,
           title: post.title,
           slug: post.slug,
           excerpt: post.excerpt,
           featuredImage: post.featuredImage,
-          publishedAt: post.publishedAt,
+          publishedAt: publishedAt, // ✅ Now Date object
           isBreaking: getMetaValue(meta, 'isBreaking', false),
         };
       });
@@ -396,16 +403,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: newsItem.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: newsItem.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: canonicalUrl,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': canonicalUrl,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: newsItem.authorName || 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: newsItem.authorName || 'NextID Team' }],
     openGraph: {
       title: newsItem.ogTitle || seoTitle,
       description: newsItem.ogDescription || seoDescription,
@@ -414,7 +421,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: newsItem.publishedAt?.toISOString(),
-      modifiedTime: newsItem.updatedAt?.toISOString(), // ✅ ADDED
+      modifiedTime: newsItem.updatedAt?.toISOString(),
     },
     twitter: {
       card: 'summary_large_image',

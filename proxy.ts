@@ -71,7 +71,6 @@ export default function middleware(req: NextRequest) {
   const seoRedirect = getRedirect(pathname);
   if (seoRedirect) {
     const url = new URL(seoRedirect.to, req.url);
-    console.log(`🔄 SEO Redirect: ${pathname}${search} → ${seoRedirect.to}`);
     return NextResponse.redirect(url, seoRedirect.status);
   }
 
@@ -81,7 +80,6 @@ export default function middleware(req: NextRequest) {
   if (!shouldSkipQueryHandling(pathname) && searchParams.size > 0) {
     const url = req.nextUrl.clone();
     url.search = "";
-    console.log(`🧹 Removing query params: ${pathname}${search} → ${pathname}`);
     return NextResponse.redirect(url, 301);
   }
 

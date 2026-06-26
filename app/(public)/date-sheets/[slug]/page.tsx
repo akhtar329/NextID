@@ -70,9 +70,26 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-function formatDate(date: Date | null): string {
+// ✅ Safe formatDate - handles both Date and string
+function formatDate(date: Date | string | null): string {
   if (!date) return 'TBA';
-  return date.toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(dateObj.getTime())) return 'TBA';
+  
+  return dateObj.toLocaleDateString('en-PK', { 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+}
+
+// ✅ Safe toISOString helper
+function toISOStringSafe(date: Date | string | null | undefined): string | undefined {
+  if (!date) return undefined;
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return undefined;
+  return dateObj.toISOString();
 }
 
 // ✅ Sanitize content - Convert H1 to H2
@@ -136,7 +153,7 @@ function ShareButtons({ title, slug }: { title: string; slug: string }) {
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('date_sheet', 100);
+    const posts = await postService.getList('date_sheet', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -176,6 +193,10 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetWithComputed |
       }
     }
     
+    // ✅ Convert dates to Date objects
+    const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : null;
+    
     // ✅ FIXED: Static year (no new Date())
     const currentYear = '2026';
     const year = getMetaValue(meta, 'year', parseInt(currentYear));
@@ -203,8 +224,8 @@ async function getDateSheetDetail(slug: string): Promise<DateSheetWithComputed |
       officialLink: getMetaValue(meta, 'officialLink', null),
       downloadLink: getMetaValue(meta, 'downloadLink', null),
       featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt,
+      updatedAt: updatedAt,
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
@@ -262,16 +283,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: dateSheet.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: dateSheet.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: canonicalUrl,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': canonicalUrl,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID Team' }],
     openGraph: {
       title: dateSheet.ogTitle || seoTitle,
       description: dateSheet.ogDescription || seoDescription,
@@ -279,8 +300,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
-      publishedTime: dateSheet.publishedAt?.toISOString(),
-      modifiedTime: dateSheet.updatedAt?.toISOString(), // ✅ ADDED
+      publishedTime: toISOStringSafe(dateSheet.publishedAt),
+      modifiedTime: toISOStringSafe(dateSheet.updatedAt),
     },
     twitter: {
       card: 'summary_large_image',
@@ -342,7 +363,7 @@ async function DateSheetDetails({ slug }: { slug: string }) {
     "@type": "EducationEvent",
     "name": `${displayName} ${dateSheet.examType} Examinations ${dateSheet.year}`,
     "description": metaDescriptionText,
-    "startDate": dateSheet.examDate?.toISOString(),
+    "startDate": toISOStringSafe(dateSheet.examDate),
     "location": {
       "@type": "Place",
       "name": displayName || "Pakistan",

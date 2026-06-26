@@ -575,7 +575,6 @@ export default function LogsPage() {
 
     autoRefreshTimerRef.current = setInterval(() => {
       setIsAutoRefreshing(true);
-      console.log("🔄 Auto-refreshing logs...");
       setRefreshKey(prev => prev + 1);
       setCountdown(AUTO_REFRESH_INTERVAL);
       setTimeout(() => setIsAutoRefreshing(false), 1000);
@@ -684,7 +683,6 @@ useEffect(() => {
   if (!autoRefreshEnabled) return;
   
   const interval = setInterval(() => {
-    console.log("🔄 Auto-refreshing logs at:", new Date().toLocaleTimeString());
     setIsAutoRefreshing(true);
     
     Promise.all([fetchLogs(), fetchStats()]).finally(() => {

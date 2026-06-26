@@ -51,7 +51,6 @@ function ensureFile() {
   if (!fs.existsSync(CONFIG_FILE)) {
     // ✅ Create file with default redirects
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_REDIRECTS, null, 2), "utf-8");
-    console.log(`✅ Created redirects file with ${DEFAULT_REDIRECTS.length} defaults`);
   }
 }
 
@@ -76,7 +75,6 @@ export function saveRedirects(redirects: RedirectRule[]): void {
   try {
     ensureFile();
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(redirects, null, 2), "utf-8");
-    console.log(`✅ ${redirects.length} redirects saved to file`);
   } catch (error) {
     console.error("Error saving redirects:", error);
     throw new Error("Failed to save redirects");
@@ -96,7 +94,6 @@ export function addRedirect(redirect: RedirectRule): void {
   // ✅ Overwrite file
   saveRedirects(updated);
   
-  console.log(`✅ Redirect added/updated: ${redirect.from} → ${redirect.to}`);
 }
 
 // ✅ DELETE: Remove redirect by "from" field
@@ -109,13 +106,11 @@ export function deleteRedirect(from: string): void {
   }
   
   saveRedirects(filtered);
-  console.log(`✅ Redirect deleted: ${from}`);
 }
 
 // ✅ RESET: Restore to defaults (overwrite with DEFAULT_REDIRECTS)
 export function resetRedirects(): void {
   saveRedirects([...DEFAULT_REDIRECTS]);
-  console.log(`✅ Redirects reset to ${DEFAULT_REDIRECTS.length} defaults`);
 }
 
 // ✅ UPDATE: Update existing redirect
@@ -127,7 +122,6 @@ export function updateRedirect(oldFrom: string, newRedirect: RedirectRule): void
   const updated = [...filtered, newRedirect];
   
   saveRedirects(updated);
-  console.log(`✅ Redirect updated: ${oldFrom} → ${newRedirect.from}`);
 }
 
 // ✅ GET: Find matching redirect
@@ -194,8 +188,6 @@ export function syncRedirects(): void {
   if (changed) {
     const merged = Array.from(currentMap.values());
     saveRedirects(merged);
-    console.log(`✅ Synced: Added missing defaults`);
   } else {
-    console.log(`✅ Already in sync`);
   }
 }

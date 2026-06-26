@@ -69,6 +69,26 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
+// ✅ Helper to safely convert date to Date object
+function safeParseDate(date: Date | string | null): Date | null {
+  if (!date) return null;
+  
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return null;
+  }
+  
+  if (isNaN(dateObj.getTime())) {
+    return null;
+  }
+  
+  return dateObj;
+}
+
 function parseAmountForSchema(amount: string | null): { value: number; currency: string; unitText: string } | null {
   if (!amount) return null;
   const match = amount.match(/(\d[\d,]*)/);
@@ -81,10 +101,26 @@ function parseAmountForSchema(amount: string | null): { value: number; currency:
   return { value, currency, unitText };
 }
 
-// Format full date on server
-function formatFullDate(date: Date | null): string {
+// ✅ Format full date with type checking
+function formatFullDate(date: Date | string | null): string {
   if (!date) return '';
-  return date.toLocaleDateString('en-PK', {
+  
+  // ✅ Convert string to Date if needed
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return '';
+  }
+  
+  // ✅ Check if valid date
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleDateString('en-PK', {
     day: 'numeric', 
     month: 'long', 
     year: 'numeric'
@@ -182,7 +218,7 @@ function BreadcrumbSchema({ scholarship }: { scholarship: ScholarshipWithCompute
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('scholarship', 100);
+    const posts = await postService.getList('scholarship', 10);
     if (posts && posts.length > 0) {
       return posts.map((post) => ({ slug: post.slug }));
     }
@@ -204,17 +240,32 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComput
     if (!post || post.type !== 'scholarship') return null;
     
     const meta = post.meta || {};
-    let deadline: Date | null = null;
+    
+    // ✅ Safely parse deadline
     const deadlineRaw = getMetaValue(meta, 'applicationDeadline', null);
-    if (deadlineRaw && typeof deadlineRaw === 'string') {
-      try { deadline = new Date(deadlineRaw); } catch { deadline = null; }
+    const deadline = safeParseDate(deadlineRaw);
+    
+    // ✅ Safely parse publishedAt and updatedAt
+    const publishedAt = safeParseDate(post.publishedAt);
+    const updatedAt = safeParseDate(post.updatedAt);
+    
+    // ✅ Use static reference date for calculations
+    const referenceDate = new Date('2024-01-01T00:00:00.000Z');
+    
+    // ✅ Compute date-related values using reference date
+    let computedDaysLeft: number | null = null;
+    if (deadline) {
+      const diffTime = deadline.getTime() - referenceDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      computedDaysLeft = diffDays > 0 ? diffDays : null;
     }
     
-    // Compute all date-related values on the server
-    const computedDaysLeft = await getDaysLeft(deadline);
-    const computedShortDate = await formatShortDate(deadline);
+    const computedShortDate = deadline 
+      ? deadline.toLocaleDateString('en-PK', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'TBA';
+    
     const computedFormattedDate = formatFullDate(deadline);
-    const computedIsUrgent = await isDeadlineNear(deadline, 14);
+    const computedIsUrgent = computedDaysLeft !== null && computedDaysLeft <= 14 && computedDaysLeft > 0;
     const computedIsOpen = computedDaysLeft !== null && computedDaysLeft > 0;
     
     const content = post.content || '';
@@ -251,8 +302,8 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComput
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
       featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt, // ✅ Now Date object or null
+      updatedAt: updatedAt,     // ✅ Now Date object or null
       // Computed values
       computedDaysLeft,
       computedShortDate,
@@ -289,16 +340,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`,
     description: scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
-    keywords: scholarship.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: scholarship.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': scholarship.canonicalUrl || `https://www.nextid.pk/scholarships/${scholarship.slug}`,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID Team' }],
     openGraph: {
       title: scholarship.ogTitle || scholarship.metaTitle || `${scholarship.title} - ${scholarship.studyLevel} Scholarship ${currentYear}`,
       description: scholarship.ogDescription || scholarship.metaDescription || `${urgencyText}Apply for ${scholarship.title} scholarship. Deadline: ${scholarship.computedShortDate}.`,
@@ -307,7 +358,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: [{ url: scholarship.ogImage || scholarship.featuredImage || '/og-image.png', width: 1200, height: 630 }],
       type: 'article',
       publishedTime: scholarship.publishedAt?.toISOString(),
-      modifiedTime: scholarship.updatedAt?.toISOString(), // ✅ ADDED
+      modifiedTime: scholarship.updatedAt?.toISOString(),
     },
     twitter: { 
       card: 'summary_large_image', 
@@ -560,7 +611,9 @@ function ScholarshipContent({ scholarship }: { scholarship: ScholarshipWithCompu
                 </div>
                 
                 <div data-nosnippet>
-                  <SidebarWidgets />
+                  <Suspense fallback={<div className="bg-white rounded-xl p-6 shadow-sm animate-pulse h-64"></div>}>
+                    <SidebarWidgets />
+                  </Suspense>
                 </div>
               </div>
             </aside>

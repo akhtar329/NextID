@@ -59,7 +59,6 @@ export default function ImageUpload({
         setPreview(data.url);
         setImageUrl(data.url);
         onImageSelect(data.url, data.alt);
-        console.log('✅ Image uploaded:', data.url);
       } else {
         alert('Upload failed: ' + data.error);
       }

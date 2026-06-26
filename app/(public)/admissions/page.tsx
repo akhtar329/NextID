@@ -87,7 +87,7 @@ async function getAdmissionsData(page: number = 1, limit: number = 10, filter: s
   cacheLife("hours");
   
   try {
-    const posts = await postService.getList('admission', 200);
+    const posts = await postService.getList('admission', 10);
     
     if (!posts || !Array.isArray(posts)) {
       return {
@@ -191,7 +191,7 @@ async function getOpenCountForMetadata() {
   cacheLife("hours");
   
   try {
-    const posts = await postService.getList('admission', 200);
+    const posts = await postService.getList('admission', 10);
     if (!posts || !Array.isArray(posts)) return 0;
     return posts.filter(post => getMetaValue(post.meta, 'status', 'Open') === "Open").length;
   } catch (error) {

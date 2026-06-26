@@ -170,7 +170,6 @@ export default function AdminPostsPage() {
       try {
         data = await res.json();
       } catch {
-        console.log('API response issue');
         showMessage('success', `✅ ${cacheGroup.name} cache cleared! (Manual refresh may be needed)`);
         await fetchPosts();
         setClearingCache(false);

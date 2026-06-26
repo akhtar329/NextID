@@ -14,7 +14,6 @@ async function isAuthenticated(): Promise<{ userId: number; userRole: string } |
     const authToken = cookieStore.get('authToken')?.value;
     
     if (!authToken) {
-      console.log('❌ No authToken found');
       return null;
     }
     
@@ -128,7 +127,6 @@ async function revalidatePostCache(slug: string, type: string) {
     else if (typeLower === 'scholarship') revalidateTag("scholarships-home", "default");
     else if (typeLower === 'job') revalidateTag("jobs-home", "default");
     
-    console.log(`✅ Cache revalidated for post: ${slug}`);
   } catch (cacheError) {
     console.error("Error revalidating cache:", cacheError);
   }

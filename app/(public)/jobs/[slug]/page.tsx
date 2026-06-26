@@ -191,7 +191,7 @@ function ShareButtons({ title, slug }: { title: string; slug: string }) {
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('job', 100);
+    const posts = await postService.getList('job', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -225,7 +225,7 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       ? new Date(getMetaValue(meta, 'deadline', '')) 
       : null;
     
-    // Use a fixed reference date to avoid new Date() during prerendering
+    // ✅ Use reference date to avoid new Date() during prerendering
     const referenceDate = new Date('2024-01-01T00:00:00.000Z');
     
     // Calculate days left using the reference date
@@ -240,6 +240,10 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
     const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
     
     const description = post.content || '';
+    
+    // ✅ Convert publishedAt and updatedAt to Date objects
+    const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : null;
     
     return {
       id: post.id,
@@ -261,8 +265,8 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
       featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt, // ✅ Now Date object
+      updatedAt: updatedAt,     // ✅ Now Date object
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
@@ -323,16 +327,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: job.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: job.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: canonicalUrl,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': canonicalUrl,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID Team' }],
     openGraph: {
       title: job.ogTitle || seoTitle,
       description: job.ogDescription || seoDescription,
@@ -341,7 +345,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: job.publishedAt?.toISOString(),
-      modifiedTime: job.updatedAt?.toISOString(), // ✅ ADDED
+      modifiedTime: job.updatedAt?.toISOString(),
     },
     twitter: {
       card: 'summary_large_image',

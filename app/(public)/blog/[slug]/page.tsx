@@ -95,10 +95,15 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function formatDateStatic(date: Date | null): string {
+// ✅ Safe date formatter
+function formatDateStatic(date: Date | string | null): string {
   if (!date) return 'Recent';
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(dateObj.getTime())) return 'Recent';
+  
   const now = new Date('2024-01-01T00:00:00.000Z');
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - dateObj.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
@@ -108,16 +113,20 @@ function formatDateStatic(date: Date | null): string {
   if (diffHours < 24) return `${diffHours} hours ago`;
   if (diffDays < 7) return `${diffDays} days ago`;
   
-  return date.toLocaleDateString('en-PK', {
+  return dateObj.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
 }
 
-function formatFullDateStatic(date: Date | null): string {
+function formatFullDateStatic(date: Date | string | null): string {
   if (!date) return 'TBA';
-  return date.toLocaleDateString('en-PK', {
+  
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(dateObj.getTime())) return 'TBA';
+  
+  return dateObj.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'long',
     year: 'numeric'
@@ -176,6 +185,14 @@ function sanitizeContent(html: string | null): string {
   return sanitized;
 }
 
+// ✅ Safe toISOString helper
+function toISOStringSafe(date: Date | string | null | undefined): string | undefined {
+  if (!date) return undefined;
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return undefined;
+  return dateObj.toISOString();
+}
+
 // ============ CACHED DATA FETCHING ============
 async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
   "use cache";
@@ -195,6 +212,11 @@ async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
     const headings = extractHeadings(content);
     const sanitizedContent = sanitizeContent(content);
     
+    // ✅ Convert dates to Date objects
+    const publishedAt = post.publishedAt ? new Date(post.publishedAt) : null;
+    const createdAt = post.createdAt ? new Date(post.createdAt) : null;
+    const updatedAt = post.updatedAt ? new Date(post.updatedAt) : null;
+    
     return {
       id: post.id,
       slug: post.slug,
@@ -208,9 +230,9 @@ async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       isPopular: getMetaValue(meta, 'isPopular', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      publishedAt: post.publishedAt,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
@@ -302,7 +324,7 @@ async function getRelatedBlogs(currentId: number, category: string): Promise<Rel
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('blog', 100);
+    const posts = await postService.getList('blog', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -352,16 +374,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: blog.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: blog.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: canonicalUrl,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': canonicalUrl,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: blog.authorName || 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: blog.authorName || 'NextID Team' }],
     openGraph: {
       title: blog.ogTitle || seoTitle,
       description: blog.ogDescription || seoDescription,
@@ -369,8 +391,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       siteName: 'NextID.pk',
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
-      publishedTime: blog.publishedAt?.toISOString(),
-      modifiedTime: blog.updatedAt?.toISOString(), // ✅ ADDED
+      publishedTime: toISOStringSafe(blog.publishedAt),
+      modifiedTime: toISOStringSafe(blog.updatedAt),
     },
     twitter: {
       card: 'summary_large_image',
@@ -482,8 +504,8 @@ async function BlogContent({ blogPromise }: { blogPromise: Promise<BlogWithCompu
     "headline": blog.title,
     "description": blog.excerpt || `${blog.title}. Read time: ${blog.readTime} minutes.`,
     "url": `https://www.nextid.pk/blog/${blog.slug}`,
-    "datePublished": blog.publishedAt?.toISOString(),
-    "dateModified": blog.updatedAt?.toISOString(),
+    "datePublished": toISOStringSafe(blog.publishedAt),
+    "dateModified": toISOStringSafe(blog.updatedAt),
     "author": {
       "@type": "Person",
       "name": blog.authorName || "NextID Team"

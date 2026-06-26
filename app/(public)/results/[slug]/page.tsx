@@ -77,14 +77,50 @@ function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defa
   return value !== undefined && value !== null ? value : defaultValue;
 }
 
-// ✅ FIXED: Static date with reference
-function formatDateStatic(date: Date | null): string {
+// ✅ FIXED: Safe date formatter with type checking
+function formatDateStatic(date: Date | string | null): string {
   if (!date) return '';
-  return date.toLocaleDateString('en-PK', {
+  
+  // ✅ Convert string to Date if needed
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return '';
+  }
+  
+  // ✅ Check if valid date
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleDateString('en-PK', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
+}
+
+// ✅ Helper to safely convert date to Date object
+function safeParseDate(date: Date | string | null): Date | null {
+  if (!date) return null;
+  
+  let dateObj: Date;
+  if (typeof date === 'string') {
+    dateObj = new Date(date);
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    return null;
+  }
+  
+  if (isNaN(dateObj.getTime())) {
+    return null;
+  }
+  
+  return dateObj;
 }
 
 function getInitials(name: string): string {
@@ -178,7 +214,7 @@ function BreadcrumbSchema({ result }: { result: ResultDetail }) {
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('result', 100);
+    const posts = await postService.getList('result', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -209,20 +245,15 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
     
     const meta = post.meta || {};
     
-    let resultDate: Date | null = null;
+    // ✅ Safely parse resultDate
     const resultDateRaw = getMetaValue(meta, 'resultDate', null);
-    if (resultDateRaw && typeof resultDateRaw === 'string') {
-      try {
-        const parsed = new Date(resultDateRaw);
-        if (!isNaN(parsed.getTime())) {
-          resultDate = parsed;
-        }
-      } catch {
-        resultDate = null;
-      }
-    }
+    const resultDate = safeParseDate(resultDateRaw);
     
-    // ✅ FIXED: Static year (no new Date())
+    // ✅ Safely parse publishedAt and updatedAt
+    const publishedAt = safeParseDate(post.publishedAt);
+    const updatedAt = safeParseDate(post.updatedAt);
+    
+    // ✅ Static year (no new Date())
     const year = getMetaValue(meta, 'year', parseInt(CURRENT_YEAR));
     const boardName = getMetaValue(meta, 'boardName', null);
     const instituteName = getMetaValue(meta, 'universityName', getMetaValue(meta, 'instituteName', null));
@@ -236,7 +267,7 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       content: post.content,
       excerpt: post.excerpt,
       year: year,
-      resultDate: resultDate,
+      resultDate: resultDate, // ✅ Now Date object or null
       boardName: boardName,
       boardSlug: getMetaValue(meta, 'boardSlug', null),
       instituteName: instituteName,
@@ -247,8 +278,8 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       status: getMetaValue(meta, 'status', true),
       viewCount: getMetaValue(meta, 'viewCount', 0),
       featuredImage: post.featuredImage || null,
-      publishedAt: post.publishedAt,
-      updatedAt: post.updatedAt,
+      publishedAt: publishedAt, // ✅ Now Date object or null
+      updatedAt: updatedAt,     // ✅ Now Date object or null
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
@@ -304,16 +335,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: seoTitle,
     description: seoDescription,
-    keywords: result.metaKeywords || undefined, // ✅ ADDED
-    robots: robots, // ✅ ADDED
+    keywords: result.metaKeywords || undefined,
+    robots: robots,
     alternates: {
       canonical: canonicalUrl,
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': canonicalUrl,
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID Team' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID Team' }],
     openGraph: {
       title: result.ogTitle || seoTitle,
       description: result.ogDescription || seoDescription,
@@ -322,7 +353,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: 'article',
       publishedTime: result.publishedAt?.toISOString(),
-      modifiedTime: result.updatedAt?.toISOString(), // ✅ ADDED
+      modifiedTime: result.updatedAt?.toISOString(),
     },
     twitter: {
       card: 'summary_large_image',

@@ -596,7 +596,6 @@ export class PostRepository {
   // ============================================================
   async clearCache(): Promise<void> {
     await cache.clear();
-    console.log('🧹 Cache cleared');
   }
 
   // ============================================================
