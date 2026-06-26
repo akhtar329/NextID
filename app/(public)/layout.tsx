@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import type { Metadata } from "next";
+import { postService } from "@/services/post/post.service";
 
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -50,11 +51,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PublicLayout({
+export default async function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // ✅ PRE-CACHE: Sab types ki cache pehle se set karein (limit: 10)
+  // Har page load par cache set ho jayegi, chahe homepage se aaye ya direct
+  await postService.preCacheAllTypes(10);
+
   return (
     <>
       <Suspense fallback={<div className="h-16 bg-transparent" />}>

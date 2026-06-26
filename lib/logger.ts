@@ -1,6 +1,7 @@
 // lib/logger.ts
 import fs from "fs";
 import path from "path";
+import { put, list, del } from "@vercel/blob";
 
 // ============================================================
 // 1. TYPES
@@ -21,32 +22,49 @@ export interface LogEntry {
   path?: string;
   ip?: string;
   dataSize?: number;
-  data?: Record<string, unknown>; // ✅ Extra metadata (filters, counts, error details, etc.)
+  data?: Record<string, unknown>;
 }
 
 // ============================================================
-// 2. FILE PATH
+// 2. FILE PATH (Vercel / Local)
 // ============================================================
 
+const isVercel = process.env.VERCEL === "1";
+const LOG_KEY = "logs/performance.json";
+
+// Local file path (fallback)
 const LOG_FILE = path.join(process.cwd(), "logs", "performance.log");
 
 // ============================================================
-// 3. ENSURE DIRECTORY EXISTS
+// 3. ENSURE DIRECTORY EXISTS (Local only)
 // ============================================================
 
 function ensureLogDir() {
-  const dir = path.dirname(LOG_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (!isVercel) {
+    const dir = path.dirname(LOG_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 }
 
 // ============================================================
-// 4. READ LOGS
+// 4. READ LOGS (Vercel Blob + Local)
 // ============================================================
 
-export function getLogs(): LogEntry[] {
+export async function getLogs(): Promise<LogEntry[]> {
   try {
+    // ✅ Vercel: Read from Blob
+    if (isVercel) {
+      const { blobs } = await list({ prefix: "logs/" });
+      const blob = blobs.find(b => b.pathname === LOG_KEY);
+      if (!blob) return [];
+      const response = await fetch(blob.url);
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    }
+
+    // ✅ Local: Read from file
     ensureLogDir();
     if (!fs.existsSync(LOG_FILE)) return [];
 
@@ -61,13 +79,11 @@ export function getLogs(): LogEntry[] {
 }
 
 // ============================================================
-// 5. WRITE LOG (APPEND)
+// 5. WRITE LOG (Vercel Blob + Local)
 // ============================================================
 
-export function writeLog(entry: LogEntry): void {
+export async function writeLog(entry: LogEntry): Promise<void> {
   try {
-    ensureLogDir();
-
     // ✅ Add ID if not present
     if (!entry.id) {
       entry.id = `log_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -78,9 +94,22 @@ export function writeLog(entry: LogEntry): void {
       entry.timestamp = new Date().toISOString();
     }
 
+    // ✅ Vercel: Save to Blob
+    if (isVercel) {
+      const existing = await getLogs();
+      const updated = [entry, ...existing];
+      await put(LOG_KEY, JSON.stringify(updated, null, 2), {
+        access: "public",
+        contentType: "application/json",
+      });
+      console.log(`📝 LOG: ${entry.type} - ${entry.operation}`);
+      return;
+    }
+
+    // ✅ Local: Append to file
+    ensureLogDir();
     const logLine = JSON.stringify(entry) + "\n";
     fs.appendFileSync(LOG_FILE, logLine, "utf-8");
-
     console.log(`📝 LOG: ${entry.type} - ${entry.operation}`);
   } catch (error) {
     console.error("Error writing log:", error);
@@ -91,18 +120,27 @@ export function writeLog(entry: LogEntry): void {
 // 6. DELETE SINGLE LOG
 // ============================================================
 
-export function deleteLog(id: string): boolean {
+export async function deleteLog(id: string): Promise<boolean> {
   try {
-    const logs = getLogs();
+    const logs = await getLogs();
     const filtered = logs.filter((log) => log.id !== id);
 
     if (filtered.length === logs.length) {
       return false; // Log not found
     }
 
+    // ✅ Vercel: Save to Blob
+    if (isVercel) {
+      await put(LOG_KEY, JSON.stringify(filtered, null, 2), {
+        access: "public",
+        contentType: "application/json",
+      });
+      return true;
+    }
+
+    // ✅ Local: Save to file
     const content = filtered.map((log) => JSON.stringify(log)).join("\n");
     fs.writeFileSync(LOG_FILE, content, "utf-8");
-
     return true;
   } catch (error) {
     console.error("Error deleting log:", error);
@@ -114,11 +152,19 @@ export function deleteLog(id: string): boolean {
 // 7. CLEAR ALL LOGS
 // ============================================================
 
-export function clearLogs(): void {
+export async function clearLogs(): Promise<void> {
   try {
+    // ✅ Vercel: Delete Blob
+    if (isVercel) {
+      await del(LOG_KEY);
+      console.log("🧹 All logs cleared (Vercel Blob)");
+      return;
+    }
+
+    // ✅ Local: Clear file
     ensureLogDir();
     fs.writeFileSync(LOG_FILE, "", "utf-8");
-    console.log("🧹 All logs cleared");
+    console.log("🧹 All logs cleared (Local)");
   } catch (error) {
     console.error("Error clearing logs:", error);
   }
@@ -128,22 +174,23 @@ export function clearLogs(): void {
 // 8. GET LOGS WITH LIMIT & FILTER
 // ============================================================
 
-export function getLogsWithFilter(
+export async function getLogsWithFilter(
   limit = 100,
   type?: string,
   search?: string
-): LogEntry[] {
-  let logs = getLogs();
+): Promise<LogEntry[]> {
+  const logs = await getLogs();
 
   // ✅ Filter by type
+  let filtered = logs;
   if (type && type !== "ALL") {
-    logs = logs.filter((log) => log.type === type);
+    filtered = filtered.filter((log) => log.type === type);
   }
 
   // ✅ Filter by search (operation name)
   if (search) {
     const query = search.toLowerCase();
-    logs = logs.filter(
+    filtered = filtered.filter(
       (log) =>
         log.operation.toLowerCase().includes(query) ||
         log.type.toLowerCase().includes(query) ||
@@ -152,15 +199,15 @@ export function getLogsWithFilter(
   }
 
   // ✅ Return latest first with limit
-  return logs.slice(-limit).reverse();
+  return filtered.slice(-limit).reverse();
 }
 
 // ============================================================
 // 9. GET STATS / ANALYSIS
 // ============================================================
 
-export function getLogStats() {
-  const logs = getLogs();
+export async function getLogStats() {
+  const logs = await getLogs();
 
   const total = logs.length;
   const cacheHits = logs.filter((l) => l.type === "CACHE_HIT").length;

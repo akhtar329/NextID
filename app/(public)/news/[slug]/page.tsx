@@ -246,7 +246,7 @@ function TableOfContents({ headings }: { headings: Heading[] }) {
 // ============ GENERATE STATIC PARAMS ============
 export async function generateStaticParams() {
   try {
-    const posts = await postService.getList('news', 100);
+    const posts = await postService.getList('news', 10);
     
     if (posts && posts.length > 0) {
       return posts.map((post) => ({
@@ -317,7 +317,7 @@ async function getAllNews(): Promise<ExtendedPost[]> {
   cacheLife("hours");
   
   try {
-    const news = await postService.getList('news', 500);
+    const news = await postService.getList('news', 10);
     return news || [];
   } catch (error) {
     console.error('Error fetching all news:', error);

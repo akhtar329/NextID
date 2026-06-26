@@ -3,7 +3,6 @@
 import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import OnScrollLoad from "@/components/OnScrollLoad/OnScrollLoad";
-import { postService } from "@/services/post/post.service";
 
 // Sections
 import AdmissionSection from "@/components/sections/Home/AdmissionSection";
@@ -134,10 +133,8 @@ function NewsSectionWrapper() {
 // ================= PAGE =================
 
 export default async function HomePage() {
-  // ✅ PRE-CACHE: Sab types ki cache pehle se set karein
-  // Ye homepage load hote hi sab types (admission, result, news, etc.)
-  // ki cache pre-load kar dega taake baad mein koi miss na ho
-  await postService.preCacheAllTypes(100);
+  // ✅ PRE-CACHE REMOVED - Now in layout.tsx
+  // Har page par cache set ho rahi hai via layout
 
   return (
     <>

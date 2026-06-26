@@ -277,21 +277,21 @@ export const postService = {
    * Pre-cache all post types (admission, result, news, etc.)
    * Call this from homepage or layout to preload cache
    */
-  async preCacheAllTypes(limit: number = 100): Promise<void> {
+  async preCacheAllTypes(limit: number = 10): Promise<void> {
     await preCacheAllTypesInternal(limit);
   },
 
   /**
    * Pre-cache a specific type
    */
-  async preCacheType(type: PostType, limit: number = 100): Promise<void> {
+  async preCacheType(type: PostType, limit: number = 10): Promise<void> {
     await preCacheTypeInternal(type, limit);
   },
 
   /**
    * Pre-cache with custom limit and types
    */
-  async preCacheCustom(types: PostType[], limit: number = 100): Promise<void> {
+  async preCacheCustom(types: PostType[], limit: number = 10): Promise<void> {
     await preCacheCustomInternal(types, limit);
   },
 };

@@ -23,7 +23,7 @@ export default async function SidebarWidgets() {
   cacheTag('sidebar-widgets')
   cacheLife('days') // 1 day cache
 
-  // Service handles all caching internally
+  // ✅ Service handles all caching internally with LIMIT: 10
   const { trending, breaking, featured, quickAccess } = await sidebarService.getSidebarData();
   
   return (
@@ -37,7 +37,7 @@ export default async function SidebarWidgets() {
             <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full ml-auto">Hot</span>
           </div>
           <div className="space-y-3">
-            {trending.map((post, index) => {
+            {trending.slice(0, 5).map((post, index) => {
               const typeInfo = getTypeInfo(post.type);
               return (
                 <Link key={post.id} href={`/${post.type}s/${post.slug}`} 
@@ -78,10 +78,10 @@ export default async function SidebarWidgets() {
                 <span className="text-red-500 text-sm">🔴</span>
                 <span className="text-xs font-bold text-red-600">Breaking</span>
               </div>
-              {breaking.map(post => (
+              {breaking.slice(0, 3).map(post => (
                 <Link key={post.id} href={`/${post.type}s/${post.slug}`}
                       className="block p-2 rounded-lg hover:bg-red-50 transition-all">
-                  <p className="text-sm font-semibold text-gray-800 group-hover:text-red-600 line-clamp-2">
+                  <p className="text-sm font-semibold text-gray-800 hover:text-red-600 line-clamp-2">
                     {post.title}
                   </p>
                 </Link>
@@ -95,10 +95,10 @@ export default async function SidebarWidgets() {
                 <span className="text-orange-500 text-sm">⭐</span>
                 <span className="text-xs font-bold text-orange-600">Featured</span>
               </div>
-              {featured.map(post => (
+              {featured.slice(0, 4).map(post => (
                 <Link key={post.id} href={`/${post.type}s/${post.slug}`}
                       className="block p-2 rounded-lg hover:bg-orange-50 transition-all">
-                  <p className="text-sm text-gray-700 group-hover:text-orange-600 line-clamp-2">
+                  <p className="text-sm text-gray-700 hover:text-orange-600 line-clamp-2">
                     {post.title}
                   </p>
                 </Link>

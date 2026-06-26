@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // ✅ Check if analysis is requested
     if (searchParams.get("analysis") === "true") {
-      const stats = getLogStats();
+      const stats = await getLogStats(); // ✅ await
       return NextResponse.json({
         success: true,
         data: stats,
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || undefined;
 
     // ✅ Fetch logs with filters
-    const logs = getLogsWithFilter(limit, type, search);
+    const logs = await getLogsWithFilter(limit, type, search); // ✅ await
 
     return NextResponse.json({
       success: true,
@@ -59,7 +59,7 @@ export async function DELETE(request: NextRequest) {
 
     // ✅ Delete all logs
     if (id === "all") {
-      clearLogs();
+      await clearLogs(); // ✅ await
       return NextResponse.json({
         success: true,
         message: "All logs cleared successfully",
@@ -68,7 +68,7 @@ export async function DELETE(request: NextRequest) {
 
     // ✅ Delete single log
     if (id) {
-      const deleted = deleteLog(id);
+      const deleted = await deleteLog(id); // ✅ await
       if (deleted) {
         return NextResponse.json({
           success: true,
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
 
     // ✅ Save to file
     const { writeLog } = await import("@/lib/logger");
-    writeLog(logEntry);
+    await writeLog(logEntry); // ✅ await
 
     return NextResponse.json({
       success: true,

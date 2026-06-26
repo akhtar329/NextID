@@ -20,13 +20,13 @@ type SidebarRepositoryMethods = {
 class SidebarService {
   private repo = sidebarRepository as unknown as SidebarRepositoryMethods;
 
-  // ✅ ONLY ONE CACHE LAYER (React cache)
+  // ✅ LIMIT: 10 (5 ki jagah) - Cache key consistent with preCacheAllTypes(10)
   getSidebarData = cache(async (): Promise<SidebarData> => {
 
     const [trending, breaking, featured, quickAccess] = await Promise.all([
-      this.repo.getTrending(5),
-      this.repo.getBreaking(3),
-      this.repo.getFeatured(4),
+      this.repo.getTrending(10),   // ✅ 5 → 10
+      this.repo.getBreaking(10),   // ✅ 3 → 10
+      this.repo.getFeatured(10),   // ✅ 4 → 10
       this.repo.getTypeCounts(),
     ]);
 

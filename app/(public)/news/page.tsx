@@ -138,7 +138,7 @@ async function getAllNews(): Promise<ExtendedPost[]> {
   
   try {
     // ✅ FIXED: 1000 → 100 (matches pre-cache limit)
-    const news = await postService.getList('news', 100);
+    const news = await postService.getList('news', 10);
     return news || [];
   } catch (error) {
     console.error('Error fetching all news:', error);

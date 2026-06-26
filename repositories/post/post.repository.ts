@@ -5,60 +5,10 @@ import { posts } from "@/db/schema";
 import { eq, desc, and, not, inArray, sql } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";
 import { writeLog } from "@/lib/logger";
+import { cache } from "@/lib/cache"; // ✅ Import persistent cache
 
 // ============================================================
-// ✅ SIMPLE IN-MEMORY CACHE (TTL 1 HOUR)
-// ============================================================
-interface CacheItem {
-  data: any;
-  timestamp: number;
-  expiresAt: number;
-}
-
-class SimpleCache {
-  private store = new Map<string, CacheItem>();
-  private defaultTTL = 3600 * 1000; // ✅ 1 hour
-
-  get<T>(key: string): T | null {
-    const item = this.store.get(key);
-    if (!item) return null;
-    if (item.expiresAt < Date.now()) {
-      this.store.delete(key);
-      return null;
-    }
-    return item.data as T;
-  }
-
-  set(key: string, data: any, ttl: number = this.defaultTTL): void {
-    console.log(`💾 SET: ${key}`);
-    console.log(`⏰ TTL: ${ttl}ms (${ttl / 1000}s)`);
-    console.log(`⏰ Expires At: ${new Date(Date.now() + ttl).toLocaleTimeString()}`);
-    
-    this.store.set(key, {
-      data,
-      timestamp: Date.now(),
-      expiresAt: Date.now() + ttl,
-    });
-  }
-
-  clear(): void {
-    this.store.clear();
-  }
-
-  getStats(): { total: number; keys: string[] } {
-    const keys = Array.from(this.store.keys());
-    const validKeys = keys.filter(key => {
-      const item = this.store.get(key);
-      return item && item.expiresAt > Date.now();
-    });
-    return { total: validKeys.length, keys: validKeys };
-  }
-}
-
-export const cache = new SimpleCache();
-
-// ============================================================
-// POST REPOSITORY
+// POST REPOSITORY - WITH PERSISTENT CACHE (Vercel Blob)
 // ============================================================
 
 export class PostRepository {
@@ -114,7 +64,7 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getList WITH CACHE
+  // ✅ getList WITH PERSISTENT CACHE
   // ============================================================
   async getList(
     type: PostType | 'all',
@@ -130,7 +80,8 @@ export class PostRepository {
     const cacheKey = `posts:list:${type}:${limit}:${offset}:${JSON.stringify(filters || {})}`;
     const operation = `getList_${type}_limit${limit}_offset${offset}`;
 
-    const cached = cache.get<Post[]>(cacheKey);
+    // ✅ Check persistent cache
+    const cached = await cache.get<Post[]>(cacheKey);
     if (cached) {
       await writeLog({
         id: `cache_hit_${Date.now()}`,
@@ -180,7 +131,8 @@ export class PostRepository {
 
       const result = rows.map(r => this.castPost(r));
 
-      cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
+      // ✅ Save to persistent cache (24 hours)
+      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
 
       await writeLog({
         id: `db_${Date.now()}`,
@@ -208,7 +160,7 @@ export class PostRepository {
         duration: Date.now() - startTime,
         data: {
           count: result.length,
-          ttl: "3600s",
+          ttl: "86400s",
         },
       });
 
@@ -236,14 +188,15 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getDetail WITH CACHE
+  // ✅ getDetail WITH PERSISTENT CACHE
   // ============================================================
   async getDetail(slug: string): Promise<Post | null> {
     const startTime = Date.now();
     const cacheKey = `posts:detail:${slug}`;
     const operation = `getDetail_${slug}`;
 
-    const cached = cache.get<Post>(cacheKey);
+    // ✅ Check persistent cache
+    const cached = await cache.get<Post>(cacheKey);
     if (cached) {
       await writeLog({
         id: `cache_hit_${Date.now()}`,
@@ -276,7 +229,8 @@ export class PostRepository {
 
       const result = row ? this.castPost(row) : null;
 
-      cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
+      // ✅ Save to persistent cache (24 hours)
+      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
 
       await writeLog({
         id: `db_${Date.now()}`,
@@ -301,7 +255,7 @@ export class PostRepository {
         duration: Date.now() - startTime,
         data: {
           found: !!row,
-          ttl: "3600s",
+          ttl: "86400s",
         },
       });
 
@@ -326,7 +280,7 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getRelated WITH CACHE
+  // ✅ getRelated WITH PERSISTENT CACHE
   // ============================================================
   async getRelated(
     currentId: number,
@@ -337,7 +291,7 @@ export class PostRepository {
     const cacheKey = `posts:related:${currentId}:${type}:${limit}`;
     const operation = `getRelated_${type}_id${currentId}`;
 
-    const cached = cache.get<Post[]>(cacheKey);
+    const cached = await cache.get<Post[]>(cacheKey);
     if (cached) {
       await writeLog({
         id: `cache_hit_${Date.now()}`,
@@ -377,7 +331,7 @@ export class PostRepository {
 
       const result = rows.map(r => this.castPost(r));
 
-      cache.set(cacheKey, result, 3600 * 1000); // 1 hour TTL
+      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
 
       await writeLog({
         id: `db_${Date.now()}`,
@@ -404,7 +358,7 @@ export class PostRepository {
         duration: Date.now() - startTime,
         data: {
           count: result.length,
-          ttl: "3600s",
+          ttl: "86400s",
         },
       });
 
@@ -431,7 +385,7 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getHomepageData WITH CACHE
+  // ✅ getHomepageData WITH PERSISTENT CACHE
   // ============================================================
   async getHomepageData(
     types: PostType[],
@@ -441,7 +395,7 @@ export class PostRepository {
     const cacheKey = `posts:homepage:${types.join(',')}:${limitPerType}`;
     const operation = `getHomepageData_${types.join('_')}`;
 
-    const cached = cache.get<Record<PostType, Post[]>>(cacheKey);
+    const cached = await cache.get<Record<PostType, Post[]>>(cacheKey);
     if (cached) {
       await writeLog({
         id: `cache_hit_${Date.now()}`,
@@ -489,7 +443,7 @@ export class PostRepository {
         }
       }
 
-      cache.set(cacheKey, grouped, 3600 * 1000); // 1 hour TTL
+      await cache.set(cacheKey, grouped, 86400 * 1000); // 24 hours
 
       const totalCount = rows.length;
       const groupedCounts = Object.fromEntries(
@@ -521,7 +475,7 @@ export class PostRepository {
         duration: Date.now() - startTime,
         data: {
           groupedCounts,
-          ttl: "3600s",
+          ttl: "86400s",
         },
       });
 
@@ -550,14 +504,14 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getTotalCount WITH CACHE
+  // ✅ getTotalCount WITH PERSISTENT CACHE
   // ============================================================
   async getTotalCount(type: PostType | 'all'): Promise<number> {
     const startTime = Date.now();
     const cacheKey = `posts:count:${type}`;
     const operation = `getTotalCount_${type}`;
 
-    const cached = cache.get<number>(cacheKey);
+    const cached = await cache.get<number>(cacheKey);
     if (cached !== null) {
       await writeLog({
         id: `cache_hit_${Date.now()}`,
@@ -595,7 +549,7 @@ export class PostRepository {
 
       const count = result[0]?.count || 0;
 
-      cache.set(cacheKey, count, 3600 * 1000); // 1 hour TTL
+      await cache.set(cacheKey, count, 86400 * 1000); // 24 hours
 
       await writeLog({
         id: `db_${Date.now()}`,
@@ -614,7 +568,7 @@ export class PostRepository {
         operation: cacheKey,
         source: "cache",
         duration: Date.now() - startTime,
-        data: { type, count, ttl: "3600s" },
+        data: { type, count, ttl: "86400s" },
       });
 
       return count;
@@ -640,8 +594,8 @@ export class PostRepository {
   // ============================================================
   // ✅ CLEAR CACHE
   // ============================================================
-  clearCache(): void {
-    cache.clear();
+  async clearCache(): Promise<void> {
+    await cache.clear();
     console.log('🧹 Cache cleared');
   }
 
@@ -649,7 +603,7 @@ export class PostRepository {
   // ✅ GET CACHE STATS
   // ============================================================
   getCacheStats(): { total: number; keys: string[] } {
-    return cache.getStats();
+    return { total: 0, keys: [] };
   }
 }
 
