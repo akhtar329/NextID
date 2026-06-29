@@ -10,7 +10,8 @@ import { put, list, del } from "@vercel/blob";
 export interface LogEntry {
   id: string;
   timestamp: string;
-  type: "CACHE_HIT" | "CACHE_MISS" | "DATABASE_QUERY" | "CACHE_SAVE";
+  // ✅ Updated: Added CACHE_EXPIRE
+  type: "CACHE_HIT" | "CACHE_MISS" | "DATABASE_QUERY" | "CACHE_SAVE" | "CACHE_EXPIRE";
   operation: string;
   source?: "cache" | "database";
   duration?: number;
@@ -101,6 +102,7 @@ export async function writeLog(entry: LogEntry): Promise<void> {
       await put(LOG_KEY, JSON.stringify(updated, null, 2), {
         access: "public",
         contentType: "application/json",
+        allowOverwrite: true,
       });
       return;
     }
@@ -132,6 +134,7 @@ export async function deleteLog(id: string): Promise<boolean> {
       await put(LOG_KEY, JSON.stringify(filtered, null, 2), {
         access: "public",
         contentType: "application/json",
+        allowOverwrite: true,
       });
       return true;
     }
@@ -209,6 +212,7 @@ export async function getLogStats() {
   const cacheHits = logs.filter((l) => l.type === "CACHE_HIT").length;
   const cacheMisses = logs.filter((l) => l.type === "CACHE_MISS").length;
   const dbQueries = logs.filter((l) => l.type === "DATABASE_QUERY").length;
+  const cacheExpires = logs.filter((l) => l.type === "CACHE_EXPIRE").length;
 
   // ✅ Cache hit ratio
   const hitRatio = total > 0 ? Math.round((cacheHits / total) * 100) : 0;
@@ -253,6 +257,7 @@ export async function getLogStats() {
     cacheHits,
     cacheMisses,
     dbQueries,
+    cacheExpires,
     hitRatio,
     avgDuration,
     topOperations,
