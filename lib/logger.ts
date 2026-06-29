@@ -1,4 +1,5 @@
-// lib/logger.ts
+// lib/logger.ts - Updated with debug logs
+
 import fs from "fs";
 import path from "path";
 import { put, list, del } from "@vercel/blob";
@@ -10,7 +11,6 @@ import { put, list, del } from "@vercel/blob";
 export interface LogEntry {
   id: string;
   timestamp: string;
-  // ✅ Updated: Added CACHE_EXPIRE
   type: "CACHE_HIT" | "CACHE_MISS" | "DATABASE_QUERY" | "CACHE_SAVE" | "CACHE_EXPIRE";
   operation: string;
   source?: "cache" | "database";
@@ -30,7 +30,8 @@ export interface LogEntry {
 // 2. FILE PATH (Vercel / Local)
 // ============================================================
 
-const isVercel = process.env.VERCEL === "1";
+// ✅ FIX: Check both VERCEL and NODE_ENV
+const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
 const LOG_KEY = "logs/performance.json";
 
 // Local file path (fallback)
@@ -57,30 +58,55 @@ export async function getLogs(): Promise<LogEntry[]> {
   try {
     // ✅ Vercel: Read from Blob
     if (isVercel) {
-      const { blobs } = await list({ prefix: "logs/" });
+      console.log('[LOGGER] 📖 Reading logs from blob...');
+      console.log('[LOGGER] Token exists:', !!process.env.BLOB_READ_WRITE_TOKEN);
+      
+      const { blobs } = await list({ 
+        prefix: "logs/",
+      });
+      
+      console.log(`[LOGGER] 📁 Found ${blobs.length} blobs`);
+      blobs.forEach(b => console.log(`[LOGGER]   - ${b.pathname}`));
+      
       const blob = blobs.find(b => b.pathname === LOG_KEY);
-      if (!blob) return [];
+      if (!blob) {
+        console.log('[LOGGER] ⚠️ No log file found, returning empty array');
+        return [];
+      }
+      
+      console.log(`[LOGGER] 📄 Reading: ${blob.pathname}`);
       const response = await fetch(blob.url);
+      
+      if (!response.ok) {
+        console.error(`[LOGGER] ❌ Failed to read logs: ${response.status}`);
+        return [];
+      }
+      
       const data = await response.json();
+      console.log(`[LOGGER] ✅ Read ${data.length} logs`);
       return Array.isArray(data) ? data : [];
     }
 
     // ✅ Local: Read from file
+    console.log('[LOGGER] 📖 Reading logs from local file...');
     ensureLogDir();
-    if (!fs.existsSync(LOG_FILE)) return [];
+    if (!fs.existsSync(LOG_FILE)) {
+      console.log('[LOGGER] ⚠️ No log file found locally');
+      return [];
+    }
 
     const data = fs.readFileSync(LOG_FILE, "utf-8");
     const lines = data.split("\n").filter((line) => line.trim());
-
+    console.log(`[LOGGER] ✅ Read ${lines.length} logs from local file`);
     return lines.map((line) => JSON.parse(line));
   } catch (error) {
-    console.error("Error reading logs:", error);
+    console.error("[LOGGER] Error reading logs:", error);
     return [];
   }
 }
 
 // ============================================================
-// 5. WRITE LOG (Vercel Blob + Local)
+// 5. WRITE LOG (Vercel Blob + Local) - ✅ FIXED
 // ============================================================
 
 export async function writeLog(entry: LogEntry): Promise<void> {
@@ -95,24 +121,53 @@ export async function writeLog(entry: LogEntry): Promise<void> {
       entry.timestamp = new Date().toISOString();
     }
 
+    console.log(`[LOGGER] 📝 Writing log: ${entry.type} - ${entry.operation}`);
+    console.log(`[LOGGER] isVercel: ${isVercel}`);
+    console.log(`[LOGGER] BLOB_READ_WRITE_TOKEN exists: ${!!process.env.BLOB_READ_WRITE_TOKEN}`);
+
     // ✅ Vercel: Save to Blob
     if (isVercel) {
-      const existing = await getLogs();
-      const updated = [entry, ...existing];
-      await put(LOG_KEY, JSON.stringify(updated, null, 2), {
-        access: "public",
-        contentType: "application/json",
-        allowOverwrite: true,
-      });
-      return;
+      console.log('[LOGGER] 💾 Saving to Vercel Blob...');
+      
+      try {
+        const existing = await getLogs();
+        const updated = [entry, ...existing];
+        
+        // ✅ Limit to 1000 logs to prevent size issues
+        const limited = updated.slice(0, 1000);
+        
+        console.log(`[LOGGER] 📦 Saving ${limited.length} logs to blob...`);
+        
+        const result = await put(LOG_KEY, JSON.stringify(limited, null, 2), {
+          access: "public",
+          contentType: "application/json",
+          allowOverwrite: true,
+        });
+        
+        console.log(`[LOGGER] ✅ Log saved to blob successfully: ${result.url}`);
+        return;
+      } catch (blobError) {
+        console.error('[LOGGER] ❌ Blob save failed:', blobError);
+        // ✅ Fallback to local if blob fails
+        console.log('[LOGGER] 📝 Falling back to local file...');
+        ensureLogDir();
+        const logLine = JSON.stringify(entry) + "\n";
+        fs.appendFileSync(LOG_FILE, logLine, "utf-8");
+        console.log(`[LOGGER] ✅ Log saved locally as fallback: ${entry.id}`);
+        return;
+      }
     }
 
     // ✅ Local: Append to file
+    console.log('[LOGGER] 💾 Saving to local file...');
     ensureLogDir();
     const logLine = JSON.stringify(entry) + "\n";
     fs.appendFileSync(LOG_FILE, logLine, "utf-8");
+    console.log(`[LOGGER] ✅ Log saved locally: ${entry.id}`);
+    
   } catch (error) {
-    console.error("Error writing log:", error);
+    console.error("[LOGGER] ❌ Error writing log:", error);
+    // ✅ Don't throw - logs should never break the app
   }
 }
 
@@ -158,14 +213,16 @@ export async function clearLogs(): Promise<void> {
     // ✅ Vercel: Delete Blob
     if (isVercel) {
       await del(LOG_KEY);
+      console.log('[LOGGER] ✅ All logs cleared from blob');
       return;
     }
 
     // ✅ Local: Clear file
     ensureLogDir();
     fs.writeFileSync(LOG_FILE, "", "utf-8");
+    console.log('[LOGGER] ✅ All logs cleared locally');
   } catch (error) {
-    console.error("Error clearing logs:", error);
+    console.error("[LOGGER] Error clearing logs:", error);
   }
 }
 
