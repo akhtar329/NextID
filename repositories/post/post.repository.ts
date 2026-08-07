@@ -2,7 +2,7 @@
 
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
-import { eq, desc, and, not, inArray, sql } from "drizzle-orm";
+import { eq, and, not, inArray, sql } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";
 import { writeLog } from "@/lib/logger";
 
@@ -93,7 +93,7 @@ export class PostRepository {
         .select(this.lightFields)
         .from(posts)
         .where(and(...conditions))
-        .orderBy(desc(posts.publishedAt))
+        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
         .limit(limit)
         .offset(offset);
 
@@ -211,7 +211,7 @@ export class PostRepository {
             not(eq(posts.id, currentId))
           )
         )
-        .orderBy(desc(posts.publishedAt))
+        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
         .limit(limit);
 
       const result = rows.map(r => this.castPost(r));
@@ -274,7 +274,7 @@ export class PostRepository {
             eq(posts.status, "published")
           )
         )
-        .orderBy(desc(posts.publishedAt))
+        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
         .limit(types.length * limitPerType);
 
       const grouped = {} as Record<PostType, Post[]>;
