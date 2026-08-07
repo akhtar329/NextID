@@ -32,7 +32,9 @@ export interface LogEntry {
 
 // ✅ ALWAYS use blob if token exists (regardless of VERCEL env)
 const hasBlobToken = !!process.env.BLOB_READ_WRITE_TOKEN;
-const useBlob = hasBlobToken; // Force use blob if token exists
+// A token can remain after a store is suspended. Blob logging must be opt-in.
+const useBlob = hasBlobToken && process.env.ENABLE_BLOB_LOGS === "true";
+const isQueryLoggingEnabled = process.env.ENABLE_QUERY_LOGGING === "true";
 
 const LOG_KEY = "logs/performance.json";
 const LOG_FILE = path.join(process.cwd(), "logs", "performance.log");
@@ -118,6 +120,10 @@ function getLogsLocal(): LogEntry[] {
 // ============================================================
 
 export async function writeLog(entry: LogEntry): Promise<void> {
+  // Logging must not add a network request to every public page render or
+  // affect the response when an observability store is unavailable.
+  if (!isQueryLoggingEnabled) return;
+
   try {
     // ✅ Add ID if not present
     if (!entry.id) {

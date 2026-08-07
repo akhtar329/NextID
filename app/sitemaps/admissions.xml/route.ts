@@ -1,9 +1,7 @@
 // app/sitemaps/admissions/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/db/db";
-import { posts } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { getSitemapPosts } from "@/lib/sitemap-cache";
 
 const BASE_URL = "https://www.nextid.pk";
 
@@ -11,16 +9,7 @@ export async function GET() {
   const today = new Date().toISOString().split("T")[0];
   
   try {
-    const postsList = await db
-      .select({
-        slug: posts.slug,
-        updatedAt: posts.updatedAt,
-      })
-      .from(posts)
-      .where(
-        sql`${posts.type} = 'admission' AND ${posts.status} = 'published'`
-      )
-      .limit(1000);
+    const postsList = await getSitemapPosts("admission");
     
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

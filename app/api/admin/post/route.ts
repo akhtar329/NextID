@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq, or, ilike, and, desc } from "drizzle-orm";
+import { revalidatePostCache } from "@/lib/post-cache";
 
 // ============================================
 // Types
@@ -321,6 +322,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
+    revalidatePostCache(newPost[0].type, newPost[0].slug);
 
     return NextResponse.json({
       success: true,
@@ -370,6 +372,8 @@ export async function DELETE(request: NextRequest) {
           .update(posts)
           .set({ status: "archived", updatedAt: new Date() })
           .where(eq(posts.id, id));
+        const [archivedPost] = await db.select({ type: posts.type, slug: posts.slug }).from(posts).where(eq(posts.id, id));
+        if (archivedPost) revalidatePostCache(archivedPost.type, archivedPost.slug);
         successCount++;
       } catch {
         failCount++;

@@ -29,6 +29,11 @@
     "to": "/admissions",
     "status": 301
   },
+   {
+    "from": "/categories/*",
+    "to": "/admissions",
+    "status": 301
+  },
   {
     "from": "/universities",
     "to": "/admissions",

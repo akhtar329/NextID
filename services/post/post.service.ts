@@ -168,9 +168,12 @@ async function getListInternal(
   offset: number = 0,
   filters?: { featured?: boolean; popular?: boolean; breaking?: boolean }
 ): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag(`list-${type}-${limit}-${offset}`);
-  cacheLife({ revalidate: 3600 });
+"use cache";
+cacheTag(`list-${type}`);
+cacheTag("posts");
+cacheTag(`posts-type-${type}`);
+cacheTag("homepage");
+cacheLife("days");
   
   const posts = await postRepository.getList(type, limit, offset, filters);
   return posts.map(mapPost);
@@ -179,7 +182,9 @@ async function getListInternal(
 async function getDetailInternal(slug: string): Promise<ExtendedPost | null> {
   "use cache";
   cacheTag(`detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
+  cacheTag(`post-${slug}`);
+  cacheTag("posts");
+  cacheLife("days");
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -192,7 +197,9 @@ async function getRelatedInternal(
 ): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag(`related-${currentId}-${type}`);
-  cacheLife({ revalidate: 3600 });
+  cacheTag(`post-related-${type}`);
+  cacheTag(`posts-type-${type}`);
+  cacheLife("days");
   
   const posts = await postRepository.getRelated(currentId, type, limit);
   return posts.map(mapPost);
@@ -201,7 +208,8 @@ async function getRelatedInternal(
 async function getTotalCountInternal(type: PostType | 'all'): Promise<number> {
   "use cache";
   cacheTag(`count-${type}`);
-  cacheLife({ revalidate: 3600 });
+  cacheTag(`posts-type-${type}`);
+  cacheLife("days");
   
   return await postRepository.getTotalCount(type);
 }
@@ -262,12 +270,21 @@ export const postService = {
     return getTotalCountInternal(type);
   },
 
-  async clearCache(slug?: string) {
-    if (slug) {
-      revalidateTag(`detail-${slug}`, "page");
-    }
-    revalidateTag("homepage", "page");
-  },
+async clearCache(
+  type?: PostType,
+  slug?: string
+) {
+  if (slug) {
+    revalidateTag(`detail-${slug}`, "default");
+  }
+
+  if (type) {
+    revalidateTag(`list-${type}`, "default");
+    revalidateTag(`count-${type}`, "default");
+  }
+
+  revalidateTag("homepage", "default");
+},
 
   // ============================================================
   // ✅ PRE-CACHE FUNCTIONS

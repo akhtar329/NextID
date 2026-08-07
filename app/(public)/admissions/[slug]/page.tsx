@@ -143,6 +143,7 @@ export async function generateStaticParams() {
 async function getAdmissionBySlug(slug: string): Promise<AdmissionWithComputed | null> {
   "use cache";
   cacheTag(`admission-detail-${slug}`);
+  cacheTag("posts-type-admission");
   cacheLife("hours");
   
   try {

@@ -201,6 +201,28 @@ const getUrlFolder = (type: string): string => {
   return typeMap[type] || type;
 };
 
+const toDateTimeLocal = (value: string | Date | null | undefined): string => {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const pad = (number: number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const parseSchemaMarkup = (value: string): Record<string, unknown> | unknown[] | null => {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return null;
+
+  const parsed: unknown = JSON.parse(trimmedValue);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Schema markup must be a JSON object or array.');
+  }
+
+  return parsed as Record<string, unknown> | unknown[];
+};
+
 // ==================== COMPONENTS ====================
 
 // Author Box
@@ -258,7 +280,7 @@ const PublishMetaBox = ({
       </div>
       
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+        <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
           <FiCalendar className="w-3 h-3" /> Publish Date
         </label>
         <input
@@ -270,7 +292,7 @@ const PublishMetaBox = ({
       </div>
       
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+        <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
           <FiClock className="w-3 h-3" /> Deadline / Last Date
         </label>
         <input
@@ -582,8 +604,8 @@ export default function EditPostPage() {
         if (data.success && data.post) {
           const post = data.post;
           
-          const meta = post.meta || {};
-          const deadline = meta.deadline || '';
+          const meta = post.meta && typeof post.meta === 'object' ? post.meta : {};
+          const deadline = toDateTimeLocal(post.expiresAt || meta.deadline);
           const galleryImages = post.galleryImages || [];
           
           setFormData({
@@ -599,8 +621,8 @@ export default function EditPostPage() {
             isFeatured: post.isFeatured || false,
             isPopular: post.isPopular || false,
             isBreaking: post.isBreaking || false,
-            publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString().slice(0, 16) : '',
-            expiresAt: post.expiresAt ? new Date(post.expiresAt).toISOString().slice(0, 16) : '',
+            publishedAt: toDateTimeLocal(post.publishedAt),
+            expiresAt: toDateTimeLocal(post.expiresAt),
             deadline: deadline,
             
             // Author
@@ -627,7 +649,11 @@ export default function EditPostPage() {
             twitterCard: post.twitterCard || 'summary_large_image',
             
             // Structured Data
-            schemaMarkup: post.schemaMarkup ? JSON.stringify(post.schemaMarkup) : '',
+            schemaMarkup: post.schemaMarkup
+              ? typeof post.schemaMarkup === 'string'
+                ? post.schemaMarkup
+                : JSON.stringify(post.schemaMarkup, null, 2)
+              : '',
             
             // Extra SEO
             breadcrumbTitle: post.breadcrumbTitle || '',
@@ -795,9 +821,18 @@ export default function EditPostPage() {
     setError('');
     setSuccess('');
     
+    let schemaMarkup: Record<string, unknown> | unknown[] | null;
+    try {
+      schemaMarkup = parseSchemaMarkup(formData.schemaMarkup);
+    } catch (schemaError) {
+      setError(schemaError instanceof Error ? schemaError.message : 'Schema markup is not valid JSON.');
+      setLoading(false);
+      return;
+    }
+
     const updatedMeta = {
       ...formData.meta,
-      deadline: formData.deadline,
+      deadline: formData.deadline || null,
     };
     
     const submitData = {
@@ -805,6 +840,7 @@ export default function EditPostPage() {
       meta: updatedMeta,
       publishedAt: formData.publishedAt,
       expiresAt: formData.deadline ? new Date(formData.deadline).toISOString() : null,
+      schemaMarkup,
     };
     
     try {
@@ -1023,7 +1059,7 @@ export default function EditPostPage() {
                 <div className="p-4 space-y-4">
                   {/* Focus Keyword */}
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
+                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
                       🎯 Focus Keyword
                       <span className="text-gray-400 text-xs ml-2">(Primary keyword)</span>
                     </label>
@@ -1038,7 +1074,7 @@ export default function EditPostPage() {
                   
                   {/* ✅ Meta Keywords (ADDED) */}
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
+                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
                       📝 Meta Keywords
                       <span className="text-gray-400 text-xs ml-2">(Comma separated)</span>
                     </label>
@@ -1098,7 +1134,7 @@ export default function EditPostPage() {
                   
                   {/* ✅ Canonical URL (ADDED) */}
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
+                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
                       <FiLink className="w-3 h-3" /> Canonical URL
                     </label>
                     <input
@@ -1112,7 +1148,7 @@ export default function EditPostPage() {
                   
                   {/* ✅ Robots (ADDED) */}
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
+                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
                       <FiGlobe className="w-3 h-3" /> Robots
                     </label>
                     <select

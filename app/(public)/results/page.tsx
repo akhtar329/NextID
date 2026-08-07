@@ -148,6 +148,7 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
 async function getAllResults(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("results-all");
+  cacheTag("posts-type-result");
   cacheLife("hours");
   
   try {
@@ -164,6 +165,7 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
   
   const cacheKey = `results-${filters.page || 1}-${filters.board || 'all'}-${filters.year || 'all'}-${filters.level || 'all'}-${filters.q || 'all'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-result");
   cacheLife("hours");
   
   const currentPage = filters.page || 1;
@@ -266,6 +268,7 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
 async function getStats(): Promise<Stats> {
   "use cache";
   cacheTag("results-stats");
+  cacheTag("posts-type-result");
   cacheLife("hours");
   
   try {

@@ -10,6 +10,7 @@ const ITEMS_PER_PAGE = 20;
 async function getAllSearchablePosts(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("search-all-posts");
+  cacheTag("posts");
   cacheLife("hours");
   
   try {

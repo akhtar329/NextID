@@ -1,31 +1,33 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-
-const GA_ID = "G-2VNFCBN0SG";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export default function GoogleAnalytics() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const excluded = ["/admin", "/login"];
+    if (!window.gtag) return;
 
-    if (excluded.some((p) => pathname.startsWith(p))) return;
-
-    window.dataLayer = window.dataLayer || [];
-
-    if (typeof window.gtag !== "function") {
-      window.gtag = (...args: unknown[]) => {
-        window.dataLayer.push(args);
-      };
+    // Don't track admin pages
+    if (
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/login")
+    ) {
+      return;
     }
 
-    window.gtag("js", new Date());
-    window.gtag("config", GA_ID, {
-      page_path: pathname,
+    const url =
+      pathname +
+      (searchParams.toString() ? `?${searchParams}` : "");
+
+    window.gtag("event", "page_view", {
+      page_title: document.title,
+      page_location: window.location.href,
+      page_path: url,
     });
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
   return null;
 }

@@ -3,6 +3,7 @@
 import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import OnScrollLoad from "@/components/OnScrollLoad/OnScrollLoad";
+import Loader from "@/components/loader/Loader";
 
 // Sections
 import AdmissionSection from "@/components/sections/Home/AdmissionSection";
@@ -121,12 +122,14 @@ const breadcrumbSchema = {
 function NewsSectionWrapper() {
   return (
     <Suspense
-      fallback={
-        <div className="h-[500px] bg-gradient-to-br from-gray-100 to-gray-200 animate-pulse rounded-2xl" />
-      }
-    >
-      <NewsSection />
-    </Suspense>
+  fallback={
+    <div className="flex items-center justify-center min-h-[500px]">
+      <Loader />
+    </div>
+  }
+>
+  <NewsSection />
+</Suspense>
   );
 }
 
@@ -212,9 +215,15 @@ export default async function HomePage() {
               aria-label="Sidebar"
             >
               <div className="lg:sticky lg:top-6 space-y-6">
-                <Suspense fallback={<div>Loading...</div>}>
-                  <SidebarWidgets />
-                </Suspense>
+                <Suspense
+  fallback={
+    <div className="flex items-center justify-center h-60">
+      <Loader />
+    </div>
+  }
+>
+  <SidebarWidgets />
+</Suspense>
               </div>
             </aside>
           </div>

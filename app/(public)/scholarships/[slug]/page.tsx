@@ -233,6 +233,7 @@ export async function generateStaticParams() {
 async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComputed | null> {
   "use cache";
   cacheTag(`scholarship-detail-${slug}`);
+  cacheTag("posts-type-scholarship");
   cacheLife("hours");
   
   try {

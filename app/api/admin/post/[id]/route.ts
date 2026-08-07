@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { revalidateTag } from "next/cache";
+import { revalidatePostCache } from "@/lib/post-cache";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
@@ -113,20 +113,9 @@ async function getNumericId(context: { params: Promise<{ id: string }> }) {
 }
 
 // Helper function to revalidate cache
-async function revalidatePostCache(slug: string, type: string) {
+async function invalidatePostCache(slug: string, type: string) {
   try {
-    revalidateTag(`post-${slug}`, "default");
-    revalidateTag(`posts-type-${type}`, "default");
-    revalidateTag("homepage", "default");
-    
-    const typeLower = type.toLowerCase();
-    if (typeLower === 'admission') revalidateTag("admissions-home", "default");
-    else if (typeLower === 'result') revalidateTag("results-home", "default");
-    else if (typeLower === 'news') revalidateTag("news-home", "default");
-    else if (typeLower === 'date_sheet') revalidateTag("datesheets-home", "default");
-    else if (typeLower === 'scholarship') revalidateTag("scholarships-home", "default");
-    else if (typeLower === 'job') revalidateTag("jobs-home", "default");
-    
+    revalidatePostCache(type, slug);
   } catch (cacheError) {
     console.error("Error revalidating cache:", cacheError);
   }
@@ -311,7 +300,7 @@ export async function PUT(
       );
     }
 
-    await revalidatePostCache(existing.slug, existing.type);
+    await invalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ 
       success: true, 
@@ -478,7 +467,7 @@ export async function PATCH(
       );
     }
 
-    await revalidatePostCache(existing.slug, existing.type);
+    await invalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({ 
       success: true, 
@@ -544,7 +533,7 @@ export async function DELETE(
       })
       .where(eq(posts.id, numericId));
 
-    await revalidatePostCache(existing.slug, existing.type);
+    await invalidatePostCache(existing.slug, existing.type);
 
     return NextResponse.json({
       success: true,

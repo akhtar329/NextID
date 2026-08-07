@@ -197,6 +197,7 @@ function toISOStringSafe(date: Date | string | null | undefined): string | undef
 async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
   "use cache";
   cacheTag(`blog-detail-${slug}`);
+  cacheTag("posts-type-blog");
   cacheLife("hours");
   
   try {
@@ -260,6 +261,7 @@ async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
 async function getAllBlogs(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("blogs-all");
+  cacheTag("posts-type-blog");
   cacheLife("hours");
   
   try {
@@ -274,7 +276,9 @@ async function getAllBlogs(): Promise<ExtendedPost[]> {
 async function getRelatedBlogs(currentId: number, category: string): Promise<RelatedBlog[]> {
   "use cache";
   cacheTag(`blog-related-${currentId}`);
-  cacheLife("hours");
+  cacheTag("blog-related");
+  cacheTag("posts-type-blog");
+  cacheLife("days");
   
   try {
     const allBlogs = await getAllBlogs();

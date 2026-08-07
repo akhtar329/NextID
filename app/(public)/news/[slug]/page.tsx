@@ -266,6 +266,7 @@ export async function generateStaticParams() {
 async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
   "use cache";
   cacheTag(`news-detail-${slug}`);
+  cacheTag("posts-type-news");
   cacheLife("hours");
   
   try {
@@ -319,6 +320,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
 async function getAllNews(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("news-all");
+  cacheTag("posts-type-news");
   cacheLife("hours");
   
   try {
@@ -333,7 +335,9 @@ async function getAllNews(): Promise<ExtendedPost[]> {
 async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
   "use cache";
   cacheTag(`news-related-${currentId}`);
-  cacheLife("hours");
+  cacheTag("news-related");
+  cacheTag("posts-type-news");
+  cacheLife("days");
   
   try {
     const allNews = await getAllNews();

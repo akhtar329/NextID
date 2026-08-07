@@ -4,6 +4,7 @@ import { db } from '@/db/db';
 import { posts } from '@/db/schema';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
+import { revalidatePostCache } from '@/lib/post-cache';
 
 // ==================== GET SESSION FROM COOKIE ====================
 async function getSessionFromCookie(): Promise<{ userId: number; userName: string } | null> {
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
     };
 
     const [newPost] = await db.insert(posts).values(postData).returning();
+    revalidatePostCache(newPost.type, newPost.slug);
 
     return NextResponse.json({ 
       success: true, 

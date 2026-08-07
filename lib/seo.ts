@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { cacheTag } from 'next/cache';
+import { cacheLife, cacheTag } from 'next/cache';
+import { revalidatePostCache } from '@/lib/post-cache';
 
 const BASE_URL = "https://www.nextid.pk";
 const SITE_NAME = "NextID";
@@ -68,6 +69,7 @@ const DEFAULT_KEYWORDS = [
 async function fetchSeoFromPost(postId: number) {
   'use cache';
   cacheTag('seo');
+  cacheLife('days');
   
   try {
     const [post] = await db
@@ -365,6 +367,7 @@ export async function saveSeoMetadata(
       .where(eq(posts.id, postId))
       .returning();
 
+    if (updated) revalidatePostCache(updated.type, updated.slug);
     return updated || null;
   } catch (error) {
     console.error(`Error saving SEO for post ${postId}:`, error);
@@ -374,6 +377,10 @@ export async function saveSeoMetadata(
 
 // ✅ Get SEO for a post by slug
 export async function getSeoBySlug(slug: string) {
+  'use cache';
+  cacheTag('seo', `seo-${slug}`);
+  cacheLife('days');
+
   try {
     const [post] = await db
       .select({

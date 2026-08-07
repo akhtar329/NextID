@@ -187,6 +187,7 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
 async function getAllNews(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("news-all");
+  cacheTag("posts-type-news");
   cacheLife("hours");
   
   try {
@@ -203,6 +204,7 @@ async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, sea
   
   const cacheKey = `news-${page}-${category || 'all'}-${searchQuery || 'none'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-news");
   cacheLife("hours");
   
   try {

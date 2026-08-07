@@ -163,6 +163,7 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
 async function getAllScholarships(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("scholarships-all");
+  cacheTag("posts-type-scholarship");
   cacheLife("hours");
   
   try {
@@ -177,6 +178,7 @@ async function getAllScholarships(): Promise<ExtendedPost[]> {
 async function getStats(): Promise<Stats> {
   "use cache";
   cacheTag("scholarships-stats");
+  cacheTag("posts-type-scholarship");
   cacheLife("hours");
   
   try {
@@ -207,6 +209,7 @@ async function getPaginatedScholarships(filters: Filters): Promise<PaginatedResp
   
   const cacheKey = `scholarships-${filters.page || 1}-${filters.level || 'all'}-${filters.type || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-scholarship");
   cacheLife("hours");
   
   try {

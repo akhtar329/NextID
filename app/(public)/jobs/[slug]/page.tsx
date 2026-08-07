@@ -211,6 +211,7 @@ export async function generateStaticParams() {
 async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
   "use cache";
   cacheTag(`job-detail-${slug}`);
+  cacheTag("posts-type-job");
   cacheLife("hours");
   
   try {

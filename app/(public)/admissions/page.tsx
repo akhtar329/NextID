@@ -84,6 +84,7 @@ function getPriorityScore(status: string, closeDate: Date | null): number {
 async function getAdmissionsData(page: number = 1, limit: number = 10, filter: string = 'all', search: string = '') {
   "use cache";
   cacheTag("admissions-data");
+  cacheTag("posts-type-admission");
   cacheLife("hours");
   
   try {
@@ -188,6 +189,7 @@ async function getAdmissionsData(page: number = 1, limit: number = 10, filter: s
 async function getOpenCountForMetadata() {
   "use cache";
   cacheTag("admissions-metadata");
+  cacheTag("posts-type-admission");
   cacheLife("hours");
   
   try {

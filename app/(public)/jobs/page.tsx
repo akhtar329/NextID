@@ -163,6 +163,7 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
 async function getAllJobs(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("jobs-all");
+  cacheTag("posts-type-job");
   cacheLife("hours");
   
   try {
@@ -179,6 +180,7 @@ async function getPaginatedJobs(filters: Filters): Promise<PaginatedResponse> {
   
   const cacheKey = `jobs-${filters.page || 1}-${filters.jobType || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-job");
   cacheLife("hours");
   
   const currentPage = filters.page || 1;
@@ -272,6 +274,7 @@ async function getPaginatedJobs(filters: Filters): Promise<PaginatedResponse> {
 async function getStats(): Promise<Stats> {
   "use cache";
   cacheTag("jobs-stats");
+  cacheTag("posts-type-job");
   cacheLife("hours");
   
   try {

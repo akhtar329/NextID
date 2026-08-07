@@ -1,72 +1,69 @@
 // app/api/admin/cache/clear/route.ts - Next.js 15+ compatible
 
 import { NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
+import { revalidateTag } from 'next/cache';
+import { getPostCacheTags, type CachedPostType } from '@/lib/post-cache';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { groupId, groupName } = body;
+    const { groupId, groupName, tags = [] } = body;
 
-    
-    // Define paths to clear based on group
-    let pathsToClear: string[] = [];
+    // Define tags to clear based on group
+    let tagsToClear: string[] = [];
     
     switch (groupId) {
       case 'all':
-        pathsToClear = ['/', '/news', '/admissions', '/results', '/jobs', '/scholarships', '/date-sheets'];
+        tagsToClear = (['admission', 'result', 'news', 'date_sheet', 'scholarship', 'job', 'blog'] as CachedPostType[])
+          .flatMap((type) => getPostCacheTags(type));
         break;
       case 'admissions':
-        pathsToClear = ['/', '/admissions'];
+        tagsToClear = getPostCacheTags('admission');
         break;
       case 'results':
-        pathsToClear = ['/', '/results'];
+        tagsToClear = getPostCacheTags('result');
         break;
       case 'news':
-        pathsToClear = ['/', '/news'];
+        tagsToClear = getPostCacheTags('news');
         break;
       case 'date-sheets':
-        pathsToClear = ['/', '/date-sheets'];
+        tagsToClear = getPostCacheTags('date_sheet');
         break;
       case 'scholarships':
-        pathsToClear = ['/', '/scholarships'];
+        tagsToClear = getPostCacheTags('scholarship');
         break;
       case 'jobs':
-        pathsToClear = ['/', '/jobs'];
+        tagsToClear = getPostCacheTags('job');
         break;
       case 'homepage':
-        pathsToClear = ['/'];
+        tagsToClear = getPostCacheTags();
         break;
       default:
-        pathsToClear = ['/'];
+        tagsToClear = ['homepage'];
+    }
+
+    // Add any additional tags from request
+    if (tags && Array.isArray(tags)) {
+      tagsToClear = [...new Set([...tagsToClear, ...tags])];
     }
     
-    // Revalidate all paths
-    for (const path of pathsToClear) {
+    // Revalidate all tags with default profile
+    for (const tag of tagsToClear) {
       try {
-        revalidatePath(path);
+        revalidateTag(tag, 'default');
       } catch (error) {
-        console.warn(`  ⚠️ Failed to revalidate: ${path}`, error);
-      }
-    }
-    
-    // Also try to revalidate with layout for root
-    if (pathsToClear.includes('/')) {
-      try {
-        revalidatePath('/', 'layout');
-      } catch {
-        // Ignore
+        console.warn(`  ⚠️ Failed to revalidate tag: ${tag}`, error);
       }
     }
     
     return NextResponse.json({ 
       success: true, 
       message: `${groupName || 'Cache'} cleared successfully!`,
-      clearedPaths: pathsToClear
+      clearedTags: tagsToClear
     });
     
-  } catch {
-    console.error('Cache clear error:');
+  } catch (error) {
+    console.error('Cache clear error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to clear cache' }, 
       { status: 500 }

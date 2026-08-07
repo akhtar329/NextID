@@ -1,0 +1,264 @@
+.overlay{
+
+position:fixed;
+inset:0;
+
+display:flex;
+justify-content:center;
+align-items:center;
+
+background:
+radial-gradient(circle at top,#2563eb22 0%,transparent 45%),
+linear-gradient(#ffffff,#f8fafc);
+
+z-index:99999;
+
+overflow:hidden;
+
+}
+
+.overlay::before{
+
+content:"";
+
+position:absolute;
+
+width:450px;
+height:450px;
+
+border-radius:50%;
+
+background:#2563eb18;
+
+filter:blur(90px);
+
+animation:float 8s ease infinite;
+
+}
+
+.card{
+
+position:relative;
+
+padding:60px 70px;
+
+border-radius:30px;
+
+background:rgba(255,255,255,.55);
+
+backdrop-filter:blur(20px);
+
+border:1px solid rgba(255,255,255,.6);
+
+box-shadow:
+
+0 15px 60px rgba(0,0,0,.08),
+0 0 80px rgba(37,99,235,.08);
+
+display:flex;
+flex-direction:column;
+align-items:center;
+
+animation:cardFloat 3s ease infinite;
+
+}
+
+.logo{
+
+font-size:78px;
+font-weight:900;
+letter-spacing:4px;
+
+display:flex;
+
+}
+
+.next{
+
+color:#111827;
+
+}
+
+.id{
+
+margin-left:8px;
+
+background:
+linear-gradient(
+90deg,
+#1d4ed8 0%,
+#60a5fa 25%,
+#ffffff 50%,
+#60a5fa 75%,
+#1d4ed8 100%
+);
+
+background-size:300%;
+
+color:transparent;
+
+-webkit-background-clip:text;
+background-clip:text;
+
+animation:
+
+shine 2s linear infinite,
+pulse 2.5s ease infinite;
+
+}
+
+.line{
+
+margin-top:35px;
+
+width:260px;
+height:6px;
+
+background:#e2e8f0;
+
+border-radius:999px;
+
+overflow:hidden;
+
+}
+
+.line span{
+
+display:block;
+
+height:100%;
+width:35%;
+
+border-radius:inherit;
+
+background:
+
+linear-gradient(
+90deg,
+#1d4ed8,
+#60a5fa,
+#ffffff,
+#60a5fa,
+#1d4ed8
+);
+
+background-size:250%;
+
+animation:
+
+progress 1.5s ease infinite,
+shine 2s linear infinite;
+
+}
+
+.text{
+
+margin-top:20px;
+
+font-size:14px;
+
+letter-spacing:5px;
+
+text-transform:uppercase;
+
+color:#64748b;
+
+animation:textPulse 1.8s ease infinite;
+
+}
+
+@keyframes shine{
+
+0%{
+
+background-position:300%;
+
+}
+
+100%{
+
+background-position:-300%;
+
+}
+
+}
+
+@keyframes progress{
+
+0%{
+
+transform:translateX(-180%);
+
+}
+
+100%{
+
+transform:translateX(350%);
+
+}
+
+}
+
+@keyframes pulse{
+
+0%,100%{
+
+filter:drop-shadow(0 0 6px #60a5fa55);
+
+}
+
+50%{
+
+filter:drop-shadow(0 0 18px #3b82f6);
+
+}
+
+}
+
+@keyframes textPulse{
+
+0%,100%{
+
+opacity:.45;
+
+}
+
+50%{
+
+opacity:1;
+
+}
+
+}
+
+@keyframes cardFloat{
+
+0%,100%{
+
+transform:translateY(0);
+
+}
+
+50%{
+
+transform:translateY(-8px);
+
+}
+
+}
+
+@keyframes float{
+
+0%,100%{
+
+transform:translate(-120px,-80px);
+
+}
+
+50%{
+
+transform:translate(140px,100px);
+
+}
+
+}

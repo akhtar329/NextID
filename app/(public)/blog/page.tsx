@@ -156,6 +156,7 @@ export async function generateMetadata(): Promise<Metadata> {
 async function getAllBlogs(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("blogs-all");
+  cacheTag("posts-type-blog");
   cacheLife("hours");
   
   try {
@@ -172,6 +173,7 @@ async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
   
   const cacheKey = `blogs-${filters.page || 1}-${filters.category || 'all'}-${filters.q || 'none'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-blog");
   cacheLife("hours");
   
   const currentPage = filters.page || 1;
@@ -250,6 +252,7 @@ async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
 async function getStats(): Promise<Stats> {
   "use cache";
   cacheTag("blogs-stats");
+  cacheTag("posts-type-blog");
   cacheLife("hours");
   
   try {

@@ -5,10 +5,9 @@ import { posts } from "@/db/schema";
 import { eq, desc, and, not, inArray, sql } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";
 import { writeLog } from "@/lib/logger";
-import { cache } from "@/lib/cache"; // ✅ Import persistent cache
 
 // ============================================================
-// POST REPOSITORY - WITH PERSISTENT CACHE (Vercel Blob)
+// POST REPOSITORY - PURE DATABASE ACCESS LAYER
 // ============================================================
 
 export class PostRepository {
@@ -64,7 +63,7 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getList WITH PERSISTENT CACHE
+  // ✅ getList - Database query only
   // ============================================================
   async getList(
     type: PostType | 'all',
@@ -77,38 +76,7 @@ export class PostRepository {
     }
   ): Promise<Post[]> {
     const startTime = Date.now();
-    const cacheKey = `posts:list:${type}:${limit}:${offset}:${JSON.stringify(filters || {})}`;
     const operation = `getList_${type}_limit${limit}_offset${offset}`;
-
-    // ✅ Check persistent cache
-    const cached = await cache.get<Post[]>(cacheKey);
-    if (cached) {
-      await writeLog({
-        id: `cache_hit_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_HIT",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: {
-          count: cached.length,
-          type,
-          limit,
-          offset,
-        },
-      });
-      return cached;
-    }
-
-    await writeLog({
-      id: `cache_miss_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "CACHE_MISS",
-      operation: cacheKey,
-      source: "database",
-      duration: 0,
-      data: { type, limit, offset },
-    });
 
     try {
       const conditions = [eq(posts.status, "published")];
@@ -131,9 +99,6 @@ export class PostRepository {
 
       const result = rows.map(r => this.castPost(r));
 
-      // ✅ Save to persistent cache (24 hours)
-      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
-
       await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -148,19 +113,6 @@ export class PostRepository {
           limit,
           offset,
           filters,
-        },
-      });
-
-      await writeLog({
-        id: `cache_save_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_SAVE",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: {
-          count: result.length,
-          ttl: "86400s",
         },
       });
 
@@ -188,37 +140,11 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getDetail WITH PERSISTENT CACHE
+  // ✅ getDetail - Database query only
   // ============================================================
   async getDetail(slug: string): Promise<Post | null> {
     const startTime = Date.now();
-    const cacheKey = `posts:detail:${slug}`;
     const operation = `getDetail_${slug}`;
-
-    // ✅ Check persistent cache
-    const cached = await cache.get<Post>(cacheKey);
-    if (cached) {
-      await writeLog({
-        id: `cache_hit_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_HIT",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: { slug },
-      });
-      return cached;
-    }
-
-    await writeLog({
-      id: `cache_miss_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "CACHE_MISS",
-      operation: cacheKey,
-      source: "database",
-      duration: 0,
-      data: { slug },
-    });
 
     try {
       const [row] = await db
@@ -228,9 +154,6 @@ export class PostRepository {
         .limit(1);
 
       const result = row ? this.castPost(row) : null;
-
-      // ✅ Save to persistent cache (24 hours)
-      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
 
       await writeLog({
         id: `db_${Date.now()}`,
@@ -243,19 +166,6 @@ export class PostRepository {
         data: {
           found: !!row,
           slug,
-        },
-      });
-
-      await writeLog({
-        id: `cache_save_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_SAVE",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: {
-          found: !!row,
-          ttl: "86400s",
         },
       });
 
@@ -280,7 +190,7 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getRelated WITH PERSISTENT CACHE
+  // ✅ getRelated - Database query only
   // ============================================================
   async getRelated(
     currentId: number,
@@ -288,32 +198,7 @@ export class PostRepository {
     limit: number = 5
   ): Promise<Post[]> {
     const startTime = Date.now();
-    const cacheKey = `posts:related:${currentId}:${type}:${limit}`;
     const operation = `getRelated_${type}_id${currentId}`;
-
-    const cached = await cache.get<Post[]>(cacheKey);
-    if (cached) {
-      await writeLog({
-        id: `cache_hit_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_HIT",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: { count: cached.length, currentId, type },
-      });
-      return cached;
-    }
-
-    await writeLog({
-      id: `cache_miss_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "CACHE_MISS",
-      operation: cacheKey,
-      source: "database",
-      duration: 0,
-      data: { currentId, type, limit },
-    });
 
     try {
       const rows = await db
@@ -331,8 +216,6 @@ export class PostRepository {
 
       const result = rows.map(r => this.castPost(r));
 
-      await cache.set(cacheKey, result, 86400 * 1000); // 24 hours
-
       await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -346,19 +229,6 @@ export class PostRepository {
           currentId,
           type,
           limit,
-        },
-      });
-
-      await writeLog({
-        id: `cache_save_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_SAVE",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: {
-          count: result.length,
-          ttl: "86400s",
         },
       });
 
@@ -385,39 +255,14 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getHomepageData WITH PERSISTENT CACHE
+  // ✅ getHomepageData - Database query only
   // ============================================================
   async getHomepageData(
     types: PostType[],
     limitPerType: number = 5
   ): Promise<Record<PostType, Post[]>> {
     const startTime = Date.now();
-    const cacheKey = `posts:homepage:${types.join(',')}:${limitPerType}`;
     const operation = `getHomepageData_${types.join('_')}`;
-
-    const cached = await cache.get<Record<PostType, Post[]>>(cacheKey);
-    if (cached) {
-      await writeLog({
-        id: `cache_hit_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_HIT",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: { types, limitPerType },
-      });
-      return cached;
-    }
-
-    await writeLog({
-      id: `cache_miss_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "CACHE_MISS",
-      operation: cacheKey,
-      source: "database",
-      duration: 0,
-      data: { types, limitPerType },
-    });
 
     try {
       const rows = await db
@@ -443,8 +288,6 @@ export class PostRepository {
         }
       }
 
-      await cache.set(cacheKey, grouped, 86400 * 1000); // 24 hours
-
       const totalCount = rows.length;
       const groupedCounts = Object.fromEntries(
         Object.entries(grouped).map(([key, val]) => [key, val.length])
@@ -463,19 +306,6 @@ export class PostRepository {
           groupedCounts,
           types,
           limitPerType,
-        },
-      });
-
-      await writeLog({
-        id: `cache_save_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_SAVE",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: {
-          groupedCounts,
-          ttl: "86400s",
         },
       });
 
@@ -504,36 +334,11 @@ export class PostRepository {
   }
 
   // ============================================================
-  // ✅ getTotalCount WITH PERSISTENT CACHE
+  // ✅ getTotalCount - Database query only
   // ============================================================
   async getTotalCount(type: PostType | 'all'): Promise<number> {
     const startTime = Date.now();
-    const cacheKey = `posts:count:${type}`;
     const operation = `getTotalCount_${type}`;
-
-    const cached = await cache.get<number>(cacheKey);
-    if (cached !== null) {
-      await writeLog({
-        id: `cache_hit_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_HIT",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: { type, count: cached },
-      });
-      return cached;
-    }
-
-    await writeLog({
-      id: `cache_miss_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "CACHE_MISS",
-      operation: cacheKey,
-      source: "database",
-      duration: 0,
-      data: { type },
-    });
 
     try {
       const conditions = [eq(posts.status, "published")];
@@ -549,8 +354,6 @@ export class PostRepository {
 
       const count = result[0]?.count || 0;
 
-      await cache.set(cacheKey, count, 86400 * 1000); // 24 hours
-
       await writeLog({
         id: `db_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -559,16 +362,6 @@ export class PostRepository {
         source: "database",
         duration: Date.now() - startTime,
         data: { type, count },
-      });
-
-      await writeLog({
-        id: `cache_save_${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        type: "CACHE_SAVE",
-        operation: cacheKey,
-        source: "cache",
-        duration: Date.now() - startTime,
-        data: { type, count, ttl: "86400s" },
       });
 
       return count;
@@ -589,20 +382,6 @@ export class PostRepository {
       console.error('Error in getTotalCount:', error);
       return 0;
     }
-  }
-
-  // ============================================================
-  // ✅ CLEAR CACHE
-  // ============================================================
-  async clearCache(): Promise<void> {
-    await cache.clear();
-  }
-
-  // ============================================================
-  // ✅ GET CACHE STATS
-  // ============================================================
-  getCacheStats(): { total: number; keys: string[] } {
-    return { total: 0, keys: [] };
   }
 }
 

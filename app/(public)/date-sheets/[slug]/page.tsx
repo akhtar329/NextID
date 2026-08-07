@@ -173,6 +173,7 @@ export async function generateStaticParams() {
 async function getDateSheetDetail(slug: string): Promise<DateSheetWithComputed | null> {
   "use cache";
   cacheTag(`date-sheet-detail-${slug}`);
+  cacheTag("posts-type-date_sheet");
   cacheLife("hours");
   
   try {

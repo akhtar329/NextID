@@ -159,6 +159,7 @@ function SearchLoading() {
 async function getAllSearchablePosts(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("search-all-posts");
+  cacheTag("posts");
   cacheLife("hours");
   
   try {

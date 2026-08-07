@@ -234,6 +234,7 @@ export async function generateStaticParams() {
 async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
   "use cache";
   cacheTag(`result-detail-${slug}`);
+  cacheTag("posts-type-result");
   cacheLife("hours");
   
   try {

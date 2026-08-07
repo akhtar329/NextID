@@ -140,6 +140,7 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
 async function getAllDateSheets(): Promise<ExtendedPost[]> {
   "use cache";
   cacheTag("date-sheets-all");
+  cacheTag("posts-type-date_sheet");
   cacheLife("hours");
   
   try {
@@ -156,6 +157,7 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
   
   const cacheKey = `date-sheets-${filters.page || 1}-${filters.board || 'all'}-${filters.examType || 'all'}-${filters.year || 'all'}-${filters.q || 'all'}`;
   cacheTag(cacheKey);
+  cacheTag("posts-type-date_sheet");
   cacheLife("hours");
   
   const currentPage = filters.page || 1;
@@ -245,6 +247,7 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
 async function getStats(): Promise<StatsResult> {
   "use cache";
   cacheTag("date-sheets-stats");
+  cacheTag("posts-type-date_sheet");
   cacheLife("hours");
   
   try {
