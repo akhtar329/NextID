@@ -25,7 +25,6 @@ import {
   Mail
 } from 'lucide-react';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
@@ -159,13 +158,8 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
   );
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getAllJobs(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("jobs-all");
-  cacheTag("posts-type-job");
-  cacheLife("hours");
-  
   try {
     const jobs = await postService.getList('job', 1000);
     return jobs || [];
@@ -176,13 +170,6 @@ async function getAllJobs(): Promise<ExtendedPost[]> {
 }
 
 async function getPaginatedJobs(filters: Filters): Promise<PaginatedResponse> {
-  "use cache";
-  
-  const cacheKey = `jobs-${filters.page || 1}-${filters.jobType || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-job");
-  cacheLife("hours");
-  
   const currentPage = filters.page || 1;
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
@@ -272,11 +259,6 @@ async function getPaginatedJobs(filters: Filters): Promise<PaginatedResponse> {
 }
 
 async function getStats(): Promise<Stats> {
-  "use cache";
-  cacheTag("jobs-stats");
-  cacheTag("posts-type-job");
-  cacheLife("hours");
-  
   try {
     const allJobs = await getAllJobs();
     
@@ -316,15 +298,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Jobs in Pakistan ${currentYear} | ${totalJobs}+ Latest Education & IT Jobs | NextID.pk`,
     description: `Find ${totalJobs}+ latest jobs in education, IT, management, and administration for ${currentYear}. Full time, part time, remote jobs for fresh and experienced professionals. Apply now!`,
     keywords: `jobs in Pakistan ${currentYear}, latest jobs ${currentYear}, education jobs, IT jobs, management jobs, fresh jobs, experienced jobs, Pakistan careers`,
-    robots: 'index, follow', // ✅ ADDED
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/jobs',
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': 'https://www.nextid.pk/jobs',
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Jobs in Pakistan ${currentYear} - Latest Career Opportunities | NextID.pk`,
       description: `Find thousands of jobs in education, IT, management, and administration. Apply online for the latest career opportunities.`,

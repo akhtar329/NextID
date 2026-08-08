@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface ResultItem {
@@ -144,13 +143,8 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
   );
 }
 
-// ============ CACHED PAGINATED DATA FETCHING ============
+// ============ PAGINATED DATA FETCHING ============
 async function getAllResults(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("results-all");
-  cacheTag("posts-type-result");
-  cacheLife("hours");
-  
   try {
     const results = await postService.getList('result', 1000);
     return results || [];
@@ -161,13 +155,6 @@ async function getAllResults(): Promise<ExtendedPost[]> {
 }
 
 async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse> {
-  "use cache";
-  
-  const cacheKey = `results-${filters.page || 1}-${filters.board || 'all'}-${filters.year || 'all'}-${filters.level || 'all'}-${filters.q || 'all'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-result");
-  cacheLife("hours");
-  
   const currentPage = filters.page || 1;
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
@@ -266,11 +253,6 @@ async function getPaginatedResults(filters: Filters): Promise<PaginatedResponse>
 
 // ============ STATS ============
 async function getStats(): Promise<Stats> {
-  "use cache";
-  cacheTag("results-stats");
-  cacheTag("posts-type-result");
-  cacheLife("hours");
-  
   try {
     const allResults = await getAllResults();
     const totalResults = allResults.length;
@@ -312,15 +294,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Exam Results ${currentYear} Pakistan | ${totalResults}+ Board & University Results | NextID.pk`,
     description: `Check ${totalResults}+ board and university results ${currentYear} in Pakistan. BISE Lahore, Karachi, Islamabad, FBISE results. Matric, Intermediate, BA, BSc, MA, MSc results.`,
     keywords: `exam results ${currentYear}, board results ${currentYear}, matric results, intermediate results`,
-    robots: 'index, follow', // ✅ ADDED
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/results',
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': 'https://www.nextid.pk/results',
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Exam Results ${currentYear} Pakistan - Board & University Results | NextID.pk`,
       description: `Check ${totalResults}+ board and university results for Matric, Intermediate, BA, BSc, MA, MSc.`,

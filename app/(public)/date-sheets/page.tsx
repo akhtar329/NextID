@@ -7,7 +7,6 @@ import { Suspense } from 'react';
 import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 import { 
   Eye,
   FileText,
@@ -136,13 +135,8 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
   );
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getAllDateSheets(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("date-sheets-all");
-  cacheTag("posts-type-date_sheet");
-  cacheLife("hours");
-  
   try {
     const sheets = await postService.getList('date_sheet', 1000);
     return sheets || [];
@@ -153,13 +147,6 @@ async function getAllDateSheets(): Promise<ExtendedPost[]> {
 }
 
 async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResult> {
-  "use cache";
-  
-  const cacheKey = `date-sheets-${filters.page || 1}-${filters.board || 'all'}-${filters.examType || 'all'}-${filters.year || 'all'}-${filters.q || 'all'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-date_sheet");
-  cacheLife("hours");
-  
   const currentPage = filters.page || 1;
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
@@ -245,11 +232,6 @@ async function getDateSheets(filters: DateSheetFilters): Promise<DateSheetsResul
 }
 
 async function getStats(): Promise<StatsResult> {
-  "use cache";
-  cacheTag("date-sheets-stats");
-  cacheTag("posts-type-date_sheet");
-  cacheLife("hours");
-  
   try {
     const allSheets = await getAllDateSheets();
     

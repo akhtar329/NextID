@@ -24,7 +24,6 @@ import { postService } from '@/services/post/post.service';
 import type { ExtendedPost } from '@/services/post/post.service';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface NewsItem {
@@ -183,13 +182,8 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
   );
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getAllNews(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("news-all");
-  cacheTag("posts-type-news");
-  cacheLife("hours");
-  
   try {
     const news = await postService.getList('news', 10);
     return news || [];
@@ -200,13 +194,6 @@ async function getAllNews(): Promise<ExtendedPost[]> {
 }
 
 async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, searchQuery?: string, category?: string): Promise<{ news: NewsItem[]; pagination: PaginationInfo }> {
-  "use cache";
-  
-  const cacheKey = `news-${page}-${category || 'all'}-${searchQuery || 'none'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-news");
-  cacheLife("hours");
-  
   try {
     let allNews = await getAllNews();
     
@@ -229,8 +216,8 @@ async function getNewsData(page: number = 1, limit: number = ITEMS_PER_PAGE, sea
         isFeatured: getMetaValue(meta, 'isFeatured', false),
         isBreaking: getMetaValue(meta, 'isBreaking', false),
         viewCount: getMetaValue(meta, 'viewCount', 0),
-        publishedAt: publishedAt, // ✅ Now Date object or null
-        createdAt: createdAt,     // ✅ Now Date object or null
+        publishedAt: publishedAt,
+        createdAt: createdAt,
         authorName: getMetaValue(meta, 'authorName', null),
       };
     });

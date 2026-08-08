@@ -17,7 +17,6 @@ import { postService } from "@/services/post/post.service";
 import type { ExtendedPost } from "@/services/post/post.service";
 import SidebarWidgets from "@/components/sections/Home/SidebarWidgets";
 import { generateJsonLd } from "@/lib/seo";
-import { cacheTag, cacheLife } from "next/cache";
 
 // ============ HELPER FUNCTIONS ============
 function getMetaValue<T>(meta: Record<string, unknown> | null, key: string, defaultValue: T): T {
@@ -80,13 +79,8 @@ function getPriorityScore(status: string, closeDate: Date | null): number {
   return 10;
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getAdmissionsData(page: number = 1, limit: number = 10, filter: string = 'all', search: string = '') {
-  "use cache";
-  cacheTag("admissions-data");
-  cacheTag("posts-type-admission");
-  cacheLife("hours");
-  
   try {
     const posts = await postService.getList('admission', 10);
     
@@ -187,11 +181,6 @@ async function getAdmissionsData(page: number = 1, limit: number = 10, filter: s
 }
 
 async function getOpenCountForMetadata() {
-  "use cache";
-  cacheTag("admissions-metadata");
-  cacheTag("posts-type-admission");
-  cacheLife("hours");
-  
   try {
     const posts = await postService.getList('admission', 10);
     if (!posts || !Array.isArray(posts)) return 0;

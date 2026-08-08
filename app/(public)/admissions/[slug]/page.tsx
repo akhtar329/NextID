@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { postService } from '@/services/post/post.service';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface Program {
@@ -138,14 +137,9 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 
 async function getAdmissionBySlug(slug: string): Promise<AdmissionWithComputed | null> {
-  "use cache";
-  cacheTag(`admission-detail-${slug}`);
-  cacheTag("posts-type-admission");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     

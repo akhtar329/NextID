@@ -23,7 +23,6 @@ import {
   List
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface BlogWithComputed {
@@ -193,13 +192,8 @@ function toISOStringSafe(date: Date | string | null | undefined): string | undef
   return dateObj.toISOString();
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
-  "use cache";
-  cacheTag(`blog-detail-${slug}`);
-  cacheTag("posts-type-blog");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     
@@ -259,11 +253,6 @@ async function getBlogBySlug(slug: string): Promise<BlogWithComputed | null> {
 }
 
 async function getAllBlogs(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("blogs-all");
-  cacheTag("posts-type-blog");
-  cacheLife("hours");
-  
   try {
     const blogs = await postService.getList('blog', 500);
     return blogs || [];
@@ -274,12 +263,6 @@ async function getAllBlogs(): Promise<ExtendedPost[]> {
 }
 
 async function getRelatedBlogs(currentId: number, category: string): Promise<RelatedBlog[]> {
-  "use cache";
-  cacheTag(`blog-related-${currentId}`);
-  cacheTag("blog-related");
-  cacheTag("posts-type-blog");
-  cacheLife("days");
-  
   try {
     const allBlogs = await getAllBlogs();
     

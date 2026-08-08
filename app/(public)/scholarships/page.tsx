@@ -24,7 +24,6 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ CONSTANTS ============
 const ITEMS_PER_PAGE = 10;
@@ -159,13 +158,8 @@ function ShareButtons({ title, url }: { title: string; url: string }) {
   );
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getAllScholarships(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("scholarships-all");
-  cacheTag("posts-type-scholarship");
-  cacheLife("hours");
-  
   try {
     const scholarships = await postService.getList('scholarship', 1000);
     return scholarships || [];
@@ -176,11 +170,6 @@ async function getAllScholarships(): Promise<ExtendedPost[]> {
 }
 
 async function getStats(): Promise<Stats> {
-  "use cache";
-  cacheTag("scholarships-stats");
-  cacheTag("posts-type-scholarship");
-  cacheLife("hours");
-  
   try {
     const allScholarships = await getAllScholarships();
     const total = allScholarships.length;
@@ -205,13 +194,6 @@ async function getStats(): Promise<Stats> {
 }
 
 async function getPaginatedScholarships(filters: Filters): Promise<PaginatedResponse> {
-  "use cache";
-  
-  const cacheKey = `scholarships-${filters.page || 1}-${filters.level || 'all'}-${filters.type || 'all'}-${filters.location || 'all'}-${filters.q || 'all'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-scholarship");
-  cacheLife("hours");
-  
   try {
     const allScholarships = await getAllScholarships();
     
@@ -332,15 +314,15 @@ export async function generateMetadata(): Promise<Metadata> {
     title: `Scholarships ${currentYear} in Pakistan | ${totalScholarships}+ Fully Funded & Partial | NextID.pk`,
     description: `Find ${fullyFunded}+ fully funded and ${totalScholarships - fullyFunded}+ partial scholarships for Pakistani students ${currentYear}. Merit-based, need-based scholarships for Matric to PhD. Apply now!`,
     keywords: `scholarships ${currentYear}, scholarships in Pakistan, fully funded scholarships, merit scholarships, need-based scholarships, study abroad scholarships`,
-    robots: 'index, follow', // ✅ ADDED
+    robots: 'index, follow',
     alternates: {
       canonical: 'https://www.nextid.pk/scholarships',
-      languages: { // ✅ ADDED
+      languages: {
         'en-US': 'https://www.nextid.pk/scholarships',
       },
     },
-    publisher: 'NextID.pk', // ✅ ADDED
-    authors: [{ name: 'NextID.pk' }], // ✅ ADDED
+    publisher: 'NextID.pk',
+    authors: [{ name: 'NextID.pk' }],
     openGraph: {
       title: `Scholarships ${currentYear} Pakistan - Fully Funded & Partial | NextID.pk`,
       description: `Find ${totalScholarships}+ scholarships for Pakistani students including fully funded, merit-based, and need-based opportunities.`,

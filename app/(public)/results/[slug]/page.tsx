@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 import { generateJsonLd } from '@/lib/seo';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface ResultDetail {
@@ -230,13 +229,8 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
-  "use cache";
-  cacheTag(`result-detail-${slug}`);
-  cacheTag("posts-type-result");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     
@@ -268,7 +262,7 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       content: post.content,
       excerpt: post.excerpt,
       year: year,
-      resultDate: resultDate, // ✅ Now Date object or null
+      resultDate: resultDate,
       boardName: boardName,
       boardSlug: getMetaValue(meta, 'boardSlug', null),
       instituteName: instituteName,
@@ -279,8 +273,8 @@ async function getResultBySlug(slug: string): Promise<ResultDetail | null> {
       status: getMetaValue(meta, 'status', true),
       viewCount: getMetaValue(meta, 'viewCount', 0),
       featuredImage: post.featuredImage || null,
-      publishedAt: publishedAt, // ✅ Now Date object or null
-      updatedAt: updatedAt,     // ✅ Now Date object or null
+      publishedAt: publishedAt,
+      updatedAt: updatedAt,
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),

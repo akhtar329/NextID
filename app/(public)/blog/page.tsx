@@ -4,7 +4,6 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Suspense } from 'react';
-import { cacheTag, cacheLife } from 'next/cache';
 import {
   BookOpen,
   Calendar,
@@ -141,7 +140,6 @@ export async function generateMetadata(): Promise<Metadata> {
       type: 'website',
       images: [{ url: '/og-image.png', width: 1200, height: 630 }],
       locale: 'en_PK',
-      // OpenGraph metadata does not accept modifiedTime in this type; omit to satisfy types
     },
     twitter: {
       card: 'summary_large_image',
@@ -152,13 +150,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// ================= CACHED DATA FETCHING =================
+// ================= DATA FETCHING =================
 async function getAllBlogs(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("blogs-all");
-  cacheTag("posts-type-blog");
-  cacheLife("hours");
-  
   try {
     const blogs = await postService.getList('blog', 1000);
     return blogs || [];
@@ -169,13 +162,6 @@ async function getAllBlogs(): Promise<ExtendedPost[]> {
 }
 
 async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
-  "use cache";
-  
-  const cacheKey = `blogs-${filters.page || 1}-${filters.category || 'all'}-${filters.q || 'none'}`;
-  cacheTag(cacheKey);
-  cacheTag("posts-type-blog");
-  cacheLife("hours");
-  
   const currentPage = filters.page || 1;
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
   
@@ -250,11 +236,6 @@ async function getPaginatedBlogs(filters: Filters): Promise<PaginatedResponse> {
 
 // ================= STATS =================
 async function getStats(): Promise<Stats> {
-  "use cache";
-  cacheTag("blogs-stats");
-  cacheTag("posts-type-blog");
-  cacheLife("hours");
-  
   try {
     const allBlogs = await getAllBlogs();
     

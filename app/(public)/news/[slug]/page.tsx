@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Zap
 } from 'lucide-react';
-import { cacheTag, cacheLife } from 'next/cache';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
 
 // ============ TYPES ============
@@ -262,13 +261,8 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
-  "use cache";
-  cacheTag(`news-detail-${slug}`);
-  cacheTag("posts-type-news");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     
@@ -295,8 +289,8 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       isBreaking: getMetaValue(meta, 'isBreaking', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
-      publishedAt: publishedAt, // ✅ Now Date object
-      createdAt: createdAt,     // ✅ Now Date object
+      publishedAt: publishedAt,
+      createdAt: createdAt,
       category: getMetaValue(meta, 'category', 'General'),
       tags: getMetaValue(meta, 'tags', null),
       metaTitle: getMetaValue(meta, 'metaTitle', null),
@@ -309,7 +303,7 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
       ogImage: getMetaValue(meta, 'ogImage', null),
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
-      updatedAt: updatedAt, // ✅ Now Date object
+      updatedAt: updatedAt,
     };
   } catch (error) {
     console.error('Error fetching news detail:', error);
@@ -318,11 +312,6 @@ async function getNewsBySlug(slug: string): Promise<NewsDetail | null> {
 }
 
 async function getAllNews(): Promise<ExtendedPost[]> {
-  "use cache";
-  cacheTag("news-all");
-  cacheTag("posts-type-news");
-  cacheLife("hours");
-  
   try {
     const news = await postService.getList('news', 10);
     return news || [];
@@ -333,12 +322,6 @@ async function getAllNews(): Promise<ExtendedPost[]> {
 }
 
 async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
-  "use cache";
-  cacheTag(`news-related-${currentId}`);
-  cacheTag("news-related");
-  cacheTag("posts-type-news");
-  cacheLife("days");
-  
   try {
     const allNews = await getAllNews();
     
@@ -359,7 +342,7 @@ async function getRelatedNews(currentId: number): Promise<RelatedNews[]> {
           slug: post.slug,
           excerpt: post.excerpt,
           featuredImage: post.featuredImage,
-          publishedAt: publishedAt, // ✅ Now Date object
+          publishedAt: publishedAt,
           isBreaking: getMetaValue(meta, 'isBreaking', false),
         };
       });

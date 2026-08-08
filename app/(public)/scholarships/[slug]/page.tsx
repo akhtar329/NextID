@@ -7,7 +7,6 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { postService, getCurrentYear, getDaysLeft, formatShortDate, isDeadlineNear } from '@/services/post/post.service';
-import { cacheTag, cacheLife } from 'next/cache';
 import { 
   GraduationCap, MapPin, Eye, CheckCircle, Clock,
   ChevronLeft, Award, DollarSign, ExternalLink, TrendingUp, Zap, AlertCircle,
@@ -229,13 +228,8 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComputed | null> {
-  "use cache";
-  cacheTag(`scholarship-detail-${slug}`);
-  cacheTag("posts-type-scholarship");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     if (!post || post.type !== 'scholarship') return null;
@@ -303,8 +297,8 @@ async function getScholarshipBySlug(slug: string): Promise<ScholarshipWithComput
       twitterTitle: getMetaValue(meta, 'twitterTitle', null),
       twitterDescription: getMetaValue(meta, 'twitterDescription', null),
       featuredImage: post.featuredImage || null,
-      publishedAt: publishedAt, // ✅ Now Date object or null
-      updatedAt: updatedAt,     // ✅ Now Date object or null
+      publishedAt: publishedAt,
+      updatedAt: updatedAt,
       // Computed values
       computedDaysLeft,
       computedShortDate,

@@ -22,7 +22,6 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface DateSheetWithComputed {
@@ -169,13 +168,8 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING ============
+// ============ DATA FETCHING ============
 async function getDateSheetDetail(slug: string): Promise<DateSheetWithComputed | null> {
-  "use cache";
-  cacheTag(`date-sheet-detail-${slug}`);
-  cacheTag("posts-type-date_sheet");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     

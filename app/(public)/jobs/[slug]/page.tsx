@@ -29,7 +29,6 @@ import {
   Send
 } from 'lucide-react';
 import SidebarWidgets from '@/components/sections/Home/SidebarWidgets';
-import { cacheTag, cacheLife } from 'next/cache';
 
 // ============ TYPES ============
 interface JobWithComputed {
@@ -207,13 +206,8 @@ export async function generateStaticParams() {
   }
 }
 
-// ============ CACHED DATA FETCHING WITH COMPUTED VALUES ============
+// ============ DATA FETCHING WITH COMPUTED VALUES ============
 async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
-  "use cache";
-  cacheTag(`job-detail-${slug}`);
-  cacheTag("posts-type-job");
-  cacheLife("hours");
-  
   try {
     const post = await postService.getDetail(slug);
     
@@ -266,8 +260,8 @@ async function getJobBySlug(slug: string): Promise<JobWithComputed | null> {
       isFeatured: getMetaValue(meta, 'isFeatured', false),
       viewCount: getMetaValue(meta, 'viewCount', 0),
       featuredImage: post.featuredImage || null,
-      publishedAt: publishedAt, // ✅ Now Date object
-      updatedAt: updatedAt,     // ✅ Now Date object
+      publishedAt: publishedAt,
+      updatedAt: updatedAt,
       // Meta fields
       metaTitle: getMetaValue(meta, 'metaTitle', null),
       metaDescription: getMetaValue(meta, 'metaDescription', null),
