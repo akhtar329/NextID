@@ -1,4 +1,5 @@
 // app/(public)/about/page.tsx
+// about page
 
 import { Metadata } from 'next';
 import Link from 'next/link';
