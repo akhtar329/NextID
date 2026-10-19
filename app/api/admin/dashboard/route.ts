@@ -1,7 +1,7 @@
 // app/api/admin/dashboard/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
-import { posts, adminUsers } from "@/db/schema";
+import { posts, adminUsers, adminRoles } from "@/db/schema";
 import { sql, desc, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
       }));
     } catch (err) { console.error("Recent posts error:", err); }
 
-    // ========== 6. ✅ ALL USERS WITH STATS ==========
+    // ========== 6. ✅ ALL USERS (with role JOIN) ==========
     let allUsers: Array<{
       id: number;
       name: string;
@@ -87,10 +87,20 @@ export async function GET(req: NextRequest) {
     }> = [];
 
     try {
-      // Get users from adminUsers
-      const users = await db.select().from(adminUsers);
+      // ✅ Users with role name (JOIN)
+      const users = await db
+        .select({
+          id: adminUsers.id,
+          name: adminUsers.name,
+          email: adminUsers.email,
+          roleId: adminUsers.roleId,
+          roleName: adminRoles.name,
+          lastLogin: adminUsers.lastLogin,
+        })
+        .from(adminUsers)
+        .leftJoin(adminRoles, eq(adminUsers.roleId, adminRoles.id));
 
-      // Get all posts grouped by author
+      // Posts grouped by author
       const postsByAuthor = await db
         .select({
           authorName: posts.authorName,
@@ -109,43 +119,33 @@ export async function GET(req: NextRequest) {
           id: u.id,
           name: u.name,
           email: u.email || "",
-          role: u.role || "editor",
+          role: u.roleName || "Editor",  // ✅ roleName use karo
           totalPosts: stat?.totalPosts || 0,
           published: stat?.published || 0,
           drafts: stat?.drafts || 0,
           archived: stat?.archived || 0,
-          lastActive: stat?.lastActive || null,
+          lastActive: stat?.lastActive || (u.lastLogin ? u.lastLogin.toISOString() : null),
         };
       }).sort((a, b) => b.totalPosts - a.totalPosts);
     } catch (err) {
       console.error("Users error:", err);
     }
 
-    // ========== 7. ✅ USER ACTIVITY (CHANGE LOG / RECENT POSTS) ==========
-    // URL se userId/name param check karo
+    // ========== 7. USER ACTIVITY ==========
     const { searchParams } = new URL(req.url);
-    const selectedUser = searchParams.get("user");  // "user" param
+    const selectedUser = searchParams.get("user");
 
     let userActivity: Array<{
-      id: number;
-      title: string;
-      type: string;
-      status: string;
-      createdAt: string;
-      updatedAt: string;
-      action: string;
+      id: number; title: string; type: string; status: string;
+      createdAt: string; updatedAt: string; action: string;
     }> = [];
 
     if (selectedUser) {
       try {
         const userPosts = await db
           .select({
-            id: posts.id,
-            title: posts.title,
-            type: posts.type,
-            status: posts.status,
-            createdAt: posts.createdAt,
-            updatedAt: posts.updatedAt,
+            id: posts.id, title: posts.title, type: posts.type,
+            status: posts.status, createdAt: posts.createdAt, updatedAt: posts.updatedAt,
           })
           .from(posts)
           .where(eq(posts.authorName, selectedUser))
@@ -153,7 +153,6 @@ export async function GET(req: NextRequest) {
           .limit(20);
 
         userActivity = userPosts.map((p) => {
-          // Simple activity detection
           const created = p.createdAt ? new Date(p.createdAt).getTime() : 0;
           const updated = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
           const diff = updated - created;
@@ -167,18 +166,14 @@ export async function GET(req: NextRequest) {
           }
 
           return {
-            id: p.id,
-            title: p.title,
-            type: p.type,
+            id: p.id, title: p.title, type: p.type,
             status: p.status || "draft",
             createdAt: p.createdAt ? p.createdAt.toISOString() : new Date().toISOString(),
             updatedAt: p.updatedAt ? p.updatedAt.toISOString() : new Date().toISOString(),
             action,
           };
         });
-      } catch (err) {
-        console.error("User activity error:", err);
-      }
+      } catch (err) { console.error("User activity error:", err); }
     }
 
     return NextResponse.json({
@@ -193,7 +188,7 @@ export async function GET(req: NextRequest) {
       },
       recentPosts,
       allUsers,
-      userActivity,   // ✅ NEW
+      userActivity,
     });
   } catch (err) {
     console.error("❌ Dashboard API error:", err);
