@@ -183,7 +183,7 @@ async function getListInternal(
   cacheTag("posts");
   cacheTag(`posts-type-${type}`);
   cacheTag("homepage");
-  cacheLife("days");
+  cacheLife({ revalidate: 300 });
   
   const posts = await postRepository.getList(type, limit, offset, filters);
   return posts.map(mapPost);
@@ -194,7 +194,7 @@ async function getDetailInternal(slug: string): Promise<ExtendedPost | null> {
   cacheTag(`detail-${slug}`);
   cacheTag(`post-${slug}`);
   cacheTag("posts");
-  cacheLife("days");
+  cacheLife({ revalidate: 300 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -209,7 +209,7 @@ async function getRelatedInternal(
   cacheTag(`related-${currentId}-${type}`);
   cacheTag(`post-related-${type}`);
   cacheTag(`posts-type-${type}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 86400 });
   
   const posts = await postRepository.getRelated(currentId, type, limit);
   return posts.map(mapPost);
@@ -219,7 +219,7 @@ async function getTotalCountInternal(type: PostType | 'all'): Promise<number> {
   "use cache";
   cacheTag(`count-${type}`);
   cacheTag(`posts-type-${type}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   return await postRepository.getTotalCount(type);
 }
@@ -229,10 +229,9 @@ async function getAdmissionBySlugInternal(slug: string): Promise<ExtendedPost | 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-admission");
-  cacheTag(`admission-[slug]`);
   cacheTag(`admission-detail-${slug}`);
   cacheTag(`admission-${slug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -242,9 +241,8 @@ async function getAdmissionByIdInternal(id: number): Promise<ExtendedPost | null
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-admission");
-  cacheTag(`admission-[id]`);
   cacheTag(`admission-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -277,7 +275,7 @@ async function getBlogsListInternal(
   cacheTag("blogs-all");
   cacheTag("blogs-list");
   cacheTag("blogs-data");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getList('blog', limit, offset, filters);
   return posts.map(mapPost);
@@ -287,10 +285,9 @@ async function getBlogBySlugInternal(slug: string): Promise<ExtendedPost | null>
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-blog");
-  cacheTag(`blog-[slug]`);
   cacheTag(`blog-detail-${slug}`);
   cacheTag(`blog-${slug}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -300,9 +297,8 @@ async function getBlogByIdInternal(id: number): Promise<ExtendedPost | null> {
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-blog");
-  cacheTag(`blog-[id]`);
   cacheTag(`blog-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -331,21 +327,15 @@ async function getRelatedBlogsInternal(
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-blog");
-  cacheTag(`blog-related-[id]`);
   cacheTag(`blog-related-${currentId}`);
   cacheTag("blog-related");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getRelated(currentId, 'blog', limit);
   return posts.map(mapPost);
 }
 
 async function incrementBlogViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`blog-${slug}`);
-  cacheTag(`blog-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('blog', slug);
 }
 
@@ -362,7 +352,7 @@ async function getDateSheetsListInternal(
   cacheTag("date-sheets-list");
   cacheTag("date-sheets-data");
   cacheTag("date-sheets-metadata");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getList('date_sheet', limit, offset, filters);
   return posts.map(mapPost);
@@ -372,10 +362,9 @@ async function getDateSheetBySlugInternal(slug: string): Promise<ExtendedPost | 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-date_sheet");
-  cacheTag(`date-sheet-[slug]`);
   cacheTag(`date-sheet-detail-${slug}`);
   cacheTag(`date-sheet-${slug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -385,9 +374,8 @@ async function getDateSheetByIdInternal(id: number): Promise<ExtendedPost | null
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-date_sheet");
-  cacheTag(`date-sheet-[id]`);
   cacheTag(`date-sheet-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -411,10 +399,9 @@ async function getDateSheetsByBoardInternal(boardSlug: string, year?: number): P
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-date_sheet");
-  cacheTag(`date-sheet-[board]-[year]`);
   cacheTag(`date-sheet-${boardSlug}`);
   if (year) cacheTag(`date-sheet-${boardSlug}-${year}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('date_sheet', 1000);
   const filtered = all.filter(p => {
@@ -433,7 +420,7 @@ async function getDateSheetsByYearInternal(year: number): Promise<ExtendedPost[]
   cacheTag("posts");
   cacheTag("posts-type-date_sheet");
   cacheTag(`date-sheet-${year}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('date_sheet', 1000);
   const filtered = all.filter(p => {
@@ -448,7 +435,7 @@ async function getDateSheetsByExamTypeInternal(examType: string): Promise<Extend
   cacheTag("posts");
   cacheTag("posts-type-date_sheet");
   cacheTag(`date-sheet-${examType}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('date_sheet', 1000);
   const filtered = all.filter(p => {
@@ -460,11 +447,6 @@ async function getDateSheetsByExamTypeInternal(examType: string): Promise<Extend
 }
 
 async function incrementDateSheetViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`date-sheet-${slug}`);
-  cacheTag(`date-sheet-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('date_sheet', slug);
 }
 
@@ -481,7 +463,7 @@ async function getJobsListInternal(
   cacheTag("jobs-list");
   cacheTag("jobs-data");
   cacheTag("jobs-metadata");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getList('job', limit, offset, filters);
   return posts.map(mapPost);
@@ -491,10 +473,9 @@ async function getJobBySlugInternal(slug: string): Promise<ExtendedPost | null> 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-job");
-  cacheTag(`job-[slug]`);
   cacheTag(`job-detail-${slug}`);
   cacheTag(`job-${slug}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -504,9 +485,8 @@ async function getJobByIdInternal(id: number): Promise<ExtendedPost | null> {
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-job");
-  cacheTag(`job-[id]`);
   cacheTag(`job-${id}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -536,9 +516,8 @@ async function getJobsByTypeInternal(jobType: string, limit: number = 10): Promi
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-job");
-  cacheTag(`jobs-by-type-[jobType]`);
   cacheTag(`jobs-${jobType}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('job', 1000);
   const filtered = all.filter(p => {
@@ -553,9 +532,8 @@ async function getJobsByLocationInternal(location: string, limit: number = 10): 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-job");
-  cacheTag(`jobs-by-location-[location]`);
   cacheTag(`jobs-${location}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('job', 1000);
   const filtered = all.filter(p => {
@@ -570,9 +548,8 @@ async function getJobsByCompanyInternal(company: string, limit: number = 10): Pr
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-job");
-  cacheTag(`jobs-by-company-[company]`);
   cacheTag(`jobs-${company}`);
-  cacheLife("days");
+  cacheLife("hours");
   
   const all = await postRepository.getList('job', 1000);
   const filtered = all.filter(p => {
@@ -584,11 +561,6 @@ async function getJobsByCompanyInternal(company: string, limit: number = 10): Pr
 }
 
 async function incrementJobViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`job-${slug}`);
-  cacheTag(`job-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('job', slug);
 }
 
@@ -605,7 +577,7 @@ async function getNewsListInternal(
   cacheTag("news-list");
   cacheTag("news-data");
   cacheTag("news-metadata");
-  cacheLife("days");
+  cacheLife({ revalidate: 300 });
   
   const posts = await postRepository.getList('news', limit, offset, filters);
   return posts.map(mapPost);
@@ -615,10 +587,9 @@ async function getNewsBySlugInternal(slug: string): Promise<ExtendedPost | null>
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-news");
-  cacheTag(`news-[slug]`);
   cacheTag(`news-detail-${slug}`);
   cacheTag(`news-${slug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 86400 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -628,9 +599,8 @@ async function getNewsByIdInternal(id: number): Promise<ExtendedPost | null> {
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-news");
-  cacheTag(`news-[id]`);
   cacheTag(`news-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 300});
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -655,10 +625,9 @@ async function getRelatedNewsInternal(currentId: number, limit: number = 3): Pro
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-news");
-  cacheTag(`news-related-[id]`);
   cacheTag(`news-related-${currentId}`);
   cacheTag("news-related");
-  cacheLife("days");
+  cacheLife("hours");
   
   const posts = await postRepository.getRelated(currentId, 'news', limit);
   return posts.map(mapPost);
@@ -668,9 +637,8 @@ async function getNewsByCategoryInternal(category: string, limit: number = 10): 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-news");
-  cacheTag(`news-by-category-[category]`);
   cacheTag(`news-${category}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('news', 1000);
   const filtered = all.filter(p => {
@@ -685,9 +653,8 @@ async function getNewsByTagInternal(tag: string, limit: number = 10): Promise<Ex
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-news");
-  cacheTag(`news-by-tag-[tag]`);
   cacheTag(`news-${tag}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('news', 1000);
   const filtered = all.filter(p => {
@@ -699,11 +666,6 @@ async function getNewsByTagInternal(tag: string, limit: number = 10): Promise<Ex
 }
 
 async function incrementNewsViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`news-${slug}`);
-  cacheTag(`news-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('news', slug);
 }
 
@@ -720,7 +682,7 @@ async function getResultsListInternal(
   cacheTag("results-list");
   cacheTag("results-data");
   cacheTag("results-metadata");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getList('result', limit, offset, filters);
   return posts.map(mapPost);
@@ -730,10 +692,9 @@ async function getResultBySlugInternal(slug: string): Promise<ExtendedPost | nul
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-result");
-  cacheTag(`result-[slug]`);
   cacheTag(`result-detail-${slug}`);
   cacheTag(`result-${slug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -743,9 +704,8 @@ async function getResultByIdInternal(id: number): Promise<ExtendedPost | null> {
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-result");
-  cacheTag(`result-[id]`);
   cacheTag(`result-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -768,9 +728,8 @@ async function getResultsByBoardInternal(boardSlug: string, limit: number = 10):
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-result");
-  cacheTag(`result-by-board-[boardSlug]`);
   cacheTag(`result-${boardSlug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('result', 1000);
   const filtered = all.filter(p => {
@@ -785,9 +744,8 @@ async function getResultsByYearInternal(year: number, limit: number = 10): Promi
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-result");
-  cacheTag(`result-by-year-[year]`);
   cacheTag(`result-${year}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('result', 1000);
   const filtered = all.filter(p => {
@@ -801,9 +759,8 @@ async function getResultsByInstitutionInternal(instituteSlug: string, limit: num
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-result");
-  cacheTag(`result-by-institution-[instituteSlug]`);
   cacheTag(`result-${instituteSlug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('result', 1000);
   const filtered = all.filter(p => {
@@ -815,11 +772,6 @@ async function getResultsByInstitutionInternal(instituteSlug: string, limit: num
 }
 
 async function incrementResultViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`result-${slug}`);
-  cacheTag(`result-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('result', slug);
 }
 
@@ -836,7 +788,7 @@ async function getScholarshipsListInternal(
   cacheTag("scholarships-list");
   cacheTag("scholarships-data");
   cacheTag("scholarships-metadata");
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const posts = await postRepository.getList('scholarship', limit, offset, filters);
   return posts.map(mapPost);
@@ -846,10 +798,9 @@ async function getScholarshipBySlugInternal(slug: string): Promise<ExtendedPost 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-scholarship");
-  cacheTag(`scholarship-[slug]`);
   cacheTag(`scholarship-detail-${slug}`);
   cacheTag(`scholarship-${slug}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getDetail(slug);
   return post ? mapPost(post) : null;
@@ -859,9 +810,8 @@ async function getScholarshipByIdInternal(id: number): Promise<ExtendedPost | nu
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-scholarship");
-  cacheTag(`scholarship-[id]`);
   cacheTag(`scholarship-${id}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const post = await postRepository.getById(id);
   return post ? mapPost(post) : null;
@@ -907,9 +857,8 @@ async function getScholarshipsByLevelInternal(studyLevel: string, limit: number 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-scholarship");
-  cacheTag(`scholarships-by-level-[studyLevel]`);
   cacheTag(`scholarships-${studyLevel}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('scholarship', 1000);
   const filtered = all.filter(p => {
@@ -924,9 +873,8 @@ async function getScholarshipsByTypeInternal(type: string, limit: number = 10): 
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-scholarship");
-  cacheTag(`scholarships-by-type-[type]`);
   cacheTag(`scholarships-${type}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('scholarship', 1000);
   const filtered = all.filter(p => {
@@ -941,9 +889,8 @@ async function getScholarshipsByProviderInternal(provider: string, limit: number
   "use cache";
   cacheTag("posts");
   cacheTag("posts-type-scholarship");
-  cacheTag(`scholarships-by-provider-[provider]`);
   cacheTag(`scholarships-${provider}`);
-  cacheLife("days");
+  cacheLife({ revalidate: 1800 });
   
   const all = await postRepository.getList('scholarship', 1000);
   const filtered = all.filter(p => {
@@ -955,11 +902,6 @@ async function getScholarshipsByProviderInternal(provider: string, limit: number
 }
 
 async function incrementScholarshipViewCountInternal(slug: string): Promise<void> {
-  "use cache";
-  cacheTag(`scholarship-${slug}`);
-  cacheTag(`scholarship-detail-${slug}`);
-  cacheLife({ revalidate: 3600 });
-  
   await postRepository.incrementViewCount('scholarship', slug);
 }
 
@@ -1086,7 +1028,8 @@ export const postService = {
     type: PostType | 'all' = 'admission',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('admission', limit);
+    const requestedType = type === 'all' ? 'admission' : type;
+    return this.getList(requestedType, limit);
   },
 
   async getAdmissionBySlug(slug: string): Promise<ExtendedPost | null> {
@@ -1110,7 +1053,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-admission");
     cacheTag("featured-admissions");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('admission', 1000);
     const featured = posts.filter(p => getMetaValue<boolean>(p.meta, 'isFeatured', false) === true);
@@ -1166,7 +1109,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-admission");
     cacheTag("admissions-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('admission', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -1238,7 +1181,7 @@ export const postService = {
     type: PostType | 'all' = 'blog',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('blog', limit);
+    return this.getList(type, limit);
   },
 
   async getFeaturedBlogs(limit: number = 10): Promise<ExtendedPost[]> {
@@ -1246,7 +1189,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-blog");
     cacheTag("featured-blogs");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('blog', 1000);
     const featured = posts.filter(p => getMetaValue<boolean>(p.meta, 'isFeatured', false) === true);
@@ -1258,7 +1201,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-blog");
     cacheTag("popular-blogs");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('blog', 1000);
     const popular = posts.filter(p => getMetaValue<boolean>(p.meta, 'isPopular', false) === true);
@@ -1270,7 +1213,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-blog");
     cacheTag("blog-categories");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const all = await postRepository.getList('blog', 1000);
     const categories = new Set<string>();
@@ -1320,7 +1263,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-blog");
     cacheTag("blogs-all");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('blog', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -1420,7 +1363,8 @@ export const postService = {
     type: PostType | 'all' = 'date_sheet',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('date_sheet', limit);
+    const postType = type === 'all' ? 'date_sheet' : type;
+    return this.getList(postType, limit);
   },
 
   async getDateSheetsData(
@@ -1442,7 +1386,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-date_sheet");
     cacheTag("popular-date-sheets");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('date_sheet', 1000);
     const popular = posts.filter(p => getMetaValue<boolean>(p.meta, 'isPopular', false) === true);
@@ -1506,7 +1450,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-date_sheet");
     cacheTag("date-sheets-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('date_sheet', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -1603,7 +1547,7 @@ export const postService = {
     type: PostType | 'all' = 'job',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('job', limit);
+    return this.getList(type, limit);
   },
 
   async getJobsData(
@@ -1625,7 +1569,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-job");
     cacheTag("featured-jobs");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('job', 1000);
     const featured = posts.filter(p => getMetaValue<boolean>(p.meta, 'isFeatured', false) === true);
@@ -1637,7 +1581,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-job");
     cacheTag("urgent-jobs");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('job', 1000);
     const urgent = posts.filter(p => getMetaValue<boolean>(p.meta, 'isUrgent', false) === true);
@@ -1697,7 +1641,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-job");
     cacheTag("jobs-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('job', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -1724,7 +1668,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-job");
     cacheTag("open-jobs");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const all = await postRepository.getList('job', 1000);
     const open = all.filter(p => {
@@ -1820,7 +1764,8 @@ export const postService = {
     type: PostType | 'all' = 'news',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('news', limit);
+    const postType = type === 'all' ? 'news' : type;
+    return this.getList(postType, limit);
   },
 
   async getBreakingNews(limit: number = 10): Promise<ExtendedPost[]> {
@@ -1840,7 +1785,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-news");
     cacheTag("featured-news");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('news', 1000);
     const featured = posts.filter(p => getMetaValue<boolean>(p.meta, 'isFeatured', false) === true);
@@ -1852,7 +1797,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-news");
     cacheTag("popular-news");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('news', 1000);
     const popular = posts.filter(p => getMetaValue<boolean>(p.meta, 'isPopular', false) === true);
@@ -1913,7 +1858,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-news");
     cacheTag("news-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('news', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -2040,7 +1985,8 @@ export const postService = {
     type: PostType | 'all' = 'result',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('result', limit);
+    const postType = type === 'all' ? 'result' : type;
+    return this.getList(postType, limit);
   },
 
   async getResultsData(
@@ -2062,7 +2008,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-result");
     cacheTag("popular-results");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('result', 1000);
     const popular = posts.filter(p => getMetaValue<boolean>(p.meta, 'isPopular', false) === true);
@@ -2114,7 +2060,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-result");
     cacheTag("results-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('result', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -2278,7 +2224,8 @@ export const postService = {
     type: PostType | 'all' = 'scholarship',
     limit: number = 10
   ): Promise<ExtendedPost[]> {
-    return this.getList('scholarship', limit);
+    const postType = type === 'all' ? 'scholarship' : type;
+    return this.getList(postType, limit);
   },
 
   async getScholarshipsData(
@@ -2300,7 +2247,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-scholarship");
     cacheTag("featured-scholarships");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('scholarship', 1000);
     const featured = posts.filter(p => getMetaValue<boolean>(p.meta, 'isFeatured', false) === true);
@@ -2312,7 +2259,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-scholarship");
     cacheTag("popular-scholarships");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const posts = await postRepository.getList('scholarship', 1000);
     const popular = posts.filter(p => getMetaValue<boolean>(p.meta, 'isPopular', false) === true);
@@ -2392,7 +2339,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-scholarship");
     cacheTag("scholarships-list");
-    cacheLife("days");
+    cacheLife({ revalidate: 3600 });
     
     const posts = await postRepository.getList('scholarship', 100);
     return posts.map(p => ({ slug: p.slug }));
@@ -2452,7 +2399,7 @@ export const postService = {
     cacheTag("posts");
     cacheTag("posts-type-scholarship");
     cacheTag("abroad-scholarships");
-    cacheLife("days");
+    cacheLife({ revalidate: 1800 });
     
     const all = await postRepository.getList('scholarship', 1000);
     const abroad = all.filter(p => safeLower(getMetaValue(p.meta, 'location', '')) === 'abroad');

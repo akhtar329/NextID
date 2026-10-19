@@ -39,7 +39,7 @@ async function getTrendingPostsInternal(limit: number = 10): Promise<ExtendedPos
   "use cache";
   cacheTag("sidebar-trending");
   cacheTag("trending-posts");
-  cacheLife({ revalidate: 86400 });
+  cacheLife({ revalidate: 1800 });
 
   const posts = await sidebarRepository.getTrendingPosts(limit);
   return posts.map(mapPost);

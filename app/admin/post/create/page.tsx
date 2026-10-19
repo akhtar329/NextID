@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
 import ImageUpload from '@/components/Image/ImageUpload';
+import RichTextEditor, { type EditorSection } from '@/components/ui/RichTextEditor';
+import { toast } from 'sonner';
+import { generateSchema } from '@/lib/generateSchema';
 import {
   FiSave, FiSearch, FiAlertCircle, FiCheckCircle,
-  FiChevronDown, FiChevronUp, FiPlus, FiTrash2, FiLink,
+  FiPlus, FiTrash2, FiLink,
   FiTag, FiEye, FiImage, FiUser, FiGlobe,
-  FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap
+  FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap,
+  FiFileText, FiExternalLink, FiFilePlus
 } from 'react-icons/fi';
 
 // ==================== TYPES ====================
@@ -29,7 +32,6 @@ interface CharCount {
 }
 
 interface FormData {
-  // Basic
   title: string;
   slug: string;
   content: string;
@@ -45,46 +47,56 @@ interface FormData {
   publishedAt: string;
   expiresAt: string;
   deadline: string;
-  
-  // Author
   authorName: string;
-  authorId: number | null;
-  
-  // SEO - Meta Tags
   metaTitle: string;
   metaDescription: string;
   metaKeywords: string;
   focusKeyword: string;
   canonicalUrl: string;
   robots: string;
-  
-  // SEO - Open Graph
   ogTitle: string;
   ogDescription: string;
   ogImage: string;
   ogType: string;
-  
-  // SEO - Twitter Cards
   twitterTitle: string;
   twitterDescription: string;
   twitterImage: string;
   twitterCard: string;
-  
-  // SEO - Structured Data
   schemaMarkup: string;
-  
-  // SEO - Extra
   breadcrumbTitle: string;
   priority: string;
   changefreq: string;
   oldSlug: string;
-  
-  // Meta & Tags
-  meta: Record<string, unknown>;
   tags: string[];
+  company: string;
+  location: string;
+  jobType: string;
+  salary: string;
+  experience: string;
+  qualification: string;
+  industry: string;
+  officialLink: string;
+  applicationLink: string;
+  source: string;
+  sourceUrl: string;
+  institute: string;
+  session: string;
+  program: string;
+  eligibility: string;
+  feeStructure: string;
+  board: string;
+  examType: string;
+  examYear: string;
+  resultDate: string;
+  className: string;
+  dateSheetExamStartDate: string;
+  organization: string;
+  amount: string;
+  scholarshipEligibility: string;
+  imageAlt: string;
 }
 
-// ==================== PROPS INTERFACES ====================
+// ==================== PROPS ====================
 interface PublishMetaBoxProps {
   status: string;
   onStatusChange: (value: string) => void;
@@ -100,6 +112,10 @@ interface PublishMetaBoxProps {
   onBreakingChange: (value: boolean) => void;
   loading: boolean;
   slugCheck: SlugCheck;
+  onSaveDraft: () => void;
+  onPreview: () => void;
+  onViewWebsite: () => void;
+  canViewWebsite: boolean;
 }
 
 interface PermalinkBoxProps {
@@ -118,13 +134,13 @@ interface CategoriesTagsBoxProps {
 interface FeaturedImageBoxProps {
   image: string;
   onImageSelect: (url: string) => void;
+  imageAlt: string;
+  onImageAltChange: (value: string) => void;
 }
 
 interface AuthorBoxProps {
   authorName: string;
-  authorId: number | null;
   onAuthorNameChange: (value: string) => void;
-  onAuthorIdChange: (value: number | null) => void;
 }
 
 interface RedirectBoxProps {
@@ -136,6 +152,12 @@ interface PreviewBoxProps {
   title: string;
   description: string;
   url: string;
+}
+
+interface DynamicFieldsBoxProps {
+  postType: string;
+  formData: FormData;
+  onFieldChange: (fieldName: string, value: string) => void;
 }
 
 // ==================== CONSTANTS ====================
@@ -150,9 +172,9 @@ const POST_TYPES = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft', icon: '📝', color: 'bg-gray-100 text-gray-700' },
-  { value: 'published', label: 'Published', icon: '🚀', color: 'bg-green-100 text-green-700' },
-  { value: 'archived', label: 'Archived', icon: '📦', color: 'bg-gray-100 text-gray-500' },
+  { value: 'draft', label: 'Draft', icon: '📝' },
+  { value: 'published', label: 'Published', icon: '🚀' },
+  { value: 'archived', label: 'Archived', icon: '📦' },
 ];
 
 const ROBOTS_OPTIONS = [
@@ -198,38 +220,107 @@ const PRIORITY_OPTIONS = [
   { value: '0.1', label: '0.1' },
 ];
 
-const getUrlFolder = (type: string): string => {
-  const typeMap: Record<string, string> = {
-    'scholarship': 'scholarships',
-    'admission': 'admissions',
-    'result': 'results',
-    'job': 'jobs',
-    'date_sheet': 'date-sheets',
-    'news': 'news',
-    'blog': 'blog'
-  };
-  return typeMap[type] || type;
+// ==================== DYNAMIC FIELDS ====================
+type FieldConfig = {
+  name: string;
+  label: string;
+  type: 'text' | 'textarea' | 'url' | 'date' | 'select';
+  options?: string[];
+  placeholder?: string;
+  required?: boolean;
+  icon?: string;
 };
 
-// ==================== COMPONENTS ====================
+const POST_TYPE_FIELDS: Record<string, FieldConfig[]> = {
+  job: [
+    { name: 'company', label: 'Company Name', type: 'text', placeholder: 'e.g., Pakistan Air Force', required: true, icon: '🏢' },
+    { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g., Islamabad, Pakistan', required: true, icon: '📍' },
+    { name: 'jobType', label: 'Job Type', type: 'select', options: ['Full Time', 'Part Time', 'Contract', 'Remote', 'Internship', 'International'], icon: '💼' },
+    { name: 'salary', label: 'Salary Range', type: 'text', placeholder: 'e.g., Rs. 50,000 - Rs. 150,000', icon: '💰' },
+    { name: 'experience', label: 'Experience Required', type: 'text', placeholder: 'e.g., 2-3 years', icon: '⏳' },
+    { name: 'qualification', label: 'Qualification', type: 'text', placeholder: 'e.g., Bachelor, Master', icon: '🎓' },
+    { name: 'industry', label: 'Industry', type: 'text', placeholder: 'e.g., Government, IT, Education', icon: '🏭' },
+    { name: 'officialLink', label: 'Official Link', type: 'url', placeholder: 'https://...', icon: '🔗' },
+    { name: 'applicationLink', label: 'Application Link', type: 'url', placeholder: 'https://...', icon: '📝' },
+  ],
+  news: [
+    { name: 'source', label: 'Source', type: 'text', placeholder: 'e.g., ProPakistani', icon: '📰' },
+    { name: 'sourceUrl', label: 'Source URL', type: 'url', placeholder: 'https://...', icon: '🔗' },
+  ],
+  admission: [
+    { name: 'institute', label: 'Institute', type: 'text', placeholder: 'e.g., Punjab University', required: true, icon: '🏛️' },
+    { name: 'session', label: 'Session', type: 'text', placeholder: 'e.g., 2026-2027', icon: '📅' },
+    { name: 'program', label: 'Program', type: 'text', placeholder: 'e.g., BS Computer Science', icon: '📚' },
+    { name: 'eligibility', label: 'Eligibility', type: 'textarea', placeholder: 'e.g., Intermediate with 60% marks', icon: '✅' },
+    { name: 'feeStructure', label: 'Fee Structure', type: 'text', placeholder: 'e.g., Rs. 50,000 per semester', icon: '💰' },
+  ],
+  result: [
+    { name: 'board', label: 'Board', type: 'text', placeholder: 'e.g., BISE Punjab', required: true, icon: '🏛️' },
+    { name: 'examType', label: 'Exam Type', type: 'select', options: ['Annual', 'Supplementary', 'Special'], icon: '📝' },
+    { name: 'examYear', label: 'Year', type: 'text', placeholder: 'e.g., 2026', icon: '📅' },
+    { name: 'resultDate', label: 'Result Date', type: 'date', icon: '📅' },
+    { name: 'className', label: 'Class', type: 'text', placeholder: 'e.g., 10th, 12th', icon: '🎓' },
+  ],
+  date_sheet: [
+    { name: 'board', label: 'Board', type: 'text', placeholder: 'e.g., BISE Punjab', required: true, icon: '🏛️' },
+    { name: 'examType', label: 'Exam Type', type: 'select', options: ['Annual', 'Supplementary'], icon: '📝' },
+    { name: 'examYear', label: 'Year', type: 'text', placeholder: 'e.g., 2026', icon: '📅' },
+    { name: 'dateSheetExamStartDate', label: 'Exam Start Date', type: 'date', icon: '📅' },
+    { name: 'className', label: 'Class', type: 'text', placeholder: 'e.g., 10th, 12th', icon: '🎓' },
+  ],
+  scholarship: [
+    { name: 'organization', label: 'Organization', type: 'text', placeholder: 'e.g., HEC', required: true, icon: '🏢' },
+    { name: 'amount', label: 'Amount', type: 'text', placeholder: 'e.g., Rs. 100,000', icon: '💰' },
+    { name: 'scholarshipEligibility', label: 'Eligibility', type: 'textarea', placeholder: 'e.g., CGPA 3.5+', icon: '✅' },
+  ],
+  blog: [],
+};
 
-// Author Box
-const AuthorBox = ({ 
-  authorName, 
-  authorId, 
-  onAuthorNameChange, 
-  onAuthorIdChange 
-}: AuthorBoxProps) => (
+const getUrlFolder = (type: string): string => {
+  const map: Record<string, string> = {
+    scholarship: 'scholarships',
+    admission: 'admissions',
+    result: 'results',
+    job: 'jobs',
+    date_sheet: 'date-sheets',
+    news: 'news',
+    blog: 'blog',
+  };
+  return map[type] || type;
+};
+
+// ==================== LOADING SKELETON ====================
+const LoadingSkeleton = () => (
+  <div className="min-h-screen bg-gray-100 animate-pulse">
+    <div className="bg-gray-300 h-10 w-full" />
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="bg-gray-300 h-8 w-48 mb-6 rounded" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-gray-200 h-20 rounded-lg" />
+          <div className="bg-gray-200 h-24 rounded-lg" />
+          <div className="bg-gray-200 h-96 rounded-lg" />
+        </div>
+        <div className="space-y-6">
+          <div className="bg-gray-200 h-64 rounded-lg" />
+          <div className="bg-gray-200 h-48 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// ==================== COMPONENTS ====================
+const AuthorBox = ({ authorName, onAuthorNameChange }: AuthorBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiUser className="w-4 h-4 text-blue-600" />
-        Author
+        <FiUser className="w-4 h-4 text-blue-600" /> Author
       </h3>
     </div>
     <div className="p-4 space-y-3">
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">
+        <label className="text-xs font-medium text-gray-600 mb-1 block">
           Author Name <span className="text-red-500">*</span>
         </label>
         <input
@@ -245,41 +336,34 @@ const AuthorBox = ({
   </div>
 );
 
-// Publish Box
-const PublishMetaBox = ({ 
-  status, onStatusChange, 
-  publishedAt, onPublishedAtChange,
-  deadline, onDeadlineChange,
-  isFeatured, onFeaturedChange,
-  isPopular, onPopularChange,
-  isBreaking, onBreakingChange,
-  loading, slugCheck 
+const PublishMetaBox = ({
+  status, onStatusChange, publishedAt, onPublishedAtChange,
+  deadline, onDeadlineChange, isFeatured, onFeaturedChange,
+  isPopular, onPopularChange, isBreaking, onBreakingChange,
+  loading, slugCheck, onSaveDraft, onPreview, onViewWebsite, canViewWebsite,
 }: PublishMetaBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiSave className="w-4 h-4 text-green-600" />
-        Publish
+        <FiSave className="w-4 h-4 text-green-600" /> Publish
       </h3>
     </div>
     <div className="p-4 space-y-4">
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
         <select
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.icon} {opt.label}
-            </option>
+            <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
           ))}
         </select>
       </div>
-      
+
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+        <label className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
           <FiCalendar className="w-3 h-3" /> Publish Date
         </label>
         <input
@@ -289,10 +373,10 @@ const PublishMetaBox = ({
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      
+
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-          <FiClock className="w-3 h-3" /> Deadline / Last Date
+        <label className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+          <FiClock className="w-3 h-3" /> Deadline
         </label>
         <input
           type="datetime-local"
@@ -300,177 +384,143 @@ const PublishMetaBox = ({
           onChange={(e) => onDeadlineChange(e.target.value)}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <p className="text-xs text-gray-400 mt-1">For results, admissions, jobs, and scholarships</p>
       </div>
-      
+
       <div className="space-y-2 pt-2 border-t border-gray-100">
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isFeatured}
-            onChange={(e) => onFeaturedChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiStar className="w-4 h-4 inline text-amber-500" /> Featured Post</span>
+          <input type="checkbox" checked={isFeatured} onChange={(e) => onFeaturedChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiStar className="w-4 h-4 inline text-amber-500" /> Featured</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isPopular}
-            onChange={(e) => onPopularChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular Post</span>
+          <input type="checkbox" checked={isPopular} onChange={(e) => onPopularChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isBreaking}
-            onChange={(e) => onBreakingChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking News</span>
+          <input type="checkbox" checked={isBreaking} onChange={(e) => onBreakingChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking</span>
         </label>
       </div>
     </div>
-    <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex gap-2">
-      <Link
-        href="/admin/post"
-        className="flex-1 text-center px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition"
-      >
-        Cancel
-      </Link>
+
+    <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-2">
+      {canViewWebsite && (
+        <button
+          type="button"
+          onClick={onViewWebsite}
+          className="w-full px-3 py-2 border border-blue-300 text-blue-700 rounded-md text-sm hover:bg-blue-50 transition flex items-center justify-center gap-2"
+        >
+          <FiExternalLink className="w-4 h-4" /> View on Website
+        </button>
+      )}
       <button
-        type="submit"
-        disabled={loading || !slugCheck.available}
-        className="flex-1 bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        type="button"
+        onClick={onPreview}
+        className="w-full px-3 py-2 border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-100 transition flex items-center justify-center gap-2"
       >
-        {loading ? (
-          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <>
-            <FiSave className="w-4 h-4" />
-            Publish
-          </>
-        )}
+        <FiEye className="w-4 h-4" /> Preview
       </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onSaveDraft}
+          disabled={loading}
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <FiFilePlus className="w-4 h-4" /> Draft
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !slugCheck.available}
+          className="flex-1 bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <><FiSave className="w-4 h-4" /> Publish</>
+          )}
+        </button>
+      </div>
     </div>
   </div>
 );
 
-// Permalink Box
 const PermalinkBox = ({ slug, onSlugChange, type, slugCheck }: PermalinkBoxProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempSlug, setTempSlug] = useState(slug);
-  
+
   const handleSaveSlug = () => {
     onSlugChange(tempSlug);
     setIsEditing(false);
   };
-  
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <FiLink className="w-4 h-4 text-purple-600" />
-          Permalink
+          <FiLink className="w-4 h-4 text-purple-600" /> Permalink
         </h3>
       </div>
       <div className="p-4">
         <div className="text-xs text-gray-500 mb-1">URL</div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-500">https://www.nextid.pk/{getUrlFolder(type)}/</span>
+          <span className="text-sm text-gray-500">/nextid.pk/{getUrlFolder(type)}/</span>
           {isEditing ? (
             <div className="flex items-center gap-2 flex-1">
               <input
                 type="text"
                 value={tempSlug}
                 onChange={(e) => setTempSlug(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
                 autoFocus
               />
-              <button
-                type="button"
-                onClick={handleSaveSlug}
-                className="px-2 py-1 bg-blue-600 text-white rounded-md text-xs"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTempSlug(slug); setIsEditing(false); }}
-                className="px-2 py-1 border border-gray-300 rounded-md text-xs"
-              >
-                Cancel
-              </button>
+              <button type="button" onClick={handleSaveSlug} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Save</button>
+              <button type="button" onClick={() => { setTempSlug(slug); setIsEditing(false); }} className="px-2 py-1 border rounded text-xs">Cancel</button>
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-1">
-              <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                {slug || 'example-post'}
-              </code>
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="text-xs text-blue-600 hover:text-blue-800"
-              >
-                Edit
-              </button>
+              <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">{slug || 'example-post'}</code>
+              <button type="button" onClick={() => setIsEditing(true)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
             </div>
           )}
         </div>
         {slugCheck.message && (
-          <p className={`text-xs mt-2 ${slugCheck.available ? 'text-green-600' : 'text-red-600'}`}>
-            {slugCheck.message}
-          </p>
+          <p className={`text-xs mt-2 ${slugCheck.available ? 'text-green-600' : 'text-red-600'}`}>{slugCheck.message}</p>
         )}
       </div>
     </div>
   );
 };
 
-// Categories & Tags Box
 const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxProps) => {
   const [newTag, setNewTag] = useState('');
-  
   const addTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       onTagsChange([...tags, newTag.trim()]);
       setNewTag('');
     }
   };
-  
-  const removeTag = (tagToRemove: string) => {
-    onTagsChange(tags.filter((tag: string) => tag !== tagToRemove));
-  };
-  
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <FiTag className="w-4 h-4 text-yellow-600" />
-          Categories & Tags
+          <FiTag className="w-4 h-4 text-yellow-600" /> Categories & Tags
         </h3>
       </div>
       <div className="p-4">
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Post Type</label>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Post Type</label>
           <div className="inline-flex px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
             {POST_TYPES.find(t => t.value === postType)?.icon} {POST_TYPES.find(t => t.value === postType)?.label}
           </div>
         </div>
-        
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-2">Tags</label>
+          <label className="text-xs font-medium text-gray-600 mb-2 block">Tags</label>
           <div className="flex flex-wrap gap-2 mb-3">
-            {tags.map((tag: string, idx: number) => (
+            {tags.map((tag, idx) => (
               <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs">
                 #{tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="text-gray-400 hover:text-red-500"
-                >
+                <button type="button" onClick={() => onTagsChange(tags.filter(t => t !== tag))} className="text-gray-400 hover:text-red-500">
                   <FiTrash2 className="w-3 h-3" />
                 </button>
               </span>
@@ -481,15 +531,11 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
               type="text"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addTag()}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
               placeholder="Add new tag..."
-              className="flex-1 border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-300 rounded-md px-3 py-1 text-sm"
             />
-            <button
-              type="button"
-              onClick={addTag}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-            >
+            <button type="button" onClick={addTag} className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
               <FiPlus className="w-4 h-4" />
             </button>
           </div>
@@ -499,64 +545,64 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
   );
 };
 
-// Featured Image Box
-const FeaturedImageBox = ({ image, onImageSelect }: FeaturedImageBoxProps) => (
+const FeaturedImageBox = ({ image, onImageSelect, imageAlt, onImageAltChange }: FeaturedImageBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiImage className="w-4 h-4 text-indigo-600" />
-        Featured Image
+        <FiImage className="w-4 h-4 text-indigo-600" /> Featured Image <span className="text-red-500">*</span>
       </h3>
     </div>
-    <div className="p-4">
-      <ImageUpload
-        onImageSelect={onImageSelect}
-        currentImage={image}
-        postSlug=""
-        postTitle=""
-        postType=""
-      />
+    <div className="p-4 space-y-3">
+      <ImageUpload onImageSelect={onImageSelect} currentImage={image} postSlug="" postTitle="" postType="" />
+      {image && (
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Image Alt Text (for SEO)</label>
+          <input
+            type="text"
+            value={imageAlt}
+            onChange={(e) => onImageAltChange(e.target.value)}
+            placeholder="Describe the image for accessibility & SEO"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
     </div>
   </div>
 );
 
-// Redirect Box
 const RedirectBox = ({ oldSlug, onOldSlugChange }: RedirectBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-red-50 to-orange-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiLink className="w-4 h-4 text-red-600" />
-        Redirects (301)
+        <FiLink className="w-4 h-4 text-red-600" /> Redirects (301)
       </h3>
     </div>
     <div className="p-4">
-      <label className="block text-xs font-medium text-gray-600 mb-1">Old Slug</label>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Old Slug</label>
       <input
         type="text"
         value={oldSlug}
         onChange={(e) => onOldSlugChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         placeholder="e.g., old-post-slug"
       />
-      <p className="text-xs text-gray-400 mt-1">If you change the slug, enter the old slug here for automatic 301 redirect.</p>
+      <p className="text-xs text-gray-400 mt-1">If you change the slug, enter the old slug here.</p>
     </div>
   </div>
 );
 
-// Preview Box
 const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-cyan-50 to-blue-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiEye className="w-4 h-4 text-cyan-600" />
-        Google Search Preview
+        <FiEye className="w-4 h-4 text-cyan-600" /> Google Preview
       </h3>
     </div>
     <div className="p-4">
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div className="bg-gray-50 rounded-lg p-4 border">
         <div className="text-blue-600 text-sm mb-1 truncate">{url}</div>
         <div className="text-xl text-blue-800 font-medium mb-1 line-clamp-1">{title || 'Your Title Here'}</div>
-        <div className="text-sm text-gray-600 line-clamp-2">{description || 'Your description will appear here...'}</div>
+        <div className="text-sm text-gray-600 line-clamp-2">{description || 'Your description...'}</div>
       </div>
       <div className="mt-3 flex gap-4">
         <div className={`flex-1 text-center p-2 rounded-lg text-xs ${title.length > 60 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
@@ -570,316 +616,416 @@ const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
   </div>
 );
 
+const DynamicFieldsBox = ({ postType, formData, onFieldChange }: DynamicFieldsBoxProps) => {
+  const fields = POST_TYPE_FIELDS[postType] || [];
+  if (fields.length === 0) return null;
+
+  const postTypeLabel = POST_TYPES.find(t => t.value === postType)?.label || postType;
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
+        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <FiFileText className="w-4 h-4 text-indigo-600" /> {postTypeLabel} Details
+        </h3>
+      </div>
+      <div className="p-4 space-y-4">
+        {fields.map((field) => (
+          <div key={field.name}>
+            <label className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+              <span>{field.icon}</span> {field.label}
+              {field.required && <span className="text-red-500">*</span>}
+            </label>
+
+            {field.type === 'text' && (
+              <input
+                type="text"
+                value={(formData as unknown as Record<string, string>)[field.name] || ''}
+                onChange={(e) => onFieldChange(field.name, e.target.value)}
+                placeholder={field.placeholder}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
+            {field.type === 'url' && (
+              <input
+                type="url"
+                value={(formData as unknown as Record<string, string>)[field.name] || ''}
+                onChange={(e) => onFieldChange(field.name, e.target.value)}
+                placeholder={field.placeholder}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            )}
+            {field.type === 'textarea' && (
+              <textarea
+                value={(formData as unknown as Record<string, string>)[field.name] || ''}
+                onChange={(e) => onFieldChange(field.name, e.target.value)}
+                placeholder={field.placeholder}
+                rows={3}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            )}
+            {field.type === 'select' && (
+              <select
+                value={(formData as unknown as Record<string, string>)[field.name] || ''}
+                onChange={(e) => onFieldChange(field.name, e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">Select {field.label}</option>
+                {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            )}
+            {field.type === 'date' && (
+              <input
+                type="date"
+                value={(formData as unknown as Record<string, string>)[field.name] || ''}
+                onChange={(e) => onFieldChange(field.name, e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ==================== MAIN COMPONENT ====================
 export default function CreatePostPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showAdvancedSeo, setShowAdvancedSeo] = useState(false);
-  const [showSitemapSeo, setShowSitemapSeo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'content' | 'seo' | 'advanced'>('content');
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [savedPostSlug, setSavedPostSlug] = useState<string>('');
+  const [countdown, setCountdown] = useState<{ text: string; color: string } | null>(null);
+
+  // ✅ FIX 1: IsInitialized state ki zaroorat nahi — useState se initialize karo
+  const [isInitialized] = useState(true);
 
   const today = new Date().toISOString().slice(0, 16);
-  
+  const DRAFT_KEY = 'nextid_post_draft';
+
   const [formData, setFormData] = useState<FormData>({
-    title: '',
-    slug: '',
-    content: '',
-    excerpt: '',
-    type: 'news',
-    featuredImage: '',
-    actualImage: '',
-    galleryImages: [],
-    status: 'draft',
-    isFeatured: false,
-    isPopular: false,
-    isBreaking: false,
-    publishedAt: today,
-    expiresAt: '',
-    deadline: '',
-    
-    // Author
-    authorName: '',
-    authorId: null,
-    
-    // SEO
-    metaTitle: '',
-    metaDescription: '',
-    metaKeywords: '',
-    focusKeyword: '',
-    canonicalUrl: '',
-    robots: 'index, follow',
-    
-    // Open Graph
-    ogTitle: '',
-    ogDescription: '',
-    ogImage: '',
-    ogType: 'article',
-    
-    // Twitter
-    twitterTitle: '',
-    twitterDescription: '',
-    twitterImage: '',
-    twitterCard: 'summary_large_image',
-    
-    // Structured Data
-    schemaMarkup: '',
-    
-    // Extra SEO
-    breadcrumbTitle: '',
-    priority: '0.5',
-    changefreq: 'weekly',
-    oldSlug: '',
-    
-    meta: {},
-    tags: [],
+    title: '', slug: '', content: '', excerpt: '', type: 'news',
+    featuredImage: '', actualImage: '', galleryImages: [], status: 'draft',
+    isFeatured: false, isPopular: false, isBreaking: false,
+    publishedAt: today, expiresAt: '', deadline: '', authorName: '',
+    metaTitle: '', metaDescription: '', metaKeywords: '', focusKeyword: '',
+    canonicalUrl: '', robots: 'index, follow',
+    ogTitle: '', ogDescription: '', ogImage: '', ogType: 'article',
+    twitterTitle: '', twitterDescription: '', twitterImage: '', twitterCard: 'summary_large_image',
+    schemaMarkup: '', breadcrumbTitle: '', priority: '0.5', changefreq: 'weekly', oldSlug: '', tags: [],
+    company: '', location: '', jobType: 'Full Time', salary: '', experience: '', qualification: '', industry: '', officialLink: '', applicationLink: '',
+    source: '', sourceUrl: '',
+    institute: '', session: '', program: '', eligibility: '', feeStructure: '',
+    board: '', examType: 'Annual', examYear: '', resultDate: '', className: '',
+    dateSheetExamStartDate: '',
+    organization: '', amount: '', scholarshipEligibility: '',
+    imageAlt: '',
   });
-  
+
   const [slugCheck, setSlugCheck] = useState<SlugCheck>({ available: true, checking: false, message: '' });
-  const [charCount, setCharCount] = useState<CharCount>({
-    title: 0, desc: 0, ogTitle: 0, ogDesc: 0,
-    twitterTitle: 0, twitterDesc: 0
-  });
-  
-  // Auto-generate functions
-  const generateSlug = (title: string) => {
-    return title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .substring(0, 100);
+  const [charCount, setCharCount] = useState<CharCount>({ title: 0, desc: 0, ogTitle: 0, ogDesc: 0, twitterTitle: 0, twitterDesc: 0 });
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const checkSlugTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // ✅ FIX 2: Date.now() ko useState + useEffect mein calculate karo
+  useEffect(() => {
+    if (!formData.deadline) {
+      setCountdown(null);
+      return;
+    }
+    const days = Math.ceil((new Date(formData.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 0) setCountdown({ text: 'Deadline passed', color: 'bg-gray-100 text-gray-600' });
+    else if (days === 0) setCountdown({ text: 'Last day today!', color: 'bg-red-100 text-red-700' });
+    else if (days <= 3) setCountdown({ text: `${days} days left!`, color: 'bg-red-100 text-red-700' });
+    else if (days <= 7) setCountdown({ text: `${days} days left`, color: 'bg-orange-100 text-orange-700' });
+    else if (days <= 30) setCountdown({ text: `${days} days left`, color: 'bg-yellow-100 text-yellow-700' });
+    else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
+  }, [formData.deadline]);
+
+  // Load draft on mount (no setState in effect — just localStorage read inside effect and set via ref/state after)
+  useEffect(() => {
+    const draft = localStorage.getItem(DRAFT_KEY);
+    if (!draft) return;
+    try {
+      const parsed = JSON.parse(draft);
+      // Defer to avoid cascading render warning
+      const timer = setTimeout(() => {
+        toast.custom((t) => (
+          <div className="bg-white border rounded-lg shadow-lg p-4 max-w-sm">
+            <p className="text-sm font-medium text-gray-800 mb-2">📝 Unsaved draft found</p>
+            <p className="text-xs text-gray-500 mb-3">Do you want to restore it?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setFormData(parsed.formData); toast.dismiss(t); toast.success('Draft restored!'); }}
+                className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium"
+              >
+                Restore
+              </button>
+              <button
+                onClick={() => { localStorage.removeItem(DRAFT_KEY); toast.dismiss(t); }}
+                className="flex-1 px-3 py-1.5 border rounded text-xs"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        ), { duration: Infinity });
+      }, 100);
+      return () => clearTimeout(timer);
+    } catch { localStorage.removeItem(DRAFT_KEY); }
+  }, []);
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    autoSaveTimer.current = setInterval(() => {
+      if (formData.title || formData.content) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, savedAt: new Date().toISOString() }));
+        setLastSaved(new Date());
+      }
+    }, 30000);
+    return () => { if (autoSaveTimer.current) clearInterval(autoSaveTimer.current); };
+  }, [formData]);
+
+  // Unsaved changes warning
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty && !success) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty, success]);
+
+  // Debounced slug check
+  const checkSlugDebounced = (slug: string) => {
+    if (checkSlugTimer.current) clearTimeout(checkSlugTimer.current);
+    checkSlugTimer.current = setTimeout(() => checkSlug(slug), 500);
   };
-  
+
+  // ==================== HELPERS ====================
+  const generateSlug = (title: string) =>
+    title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 100);
+
   const generateMetaTitle = (title: string, type: string) => {
     if (!title) return '';
-    const prefix = type === 'admission' ? 'Admissions 2026: ' :
-                   type === 'scholarship' ? 'Scholarship: ' :
-                   type === 'news' ? 'Breaking: ' : '';
+    const prefix = type === 'admission' ? 'Admissions 2026: ' : type === 'scholarship' ? 'Scholarship: ' : type === 'news' ? 'Breaking: ' : '';
     const metaTitle = prefix + title;
     return metaTitle.length > 60 ? metaTitle.substring(0, 57) + '...' : metaTitle;
   };
-  
+
   const generateMetaDescription = (content: string, excerpt: string) => {
     if (excerpt && excerpt.trim()) {
-      const cleanExcerpt = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-      return cleanExcerpt.length > 160 ? cleanExcerpt.substring(0, 157) + '...' : cleanExcerpt;
+      const clean = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      return clean.length > 160 ? clean.substring(0, 157) + '...' : clean;
     }
     if (!content) return '';
-    const plainText = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-    return plainText.length > 160 ? plainText.substring(0, 157) + '...' : plainText;
+    const plain = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    return plain.length > 160 ? plain.substring(0, 157) + '...' : plain;
   };
-  
-  // Handlers
-  const handleExcerptChange = (excerpt: string) => {
-    const metaDescription = generateMetaDescription(formData.content, excerpt);
-    
-    setFormData(prev => ({
-      ...prev,
-      excerpt,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-    }));
-    
-    setCharCount(prev => ({ 
-      ...prev, 
-      desc: metaDescription.length,
-      ogDesc: metaDescription.length,
-      twitterDesc: metaDescription.length
-    }));
-  };
-  
+
+  // ==================== HANDLERS ====================
   const handleTitleChange = (title: string) => {
     const slug = generateSlug(title);
     const metaTitle = generateMetaTitle(title, formData.type);
     const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    
-    setFormData(prev => ({
-      ...prev,
-      title,
-      slug,
-      metaTitle,
-      ogTitle: metaTitle,
-      twitterTitle: metaTitle,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-      breadcrumbTitle: title,
-    }));
-    
-    if (slug) checkSlug(slug);
-    setCharCount(prev => ({ 
-      ...prev, 
-      title: metaTitle.length, 
-      ogTitle: metaTitle.length,
-      twitterTitle: metaTitle.length 
-    }));
+    setFormData(prev => ({ ...prev, title, slug, metaTitle, ogTitle: metaTitle, twitterTitle: metaTitle, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription, breadcrumbTitle: title }));
+    setIsDirty(true);
+    if (slug) checkSlugDebounced(slug);
+    setCharCount(prev => ({ ...prev, title: metaTitle.length, ogTitle: metaTitle.length, twitterTitle: metaTitle.length }));
   };
-  
-  const handleContentChange = (content: string) => {
+
+  const handleExcerptChange = (excerpt: string) => {
+    const metaDescription = generateMetaDescription(formData.content, excerpt);
+    setFormData(prev => ({ ...prev, excerpt, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+    setIsDirty(true);
+  };
+
+  // ✅ FIX 3: RichTextEditor onChange type ke liye flexible handler
+  const handleContentChange = (value: string | EditorSection[]) => {
+    const content = typeof value === 'string' ? value : '';
     const metaDescription = generateMetaDescription(content, formData.excerpt);
-    setFormData(prev => ({
-      ...prev,
-      content,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-    }));
-    setCharCount(prev => ({ 
-      ...prev, 
-      desc: metaDescription.length, 
-      ogDesc: metaDescription.length,
-      twitterDesc: metaDescription.length 
-    }));
+    setFormData(prev => ({ ...prev, content, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+    setIsDirty(true);
   };
-  
-  const handleMetaTitleChange = (metaTitle: string) => {
-    setFormData(prev => ({ ...prev, metaTitle }));
-    setCharCount(prev => ({ ...prev, title: metaTitle.length }));
-  };
-  
-  const handleMetaDescriptionChange = (metaDescription: string) => {
-    setFormData(prev => ({ ...prev, metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length }));
-  };
-  
-  const handleMetaKeywordsChange = (metaKeywords: string) => {
-    setFormData(prev => ({ ...prev, metaKeywords }));
-  };
-  
-  const handleOgTitleChange = (ogTitle: string) => {
-    setFormData(prev => ({ ...prev, ogTitle }));
-    setCharCount(prev => ({ ...prev, ogTitle: ogTitle.length }));
-  };
-  
-  const handleOgDescriptionChange = (ogDescription: string) => {
-    setFormData(prev => ({ ...prev, ogDescription }));
-    setCharCount(prev => ({ ...prev, ogDesc: ogDescription.length }));
-  };
-  
-  const handleTwitterTitleChange = (twitterTitle: string) => {
-    setFormData(prev => ({ ...prev, twitterTitle }));
-    setCharCount(prev => ({ ...prev, twitterTitle: twitterTitle.length }));
-  };
-  
-  const handleTwitterDescriptionChange = (twitterDescription: string) => {
-    setFormData(prev => ({ ...prev, twitterDescription }));
-    setCharCount(prev => ({ ...prev, twitterDesc: twitterDescription.length }));
-  };
-  
+
   const handleSlugChange = (slug: string) => {
     setFormData(prev => ({ ...prev, slug }));
-    if (slug) checkSlug(slug);
+    setIsDirty(true);
+    if (slug) checkSlugDebounced(slug);
   };
-  
-  const handleTagsChange = (tags: string[]) => {
-    setFormData(prev => ({ ...prev, tags }));
+
+  const handleDynamicFieldChange = (fieldName: string, value: string) => {
+    setFormData(prev => ({ ...prev, [fieldName]: value }));
+    setIsDirty(true);
   };
-  
-  const handleDeadlineChange = (deadline: string) => {
-    setFormData(prev => ({ ...prev, deadline }));
+
+  const handleImageSelect = (url: string) => {
+    setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
+    setIsDirty(true);
   };
-  
+
   const checkSlug = async (slug: string) => {
     if (!slug) return;
-    setSlugCheck({ ...slugCheck, checking: true, message: 'Checking...' });
+    setSlugCheck(prev => ({ ...prev, checking: true, message: 'Checking...' }));
     try {
       const res = await fetch('/api/admin/post/check-slug', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug }),
       });
       const data = await res.json();
-      setSlugCheck({
-        available: data.isAvailable,
-        checking: false,
-        message: data.isAvailable ? '✓ Available' : '✗ Already exists',
-      });
+      setSlugCheck({ available: data.isAvailable, checking: false, message: data.isAvailable ? '✓ Available' : '✗ Already exists' });
     } catch {
       setSlugCheck({ available: true, checking: false, message: 'Unable to check' });
     }
   };
-  
-  const handleImageSelect = (url: string) => {
-    setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
-  };
-  
+
   const regenerateMeta = () => {
     const metaTitle = generateMetaTitle(formData.title, formData.type);
     const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    setFormData(prev => ({
-      ...prev,
-      metaTitle,
-      metaDescription,
-      ogTitle: metaTitle,
-      ogDescription: metaDescription,
-      twitterTitle: metaTitle,
-      twitterDescription: metaDescription,
-    }));
-    setCharCount(prev => ({
-      ...prev,
-      title: metaTitle.length,
-      desc: metaDescription.length,
-      ogTitle: metaTitle.length,
-      ogDesc: metaDescription.length,
-      twitterTitle: metaTitle.length,
-      twitterDesc: metaDescription.length,
-    }));
+    setFormData(prev => ({ ...prev, metaTitle, metaDescription, ogTitle: metaTitle, ogDescription: metaDescription, twitterTitle: metaTitle, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, title: metaTitle.length, desc: metaDescription.length, ogTitle: metaTitle.length, ogDesc: metaDescription.length, twitterTitle: metaTitle.length, twitterDesc: metaDescription.length }));
+    toast.success('Meta tags regenerated!');
   };
-  
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+
+  const buildMetaObject = (): Record<string, unknown> => {
+    const meta: Record<string, unknown> = {};
+    const fields = POST_TYPE_FIELDS[formData.type] || [];
+    fields.forEach(field => {
+      const value = (formData as unknown as Record<string, string>)[field.name];
+      if (value !== undefined && value !== null && value !== '') meta[field.name] = value;
+    });
+    if (formData.deadline) meta.deadline = formData.deadline;
+    meta.isFeatured = formData.isFeatured;
+    return meta;
+  };
+
+  // ==================== VALIDATION ====================
+  const validateForm = (): string | null => {
+    if (!formData.title.trim()) return 'Title is required';
+    if (!slugCheck.available) return 'Please choose a different slug';
+    if (!formData.content || formData.content.trim() === '' || formData.content === '<p></p>') return 'Content is required';
+    if (!formData.featuredImage) return 'Featured image is required';
+    if (!formData.imageAlt.trim()) return 'Image alt text is required for SEO';
+    if (!formData.authorName.trim()) return 'Author name is required';
+
+    const fields = POST_TYPE_FIELDS[formData.type] || [];
+    for (const field of fields) {
+      if (field.required) {
+        const value = (formData as unknown as Record<string, string>)[field.name];
+        if (!value || !value.trim()) return `${field.label} is required`;
+      }
+    }
+    return null;
+  };
+
+  // ==================== SUBMIT ====================
+  const submitPost = async (status: 'draft' | 'published') => {
     setLoading(true);
     setError('');
     setSuccess('');
-    
-    if (!slugCheck.available) {
-      setError('Please choose a different slug');
+
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       setLoading(false);
       return;
     }
-    
+
+    const url = `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug}`;
+    const meta = buildMetaObject();
+    const autoSchema = generateSchema({
+      title: formData.title,
+      description: formData.metaDescription || formData.excerpt,
+      image: formData.featuredImage,
+      url,
+      authorName: formData.authorName,
+      publishedAt: formData.publishedAt,
+      type: formData.type,
+      meta,
+    });
+
+    const payload = {
+      ...formData,
+      status,
+      meta,
+      schemaMarkup: formData.schemaMarkup || autoSchema,
+      imageAlt: formData.imageAlt,
+    };
+
     try {
       const res = await fetch('/api/admin/post/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      
+
       if (data.success) {
-        setSuccess('Post created successfully! Redirecting...');
+        localStorage.removeItem(DRAFT_KEY);
+        setIsDirty(false);
+        setSavedPostSlug(formData.slug);
+        setSuccess(status === 'draft' ? 'Draft saved!' : 'Post published successfully!');
+        toast.success(status === 'draft' ? 'Draft saved!' : 'Post published!');
         setTimeout(() => router.push('/admin/post'), 1500);
       } else {
-        setError(data.error || 'Failed to create post');
+        setError(data.error || 'Failed to save post');
+        toast.error(data.error || 'Failed to save post');
       }
     } catch {
       setError('Something went wrong. Please try again.');
+      toast.error('Something went wrong');
     } finally {
       setLoading(false);
     }
   };
-  
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitPost(formData.status === 'draft' ? 'draft' : 'published');
+  };
+
+  const handleSaveDraft = () => {
+    const originalStatus = formData.status;
+    submitPost('draft').finally(() => setFormData(prev => ({ ...prev, status: originalStatus })));
+  };
+
+  const handlePreview = () => {
+    if (!formData.slug) { toast.error('Add a title first to generate slug'); return; }
+    toast.info('Preview coming soon');
+  };
+
+  const handleViewWebsite = () => {
+    const slug = savedPostSlug || formData.slug;
+    if (!slug) { toast.error('Post not published yet'); return; }
+    window.open(`/${getUrlFolder(formData.type)}/${slug}`, '_blank');
+  };
+
   const seoPreview = {
     title: formData.metaTitle || formData.title || 'Your Title Here',
-    description: formData.metaDescription || formData.excerpt || formData.content?.substring(0, 160) || 'Your description will appear here...',
+    description: formData.metaDescription || formData.excerpt || formData.content?.replace(/<[^>]*>/g, '').substring(0, 160) || 'Your description will appear here...',
     url: `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug || 'example-post'}`,
   };
-  
+
+  if (!isInitialized) return <LoadingSkeleton />;
+
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Admin Bar */}
+      {/* Sticky Header */}
       <div className="bg-gray-900 text-white px-4 py-2 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/admin/dashboard" className="text-sm font-medium hover:text-gray-300">
-              Dashboard
-            </Link>
-            <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">
-              All Posts
-            </Link>
+            <Link href="/admin/dashboard" className="text-sm font-medium hover:text-gray-300">Dashboard</Link>
+            <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">All Posts</Link>
             <span className="text-sm text-gray-400">|</span>
             <span className="text-sm font-semibold">Add New Post</span>
+            {lastSaved && (
+              <span className="text-xs text-gray-400">✓ Saved {lastSaved.toLocaleTimeString()}</span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {formData.status === 'published' ? (
@@ -887,18 +1033,30 @@ export default function CreatePostPage() {
             ) : (
               <span className="text-xs bg-yellow-600 px-2 py-1 rounded">Draft</span>
             )}
+            <button
+              type="submit"
+              form="post-form"
+              disabled={loading || !slugCheck.available}
+              className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </div>
       </div>
-      
+
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Add New Post</h1>
-          <p className="text-sm text-gray-500 mt-1">Create a new post. Fill in the details below.</p>
+          <p className="text-sm text-gray-500 mt-1">Create a new post with all SEO features.</p>
         </div>
-        
-        {/* Messages */}
+
+        {countdown && (
+          <div className={`${countdown.color} rounded-lg px-4 py-2 mb-4 flex items-center gap-2 text-sm font-medium`}>
+            <FiClock className="w-4 h-4" /> Deadline: {countdown.text}
+          </div>
+        )}
+
         {success && (
           <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-4 mb-6 flex items-center gap-3">
             <FiCheckCircle className="w-5 h-5 text-green-500" />
@@ -911,469 +1069,250 @@ export default function CreatePostPage() {
             <span className="text-red-700">{error}</span>
           </div>
         )}
-        
-        <form onSubmit={handleSubmit}>
+
+        {/* TABS */}
+        <div className="flex gap-1 mb-4 border-b border-gray-300">
+          {[
+            { key: 'content' as const, label: '📝 Content' },
+            { key: 'seo' as const, label: '🔍 SEO' },
+            { key: 'advanced' as const, label: '⚙️ Advanced' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${
+                activeTab === tab.key
+                  ? 'bg-white text-blue-600 border border-b-0 border-gray-300'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <form id="post-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* LEFT COLUMN - Main Content */}
+            {/* LEFT COLUMN */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Title */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4">
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => handleTitleChange(e.target.value)}
-                    required
-                    className="w-full text-2xl font-bold border-none focus:outline-none focus:ring-0 placeholder-gray-300"
-                    placeholder="Add title"
-                  />
-                </div>
-              </div>
-              
-              {/* Post Type Selector */}
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
-                <div className="flex flex-wrap gap-2">
-                  {POST_TYPES.map((type) => (
-                    <button
-                      key={type.value}
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, type: type.value }));
-                        const newMetaTitle = generateMetaTitle(formData.title, type.value);
-                        setFormData(prev => ({ ...prev, metaTitle: newMetaTitle, ogTitle: newMetaTitle }));
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1 ${
-                        formData.type === type.value
-                          ? type.color + ' ring-2 ring-offset-1 ring-blue-500'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      <span>{type.icon}</span> {type.label}
-                    </button>
-                  ))}
-                </div>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  required
+                  className="w-full text-2xl font-bold border-none focus:outline-none focus:ring-0 placeholder-gray-300"
+                  placeholder="Add title"
+                />
               </div>
-              
-              {/* Content Editor */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    rows={15}
-                    required
-                    className="w-full border border-gray-300 rounded-md px-4 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Write your content here... (HTML supported)"
-                  />
-                  
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      📌 Excerpt (Short Description)
-                      <span className="text-xs text-green-600 ml-2">→ This will become your Meta Description</span>
-                    </label>
-                    <textarea
-                      value={formData.excerpt}
-                      onChange={(e) => handleExcerptChange(e.target.value)}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Brief summary of your post... (This becomes your meta description for SEO)"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      💡 This short description will be used as your Meta Description in Google search results.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* RIGHT SIDEBAR - WordPress Style Meta Boxes */}
-            <div className="space-y-6">
-              {/* Publish Box */}
-              <PublishMetaBox
-                status={formData.status}
-                onStatusChange={(val: string) => setFormData(prev => ({ ...prev, status: val }))}
-                publishedAt={formData.publishedAt}
-                onPublishedAtChange={(val: string) => setFormData(prev => ({ ...prev, publishedAt: val }))}
-                deadline={formData.deadline}
-                onDeadlineChange={handleDeadlineChange}
-                isFeatured={formData.isFeatured}
-                onFeaturedChange={(val: boolean) => setFormData(prev => ({ ...prev, isFeatured: val }))}
-                isPopular={formData.isPopular}
-                onPopularChange={(val: boolean) => setFormData(prev => ({ ...prev, isPopular: val }))}
-                isBreaking={formData.isBreaking}
-                onBreakingChange={(val: boolean) => setFormData(prev => ({ ...prev, isBreaking: val }))}
-                loading={loading}
-                slugCheck={slugCheck}
-              />
-              
-              {/* Author Box */}
-              <AuthorBox
-                authorName={formData.authorName}
-                authorId={formData.authorId}
-                onAuthorNameChange={(val: string) => setFormData(prev => ({ ...prev, authorName: val }))}
-                onAuthorIdChange={(val: number | null) => setFormData(prev => ({ ...prev, authorId: val }))}
-              />
-              
-              {/* Permalink Box */}
-              <PermalinkBox
-                slug={formData.slug}
-                onSlugChange={handleSlugChange}
-                type={formData.type}
-                slugCheck={slugCheck}
-              />
-              
-              {/* Featured Image Box */}
-              <FeaturedImageBox
-                image={formData.featuredImage}
-                onImageSelect={handleImageSelect}
-              />
-              
-              {/* Categories & Tags Box */}
-              <CategoriesTagsBox
-                tags={formData.tags}
-                onTagsChange={handleTagsChange}
-                postType={formData.type}
-              />
-              
-              {/* Redirect Box */}
-              <RedirectBox
-                oldSlug={formData.oldSlug}
-                onOldSlugChange={(val: string) => setFormData(prev => ({ ...prev, oldSlug: val }))}
-              />
-              
-              {/* SEO Settings Box */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <FiSearch className="w-4 h-4 text-blue-600" />
-                    SEO Settings
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={regenerateMeta}
-                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-                <div className="p-4 space-y-4">
-                  {/* Focus Keyword */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
-                      🎯 Focus Keyword
-                      <span className="text-gray-400 text-xs ml-2">(Primary keyword)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.focusKeyword}
-                      onChange={(e) => setFormData(prev => ({ ...prev, focusKeyword: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., university admission 2026"
-                    />
-                  </div>
-                  
-                  {/* Meta Keywords */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
-                      📝 Meta Keywords
-                      <span className="text-gray-400 text-xs ml-2">(Comma separated)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.metaKeywords}
-                      onChange={(e) => handleMetaKeywordsChange(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., university admission 2026, study in Pakistan, education news"
-                    />
-                    <div className="flex justify-between mt-1">
-                      <p className="text-xs text-gray-400">Enter multiple keywords separated by commas</p>
-                      <span className="text-xs text-gray-400">
-                        {formData.metaKeywords ? formData.metaKeywords.split(',').length : 0} keywords
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Meta Title */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-medium text-gray-600">Meta Title</label>
-                      <span className={`text-xs ${charCount.title > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                        {charCount.title}/60
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={formData.metaTitle}
-                      onChange={(e) => handleMetaTitleChange(e.target.value)}
-                      className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        charCount.title > 60 ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
-                  </div>
-                  
-                  {/* Meta Description */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-medium text-gray-600">Meta Description</label>
-                      <span className={`text-xs ${charCount.desc > 160 ? 'text-red-500' : 'text-green-500'}`}>
-                        {charCount.desc}/160
-                      </span>
-                    </div>
-                    <textarea
-                      value={formData.metaDescription}
-                      onChange={(e) => handleMetaDescriptionChange(e.target.value)}
-                      rows={3}
-                      className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        charCount.desc > 160 ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      ✏️ Auto-generated from Short Description. Edit manually if needed.
-                    </p>
-                  </div>
-                  
-                  {/* Canonical URL */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
-                      <FiLink className="w-3 h-3" /> Canonical URL
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.canonicalUrl}
-                      onChange={(e) => setFormData(prev => ({ ...prev, canonicalUrl: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="https://www.nextid.pk/your-canonical-url"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Leave empty to use default URL.</p>
-                  </div>
-                  
-                  {/* Robots */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block flex items-center gap-1">
-                      <FiGlobe className="w-3 h-3" /> Robots
-                    </label>
-                    <select
-                      value={formData.robots}
-                      onChange={(e) => setFormData(prev => ({ ...prev, robots: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {ROBOTS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+
+              {activeTab === 'content' && (
+                <>
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Post Type</label>
+                    <div className="flex flex-wrap gap-2">
+                      {POST_TYPES.map((type) => (
+                        <button
+                          key={type.value}
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, type: type.value }));
+                            const newMetaTitle = generateMetaTitle(formData.title, type.value);
+                            setFormData(prev => ({ ...prev, metaTitle: newMetaTitle, ogTitle: newMetaTitle }));
+                            setIsDirty(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1 ${
+                            formData.type === type.value ? type.color + ' ring-2 ring-offset-1 ring-blue-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          <span>{type.icon}</span> {type.label}
+                        </button>
                       ))}
+                    </div>
+                  </div>
+
+                  <DynamicFieldsBox postType={formData.type} formData={formData} onFieldChange={handleDynamicFieldChange} />
+
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Content <span className="text-red-500">*</span></label>
+                    <RichTextEditor
+                      value={formData.content}
+                      onChange={handleContentChange}
+                      placeholder="Write your content here..."
+                      minHeight={400}
+                      mode={formData.type === 'job' || formData.type === 'admission' || formData.type === 'scholarship' ? 'multi-section' : 'single'}
+                    />
+
+                    <div className="mt-4">
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">
+                        📌 Excerpt <span className="text-xs text-green-600 ml-2">→ Becomes Meta Description</span>
+                      </label>
+                      <textarea
+                        value={formData.excerpt}
+                        onChange={(e) => handleExcerptChange(e.target.value)}
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm"
+                        placeholder="Brief summary..."
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'seo' && (
+                <>
+                  <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h3 className="text-sm font-semibold flex items-center gap-2"><FiSearch className="w-4 h-4 text-blue-600" /> SEO Settings</h3>
+                      <button type="button" onClick={regenerateMeta} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200">Regenerate</button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">🎯 Focus Keyword</label>
+                      <input type="text" value={formData.focusKeyword} onChange={(e) => setFormData(prev => ({ ...prev, focusKeyword: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="e.g., university admission 2026" />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">📝 Meta Keywords</label>
+                      <input type="text" value={formData.metaKeywords} onChange={(e) => setFormData(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="keyword1, keyword2" />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-medium text-gray-600">Meta Title</label>
+                        <span className={`text-xs ${charCount.title > 60 ? 'text-red-500' : 'text-green-500'}`}>{charCount.title}/60</span>
+                      </div>
+                      <input type="text" value={formData.metaTitle} onChange={(e) => { setFormData(prev => ({ ...prev, metaTitle: e.target.value })); setCharCount(prev => ({ ...prev, title: e.target.value.length })); }} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.title > 60 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-medium text-gray-600">Meta Description</label>
+                        <span className={`text-xs ${charCount.desc > 160 ? 'text-red-500' : 'text-green-500'}`}>{charCount.desc}/160</span>
+                      </div>
+                      <textarea value={formData.metaDescription} onChange={(e) => { setFormData(prev => ({ ...prev, metaDescription: e.target.value })); setCharCount(prev => ({ ...prev, desc: e.target.value.length })); }} rows={3} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.desc > 160 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">Canonical URL</label>
+                      <input type="text" value={formData.canonicalUrl} onChange={(e) => setFormData(prev => ({ ...prev, canonicalUrl: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="https://..." />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">Robots</label>
+                      <select value={formData.robots} onChange={(e) => setFormData(prev => ({ ...prev, robots: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        {ROBOTS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <PreviewBox title={seoPreview.title} description={seoPreview.description} url={seoPreview.url} />
+                </>
+              )}
+
+              {activeTab === 'advanced' && (
+                <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><FiGlobe className="w-4 h-4" /> Advanced Settings</h3>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Type</label>
+                    <select value={formData.ogType} onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                      {OG_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                   </div>
-                  
-                  {/* Advanced SEO Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedSeo(!showAdvancedSeo)}
-                    className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-t border-gray-100 mt-2 pt-3"
-                  >
-                    {showAdvancedSeo ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
-                    Advanced SEO (Open Graph & Twitter Cards)
-                  </button>
-                  
-                  {showAdvancedSeo && (
-                    <div className="space-y-4 pt-2 border-t border-gray-100">
-                      {/* OG Type */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG:Type</label>
-                        <select
-                          value={formData.ogType}
-                          onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {OG_TYPES.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* OG Title */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">OG:Title (Facebook)</label>
-                          <span className={`text-xs ${charCount.ogTitle > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.ogTitle}/60
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={formData.ogTitle}
-                          onChange={(e) => handleOgTitleChange(e.target.value)}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* OG Description */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">OG:Description (Facebook)</label>
-                          <span className={`text-xs ${charCount.ogDesc > 200 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.ogDesc}/200
-                          </span>
-                        </div>
-                        <textarea
-                          value={formData.ogDescription}
-                          onChange={(e) => handleOgDescriptionChange(e.target.value)}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* OG Image Preview */}
-                      {formData.ogImage && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">OG:Image Preview</label>
-                          <Image 
-                            src={formData.ogImage} 
-                            alt="OG Preview" 
-                            width={400} 
-                            height={200} 
-                            className="w-full h-32 object-cover rounded-lg border" 
-                          />
-                        </div>
-                      )}
-                      
-                      {/* Twitter Card */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
-                        <select
-                          value={formData.twitterCard}
-                          onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {TWITTER_CARDS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* Twitter Title */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">Twitter Title</label>
-                          <span className={`text-xs ${charCount.twitterTitle > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.twitterTitle}/60
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={formData.twitterTitle}
-                          onChange={(e) => handleTwitterTitleChange(e.target.value)}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* Twitter Description */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">Twitter Description</label>
-                          <span className={`text-xs ${charCount.twitterDesc > 200 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.twitterDesc}/200
-                          </span>
-                        </div>
-                        <textarea
-                          value={formData.twitterDescription}
-                          onChange={(e) => handleTwitterDescriptionChange(e.target.value)}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* Twitter Image Preview */}
-                      {formData.twitterImage && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Image Preview</label>
-                          <Image 
-                            src={formData.twitterImage} 
-                            alt="Twitter Preview" 
-                            width={400} 
-                            height={200} 
-                            className="w-full h-32 object-cover rounded-lg border" 
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Sitemap & Schema Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowSitemapSeo(!showSitemapSeo)}
-                    className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-t border-gray-100 mt-2 pt-3"
-                  >
-                    {showSitemapSeo ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
-                    Sitemap & Schema Markup
-                  </button>
-                  
-                  {showSitemapSeo && (
-                    <div className="space-y-4 pt-2 border-t border-gray-100">
-                      {/* Priority */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Priority (Sitemap)</label>
-                        <select
-                          value={formData.priority}
-                          onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {PRIORITY_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* Changefreq */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
-                        <select
-                          value={formData.changefreq}
-                          onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {CHANGEFREQ_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* Breadcrumb Title */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
-                        <input
-                          type="text"
-                          value={formData.breadcrumbTitle}
-                          onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Custom breadcrumb title"
-                        />
-                      </div>
-                      
-                      {/* Schema Markup */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Schema Markup (JSON-LD)</label>
-                        <textarea
-                          value={formData.schemaMarkup}
-                          onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))}
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                          placeholder='{"@context": "https://schema.org", "@type": "Article", ...}'
-                        />
-                        <p className="text-xs text-gray-400 mt-1">Add custom JSON-LD schema markup.</p>
-                      </div>
-                    </div>
-                  )}
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Title</label>
+                    <input type="text" value={formData.ogTitle} onChange={(e) => setFormData(prev => ({ ...prev, ogTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Description</label>
+                    <textarea value={formData.ogDescription} onChange={(e) => setFormData(prev => ({ ...prev, ogDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
+                    <select value={formData.twitterCard} onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                      {TWITTER_CARDS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Title</label>
+                    <input type="text" value={formData.twitterTitle} onChange={(e) => setFormData(prev => ({ ...prev, twitterTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Description</label>
+                    <textarea value={formData.twitterDescription} onChange={(e) => setFormData(prev => ({ ...prev, twitterDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Sitemap Priority</label>
+                    <select value={formData.priority} onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                      {PRIORITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
+                    <select value={formData.changefreq} onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                      {CHANGEFREQ_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
+                    <input type="text" value={formData.breadcrumbTitle} onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Schema Markup (JSON-LD)
+                      <span className="text-green-600 ml-2 text-xs">✓ Auto-generated if empty</span>
+                    </label>
+                    <textarea
+                      value={formData.schemaMarkup}
+                      onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))}
+                      rows={6}
+                      className="w-full border rounded-md px-3 py-2 text-sm font-mono"
+                      placeholder="Auto-generated based on post type..."
+                    />
+                  </div>
                 </div>
-              </div>
-              
-              {/* Preview Box */}
-              <PreviewBox
-                title={seoPreview.title}
-                description={seoPreview.description}
-                url={seoPreview.url}
+              )}
+            </div>
+
+            {/* RIGHT SIDEBAR */}
+            <div className="space-y-6">
+              <PublishMetaBox
+                status={formData.status}
+                onStatusChange={(val) => { setFormData(prev => ({ ...prev, status: val })); setIsDirty(true); }}
+                publishedAt={formData.publishedAt}
+                onPublishedAtChange={(val) => setFormData(prev => ({ ...prev, publishedAt: val }))}
+                deadline={formData.deadline}
+                onDeadlineChange={(val) => setFormData(prev => ({ ...prev, deadline: val }))}
+                isFeatured={formData.isFeatured}
+                onFeaturedChange={(val) => setFormData(prev => ({ ...prev, isFeatured: val }))}
+                isPopular={formData.isPopular}
+                onPopularChange={(val) => setFormData(prev => ({ ...prev, isPopular: val }))}
+                isBreaking={formData.isBreaking}
+                onBreakingChange={(val) => setFormData(prev => ({ ...prev, isBreaking: val }))}
+                loading={loading}
+                slugCheck={slugCheck}
+                onSaveDraft={handleSaveDraft}
+                onPreview={handlePreview}
+                onViewWebsite={handleViewWebsite}
+                canViewWebsite={!!savedPostSlug}
               />
+
+              <AuthorBox authorName={formData.authorName} onAuthorNameChange={(val) => setFormData(prev => ({ ...prev, authorName: val }))} />
+              <PermalinkBox slug={formData.slug} onSlugChange={handleSlugChange} type={formData.type} slugCheck={slugCheck} />
+              <FeaturedImageBox image={formData.featuredImage} onImageSelect={handleImageSelect} imageAlt={formData.imageAlt} onImageAltChange={(val) => setFormData(prev => ({ ...prev, imageAlt: val }))} />
+              <CategoriesTagsBox tags={formData.tags} onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))} postType={formData.type} />
+              <RedirectBox oldSlug={formData.oldSlug} onOldSlugChange={(val) => setFormData(prev => ({ ...prev, oldSlug: val }))} />
             </div>
           </div>
         </form>

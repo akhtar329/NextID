@@ -56,9 +56,7 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // ✅ PRE-CACHE: Sab types ki cache pehle se set karein (limit: 10)
-  // Har page load par cache set ho jayegi, chahe homepage se aaye ya direct
-  await postService.preCacheAllTypes(10);
+
 
   return (
     <>

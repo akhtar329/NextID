@@ -5,11 +5,15 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import ImageUpload from '@/components/Image/ImageUpload';
+import RichTextEditor, { type EditorSection } from '@/components/ui/RichTextEditor';
+import { toast } from 'sonner';
+import { generateSchema } from '@/lib/generateSchema';
 import {
   FiSave, FiSearch, FiAlertCircle, FiCheckCircle,
   FiChevronDown, FiChevronUp, FiPlus, FiTrash2, FiLink,
   FiTag, FiEye, FiImage, FiLock, FiUser, FiGlobe,
-  FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap
+  FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap,
+  FiExternalLink, FiFilePlus
 } from 'react-icons/fi';
 
 // ==================== TYPES ====================
@@ -23,7 +27,6 @@ interface CharCount {
 }
 
 interface FormData {
-  // Basic
   title: string;
   slug: string;
   content: string;
@@ -39,45 +42,32 @@ interface FormData {
   publishedAt: string;
   expiresAt: string;
   deadline: string;
-  
-  // Author
   authorName: string;
-  
-  // SEO - Meta Tags
   metaTitle: string;
   metaDescription: string;
   metaKeywords: string;
   focusKeyword: string;
   canonicalUrl: string;
   robots: string;
-  
-  // SEO - Open Graph
   ogTitle: string;
   ogDescription: string;
   ogImage: string;
   ogType: string;
-  
-  // SEO - Twitter Cards
   twitterTitle: string;
   twitterDescription: string;
   twitterImage: string;
   twitterCard: string;
-  
-  // SEO - Structured Data
   schemaMarkup: string;
-  
-  // SEO - Extra
   breadcrumbTitle: string;
   priority: string;
   changefreq: string;
   oldSlug: string;
-  
-  // Meta & Tags
   meta: Record<string, unknown>;
   tags: string[];
+  imageAlt: string;
 }
 
-// ==================== PROPS INTERFACES ====================
+// ==================== PROPS ====================
 interface PublishMetaBoxProps {
   status: string;
   onStatusChange: (value: string) => void;
@@ -91,6 +81,11 @@ interface PublishMetaBoxProps {
   onPopularChange: (value: boolean) => void;
   isBreaking: boolean;
   onBreakingChange: (value: boolean) => void;
+  loading: boolean;
+  onSaveDraft: () => void;
+  onPreview: () => void;
+  onViewWebsite: () => void;
+  canViewWebsite: boolean;
 }
 
 interface AuthorBoxProps {
@@ -107,9 +102,8 @@ interface CategoriesTagsBoxProps {
 interface FeaturedImageBoxProps {
   image: string;
   onImageSelect: (url: string) => void;
-  slug: string;
-  title: string;
-  type: string;
+  imageAlt: string;
+  onImageAltChange: (value: string) => void;
 }
 
 interface PreviewBoxProps {
@@ -203,35 +197,47 @@ const getUrlFolder = (type: string): string => {
 
 const toDateTimeLocal = (value: string | Date | null | undefined): string => {
   if (!value) return '';
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-
   const pad = (number: number) => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
 const parseSchemaMarkup = (value: string): Record<string, unknown> | unknown[] | null => {
-  const trimmedValue = value.trim();
-  if (!trimmedValue) return null;
-
-  const parsed: unknown = JSON.parse(trimmedValue);
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed: unknown = JSON.parse(trimmed);
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Schema markup must be a JSON object or array.');
   }
-
   return parsed as Record<string, unknown> | unknown[];
 };
 
-// ==================== COMPONENTS ====================
+// ==================== LOADING SKELETON ====================
+const LoadingSkeleton = () => (
+  <div className="min-h-screen bg-gray-100 animate-pulse">
+    <div className="bg-gray-300 h-10 w-full" />
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="bg-gray-300 h-8 w-48 mb-6 rounded" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-gray-200 h-20 rounded-lg" />
+          <div className="bg-gray-200 h-96 rounded-lg" />
+        </div>
+        <div className="space-y-6">
+          <div className="bg-gray-200 h-64 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
-// Author Box
+// ==================== COMPONENTS ====================
 const AuthorBox = ({ authorName, onAuthorNameChange }: AuthorBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiUser className="w-4 h-4 text-blue-600" />
-        Author
+        <FiUser className="w-4 h-4 text-blue-600" /> Author
       </h3>
     </div>
     <div className="p-4">
@@ -247,20 +253,16 @@ const AuthorBox = ({ authorName, onAuthorNameChange }: AuthorBoxProps) => (
   </div>
 );
 
-// Publish Meta Box
-const PublishMetaBox = ({ 
-  status, onStatusChange, 
-  publishedAt, onPublishedAtChange,
-  deadline, onDeadlineChange,
-  isFeatured, onFeaturedChange,
-  isPopular, onPopularChange,
-  isBreaking, onBreakingChange
+const PublishMetaBox = ({
+  status, onStatusChange, publishedAt, onPublishedAtChange,
+  deadline, onDeadlineChange, isFeatured, onFeaturedChange,
+  isPopular, onPopularChange, isBreaking, onBreakingChange,
+  loading, onSaveDraft, onPreview, onViewWebsite, canViewWebsite,
 }: PublishMetaBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiSave className="w-4 h-4 text-green-600" />
-        Publish
+        <FiSave className="w-4 h-4 text-green-600" /> Publish
       </h3>
     </div>
     <div className="p-4 space-y-4">
@@ -272,13 +274,11 @@ const PublishMetaBox = ({
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.icon} {opt.label}
-            </option>
+            <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
           ))}
         </select>
       </div>
-      
+
       <div>
         <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
           <FiCalendar className="w-3 h-3" /> Publish Date
@@ -290,10 +290,10 @@ const PublishMetaBox = ({
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      
+
       <div>
         <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
-          <FiClock className="w-3 h-3" /> Deadline / Last Date
+          <FiClock className="w-3 h-3" /> Deadline
         </label>
         <input
           type="datetime-local"
@@ -301,49 +301,71 @@ const PublishMetaBox = ({
           onChange={(e) => onDeadlineChange(e.target.value)}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <p className="text-xs text-gray-400 mt-1">For results, admissions, jobs, and scholarships</p>
       </div>
-      
+
       <div className="space-y-2 pt-2 border-t border-gray-100">
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isFeatured}
-            onChange={(e) => onFeaturedChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiStar className="w-4 h-4 inline text-amber-500" /> Featured Post</span>
+          <input type="checkbox" checked={isFeatured} onChange={(e) => onFeaturedChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiStar className="w-4 h-4 inline text-amber-500" /> Featured</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isPopular}
-            onChange={(e) => onPopularChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular Post</span>
+          <input type="checkbox" checked={isPopular} onChange={(e) => onPopularChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input
-            type="checkbox"
-            checked={isBreaking}
-            onChange={(e) => onBreakingChange(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300"
-          />
-          <span className="text-sm text-gray-700"><FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking News</span>
+          <input type="checkbox" checked={isBreaking} onChange={(e) => onBreakingChange(e.target.checked)} className="w-4 h-4" />
+          <span className="text-sm text-gray-700"><FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking</span>
         </label>
+      </div>
+    </div>
+
+    <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 space-y-2">
+      {canViewWebsite && (
+        <button
+          type="button"
+          onClick={onViewWebsite}
+          className="w-full px-3 py-2 border border-blue-300 text-blue-700 rounded-md text-sm hover:bg-blue-50 transition flex items-center justify-center gap-2"
+        >
+          <FiExternalLink className="w-4 h-4" /> View on Website
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onPreview}
+        className="w-full px-3 py-2 border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-100 transition flex items-center justify-center gap-2"
+      >
+        <FiEye className="w-4 h-4" /> Preview
+      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onSaveDraft}
+          disabled={loading}
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-100 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <FiFilePlus className="w-4 h-4" /> Draft
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex-1 bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <><FiSave className="w-4 h-4" /> Update</>
+          )}
+        </button>
       </div>
     </div>
   </div>
 );
 
-// Permalink Box
 const PermalinkBox = ({ slug, type }: PermalinkBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiLink className="w-4 h-4 text-purple-600" />
-        Permalink
+        <FiLink className="w-4 h-4 text-purple-600" /> Permalink
         <span className="text-xs text-gray-400 ml-2 flex items-center gap-1"><FiLock className="w-3 h-3" /> Locked</span>
       </h3>
     </div>
@@ -351,24 +373,18 @@ const PermalinkBox = ({ slug, type }: PermalinkBoxProps) => (
       <div className="text-xs text-gray-500 mb-1">URL</div>
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-gray-500">https://www.nextid.pk/{getUrlFolder(type)}/</span>
-        <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
-          {slug || 'example-post'}
-        </code>
+        <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">{slug || 'example-post'}</code>
       </div>
-      <p className="text-xs text-gray-400 mt-2">
-        🔒 Slug cannot be changed after creation.
-      </p>
+      <p className="text-xs text-gray-400 mt-2">🔒 Slug cannot be changed after creation.</p>
     </div>
   </div>
 );
 
-// Redirect Box
 const RedirectBox = ({ oldSlug, onOldSlugChange }: RedirectBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-red-50 to-orange-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiLink className="w-4 h-4 text-red-600" />
-        Redirects (301)
+        <FiLink className="w-4 h-4 text-red-600" /> Redirects (301)
       </h3>
     </div>
     <div className="p-4">
@@ -377,35 +393,27 @@ const RedirectBox = ({ oldSlug, onOldSlugChange }: RedirectBoxProps) => (
         type="text"
         value={oldSlug}
         onChange={(e) => onOldSlugChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         placeholder="e.g., old-post-slug"
       />
-      <p className="text-xs text-gray-400 mt-1">For 301 redirect if slug changed.</p>
     </div>
   </div>
 );
 
-// Categories & Tags Box
 const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxProps) => {
   const [newTag, setNewTag] = useState('');
-  
   const addTag = () => {
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       onTagsChange([...tags, newTag.trim()]);
       setNewTag('');
     }
   };
-  
-  const removeTag = (tagToRemove: string) => {
-    onTagsChange(tags.filter((tag: string) => tag !== tagToRemove));
-  };
-  
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="bg-gradient-to-r from-yellow-50 to-amber-50 px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <FiTag className="w-4 h-4 text-yellow-600" />
-          Categories & Tags
+          <FiTag className="w-4 h-4 text-yellow-600" /> Categories & Tags
         </h3>
       </div>
       <div className="p-4">
@@ -415,18 +423,13 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
             {POST_TYPES.find(t => t.value === postType)?.icon} {POST_TYPES.find(t => t.value === postType)?.label}
           </div>
         </div>
-        
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-2">Tags</label>
           <div className="flex flex-wrap gap-2 mb-3">
-            {tags.map((tag: string, idx: number) => (
+            {tags.map((tag, idx) => (
               <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs">
                 #{tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="text-gray-400 hover:text-red-500"
-                >
+                <button type="button" onClick={() => onTagsChange(tags.filter(t => t !== tag))} className="text-gray-400 hover:text-red-500">
                   <FiTrash2 className="w-3 h-3" />
                 </button>
               </span>
@@ -437,15 +440,11 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
               type="text"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addTag()}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
               placeholder="Add new tag..."
-              className="flex-1 border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-300 rounded-md px-3 py-1 text-sm"
             />
-            <button
-              type="button"
-              onClick={addTag}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-            >
+            <button type="button" onClick={addTag} className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
               <FiPlus className="w-4 h-4" />
             </button>
           </div>
@@ -455,49 +454,43 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
   );
 };
 
-// Featured Image Box
-const FeaturedImageBox = ({ image, onImageSelect, slug, title, type }: FeaturedImageBoxProps) => (
+const FeaturedImageBox = ({ image, onImageSelect, imageAlt, onImageAltChange }: FeaturedImageBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiImage className="w-4 h-4 text-indigo-600" />
-        Featured Image
+        <FiImage className="w-4 h-4 text-indigo-600" /> Featured Image
       </h3>
     </div>
-    <div className="p-4">
-      <ImageUpload
-        onImageSelect={onImageSelect}
-        currentImage={image}
-        postSlug={slug}
-        postTitle={title}
-        postType={type}
-      />
+    <div className="p-4 space-y-3">
+      <ImageUpload onImageSelect={onImageSelect} currentImage={image} postSlug="" postTitle="" postType="" />
+      {image && (
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Image Alt Text (SEO)</label>
+          <input
+            type="text"
+            value={imageAlt}
+            onChange={(e) => onImageAltChange(e.target.value)}
+            placeholder="Describe image..."
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+          />
+        </div>
+      )}
     </div>
   </div>
 );
 
-// Preview Box
 const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-cyan-50 to-blue-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiEye className="w-4 h-4 text-cyan-600" />
-        Google Search Preview
+        <FiEye className="w-4 h-4 text-cyan-600" /> Google Preview
       </h3>
     </div>
     <div className="p-4">
-      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div className="bg-gray-50 rounded-lg p-4 border">
         <div className="text-blue-600 text-sm mb-1 truncate">{url}</div>
         <div className="text-xl text-blue-800 font-medium mb-1 line-clamp-1">{title || 'Your Title Here'}</div>
-        <div className="text-sm text-gray-600 line-clamp-2">{description || 'Your description will appear here...'}</div>
-      </div>
-      <div className="mt-3 flex gap-4">
-        <div className={`flex-1 text-center p-2 rounded-lg text-xs ${title.length > 60 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-          Title: {title.length}/60
-        </div>
-        <div className={`flex-1 text-center p-2 rounded-lg text-xs ${description.length > 160 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-          Description: {description.length}/160
-        </div>
+        <div className="text-sm text-gray-600 line-clamp-2">{description || 'Your description...'}</div>
       </div>
     </div>
   </div>
@@ -508,73 +501,33 @@ export default function EditPostPage() {
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
-  
+
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showAdvancedSeo, setShowAdvancedSeo] = useState(false);
   const [showSitemapSeo, setShowSitemapSeo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'content' | 'seo' | 'advanced'>('content');
+  const [countdown, setCountdown] = useState<{ text: string; color: string } | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
-    title: '',
-    slug: '',
-    content: '',
-    excerpt: '',
-    type: 'news',
-    featuredImage: '',
-    actualImage: '',
-    galleryImages: [],
-    status: 'draft',
-    isFeatured: false,
-    isPopular: false,
-    isBreaking: false,
-    publishedAt: '',
-    expiresAt: '',
-    deadline: '',
-    
-    // Author
-    authorName: '',
-    
-    // SEO
-    metaTitle: '',
-    metaDescription: '',
-    metaKeywords: '',
-    focusKeyword: '',
-    canonicalUrl: '',
-    robots: 'index, follow',
-    
-    // Open Graph
-    ogTitle: '',
-    ogDescription: '',
-    ogImage: '',
-    ogType: 'article',
-    
-    // Twitter
-    twitterTitle: '',
-    twitterDescription: '',
-    twitterImage: '',
-    twitterCard: 'summary_large_image',
-    
-    // Structured Data
-    schemaMarkup: '',
-    
-    // Extra SEO
-    breadcrumbTitle: '',
-    priority: '0.5',
-    changefreq: 'weekly',
-    oldSlug: '',
-    
-    meta: {},
-    tags: [],
+    title: '', slug: '', content: '', excerpt: '', type: 'news',
+    featuredImage: '', actualImage: '', galleryImages: [], status: 'draft',
+    isFeatured: false, isPopular: false, isBreaking: false,
+    publishedAt: '', expiresAt: '', deadline: '', authorName: '',
+    metaTitle: '', metaDescription: '', metaKeywords: '', focusKeyword: '',
+    canonicalUrl: '', robots: 'index, follow',
+    ogTitle: '', ogDescription: '', ogImage: '', ogType: 'article',
+    twitterTitle: '', twitterDescription: '', twitterImage: '', twitterCard: 'summary_large_image',
+    schemaMarkup: '', breadcrumbTitle: '', priority: '0.5', changefreq: 'weekly', oldSlug: '',
+    meta: {}, tags: [], imageAlt: '',
   });
-  
+
   const [charCount, setCharCount] = useState<CharCount>({
-    title: 0, desc: 0, ogTitle: 0, ogDesc: 0,
-    twitterTitle: 0, twitterDesc: 0
+    title: 0, desc: 0, ogTitle: 0, ogDesc: 0, twitterTitle: 0, twitterDesc: 0
   });
-  
-  // Auto-generate functions
+
   const generateMetaTitle = (title: string, type: string) => {
     if (!title) return '';
     const prefix = type === 'admission' ? 'Admissions 2026: ' :
@@ -583,31 +536,28 @@ export default function EditPostPage() {
     const metaTitle = prefix + title;
     return metaTitle.length > 60 ? metaTitle.substring(0, 57) + '...' : metaTitle;
   };
-  
+
   const generateMetaDescription = (content: string, excerpt: string) => {
     if (excerpt && excerpt.trim()) {
-      const cleanExcerpt = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-      return cleanExcerpt.length > 160 ? cleanExcerpt.substring(0, 157) + '...' : cleanExcerpt;
+      const clean = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      return clean.length > 160 ? clean.substring(0, 157) + '...' : clean;
     }
     if (!content) return '';
-    const plainText = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-    return plainText.length > 160 ? plainText.substring(0, 157) + '...' : plainText;
+    const plain = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    return plain.length > 160 ? plain.substring(0, 157) + '...' : plain;
   };
-  
-  // Fetch post data
+
+  // Fetch post
   useEffect(() => {
     const fetchPost = async () => {
       try {
         const res = await fetch(`/api/admin/post/${id}`);
         const data = await res.json();
-        
         if (data.success && data.post) {
           const post = data.post;
-          
           const meta = post.meta && typeof post.meta === 'object' ? post.meta : {};
           const deadline = toDateTimeLocal(post.expiresAt || meta.deadline);
-          const galleryImages = post.galleryImages || [];
-          
+
           setFormData({
             title: post.title || '',
             slug: post.slug || '',
@@ -616,55 +566,43 @@ export default function EditPostPage() {
             type: post.type || 'news',
             featuredImage: post.featuredImage || '',
             actualImage: post.actualImage || '',
-            galleryImages: galleryImages,
+            galleryImages: post.galleryImages || [],
             status: post.status || 'draft',
             isFeatured: post.isFeatured || false,
             isPopular: post.isPopular || false,
             isBreaking: post.isBreaking || false,
             publishedAt: toDateTimeLocal(post.publishedAt),
             expiresAt: toDateTimeLocal(post.expiresAt),
-            deadline: deadline,
-            
-            // Author
+            deadline,
             authorName: post.authorName || '',
-            
-            // SEO
             metaTitle: post.metaTitle || '',
             metaDescription: post.metaDescription || '',
             metaKeywords: post.metaKeywords || '',
             focusKeyword: post.focusKeyword || '',
             canonicalUrl: post.canonicalUrl || '',
             robots: post.robots || 'index, follow',
-            
-            // Open Graph
             ogTitle: post.ogTitle || '',
             ogDescription: post.ogDescription || '',
             ogImage: post.ogImage || '',
             ogType: post.ogType || 'article',
-            
-            // Twitter
             twitterTitle: post.twitterTitle || '',
             twitterDescription: post.twitterDescription || '',
             twitterImage: post.twitterImage || '',
             twitterCard: post.twitterCard || 'summary_large_image',
-            
-            // Structured Data
             schemaMarkup: post.schemaMarkup
               ? typeof post.schemaMarkup === 'string'
                 ? post.schemaMarkup
                 : JSON.stringify(post.schemaMarkup, null, 2)
               : '',
-            
-            // Extra SEO
             breadcrumbTitle: post.breadcrumbTitle || '',
             priority: post.priority || '0.5',
             changefreq: post.changefreq || 'weekly',
             oldSlug: post.oldSlug || '',
-            
             meta: post.meta || {},
             tags: post.tags || [],
+            imageAlt: meta.imageAlt as string || '',
           });
-          
+
           setCharCount({
             title: post.metaTitle?.length || 0,
             desc: post.metaDescription?.length || 0,
@@ -682,167 +620,116 @@ export default function EditPostPage() {
         setFetching(false);
       }
     };
-    
     fetchPost();
   }, [id]);
-  
+
+  // ✅ Countdown (computed on deadline change)
+  useEffect(() => {
+    if (!formData.deadline) {
+      setCountdown(null);
+      return;
+    }
+    const days = Math.ceil((new Date(formData.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    if (days < 0) setCountdown({ text: 'Deadline passed', color: 'bg-gray-100 text-gray-600' });
+    else if (days === 0) setCountdown({ text: 'Last day today!', color: 'bg-red-100 text-red-700' });
+    else if (days <= 3) setCountdown({ text: `${days} days left!`, color: 'bg-red-100 text-red-700' });
+    else if (days <= 7) setCountdown({ text: `${days} days left`, color: 'bg-orange-100 text-orange-700' });
+    else if (days <= 30) setCountdown({ text: `${days} days left`, color: 'bg-yellow-100 text-yellow-700' });
+    else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
+  }, [formData.deadline]);
+
   // Handlers
   const handleTitleChange = (title: string) => {
     const metaTitle = generateMetaTitle(title, formData.type);
     const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    
-    setFormData(prev => ({
-      ...prev,
-      title,
-      metaTitle,
-      ogTitle: metaTitle,
-      twitterTitle: metaTitle,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-    }));
-    
-    setCharCount(prev => ({ 
-      ...prev, 
-      title: metaTitle.length, 
-      ogTitle: metaTitle.length,
-      twitterTitle: metaTitle.length 
-    }));
+    setFormData(prev => ({ ...prev, title, metaTitle, ogTitle: metaTitle, twitterTitle: metaTitle, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, title: metaTitle.length, ogTitle: metaTitle.length, twitterTitle: metaTitle.length }));
   };
-  
-  const handleContentChange = (content: string) => {
+
+  // ✅ FIX: RichTextEditor accepts string | EditorSection[]
+  const handleContentChange = (value: string | EditorSection[]) => {
+    const content = typeof value === 'string' ? value : '';
     const metaDescription = generateMetaDescription(content, formData.excerpt);
-    setFormData(prev => ({
-      ...prev,
-      content,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-    }));
-    setCharCount(prev => ({ 
-      ...prev, 
-      desc: metaDescription.length, 
-      ogDesc: metaDescription.length,
-      twitterDesc: metaDescription.length 
-    }));
+    setFormData(prev => ({ ...prev, content, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
   };
-  
+
   const handleExcerptChange = (excerpt: string) => {
     const metaDescription = generateMetaDescription(formData.content, excerpt);
-    
-    setFormData(prev => ({
-      ...prev,
-      excerpt,
-      metaDescription,
-      ogDescription: metaDescription,
-      twitterDescription: metaDescription,
-    }));
-    
-    setCharCount(prev => ({ 
-      ...prev, 
-      desc: metaDescription.length,
-      ogDesc: metaDescription.length,
-      twitterDesc: metaDescription.length 
-    }));
+    setFormData(prev => ({ ...prev, excerpt, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
   };
-  
-  const handleMetaTitleChange = (metaTitle: string) => {
-    setFormData(prev => ({ ...prev, metaTitle }));
-    setCharCount(prev => ({ ...prev, title: metaTitle.length }));
-  };
-  
-  const handleMetaDescriptionChange = (metaDescription: string) => {
-    setFormData(prev => ({ ...prev, metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length }));
-  };
-  
-  const handleMetaKeywordsChange = (metaKeywords: string) => {
-    setFormData(prev => ({ ...prev, metaKeywords }));
-  };
-  
-  const handleOgTitleChange = (ogTitle: string) => {
-    setFormData(prev => ({ ...prev, ogTitle }));
-    setCharCount(prev => ({ ...prev, ogTitle: ogTitle.length }));
-  };
-  
-  const handleOgDescriptionChange = (ogDescription: string) => {
-    setFormData(prev => ({ ...prev, ogDescription }));
-    setCharCount(prev => ({ ...prev, ogDesc: ogDescription.length }));
-  };
-  
-  const handleTwitterTitleChange = (twitterTitle: string) => {
-    setFormData(prev => ({ ...prev, twitterTitle }));
-    setCharCount(prev => ({ ...prev, twitterTitle: twitterTitle.length }));
-  };
-  
-  const handleTwitterDescriptionChange = (twitterDescription: string) => {
-    setFormData(prev => ({ ...prev, twitterDescription }));
-    setCharCount(prev => ({ ...prev, twitterDesc: twitterDescription.length }));
-  };
-  
-  const handleTagsChange = (tags: string[]) => {
-    setFormData(prev => ({ ...prev, tags }));
-  };
-  
-  const handleDeadlineChange = (deadline: string) => {
-    setFormData(prev => ({ ...prev, deadline }));
-  };
-  
+
   const handleImageSelect = (url: string) => {
     setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
   };
-  
+
   const regenerateMeta = () => {
     const metaTitle = generateMetaTitle(formData.title, formData.type);
     const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    setFormData(prev => ({
-      ...prev,
-      metaTitle,
-      metaDescription,
-      ogTitle: metaTitle,
-      ogDescription: metaDescription,
-      twitterTitle: metaTitle,
-      twitterDescription: metaDescription,
-    }));
-    setCharCount(prev => ({
-      ...prev,
-      title: metaTitle.length,
-      desc: metaDescription.length,
-      ogTitle: metaTitle.length,
-      ogDesc: metaDescription.length,
-      twitterTitle: metaTitle.length,
-      twitterDesc: metaDescription.length,
-    }));
+    setFormData(prev => ({ ...prev, metaTitle, metaDescription, ogTitle: metaTitle, ogDescription: metaDescription, twitterTitle: metaTitle, twitterDescription: metaDescription }));
+    setCharCount(prev => ({ ...prev, title: metaTitle.length, desc: metaDescription.length, ogTitle: metaTitle.length, ogDesc: metaDescription.length, twitterTitle: metaTitle.length, twitterDesc: metaDescription.length }));
+    toast.success('Meta tags regenerated!');
   };
-  
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+
+  const buildMetaObject = (): Record<string, unknown> => {
+    return {
+      ...formData.meta,
+      deadline: formData.deadline || null,
+      imageAlt: formData.imageAlt,
+    };
+  };
+
+  const submitUpdate = async (status?: 'draft' | 'published') => {
     setLoading(true);
     setError('');
     setSuccess('');
-    
-    let schemaMarkup: Record<string, unknown> | unknown[] | null;
-    try {
-      schemaMarkup = parseSchemaMarkup(formData.schemaMarkup);
-    } catch (schemaError) {
-      setError(schemaError instanceof Error ? schemaError.message : 'Schema markup is not valid JSON.');
+
+    if (!formData.title.trim()) {
+      setError('Title is required');
+      toast.error('Title is required');
+      setLoading(false);
+      return;
+    }
+    if (!formData.content || formData.content.trim() === '' || formData.content === '<p></p>') {
+      setError('Content is required');
+      toast.error('Content is required');
       setLoading(false);
       return;
     }
 
-    const updatedMeta = {
-      ...formData.meta,
-      deadline: formData.deadline || null,
-    };
-    
+    let schemaMarkup: Record<string, unknown> | unknown[] | null;
+    try {
+      schemaMarkup = parseSchemaMarkup(formData.schemaMarkup);
+      // ✅ Auto-generate if empty
+      if (!schemaMarkup) {
+        const autoSchema = generateSchema({
+          title: formData.title,
+          description: formData.metaDescription || formData.excerpt,
+          image: formData.featuredImage,
+          url: `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug}`,
+          authorName: formData.authorName,
+          publishedAt: formData.publishedAt,
+          type: formData.type,
+          meta: buildMetaObject(),
+        });
+        schemaMarkup = JSON.parse(autoSchema);
+      }
+    } catch (schemaError) {
+      setError(schemaError instanceof Error ? schemaError.message : 'Invalid schema');
+      setLoading(false);
+      return;
+    }
+
     const submitData = {
       ...formData,
-      meta: updatedMeta,
+      status: status || formData.status,
+      meta: buildMetaObject(),
       publishedAt: formData.publishedAt,
       expiresAt: formData.deadline ? new Date(formData.deadline).toISOString() : null,
       schemaMarkup,
     };
-    
+
     try {
       const res = await fetch(`/api/admin/post/${id}`, {
         method: 'PUT',
@@ -850,51 +737,55 @@ export default function EditPostPage() {
         body: JSON.stringify(submitData),
       });
       const data = await res.json();
-      
       if (data.success) {
-        setSuccess('Post updated successfully! Redirecting...');
-        setTimeout(() => {
-          router.push('/admin/post');
-        }, 1500);
+        setSuccess('Post updated successfully!');
+        toast.success(status === 'draft' ? 'Draft saved!' : 'Post updated!');
+        setTimeout(() => router.push('/admin/post'), 1500);
       } else {
-        setError(data.error || 'Failed to update post');
+        setError(data.error || 'Failed to update');
+        toast.error(data.error || 'Failed to update');
       }
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Something went wrong');
+      toast.error('Something went wrong');
     } finally {
       setLoading(false);
     }
   };
-  
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitUpdate();
+  };
+
+  const handleSaveDraft = () => submitUpdate('draft');
+
+  const handlePreview = () => {
+    if (!formData.slug) { toast.error('Slug missing'); return; }
+    toast.info('Preview coming soon');
+  };
+
+  const handleViewWebsite = () => {
+    if (!formData.slug) { toast.error('Slug missing'); return; }
+    window.open(`/${getUrlFolder(formData.type)}/${formData.slug}`, '_blank');
+  };
+
   const seoPreview = {
     title: formData.metaTitle || formData.title || 'Your Title Here',
-    description: formData.metaDescription || formData.excerpt || formData.content?.substring(0, 160) || 'Your description will appear here...',
+    description: formData.metaDescription || formData.excerpt || 'Your description...',
     url: `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug || 'example-post'}`,
   };
-  
-  if (fetching) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-500 mt-4">Loading post...</p>
-        </div>
-      </div>
-    );
-  }
-  
+
+  if (fetching) return <LoadingSkeleton />;
+
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Admin Bar */}
+      {/* Sticky Header */}
       <div className="bg-gray-900 text-white px-4 py-2 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/admin/dashboard" className="text-sm font-medium hover:text-gray-300">
-              Dashboard
-            </Link>
-            <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">
-              All Posts
-            </Link>
+            <Link href="/admin/dashboard" className="text-sm font-medium hover:text-gray-300">Dashboard</Link>
+            <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">All Posts</Link>
             <span className="text-sm text-gray-400">|</span>
             <span className="text-sm font-semibold">Edit Post</span>
           </div>
@@ -904,18 +795,30 @@ export default function EditPostPage() {
             ) : (
               <span className="text-xs bg-yellow-600 px-2 py-1 rounded">Draft</span>
             )}
+            <button
+              type="submit"
+              form="edit-post-form"
+              disabled={loading}
+              className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </div>
       </div>
-      
+
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-2xl font-bold text-gray-900">Edit Post</h1>
           <p className="text-sm text-gray-500 mt-1">Update your post content and SEO settings</p>
         </div>
-        
-        {/* Messages */}
+
+        {countdown && (
+          <div className={`${countdown.color} rounded-lg px-4 py-2 mb-4 flex items-center gap-2 text-sm font-medium`}>
+            <FiClock className="w-4 h-4" /> Deadline: {countdown.text}
+          </div>
+        )}
+
         {success && (
           <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-4 mb-6 flex items-center gap-3">
             <FiCheckCircle className="w-5 h-5 text-green-500" />
@@ -928,484 +831,239 @@ export default function EditPostPage() {
             <span className="text-red-700">{error}</span>
           </div>
         )}
-        
-        <form onSubmit={handleSubmit}>
+
+        {/* TABS */}
+        <div className="flex gap-1 mb-4 border-b border-gray-300">
+          {[
+            { key: 'content' as const, label: '📝 Content' },
+            { key: 'seo' as const, label: '🔍 SEO' },
+            { key: 'advanced' as const, label: '⚙️ Advanced' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${
+                activeTab === tab.key
+                  ? 'bg-white text-blue-600 border border-b-0 border-gray-300'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <form id="edit-post-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* LEFT COLUMN - Main Content */}
+            {/* LEFT */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Title */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4">
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => handleTitleChange(e.target.value)}
-                    required
-                    className="w-full text-2xl font-bold border-none focus:outline-none focus:ring-0 placeholder-gray-300"
-                    placeholder="Add title"
-                  />
-                </div>
-              </div>
-              
-              {/* Post Type */}
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
-                <div className="inline-flex px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700">
-                  {POST_TYPES.find(t => t.value === formData.type)?.icon} {POST_TYPES.find(t => t.value === formData.type)?.label}
-                </div>
-                <p className="text-xs text-gray-400 mt-2">Post type cannot be changed after creation</p>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  required
+                  className="w-full text-2xl font-bold border-none focus:outline-none focus:ring-0 placeholder-gray-300"
+                  placeholder="Add title"
+                />
               </div>
-              
-              {/* Content Editor */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    rows={15}
-                    required
-                    className="w-full border border-gray-300 rounded-md px-4 py-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Write your content here... (HTML supported)"
-                  />
-                  
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      📌 Excerpt (Short Description)
-                      <span className="text-xs text-green-600 ml-2">→ This will become your Meta Description</span>
-                    </label>
-                    <textarea
-                      value={formData.excerpt}
-                      onChange={(e) => handleExcerptChange(e.target.value)}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Brief summary of your post... (This becomes your meta description for SEO)"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      💡 This short description will be used as your Meta Description in Google search results.
-                    </p>
+
+              {activeTab === 'content' && (
+                <>
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
+                    <div className="inline-flex px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700">
+                      {POST_TYPES.find(t => t.value === formData.type)?.icon} {POST_TYPES.find(t => t.value === formData.type)?.label}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Post type cannot be changed</p>
                   </div>
+
+                  <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+                    <RichTextEditor
+                      value={formData.content}
+                      onChange={handleContentChange}
+                      placeholder="Write your content here..."
+                      minHeight={400}
+                      mode={formData.type === 'job' || formData.type === 'admission' || formData.type === 'scholarship' ? 'multi-section' : 'single'}
+                    />
+
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        📌 Excerpt <span className="text-xs text-green-600 ml-2">→ Meta Description</span>
+                      </label>
+                      <textarea
+                        value={formData.excerpt}
+                        onChange={(e) => handleExcerptChange(e.target.value)}
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm"
+                        placeholder="Brief summary..."
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'seo' && (
+                <>
+                  <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h3 className="text-sm font-semibold flex items-center gap-2"><FiSearch className="w-4 h-4 text-blue-600" /> SEO Settings</h3>
+                      <button type="button" onClick={regenerateMeta} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200">Regenerate</button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">🎯 Focus Keyword</label>
+                      <input type="text" value={formData.focusKeyword} onChange={(e) => setFormData(prev => ({ ...prev, focusKeyword: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="e.g., university admission 2026" />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">📝 Meta Keywords</label>
+                      <input type="text" value={formData.metaKeywords} onChange={(e) => setFormData(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="keyword1, keyword2" />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-medium text-gray-600">Meta Title</label>
+                        <span className={`text-xs ${charCount.title > 60 ? 'text-red-500' : 'text-green-500'}`}>{charCount.title}/60</span>
+                      </div>
+                      <input type="text" value={formData.metaTitle} onChange={(e) => { setFormData(prev => ({ ...prev, metaTitle: e.target.value })); setCharCount(prev => ({ ...prev, title: e.target.value.length })); }} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.title > 60 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-medium text-gray-600">Meta Description</label>
+                        <span className={`text-xs ${charCount.desc > 160 ? 'text-red-500' : 'text-green-500'}`}>{charCount.desc}/160</span>
+                      </div>
+                      <textarea value={formData.metaDescription} onChange={(e) => { setFormData(prev => ({ ...prev, metaDescription: e.target.value })); setCharCount(prev => ({ ...prev, desc: e.target.value.length })); }} rows={3} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.desc > 160 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">Canonical URL</label>
+                      <input type="text" value={formData.canonicalUrl} onChange={(e) => setFormData(prev => ({ ...prev, canonicalUrl: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" placeholder="https://..." />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">Robots</label>
+                      <select value={formData.robots} onChange={(e) => setFormData(prev => ({ ...prev, robots: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                        {ROBOTS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <PreviewBox title={seoPreview.title} description={seoPreview.description} url={seoPreview.url} />
+                </>
+              )}
+
+              {activeTab === 'advanced' && (
+                <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><FiGlobe className="w-4 h-4" /> Advanced Settings</h3>
+
+                  <button type="button" onClick={() => setShowAdvancedSeo(!showAdvancedSeo)} className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-b">
+                    {showAdvancedSeo ? <FiChevronUp /> : <FiChevronDown />} Open Graph & Twitter Cards
+                  </button>
+
+                  {showAdvancedSeo && (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Type</label>
+                        <select value={formData.ogType} onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                          {OG_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Title</label>
+                        <input type="text" value={formData.ogTitle} onChange={(e) => setFormData(prev => ({ ...prev, ogTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Description</label>
+                        <textarea value={formData.ogDescription} onChange={(e) => setFormData(prev => ({ ...prev, ogDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
+                        <select value={formData.twitterCard} onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                          {TWITTER_CARDS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Title</label>
+                        <input type="text" value={formData.twitterTitle} onChange={(e) => setFormData(prev => ({ ...prev, twitterTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Description</label>
+                        <textarea value={formData.twitterDescription} onChange={(e) => setFormData(prev => ({ ...prev, twitterDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                      </div>
+                    </div>
+                  )}
+
+                  <button type="button" onClick={() => setShowSitemapSeo(!showSitemapSeo)} className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-b">
+                    {showSitemapSeo ? <FiChevronUp /> : <FiChevronDown />} Sitemap & Schema
+                  </button>
+
+                  {showSitemapSeo && (
+                    <div className="space-y-4 pt-2">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Priority</label>
+                        <select value={formData.priority} onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                          {PRIORITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
+                        <select value={formData.changefreq} onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+                          {CHANGEFREQ_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
+                        <input type="text" value={formData.breadcrumbTitle} onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1 block">
+                          Schema Markup
+                          <span className="text-green-600 ml-2 text-xs">✓ Auto-generate if empty</span>
+                        </label>
+                        <textarea value={formData.schemaMarkup} onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))} rows={5} className="w-full border rounded-md px-3 py-2 text-sm font-mono" placeholder="Auto-generated..." />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
-            
-            {/* RIGHT SIDEBAR */}
+
+            {/* RIGHT */}
             <div className="space-y-6">
-              {/* Publish Box */}
               <PublishMetaBox
                 status={formData.status}
-                onStatusChange={(val: string) => setFormData(prev => ({ ...prev, status: val }))}
+                onStatusChange={(val) => setFormData(prev => ({ ...prev, status: val }))}
                 publishedAt={formData.publishedAt}
-                onPublishedAtChange={(val: string) => setFormData(prev => ({ ...prev, publishedAt: val }))}
+                onPublishedAtChange={(val) => setFormData(prev => ({ ...prev, publishedAt: val }))}
                 deadline={formData.deadline}
-                onDeadlineChange={handleDeadlineChange}
+                onDeadlineChange={(val) => setFormData(prev => ({ ...prev, deadline: val }))}
                 isFeatured={formData.isFeatured}
-                onFeaturedChange={(val: boolean) => setFormData(prev => ({ ...prev, isFeatured: val }))}
+                onFeaturedChange={(val) => setFormData(prev => ({ ...prev, isFeatured: val }))}
                 isPopular={formData.isPopular}
-                onPopularChange={(val: boolean) => setFormData(prev => ({ ...prev, isPopular: val }))}
+                onPopularChange={(val) => setFormData(prev => ({ ...prev, isPopular: val }))}
                 isBreaking={formData.isBreaking}
-                onBreakingChange={(val: boolean) => setFormData(prev => ({ ...prev, isBreaking: val }))}
+                onBreakingChange={(val) => setFormData(prev => ({ ...prev, isBreaking: val }))}
+                loading={loading}
+                onSaveDraft={handleSaveDraft}
+                onPreview={handlePreview}
+                onViewWebsite={handleViewWebsite}
+                canViewWebsite={!!formData.slug}
               />
-              
-              {/* ✅ Author Box (ADDED) */}
-              <AuthorBox
-                authorName={formData.authorName}
-                onAuthorNameChange={(val: string) => setFormData(prev => ({ ...prev, authorName: val }))}
-              />
-              
-              {/* Permalink Box */}
-              <PermalinkBox
-                slug={formData.slug}
-                type={formData.type}
-              />
-              
-              {/* ✅ Redirect Box (ADDED) */}
-              <RedirectBox
-                oldSlug={formData.oldSlug}
-                onOldSlugChange={(val: string) => setFormData(prev => ({ ...prev, oldSlug: val }))}
-              />
-              
-              {/* Featured Image Box */}
+
+              <AuthorBox authorName={formData.authorName} onAuthorNameChange={(val) => setFormData(prev => ({ ...prev, authorName: val }))} />
+              <PermalinkBox slug={formData.slug} type={formData.type} />
+              <RedirectBox oldSlug={formData.oldSlug} onOldSlugChange={(val) => setFormData(prev => ({ ...prev, oldSlug: val }))} />
               <FeaturedImageBox
                 image={formData.featuredImage}
                 onImageSelect={handleImageSelect}
-                slug={formData.slug}
-                title={formData.title}
-                type={formData.type}
+                imageAlt={formData.imageAlt}
+                onImageAltChange={(val) => setFormData(prev => ({ ...prev, imageAlt: val }))}
               />
-              
-              {/* Categories & Tags Box */}
-              <CategoriesTagsBox
-                tags={formData.tags}
-                onTagsChange={handleTagsChange}
-                postType={formData.type}
-              />
-              
-              {/* ✅ SEO Settings Box (UPDATED) */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <FiSearch className="w-4 h-4 text-blue-600" />
-                    SEO Settings
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={regenerateMeta}
-                    className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-                <div className="p-4 space-y-4">
-                  {/* Focus Keyword */}
-                  <div>
-                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
-                      🎯 Focus Keyword
-                      <span className="text-gray-400 text-xs ml-2">(Primary keyword)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.focusKeyword}
-                      onChange={(e) => setFormData(prev => ({ ...prev, focusKeyword: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., university admission 2026"
-                    />
-                  </div>
-                  
-                  {/* ✅ Meta Keywords (ADDED) */}
-                  <div>
-                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
-                      📝 Meta Keywords
-                      <span className="text-gray-400 text-xs ml-2">(Comma separated)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.metaKeywords}
-                      onChange={(e) => handleMetaKeywordsChange(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., university admission 2026, study in Pakistan, education news"
-                    />
-                    <div className="flex justify-between mt-1">
-                      <p className="text-xs text-gray-400">Enter multiple keywords separated by commas</p>
-                      <span className="text-xs text-gray-400">
-                        {formData.metaKeywords ? formData.metaKeywords.split(',').length : 0} keywords
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Meta Title */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-medium text-gray-600">Meta Title</label>
-                      <span className={`text-xs ${charCount.title > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                        {charCount.title}/60
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={formData.metaTitle}
-                      onChange={(e) => handleMetaTitleChange(e.target.value)}
-                      className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        charCount.title > 60 ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
-                  </div>
-                  
-                  {/* Meta Description */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-medium text-gray-600">Meta Description</label>
-                      <span className={`text-xs ${charCount.desc > 160 ? 'text-red-500' : 'text-green-500'}`}>
-                        {charCount.desc}/160
-                      </span>
-                    </div>
-                    <textarea
-                      value={formData.metaDescription}
-                      onChange={(e) => handleMetaDescriptionChange(e.target.value)}
-                      rows={3}
-                      className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        charCount.desc > 160 ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      ✏️ Auto-generated from Short Description. Edit manually if needed.
-                    </p>
-                  </div>
-                  
-                  {/* ✅ Canonical URL (ADDED) */}
-                  <div>
-                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
-                      <FiLink className="w-3 h-3" /> Canonical URL
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.canonicalUrl}
-                      onChange={(e) => setFormData(prev => ({ ...prev, canonicalUrl: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="https://www.nextid.pk/your-canonical-url"
-                    />
-                  </div>
-                  
-                  {/* ✅ Robots (ADDED) */}
-                  <div>
-                    <label className="flex text-xs font-medium text-gray-600 mb-1 items-center gap-1">
-                      <FiGlobe className="w-3 h-3" /> Robots
-                    </label>
-                    <select
-                      value={formData.robots}
-                      onChange={(e) => setFormData(prev => ({ ...prev, robots: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {ROBOTS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {/* Advanced SEO Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedSeo(!showAdvancedSeo)}
-                    className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-t border-gray-100 mt-2 pt-3"
-                  >
-                    {showAdvancedSeo ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
-                    Advanced SEO (Open Graph & Twitter Cards)
-                  </button>
-                  
-                  {showAdvancedSeo && (
-                    <div className="space-y-4 pt-2 border-t border-gray-100">
-                      {/* ✅ OG Type (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG:Type</label>
-                        <select
-                          value={formData.ogType}
-                          onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {OG_TYPES.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* OG Title */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">OG:Title (Facebook)</label>
-                          <span className={`text-xs ${charCount.ogTitle > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.ogTitle}/60
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={formData.ogTitle}
-                          onChange={(e) => handleOgTitleChange(e.target.value)}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* OG Description */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">OG:Description (Facebook)</label>
-                          <span className={`text-xs ${charCount.ogDesc > 200 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.ogDesc}/200
-                          </span>
-                        </div>
-                        <textarea
-                          value={formData.ogDescription}
-                          onChange={(e) => handleOgDescriptionChange(e.target.value)}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* OG Image Preview */}
-                      {formData.ogImage && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">OG:Image Preview</label>
-                          <div className="relative w-full h-32 rounded-lg border overflow-hidden">
-                            <Image
-                              src={formData.ogImage}
-                              alt="OG Preview"
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* ✅ Twitter Card (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
-                        <select
-                          value={formData.twitterCard}
-                          onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {TWITTER_CARDS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* ✅ Twitter Title (ADDED) */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">Twitter Title</label>
-                          <span className={`text-xs ${charCount.twitterTitle > 60 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.twitterTitle}/60
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={formData.twitterTitle}
-                          onChange={(e) => handleTwitterTitleChange(e.target.value)}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* ✅ Twitter Description (ADDED) */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-medium text-gray-600">Twitter Description</label>
-                          <span className={`text-xs ${charCount.twitterDesc > 200 ? 'text-red-500' : 'text-green-500'}`}>
-                            {charCount.twitterDesc}/200
-                          </span>
-                        </div>
-                        <textarea
-                          value={formData.twitterDescription}
-                          onChange={(e) => handleTwitterDescriptionChange(e.target.value)}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      
-                      {/* ✅ Twitter Image Preview (ADDED) */}
-                      {formData.twitterImage && (
-                        <div>
-                          <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Image Preview</label>
-                          <div className="relative w-full h-32 rounded-lg border overflow-hidden">
-                            <Image
-                              src={formData.twitterImage}
-                              alt="Twitter Preview"
-                              fill
-                              className="object-cover"
-                              unoptimized
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Sitemap & Schema Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowSitemapSeo(!showSitemapSeo)}
-                    className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-t border-gray-100 mt-2 pt-3"
-                  >
-                    {showSitemapSeo ? <FiChevronUp className="w-4 h-4" /> : <FiChevronDown className="w-4 h-4" />}
-                    Sitemap & Schema Markup
-                  </button>
-                  
-                  {showSitemapSeo && (
-                    <div className="space-y-4 pt-2 border-t border-gray-100">
-                      {/* ✅ Priority (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Priority (Sitemap)</label>
-                        <select
-                          value={formData.priority}
-                          onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {PRIORITY_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* ✅ Changefreq (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
-                        <select
-                          value={formData.changefreq}
-                          onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          {CHANGEFREQ_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {/* ✅ Breadcrumb Title (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
-                        <input
-                          type="text"
-                          value={formData.breadcrumbTitle}
-                          onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Custom breadcrumb title"
-                        />
-                      </div>
-                      
-                      {/* ✅ Schema Markup (ADDED) */}
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Schema Markup (JSON-LD)</label>
-                        <textarea
-                          value={formData.schemaMarkup}
-                          onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))}
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                          placeholder='{"@context": "https://schema.org", "@type": "Article", ...}'
-                        />
-                        <p className="text-xs text-gray-400 mt-1">Add custom JSON-LD schema markup.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Preview Box */}
-              <PreviewBox
-                title={seoPreview.title}
-                description={seoPreview.description}
-                url={seoPreview.url}
-              />
-              
-              {/* Save Buttons */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700">Save Changes</h3>
-                </div>
-                <div className="p-4">
-                  <div className="flex gap-3">
-                    <Link
-                      href="/admin/post"
-                      className="flex-1 text-center px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Cancel
-                    </Link>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-1 bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <FiSave className="w-4 h-4" />
-                          Update Post
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <CategoriesTagsBox tags={formData.tags} onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))} postType={formData.type} />
             </div>
           </div>
         </form>

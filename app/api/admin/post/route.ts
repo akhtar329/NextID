@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/db";
 import { posts } from "@/db/schema";
-import { eq, or, ilike, and, desc } from "drizzle-orm";
+import { eq, or, ilike, and, desc, asc } from "drizzle-orm"
 import { revalidatePostCache } from "@/lib/post-cache";
 
 // ============================================
@@ -71,18 +71,22 @@ export async function GET(request: NextRequest) {
     const limit = Number(searchParams.get("limit") || "50");
     const offset = Number(searchParams.get("offset") || "0");
 
+    // ✅ SORTING PARAMS
+    const sortField = searchParams.get("sort") || "createdAt";
+    const sortOrder = searchParams.get("order") || "desc";
+
     // Build query conditions
     let query = db.select().from(posts);
     const conditions = [];
-    
+
     if (type && type !== "all") {
       conditions.push(eq(posts.type, type));
     }
-    
+
     if (status) {
       conditions.push(eq(posts.status, status));
     }
-    
+
     if (search) {
       conditions.push(
         or(
@@ -95,12 +99,25 @@ export async function GET(request: NextRequest) {
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as typeof query;
     }
-    
-    const allPosts = await query.orderBy(desc(posts.createdAt));
-    
+
+    // ✅ SORTING LOGIC
+    const sortableColumns = {
+      title: posts.title,
+      type: posts.type,
+      status: posts.status,
+      createdAt: posts.createdAt,
+      publishedAt: posts.publishedAt,
+      id: posts.id,
+    };
+
+    const sortColumn = sortableColumns[sortField as keyof typeof sortableColumns] || posts.createdAt;
+    const orderDirection = sortOrder === "asc" ? asc : desc;
+
+    const allPosts = await query.orderBy(orderDirection(sortColumn));
+
     const total = allPosts.length;
     const paginatedPosts = allPosts.slice(offset, offset + limit);
-    
+
     // Transform posts with all SEO fields
     const transformedPosts: TransformedPost[] = paginatedPosts.map((post) => ({
       id: post.id,
@@ -121,8 +138,7 @@ export async function GET(request: NextRequest) {
       expiresAt: post.expiresAt,
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
-      
-      // SEO Fields
+
       metaTitle: post.metaTitle,
       metaDescription: post.metaDescription,
       metaKeywords: post.metaKeywords,
@@ -146,8 +162,7 @@ export async function GET(request: NextRequest) {
       changefreq: post.changefreq,
       breadcrumbTitle: post.breadcrumbTitle,
       oldSlug: post.oldSlug,
-      
-      // Extra
+
       meta: (post.meta as Record<string, unknown> | null) ?? null,
       tags: (post.tags as string[] | null) ?? null,
     }));
@@ -158,6 +173,7 @@ export async function GET(request: NextRequest) {
       total,
       limit,
       offset,
+      sorting: { field: sortField, order: sortOrder },
     });
 
   } catch (error) {

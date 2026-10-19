@@ -227,6 +227,8 @@ export async function PUT(
       .set({
         // ========== BASIC INFO ==========
         title: body.title.trim(),
+        slug: body.slug || existing.slug,
+    type: body.type || existing.type, 
         content: body.content || null,
         excerpt: body.excerpt || null,
         
