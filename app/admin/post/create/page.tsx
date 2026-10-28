@@ -594,6 +594,8 @@ export default function CreatePostPage() {
   const [charCount, setCharCount] = useState<CharCount>({ title: 0, desc: 0, ogTitle: 0, ogDesc: 0, twitterTitle: 0, twitterDesc: 0 });
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const checkSlugTimer = useRef<NodeJS.Timeout | null>(null);
+  // ✅ NEW: Flag to stop auto-save after successful publish
+  const hasPublished = useRef(false);
 
   useEffect(() => {
     if (!formData.deadline) {
@@ -609,7 +611,10 @@ export default function CreatePostPage() {
     else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
   }, [formData.deadline]);
 
+  // Load draft on mount — ✅ Skip if already published in this session
   useEffect(() => {
+    if (hasPublished.current) return;
+
     const draft = localStorage.getItem(DRAFT_KEY);
     if (!draft) return;
     try {
@@ -640,15 +645,21 @@ export default function CreatePostPage() {
     } catch { localStorage.removeItem(DRAFT_KEY); }
   }, []);
 
+  // ✅ Auto-save — only if dirty AND not published AND has content
   useEffect(() => {
     autoSaveTimer.current = setInterval(() => {
-      if (formData.title || formData.content) {
+      if (
+        isDirty &&
+        !success &&
+        !hasPublished.current &&
+        (formData.title || formData.content)
+      ) {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, savedAt: new Date().toISOString() }));
         setLastSaved(new Date());
       }
     }, 30000);
     return () => { if (autoSaveTimer.current) clearInterval(autoSaveTimer.current); };
-  }, [formData]);
+  }, [formData, isDirty, success]);
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -805,11 +816,42 @@ export default function CreatePostPage() {
       const data = await res.json();
 
       if (data.success) {
+        // ✅ STEP 1: Mark as published so auto-save won't run again
+        hasPublished.current = true;
+
+        // ✅ STEP 2: Stop the auto-save timer immediately
+        if (autoSaveTimer.current) {
+          clearInterval(autoSaveTimer.current);
+          autoSaveTimer.current = null;
+        }
+
+        // ✅ STEP 3: Remove draft from localStorage
         localStorage.removeItem(DRAFT_KEY);
+
+        // ✅ STEP 4: Reset state
         setIsDirty(false);
         setSavedPostSlug(formData.slug);
         setSuccess(status === 'draft' ? 'Draft saved!' : 'Post published successfully!');
         toast.success(status === 'draft' ? 'Draft saved!' : 'Post published!');
+
+        // ✅ STEP 5: Clear form data (only for published — draft needs data to keep editing)
+        if (status === 'published') {
+          setFormData(prev => ({
+            ...prev,
+            title: '',
+            content: '',
+            excerpt: '',
+            slug: '',
+            featuredImage: '',
+            imageAlt: '',
+            metaTitle: '',
+            metaDescription: '',
+            tags: [],
+            oldSlug: '',
+          }));
+        }
+
+        // ✅ STEP 6: Navigate after 1.5 sec
         setTimeout(() => router.push('/admin/post'), 1500);
       } else {
         setError(data.error || 'Failed to save post');
