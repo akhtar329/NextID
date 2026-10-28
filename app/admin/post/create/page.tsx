@@ -154,12 +154,6 @@ interface PreviewBoxProps {
   url: string;
 }
 
-interface DynamicFieldsBoxProps {
-  postType: string;
-  formData: FormData;
-  onFieldChange: (fieldName: string, value: string) => void;
-}
-
 // ==================== CONSTANTS ====================
 const POST_TYPES = [
   { value: 'admission', label: 'Admission', icon: '🎓', color: 'bg-purple-100 text-purple-700', border: 'border-purple-200' },
@@ -219,62 +213,6 @@ const PRIORITY_OPTIONS = [
   { value: '0.2', label: '0.2' },
   { value: '0.1', label: '0.1' },
 ];
-
-// ==================== DYNAMIC FIELDS ====================
-type FieldConfig = {
-  name: string;
-  label: string;
-  type: 'text' | 'textarea' | 'url' | 'date' | 'select';
-  options?: string[];
-  placeholder?: string;
-  required?: boolean;
-  icon?: string;
-};
-
-const POST_TYPE_FIELDS: Record<string, FieldConfig[]> = {
-  job: [
-    { name: 'company', label: 'Company Name', type: 'text', placeholder: 'e.g., Pakistan Air Force', required: true, icon: '🏢' },
-    { name: 'location', label: 'Location', type: 'text', placeholder: 'e.g., Islamabad, Pakistan', required: true, icon: '📍' },
-    { name: 'jobType', label: 'Job Type', type: 'select', options: ['Full Time', 'Part Time', 'Contract', 'Remote', 'Internship', 'International'], icon: '💼' },
-    { name: 'salary', label: 'Salary Range', type: 'text', placeholder: 'e.g., Rs. 50,000 - Rs. 150,000', icon: '💰' },
-    { name: 'experience', label: 'Experience Required', type: 'text', placeholder: 'e.g., 2-3 years', icon: '⏳' },
-    { name: 'qualification', label: 'Qualification', type: 'text', placeholder: 'e.g., Bachelor, Master', icon: '🎓' },
-    { name: 'industry', label: 'Industry', type: 'text', placeholder: 'e.g., Government, IT, Education', icon: '🏭' },
-    { name: 'officialLink', label: 'Official Link', type: 'url', placeholder: 'https://...', icon: '🔗' },
-    { name: 'applicationLink', label: 'Application Link', type: 'url', placeholder: 'https://...', icon: '📝' },
-  ],
-  news: [
-    { name: 'source', label: 'Source', type: 'text', placeholder: 'e.g., ProPakistani', icon: '📰' },
-    { name: 'sourceUrl', label: 'Source URL', type: 'url', placeholder: 'https://...', icon: '🔗' },
-  ],
-  admission: [
-    { name: 'institute', label: 'Institute', type: 'text', placeholder: 'e.g., Punjab University', required: true, icon: '🏛️' },
-    { name: 'session', label: 'Session', type: 'text', placeholder: 'e.g., 2026-2027', icon: '📅' },
-    { name: 'program', label: 'Program', type: 'text', placeholder: 'e.g., BS Computer Science', icon: '📚' },
-    { name: 'eligibility', label: 'Eligibility', type: 'textarea', placeholder: 'e.g., Intermediate with 60% marks', icon: '✅' },
-    { name: 'feeStructure', label: 'Fee Structure', type: 'text', placeholder: 'e.g., Rs. 50,000 per semester', icon: '💰' },
-  ],
-  result: [
-    { name: 'board', label: 'Board', type: 'text', placeholder: 'e.g., BISE Punjab', required: true, icon: '🏛️' },
-    { name: 'examType', label: 'Exam Type', type: 'select', options: ['Annual', 'Supplementary', 'Special'], icon: '📝' },
-    { name: 'examYear', label: 'Year', type: 'text', placeholder: 'e.g., 2026', icon: '📅' },
-    { name: 'resultDate', label: 'Result Date', type: 'date', icon: '📅' },
-    { name: 'className', label: 'Class', type: 'text', placeholder: 'e.g., 10th, 12th', icon: '🎓' },
-  ],
-  date_sheet: [
-    { name: 'board', label: 'Board', type: 'text', placeholder: 'e.g., BISE Punjab', required: true, icon: '🏛️' },
-    { name: 'examType', label: 'Exam Type', type: 'select', options: ['Annual', 'Supplementary'], icon: '📝' },
-    { name: 'examYear', label: 'Year', type: 'text', placeholder: 'e.g., 2026', icon: '📅' },
-    { name: 'dateSheetExamStartDate', label: 'Exam Start Date', type: 'date', icon: '📅' },
-    { name: 'className', label: 'Class', type: 'text', placeholder: 'e.g., 10th, 12th', icon: '🎓' },
-  ],
-  scholarship: [
-    { name: 'organization', label: 'Organization', type: 'text', placeholder: 'e.g., HEC', required: true, icon: '🏢' },
-    { name: 'amount', label: 'Amount', type: 'text', placeholder: 'e.g., Rs. 100,000', icon: '💰' },
-    { name: 'scholarshipEligibility', label: 'Eligibility', type: 'textarea', placeholder: 'e.g., CGPA 3.5+', icon: '✅' },
-  ],
-  blog: [],
-};
 
 const getUrlFolder = (type: string): string => {
   const map: Record<string, string> = {
@@ -616,79 +554,6 @@ const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
   </div>
 );
 
-const DynamicFieldsBox = ({ postType, formData, onFieldChange }: DynamicFieldsBoxProps) => {
-  const fields = POST_TYPE_FIELDS[postType] || [];
-  if (fields.length === 0) return null;
-
-  const postTypeLabel = POST_TYPES.find(t => t.value === postType)?.label || postType;
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <FiFileText className="w-4 h-4 text-indigo-600" /> {postTypeLabel} Details
-        </h3>
-      </div>
-      <div className="p-4 space-y-4">
-        {fields.map((field) => (
-          <div key={field.name}>
-            <label className="text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-              <span>{field.icon}</span> {field.label}
-              {field.required && <span className="text-red-500">*</span>}
-            </label>
-
-            {field.type === 'text' && (
-              <input
-                type="text"
-                value={(formData as unknown as Record<string, string>)[field.name] || ''}
-                onChange={(e) => onFieldChange(field.name, e.target.value)}
-                placeholder={field.placeholder}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )}
-            {field.type === 'url' && (
-              <input
-                type="url"
-                value={(formData as unknown as Record<string, string>)[field.name] || ''}
-                onChange={(e) => onFieldChange(field.name, e.target.value)}
-                placeholder={field.placeholder}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              />
-            )}
-            {field.type === 'textarea' && (
-              <textarea
-                value={(formData as unknown as Record<string, string>)[field.name] || ''}
-                onChange={(e) => onFieldChange(field.name, e.target.value)}
-                placeholder={field.placeholder}
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              />
-            )}
-            {field.type === 'select' && (
-              <select
-                value={(formData as unknown as Record<string, string>)[field.name] || ''}
-                onChange={(e) => onFieldChange(field.name, e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              >
-                <option value="">Select {field.label}</option>
-                {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            )}
-            {field.type === 'date' && (
-              <input
-                type="date"
-                value={(formData as unknown as Record<string, string>)[field.name] || ''}
-                onChange={(e) => onFieldChange(field.name, e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 // ==================== MAIN COMPONENT ====================
 export default function CreatePostPage() {
   const router = useRouter();
@@ -701,7 +566,6 @@ export default function CreatePostPage() {
   const [savedPostSlug, setSavedPostSlug] = useState<string>('');
   const [countdown, setCountdown] = useState<{ text: string; color: string } | null>(null);
 
-  // ✅ FIX 1: IsInitialized state ki zaroorat nahi — useState se initialize karo
   const [isInitialized] = useState(true);
 
   const today = new Date().toISOString().slice(0, 16);
@@ -731,7 +595,6 @@ export default function CreatePostPage() {
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const checkSlugTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ FIX 2: Date.now() ko useState + useEffect mein calculate karo
   useEffect(() => {
     if (!formData.deadline) {
       setCountdown(null);
@@ -746,13 +609,11 @@ export default function CreatePostPage() {
     else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
   }, [formData.deadline]);
 
-  // Load draft on mount (no setState in effect — just localStorage read inside effect and set via ref/state after)
   useEffect(() => {
     const draft = localStorage.getItem(DRAFT_KEY);
     if (!draft) return;
     try {
       const parsed = JSON.parse(draft);
-      // Defer to avoid cascading render warning
       const timer = setTimeout(() => {
         toast.custom((t) => (
           <div className="bg-white border rounded-lg shadow-lg p-4 max-w-sm">
@@ -779,7 +640,6 @@ export default function CreatePostPage() {
     } catch { localStorage.removeItem(DRAFT_KEY); }
   }, []);
 
-  // Auto-save every 30 seconds
   useEffect(() => {
     autoSaveTimer.current = setInterval(() => {
       if (formData.title || formData.content) {
@@ -790,7 +650,6 @@ export default function CreatePostPage() {
     return () => { if (autoSaveTimer.current) clearInterval(autoSaveTimer.current); };
   }, [formData]);
 
-  // Unsaved changes warning
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (isDirty && !success) { e.preventDefault(); e.returnValue = ''; }
@@ -799,7 +658,6 @@ export default function CreatePostPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty, success]);
 
-  // Debounced slug check
   const checkSlugDebounced = (slug: string) => {
     if (checkSlugTimer.current) clearTimeout(checkSlugTimer.current);
     checkSlugTimer.current = setTimeout(() => checkSlug(slug), 500);
@@ -844,7 +702,6 @@ export default function CreatePostPage() {
     setIsDirty(true);
   };
 
-  // ✅ FIX 3: RichTextEditor onChange type ke liye flexible handler
   const handleContentChange = (value: string | EditorSection[]) => {
     const content = typeof value === 'string' ? value : '';
     const metaDescription = generateMetaDescription(content, formData.excerpt);
@@ -857,11 +714,6 @@ export default function CreatePostPage() {
     setFormData(prev => ({ ...prev, slug }));
     setIsDirty(true);
     if (slug) checkSlugDebounced(slug);
-  };
-
-  const handleDynamicFieldChange = (fieldName: string, value: string) => {
-    setFormData(prev => ({ ...prev, [fieldName]: value }));
-    setIsDirty(true);
   };
 
   const handleImageSelect = (url: string) => {
@@ -894,11 +746,6 @@ export default function CreatePostPage() {
 
   const buildMetaObject = (): Record<string, unknown> => {
     const meta: Record<string, unknown> = {};
-    const fields = POST_TYPE_FIELDS[formData.type] || [];
-    fields.forEach(field => {
-      const value = (formData as unknown as Record<string, string>)[field.name];
-      if (value !== undefined && value !== null && value !== '') meta[field.name] = value;
-    });
     if (formData.deadline) meta.deadline = formData.deadline;
     meta.isFeatured = formData.isFeatured;
     return meta;
@@ -912,14 +759,6 @@ export default function CreatePostPage() {
     if (!formData.featuredImage) return 'Featured image is required';
     if (!formData.imageAlt.trim()) return 'Image alt text is required for SEO';
     if (!formData.authorName.trim()) return 'Author name is required';
-
-    const fields = POST_TYPE_FIELDS[formData.type] || [];
-    for (const field of fields) {
-      if (field.required) {
-        const value = (formData as unknown as Record<string, string>)[field.name];
-        if (!value || !value.trim()) return `${field.label} is required`;
-      }
-    }
     return null;
   };
 
@@ -1132,16 +971,17 @@ export default function CreatePostPage() {
                     </div>
                   </div>
 
-                  <DynamicFieldsBox postType={formData.type} formData={formData} onFieldChange={handleDynamicFieldChange} />
-
+                  {/* SINGLE CONTENT BOX (for all post types) */}
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                    <label className="text-sm font-medium text-gray-700 mb-2 block">Content <span className="text-red-500">*</span></label>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      <FiFileText className="w-4 h-4 inline mr-1 text-blue-600" /> Content <span className="text-red-500">*</span>
+                    </label>
                     <RichTextEditor
                       value={formData.content}
                       onChange={handleContentChange}
                       placeholder="Write your content here..."
                       minHeight={400}
-                      mode={formData.type === 'job' || formData.type === 'admission' || formData.type === 'scholarship' ? 'multi-section' : 'single'}
+                      mode="single"
                     />
 
                     <div className="mt-4">
