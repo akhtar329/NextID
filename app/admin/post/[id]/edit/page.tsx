@@ -1,19 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import ImageUpload from '@/components/Image/ImageUpload';
 import RichTextEditor, { type EditorSection } from '@/components/ui/RichTextEditor';
 import { toast } from 'sonner';
 import { generateSchema } from '@/lib/generateSchema';
 import {
   FiSave, FiSearch, FiAlertCircle, FiCheckCircle,
-  FiChevronDown, FiChevronUp, FiPlus, FiTrash2, FiLink,
-  FiTag, FiEye, FiImage, FiLock, FiUser, FiGlobe,
+  FiPlus, FiTrash2, FiLink,
+  FiTag, FiEye, FiImage, FiUser, FiGlobe,
   FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap,
-  FiExternalLink, FiFilePlus
+  FiFileText, FiExternalLink, FiFilePlus
 } from 'react-icons/fi';
 
 // ==================== TYPES ====================
@@ -24,6 +23,12 @@ interface CharCount {
   ogDesc: number;
   twitterTitle: number;
   twitterDesc: number;
+}
+
+interface SlugCheck {
+  available: boolean;
+  checking: boolean;
+  message: string;
 }
 
 interface FormData {
@@ -82,6 +87,7 @@ interface PublishMetaBoxProps {
   isBreaking: boolean;
   onBreakingChange: (value: boolean) => void;
   loading: boolean;
+  slugCheck: SlugCheck; 
   onSaveDraft: () => void;
   onPreview: () => void;
   onViewWebsite: () => void;
@@ -115,6 +121,7 @@ interface PreviewBoxProps {
 interface PermalinkBoxProps {
   slug: string;
   type: string;
+  slugCheck: SlugCheck;
 }
 
 interface RedirectBoxProps {
@@ -257,7 +264,7 @@ const PublishMetaBox = ({
   status, onStatusChange, publishedAt, onPublishedAtChange,
   deadline, onDeadlineChange, isFeatured, onFeaturedChange,
   isPopular, onPopularChange, isBreaking, onBreakingChange,
-  loading, onSaveDraft, onPreview, onViewWebsite, canViewWebsite,
+  loading, slugCheck, onSaveDraft, onPreview, onViewWebsite, canViewWebsite,
 }: PublishMetaBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 border-b border-gray-200">
@@ -347,7 +354,7 @@ const PublishMetaBox = ({
         </button>
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !slugCheck.available}
           className="flex-1 bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {loading ? (
@@ -361,21 +368,26 @@ const PublishMetaBox = ({
   </div>
 );
 
-const PermalinkBox = ({ slug, type }: PermalinkBoxProps) => (
+const PermalinkBox = ({ slug, type, slugCheck }: PermalinkBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <FiLink className="w-4 h-4 text-purple-600" /> Permalink
-        <span className="text-xs text-gray-400 ml-2 flex items-center gap-1"><FiLock className="w-3 h-3" /> Locked</span>
       </h3>
     </div>
     <div className="p-4">
-      <div className="text-xs text-gray-500 mb-1">URL</div>
+      <div className="text-xs text-gray-500 mb-1">URL (auto-generated from title)</div>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-gray-500">https://www.nextid.pk/{getUrlFolder(type)}/</span>
-        <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">{slug || 'example-post'}</code>
+        <span className="text-sm text-gray-500">/nextid.pk/{getUrlFolder(type)}/</span>
+        <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
+          {slug || 'example-post'}
+        </code>
       </div>
-      <p className="text-xs text-gray-400 mt-2">🔒 Slug cannot be changed after creation.</p>
+      {slugCheck.message && (
+        <p className={`text-xs mt-2 ${slugCheck.available ? 'text-green-600' : 'text-red-600'}`}>
+          {slugCheck.message}
+        </p>
+      )}
     </div>
   </div>
 );
@@ -506,10 +518,16 @@ export default function EditPostPage() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showAdvancedSeo, setShowAdvancedSeo] = useState(false);
-  const [showSitemapSeo, setShowSitemapSeo] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'content' | 'seo' | 'advanced'>('content');
   const [countdown, setCountdown] = useState<{ text: string; color: string } | null>(null);
+
+const [slugCheck, setSlugCheck] = useState<SlugCheck>({ available: true, checking: false, message: '' });
+const [isDirty, setIsDirty] = useState(false);
+const [lastSaved, setLastSaved] = useState<Date | null>(null);
+const checkSlugTimer = useRef<NodeJS.Timeout | null>(null);
+const originalSlugRef = useRef<string>('');
+const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     title: '', slug: '', content: '', excerpt: '', type: 'news',
@@ -547,6 +565,32 @@ export default function EditPostPage() {
     return plain.length > 160 ? plain.substring(0, 157) + '...' : plain;
   };
 
+const checkSlugDebounced = (slug: string) => {
+  if (checkSlugTimer.current) clearTimeout(checkSlugTimer.current);
+  checkSlugTimer.current = setTimeout(() => checkSlug(slug), 500);
+};
+
+const checkSlug = async (slug: string) => {
+  if (!slug) return;
+  setSlugCheck(prev => ({ ...prev, checking: true, message: 'Checking...' }));
+  try {
+    const res = await fetch('/api/admin/post/check-slug', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug }),
+    });
+    const data = await res.json();
+    setSlugCheck({
+      available: data.isAvailable,
+      checking: false,
+      message: data.isAvailable ? '✓ Available' : '✗ Already exists',
+    });
+  } catch {
+    setSlugCheck({ available: true, checking: false, message: 'Unable to check' });
+  }
+};
+
+
   // Fetch post
   useEffect(() => {
     const fetchPost = async () => {
@@ -555,6 +599,7 @@ export default function EditPostPage() {
         const data = await res.json();
         if (data.success && data.post) {
           const post = data.post;
+          originalSlugRef.current = post.slug || '';
           const meta = post.meta && typeof post.meta === 'object' ? post.meta : {};
           const deadline = toDateTimeLocal(post.expiresAt || meta.deadline);
 
@@ -638,31 +683,90 @@ export default function EditPostPage() {
     else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
   }, [formData.deadline]);
 
-  // Handlers
-  const handleTitleChange = (title: string) => {
-    const metaTitle = generateMetaTitle(title, formData.type);
-    const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    setFormData(prev => ({ ...prev, title, metaTitle, ogTitle: metaTitle, twitterTitle: metaTitle, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, title: metaTitle.length, ogTitle: metaTitle.length, twitterTitle: metaTitle.length }));
+// Auto-save draft
+useEffect(() => {
+  autoSaveTimer.current = setInterval(() => {
+    if (isDirty && !success && (formData.title || formData.content)) {
+      localStorage.setItem(
+        `nextid_post_draft_${id}`,
+        JSON.stringify({ formData, savedAt: new Date().toISOString() })
+      );
+      setLastSaved(new Date());
+    }
+  }, 30000);
+
+  return () => {
+    if (autoSaveTimer.current) clearInterval(autoSaveTimer.current);
   };
+}, [formData, isDirty, success, id]);
+
+// Warn before tab close
+useEffect(() => {
+  const handler = (e: BeforeUnloadEvent) => {
+    if (isDirty && !success) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  };
+  window.addEventListener('beforeunload', handler);
+  return () => window.removeEventListener('beforeunload', handler);
+}, [isDirty, success]);
+
+
+  // Handlers
+const handleTitleChange = (title: string) => {
+  
+  const newSlug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+
+  const metaTitle = generateMetaTitle(title, formData.type);
+  const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
+
+  setFormData(prev => ({
+    ...prev,
+    title,
+    slug: newSlug,
+    metaTitle,
+    ogTitle: metaTitle,
+    twitterTitle: metaTitle,
+    metaDescription,
+    ogDescription: metaDescription,
+    twitterDescription: metaDescription,
+  }));
+
+  setIsDirty(true);
+  if (newSlug) checkSlugDebounced(newSlug);
+  setCharCount(prev => ({
+    ...prev,
+    title: metaTitle.length,
+    ogTitle: metaTitle.length,
+    twitterTitle: metaTitle.length,
+  }));
+};
 
   // ✅ FIX: RichTextEditor accepts string | EditorSection[]
-  const handleContentChange = (value: string | EditorSection[]) => {
-    const content = typeof value === 'string' ? value : '';
-    const metaDescription = generateMetaDescription(content, formData.excerpt);
-    setFormData(prev => ({ ...prev, content, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
-  };
+ const handleContentChange = (value: string | EditorSection[]) => {
+  const content = typeof value === 'string' ? value : '';
+  const metaDescription = generateMetaDescription(content, formData.excerpt);
+  setFormData(prev => ({ ...prev, content, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+  setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+  setIsDirty(true);
+};
 
   const handleExcerptChange = (excerpt: string) => {
-    const metaDescription = generateMetaDescription(formData.content, excerpt);
-    setFormData(prev => ({ ...prev, excerpt, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
-  };
+  const metaDescription = generateMetaDescription(formData.content, excerpt);
+  setFormData(prev => ({ ...prev, excerpt, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
+  setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+  setIsDirty(true);
+};
 
   const handleImageSelect = (url: string) => {
-    setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
-  };
+  setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
+  setIsDirty(true);
+};
 
   const regenerateMeta = () => {
     const metaTitle = generateMetaTitle(formData.title, formData.type);
@@ -691,12 +795,25 @@ export default function EditPostPage() {
       setLoading(false);
       return;
     }
-    if (!formData.content || formData.content.trim() === '' || formData.content === '<p></p>') {
-      setError('Content is required');
-      toast.error('Content is required');
-      setLoading(false);
-      return;
-    }
+   if (!formData.content || formData.content.trim() === '' || formData.content === '<p></p>') {
+  setError('Content is required');
+  toast.error('Content is required');
+  setLoading(false);
+  return;
+}
+if (!slugCheck.available) {
+  setError('Please choose a different slug');
+  toast.error('Please choose a different slug');
+  setLoading(false);
+  return;
+}
+if (!formData.authorName.trim()) {
+  setError('Author name is required');
+  toast.error('Author name is required');
+  setLoading(false);
+  return;
+}
+
 
     let schemaMarkup: Record<string, unknown> | unknown[] | null;
     try {
@@ -738,10 +855,11 @@ export default function EditPostPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccess('Post updated successfully!');
-        toast.success(status === 'draft' ? 'Draft saved!' : 'Post updated!');
-        setTimeout(() => router.push('/admin/post'), 1500);
-      } else {
+  setSuccess('Post updated successfully!');
+  setIsDirty(false);
+  toast.success(status === 'draft' ? 'Draft saved!' : 'Post updated!');
+  setTimeout(() => router.push('/admin/post'), 1500);
+} else {
         setError(data.error || 'Failed to update');
         toast.error(data.error || 'Failed to update');
       }
@@ -766,9 +884,10 @@ export default function EditPostPage() {
   };
 
   const handleViewWebsite = () => {
-    if (!formData.slug) { toast.error('Slug missing'); return; }
-    window.open(`/${getUrlFolder(formData.type)}/${formData.slug}`, '_blank');
-  };
+  const slug = originalSlugRef.current || formData.slug;
+  if (!slug) { toast.error('Slug missing'); return; }
+  window.open(`/${getUrlFolder(formData.type)}/${slug}`, '_blank');
+};
 
   const seoPreview = {
     title: formData.metaTitle || formData.title || 'Your Title Here',
@@ -788,6 +907,9 @@ export default function EditPostPage() {
             <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">All Posts</Link>
             <span className="text-sm text-gray-400">|</span>
             <span className="text-sm font-semibold">Edit Post</span>
+{lastSaved && (
+  <span className="text-xs text-gray-400">✓ Saved {lastSaved.toLocaleTimeString()}</span>
+)}
           </div>
           <div className="flex items-center gap-3">
             {formData.status === 'published' ? (
@@ -872,22 +994,43 @@ export default function EditPostPage() {
               {activeTab === 'content' && (
                 <>
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Post Type</label>
-                    <div className="inline-flex px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700">
-                      {POST_TYPES.find(t => t.value === formData.type)?.icon} {POST_TYPES.find(t => t.value === formData.type)?.label}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-2">Post type cannot be changed</p>
-                  </div>
+  <label className="text-sm font-medium text-gray-700 mb-2 block">Post Type</label>
+  <div className="flex flex-wrap gap-2">
+    {POST_TYPES.map((type) => (
+      <button
+        key={type.value}
+        type="button"
+        onClick={() => {
+          const newMetaTitle = generateMetaTitle(formData.title, type.value);
+          setFormData(prev => ({
+            ...prev,
+            type: type.value,
+            metaTitle: newMetaTitle,
+            ogTitle: newMetaTitle,
+          }));
+          setIsDirty(true);
+        }}
+        className={`px-3 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1 ${
+          formData.type === type.value
+            ? type.color + ' ring-2 ring-offset-1 ring-blue-500'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+        }`}
+      >
+        <span>{type.icon}</span> {type.label}
+      </button>
+    ))}
+  </div>
+</div>
 
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
                     <RichTextEditor
-                      value={formData.content}
-                      onChange={handleContentChange}
-                      placeholder="Write your content here..."
-                      minHeight={400}
-                      mode={formData.type === 'job' || formData.type === 'admission' || formData.type === 'scholarship' ? 'multi-section' : 'single'}
-                    />
+  value={formData.content}
+  onChange={handleContentChange}
+  placeholder="Write your content here..."
+  minHeight={400}
+  mode="single"
+/>
 
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -955,81 +1098,78 @@ export default function EditPostPage() {
                   <PreviewBox title={seoPreview.title} description={seoPreview.description} url={seoPreview.url} />
                 </>
               )}
+{activeTab === 'advanced' && (
+  <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
+    <h3 className="text-sm font-semibold flex items-center gap-2"><FiGlobe className="w-4 h-4" /> Advanced Settings</h3>
 
-              {activeTab === 'advanced' && (
-                <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
-                  <h3 className="text-sm font-semibold flex items-center gap-2"><FiGlobe className="w-4 h-4" /> Advanced Settings</h3>
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">OG Type</label>
+      <select value={formData.ogType} onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+        {OG_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </div>
 
-                  <button type="button" onClick={() => setShowAdvancedSeo(!showAdvancedSeo)} className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-b">
-                    {showAdvancedSeo ? <FiChevronUp /> : <FiChevronDown />} Open Graph & Twitter Cards
-                  </button>
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">OG Title</label>
+      <input type="text" value={formData.ogTitle} onChange={(e) => setFormData(prev => ({ ...prev, ogTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+    </div>
 
-                  {showAdvancedSeo && (
-                    <div className="space-y-4 pt-2">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Type</label>
-                        <select value={formData.ogType} onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                          {OG_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Title</label>
-                        <input type="text" value={formData.ogTitle} onChange={(e) => setFormData(prev => ({ ...prev, ogTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">OG Description</label>
-                        <textarea value={formData.ogDescription} onChange={(e) => setFormData(prev => ({ ...prev, ogDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
-                        <select value={formData.twitterCard} onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                          {TWITTER_CARDS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Title</label>
-                        <input type="text" value={formData.twitterTitle} onChange={(e) => setFormData(prev => ({ ...prev, twitterTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Description</label>
-                        <textarea value={formData.twitterDescription} onChange={(e) => setFormData(prev => ({ ...prev, twitterDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
-                      </div>
-                    </div>
-                  )}
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">OG Description</label>
+      <textarea value={formData.ogDescription} onChange={(e) => setFormData(prev => ({ ...prev, ogDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+    </div>
 
-                  <button type="button" onClick={() => setShowSitemapSeo(!showSitemapSeo)} className="w-full text-left text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1 py-2 border-b">
-                    {showSitemapSeo ? <FiChevronUp /> : <FiChevronDown />} Sitemap & Schema
-                  </button>
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
+      <select value={formData.twitterCard} onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+        {TWITTER_CARDS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </div>
 
-                  {showSitemapSeo && (
-                    <div className="space-y-4 pt-2">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Priority</label>
-                        <select value={formData.priority} onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                          {PRIORITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
-                        <select value={formData.changefreq} onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                          {CHANGEFREQ_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
-                        <input type="text" value={formData.breadcrumbTitle} onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">
-                          Schema Markup
-                          <span className="text-green-600 ml-2 text-xs">✓ Auto-generate if empty</span>
-                        </label>
-                        <textarea value={formData.schemaMarkup} onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))} rows={5} className="w-full border rounded-md px-3 py-2 text-sm font-mono" placeholder="Auto-generated..." />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Title</label>
+      <input type="text" value={formData.twitterTitle} onChange={(e) => setFormData(prev => ({ ...prev, twitterTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+    </div>
+
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Description</label>
+      <textarea value={formData.twitterDescription} onChange={(e) => setFormData(prev => ({ ...prev, twitterDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+    </div>
+
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Sitemap Priority</label>
+      <select value={formData.priority} onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+        {PRIORITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
+      <select value={formData.changefreq} onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
+        {CHANGEFREQ_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
+      <input type="text" value={formData.breadcrumbTitle} onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+    </div>
+
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">
+        Schema Markup (JSON-LD)
+        <span className="text-green-600 ml-2 text-xs">✓ Auto-generated if empty</span>
+      </label>
+      <textarea
+        value={formData.schemaMarkup}
+        onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))}
+        rows={6}
+        className="w-full border rounded-md px-3 py-2 text-sm font-mono"
+        placeholder="Auto-generated..."
+      />
+    </div>
+  </div>
+)}
             </div>
 
             {/* RIGHT */}
@@ -1048,6 +1188,7 @@ export default function EditPostPage() {
                 isBreaking={formData.isBreaking}
                 onBreakingChange={(val) => setFormData(prev => ({ ...prev, isBreaking: val }))}
                 loading={loading}
+                 slugCheck={slugCheck}
                 onSaveDraft={handleSaveDraft}
                 onPreview={handlePreview}
                 onViewWebsite={handleViewWebsite}
@@ -1055,7 +1196,7 @@ export default function EditPostPage() {
               />
 
               <AuthorBox authorName={formData.authorName} onAuthorNameChange={(val) => setFormData(prev => ({ ...prev, authorName: val }))} />
-              <PermalinkBox slug={formData.slug} type={formData.type} />
+              <PermalinkBox slug={formData.slug} type={formData.type} slugCheck={slugCheck} />
               <RedirectBox oldSlug={formData.oldSlug} onOldSlugChange={(val) => setFormData(prev => ({ ...prev, oldSlug: val }))} />
               <FeaturedImageBox
                 image={formData.featuredImage}
