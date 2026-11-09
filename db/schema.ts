@@ -197,33 +197,33 @@ export const posts = pgTable(
 );
 
 /* =========================
-💬 POST COMMENTS
+👤 INSTITUTE USERS
 ========================= */
-export const postComments = pgTable(
-  "post_comments",
-  {
-    id: serial("id").primaryKey(),
-    postId: integer("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-    parentId: integer("parent_id"),
-    
-    userName: varchar("user_name", { length: 100 }).notNull(),
-    userEmail: varchar("user_email", { length: 255 }),
-    userWebsite: varchar("user_website", { length: 255 }),
-    
-    comment: text("comment").notNull(),
-    
-    isApproved: boolean("is_approved").default(false),
-    likes: integer("likes").default(0),
-    
-    userAgent: text("user_agent"),
-    ipAddress: varchar("ip_address", { length: 50 }),
-    
-    createdAt: timestamp("created_at").defaultNow(),
-  },
-  (table) => ({
-    idxCommentPost: index("idx_comment_post").on(table.postId),
-    idxCommentApproved: index("idx_comment_approved").on(table.isApproved),
-    idxCommentCreated: index("idx_comment_created").on(table.createdAt),
-    idxCommentParent: index("idx_comment_parent").on(table.parentId),
-  })
-);
+export const instituteUsers = pgTable("institute_users", {
+  id: serial("id").primaryKey(),
+
+  // BASIC INFORMATION
+  name: text("name").notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  phone: varchar("phone", { length: 30 }),
+
+  // AUTHENTICATION
+  password: text("password").notNull(),
+
+  // ACCOUNT STATUS
+  status: boolean("status").default(true),
+
+  // EMAIL VERIFICATION
+  emailVerifiedAt: timestamp("email_verified_at"),
+
+  // LOGIN INFORMATION
+  lastLogin: timestamp("last_login"),
+
+  // PASSWORD RESET
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpires: timestamp("password_reset_expires"),
+
+  // TIMESTAMPS
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});

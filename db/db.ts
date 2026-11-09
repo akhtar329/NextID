@@ -14,8 +14,8 @@ if (!process.env.DATABASE_URL) {
 // Vercel/serverless mein har cold start pe fresh pool milega.
 
 declare global {
-  // eslint-disable-next-line no-var
   var __pgPool: Pool | undefined;
+  var __pgShutdownRegistered: boolean | undefined;
 }
 
 const pool =
@@ -51,6 +51,7 @@ export const {
   userPermissions,
   sessions,
   notifications,
+  instituteUsers,
 } = schema;
 
 // ================== CLEAN EXIT (dev only, safe) ==================
@@ -67,8 +68,8 @@ if (process.env.NODE_ENV !== "production") {
   };
 
   // Sirf ek baar register karo (HMR ke wajah se multiple na ho)
-  if (!(globalThis as any).__pgShutdownRegistered) {
-    (globalThis as any).__pgShutdownRegistered = true;
+  if (!globalThis.__pgShutdownRegistered) {
+    globalThis.__pgShutdownRegistered = true;
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
   }
