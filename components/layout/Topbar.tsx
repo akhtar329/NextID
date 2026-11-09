@@ -169,7 +169,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       }
     } catch (error) {
       console.error("Logout error:", error);
-      router.push("/login");
+      router.push("/admin/login");
     }
   };
 

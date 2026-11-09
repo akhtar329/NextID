@@ -253,7 +253,7 @@ export default function ForgotPasswordPage() {
             {/* Back to Login */}
             <div className="mt-7 text-center">
               <Link
-                href="/login"
+                href="/admin/login"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition-colors hover:text-indigo-600"
               >
                 <svg
@@ -343,7 +343,7 @@ export default function ForgotPasswordPage() {
               </p>
 
               <Link
-                href="/login"
+                href="/admin/login"
                 className="mt-7 flex h-12 w-full items-center justify-center rounded-xl bg-indigo-600 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-700"
               >
                 Back to Login

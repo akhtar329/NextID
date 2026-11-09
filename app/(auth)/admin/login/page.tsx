@@ -234,7 +234,7 @@ function LoginForm() {
         {/* Forgot Password */}
         <div className="flex justify-end">
           <Link
-            href="/forgot-password"
+            href="/admin/forgot-password"
             className="text-sm font-semibold text-indigo-600 transition-colors hover:text-indigo-700 hover:underline"
           >
             Forgot password?

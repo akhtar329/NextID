@@ -58,7 +58,7 @@ export default function InstituteRegisterPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/institute/register", {
+      const response = await fetch("/api/institute/users/owners/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
