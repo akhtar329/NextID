@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { db, adminUsers } from "@/db/db";
+import { getDb } from "@/db/db";
+import { adminUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
@@ -16,6 +17,14 @@ interface RuntimeEnv {
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   NEXT_PUBLIC_SITE_URL?: string;
+}
+
+interface RequestBody {
+  email?: unknown;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function jsonResponse(
@@ -58,94 +67,105 @@ async function sendResetEmail(
   recipient: string,
   resetUrl: string
 ): Promise<boolean> {
-  const safeUrl = escapeHtml(resetUrl);
+  try {
+    const safeUrl = escapeHtml(resetUrl);
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <body style="margin:0;padding:30px;background:#f4f4f5;font-family:Arial,sans-serif;">
-        <div style="max-width:600px;margin:auto;background:#ffffff;padding:35px;border-radius:8px;">
-          <h2 style="color:#18181b;">Password Reset Request</h2>
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <body style="margin:0;padding:30px;background:#f4f4f5;font-family:Arial,sans-serif;">
+          <div style="max-width:600px;margin:auto;background:#ffffff;padding:35px;border-radius:8px;">
+            <h2 style="color:#18181b;">Password Reset Request</h2>
 
-          <p style="color:#52525b;line-height:1.6;">
-            We received a request to reset your NextID.pk account password.
-          </p>
+            <p style="color:#52525b;line-height:1.6;">
+              We received a request to reset your NextID.pk account password.
+            </p>
 
-          <p style="margin:30px 0;">
-            <a
-              href="${safeUrl}"
-              style="background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:6px;display:inline-block;"
-            >
-              Reset Your Password
-            </a>
-          </p>
+            <p style="margin:30px 0;">
+              <a
+                href="${safeUrl}"
+                style="background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:6px;display:inline-block;"
+              >
+                Reset Your Password
+              </a>
+            </p>
 
-          <p style="color:#52525b;line-height:1.6;">
-            This link will expire in 1 hour.
-          </p>
+            <p style="color:#52525b;line-height:1.6;">
+              This link will expire in 1 hour.
+            </p>
 
-          <p style="color:#71717a;font-size:13px;line-height:1.6;">
-            If you did not request a password reset, you can safely ignore this email.
-            Your password will remain unchanged.
-          </p>
+            <p style="color:#71717a;font-size:13px;line-height:1.6;">
+              If you did not request a password reset, you can safely ignore this email.
+              Your password will remain unchanged.
+            </p>
 
-          <hr style="border:none;border-top:1px solid #e4e4e7;margin:25px 0;" />
+            <hr style="border:none;border-top:1px solid #e4e4e7;margin:25px 0;" />
 
-          <p style="color:#a1a1aa;font-size:12px;">
-            NextID.pk Support
-          </p>
-        </div>
-      </body>
-    </html>
-  `;
+            <p style="color:#a1a1aa;font-size:12px;">
+              NextID.pk Support
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
 
-  const text = [
-    "Password Reset Request - NextID.pk",
-    "",
-    "We received a request to reset your account password.",
-    "",
-    `Reset your password using this link: ${resetUrl}`,
-    "",
-    "This link will expire in 1 hour.",
-    "",
-    "If you did not request this, ignore this email.",
-  ].join("\n");
+    const text = [
+      "Password Reset Request - NextID.pk",
+      "",
+      "We received a request to reset your account password.",
+      "",
+      `Reset your password using this link: ${resetUrl}`,
+      "",
+      "This link will expire in 1 hour.",
+      "",
+      "If you did not request this, ignore this email.",
+    ].join("\n");
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [recipient],
-      subject: "Reset Your Password - NextID.pk",
-      html,
-      text,
-    }),
-  });
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [recipient],
+        subject: "Reset Your Password - NextID.pk",
+        html,
+        text,
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
+    if (!response.ok) {
+      const errorText = await response.text();
 
-    console.error("Resend email error:", response.status, errorText);
+      console.error(
+        "Resend email error:",
+        response.status,
+        errorText
+      );
 
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Resend request failed:", error);
     return false;
   }
-
-  return true;
 }
 
 export async function POST(request: NextRequest) {
   let userId: number | null = null;
+  let db: ReturnType<typeof getDb> | null = null;
 
   try {
+    // Get Cloudflare runtime environment
     const { env } = await getCloudflareContext({
       async: true,
     });
 
-    const runtimeEnv = env as typeof env & RuntimeEnv;
+    const runtimeEnv = env as unknown as RuntimeEnv;
 
     const apiKey = runtimeEnv.RESEND_API_KEY;
     const fromEmail = runtimeEnv.RESEND_FROM_EMAIL;
@@ -157,30 +177,35 @@ export async function POST(request: NextRequest) {
       );
 
       return jsonResponse(
-        { success: false, message: "Email service is not configured." },
+        {
+          success: false,
+          message: "Email service is not configured.",
+        },
         500
       );
     }
 
+    // Parse request body
     let body: unknown;
 
     try {
       body = await request.json();
     } catch {
       return jsonResponse(
-        { success: false, message: "Invalid request body." },
+        {
+          success: false,
+          message: "Invalid request body.",
+        },
         400
       );
     }
 
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      !("email" in body) ||
-      typeof body.email !== "string"
-    ) {
+    if (!isRecord(body) || typeof body.email !== "string") {
       return jsonResponse(
-        { success: false, message: "Please provide a valid email." },
+        {
+          success: false,
+          message: "Please provide a valid email.",
+        },
         400
       );
     }
@@ -192,23 +217,33 @@ export async function POST(request: NextRequest) {
       !isValidEmail(normalizedEmail)
     ) {
       return jsonResponse(
-        { success: false, message: "Please provide a valid email." },
+        {
+          success: false,
+          message: "Please provide a valid email.",
+        },
         400
       );
     }
 
-    const normalizedSiteUrl = siteUrl.trim();
-
+    // Validate site URL
     let resetUrl: URL;
 
     try {
-      const parsedSiteUrl = new URL(normalizedSiteUrl);
+      const parsedSiteUrl = new URL(siteUrl.trim());
+
+      const isLocalhost =
+        parsedSiteUrl.hostname === "localhost" ||
+        parsedSiteUrl.hostname === "127.0.0.1";
 
       if (
         parsedSiteUrl.protocol !== "https:" &&
-        parsedSiteUrl.hostname !== "localhost"
+        !isLocalhost
       ) {
         throw new Error("HTTPS is required.");
+      }
+
+      if (parsedSiteUrl.username || parsedSiteUrl.password) {
+        throw new Error("Credentials are not allowed in site URL.");
       }
 
       resetUrl = new URL("/reset-password", parsedSiteUrl.origin);
@@ -216,11 +251,18 @@ export async function POST(request: NextRequest) {
       console.error("Invalid NEXT_PUBLIC_SITE_URL configuration.");
 
       return jsonResponse(
-        { success: false, message: "Invalid site configuration." },
+        {
+          success: false,
+          message: "Invalid site configuration.",
+        },
         500
       );
     }
 
+    // Initialize database at request runtime
+    db = getDb();
+
+    // Find admin account
     const [user] = await db
       .select({
         id: adminUsers.id,
@@ -229,13 +271,14 @@ export async function POST(request: NextRequest) {
       .where(eq(adminUsers.email, normalizedEmail))
       .limit(1);
 
-    // Do not reveal whether an email address has an account.
+    // Do not reveal whether an email address has an account
     if (!user) {
       return jsonResponse(GENERIC_RESPONSE);
     }
 
     userId = user.id;
 
+    // Generate reset token
     const token = generateResetToken();
 
     const expiresAt = new Date(
@@ -245,6 +288,7 @@ export async function POST(request: NextRequest) {
     resetUrl.searchParams.set("token", token);
     resetUrl.searchParams.set("email", normalizedEmail);
 
+    // Save reset token
     await db
       .update(adminUsers)
       .set({
@@ -253,6 +297,7 @@ export async function POST(request: NextRequest) {
       })
       .where(eq(adminUsers.id, user.id));
 
+    // Send reset email
     const emailSent = await sendResetEmail(
       apiKey,
       fromEmail,
@@ -272,7 +317,11 @@ export async function POST(request: NextRequest) {
       userId = null;
 
       return jsonResponse(
-        { success: false, message: "Unable to send reset email. Please try again later." },
+        {
+          success: false,
+          message:
+            "Unable to send reset email. Please try again later.",
+        },
         500
       );
     }
@@ -281,8 +330,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Password reset request error:", error);
 
-    // Remove the token if an error occurs after it was saved.
-    if (userId !== null) {
+    // Remove reset token if an error occurs after saving it
+    if (userId !== null && db !== null) {
       try {
         await db
           .update(adminUsers)
@@ -297,7 +346,10 @@ export async function POST(request: NextRequest) {
     }
 
     return jsonResponse(
-      { success: false, message: "Something went wrong. Please try again later." },
+      {
+        success: false,
+        message: "Something went wrong. Please try again later.",
+      },
       500
     );
   }

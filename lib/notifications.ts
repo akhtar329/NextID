@@ -1,8 +1,8 @@
-// lib/notifications.ts
-import { and, eq, sql } from 'drizzle-orm';
-import { db } from '@/db/db';
-import { notifications } from '@/db/schema';
-import { writeLog } from '@/lib/logger';
+
+import { and, eq, sql } from "drizzle-orm";
+import { getDb } from "@/db/db";
+import { notifications } from "@/db/schema";
+import { writeLog } from "@/lib/logger";
 
 interface CreateNotificationParams {
   userId: number;
@@ -10,6 +10,44 @@ interface CreateNotificationParams {
   title: string;
   message: string;
   link?: string;
+}
+
+function isValidUserId(userId: number): boolean {
+  return Number.isSafeInteger(userId) && userId > 0;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
+async function logDatabaseOperation(params: {
+  operation: string;
+  startTime: number;
+  data: Record<string, unknown>;
+  error?: unknown;
+  dataSize?: number;
+}): Promise<void> {
+  try {
+    await writeLog({
+      id: `db_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      type: "DATABASE_QUERY",
+      operation: params.operation,
+      source: "database",
+      duration: Date.now() - params.startTime,
+      ...(params.dataSize !== undefined
+        ? { dataSize: params.dataSize }
+        : {}),
+      data: {
+        ...params.data,
+        ...(params.error !== undefined
+          ? { error: getErrorMessage(params.error) }
+          : {}),
+      },
+    });
+  } catch (logError) {
+    console.error("Database operation logging failed:", logError);
+  }
 }
 
 export async function createNotification({
@@ -20,8 +58,19 @@ export async function createNotification({
   link,
 }: CreateNotificationParams) {
   const startTime = Date.now();
-  
+
   try {
+    if (
+      !isValidUserId(userId) ||
+      !type.trim() ||
+      !title.trim() ||
+      !message.trim()
+    ) {
+      return null;
+    }
+
+    const db = getDb();
+
     const [newNotification] = await db
       .insert(notifications)
       .values({
@@ -36,13 +85,9 @@ export async function createNotification({
       })
       .returning();
 
-    await writeLog({
-      id: `db_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "createNotification",
-      source: "database",
-      duration: Date.now() - startTime,
+      startTime,
       data: {
         userId,
         type,
@@ -50,33 +95,32 @@ export async function createNotification({
       },
     });
 
-    return newNotification;
+    return newNotification ?? null;
   } catch (error) {
-    await writeLog({
-      id: `db_err_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "createNotification_error",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-        type,
-      },
+      startTime,
+      data: { userId, type },
+      error,
     });
 
-    console.error('Error creating notification:', error);
+    console.error("Error creating notification:", error);
     return null;
   }
 }
 
 export async function getUnreadCount(userId: number): Promise<number> {
   const startTime = Date.now();
-  
+
   try {
+    if (!isValidUserId(userId)) {
+      return 0;
+    }
+
+    const db = getDb();
+
     const result = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(notifications)
       .where(
         and(
@@ -84,51 +128,51 @@ export async function getUnreadCount(userId: number): Promise<number> {
           eq(notifications.read, false)
         )
       );
-    
-    const count = result[0]?.count || 0;
 
-    await writeLog({
-      id: `db_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    const count = Number(result[0]?.count ?? 0);
+
+    await logDatabaseOperation({
       operation: "getUnreadCount",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        userId,
-        count,
-      },
+      startTime,
+      data: { userId, count },
     });
 
-    return count;
+    return Number.isFinite(count) ? count : 0;
   } catch (error) {
-    await writeLog({
-      id: `db_err_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "getUnreadCount_error",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-      },
+      startTime,
+      data: { userId },
+      error,
     });
 
-    console.error('Error getting unread count:', error);
+    console.error("Error getting unread count:", error);
     return 0;
   }
 }
 
-export async function markAsRead(notificationId: number, userId: number) {
+export async function markAsRead(
+  notificationId: number,
+  userId: number
+): Promise<boolean> {
   const startTime = Date.now();
-  
+
   try {
+    if (
+      !Number.isSafeInteger(notificationId) ||
+      notificationId <= 0 ||
+      !isValidUserId(userId)
+    ) {
+      return false;
+    }
+
+    const db = getDb();
+
     await db
       .update(notifications)
-      .set({ 
-        read: true, 
-        updatedAt: new Date() 
+      .set({
+        read: true,
+        updatedAt: new Date(),
       })
       .where(
         and(
@@ -136,81 +180,61 @@ export async function markAsRead(notificationId: number, userId: number) {
           eq(notifications.userId, userId)
         )
       );
-    
-    await writeLog({
-      id: `db_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+
+    await logDatabaseOperation({
       operation: "markAsRead",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        notificationId,
-        userId,
-      },
+      startTime,
+      data: { notificationId, userId },
     });
 
     return true;
   } catch (error) {
-    await writeLog({
-      id: `db_err_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "markAsRead_error",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        error: error instanceof Error ? error.message : "Unknown error",
-        notificationId,
-        userId,
-      },
+      startTime,
+      data: { notificationId, userId },
+      error,
     });
 
-    console.error('Error marking notification as read:', error);
+    console.error("Error marking notification as read:", error);
     return false;
   }
 }
 
-export async function markAllAsRead(userId: number) {
+export async function markAllAsRead(userId: number): Promise<boolean> {
   const startTime = Date.now();
-  
+
   try {
+    if (!isValidUserId(userId)) {
+      return false;
+    }
+
+    const db = getDb();
+
     await db
       .update(notifications)
-      .set({ 
-        read: true, 
-        updatedAt: new Date() 
+      .set({
+        read: true,
+        updatedAt: new Date(),
       })
       .where(eq(notifications.userId, userId));
-    
-    await writeLog({
-      id: `db_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+
+    await logDatabaseOperation({
       operation: "markAllAsRead",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        userId,
-      },
+      startTime,
+      data: { userId },
     });
 
     return true;
   } catch (error) {
-    await writeLog({
-      id: `db_err_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "markAllAsRead_error",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-      },
+      startTime,
+      data: { userId },
+      error,
     });
 
-    console.error('Error marking all as read:', error);
+    console.error("Error marking all notifications as read:", error);
     return false;
   }
 }
@@ -223,48 +247,50 @@ export async function getNotifications(
   const startTime = Date.now();
 
   try {
+    if (!isValidUserId(userId)) {
+      return [];
+    }
+
+    const safeLimit = Number.isFinite(limit)
+      ? Math.min(100, Math.max(1, Math.floor(limit)))
+      : 20;
+
+    const safeOffset = Number.isFinite(offset)
+      ? Math.max(0, Math.floor(offset))
+      : 0;
+
+    const db = getDb();
+
     const rows = await db
       .select()
       .from(notifications)
       .where(eq(notifications.userId, userId))
       .orderBy(sql`${notifications.createdAt} DESC`)
-      .limit(limit)
-      .offset(offset);
+      .limit(safeLimit)
+      .offset(safeOffset);
 
-    await writeLog({
-      id: `db_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "getNotifications",
-      source: "database",
-      duration: Date.now() - startTime,
+      startTime,
       dataSize: JSON.stringify(rows).length,
       data: {
         userId,
-        limit,
-        offset,
+        limit: safeLimit,
+        offset: safeOffset,
         count: rows.length,
       },
     });
 
     return rows;
   } catch (error) {
-    await writeLog({
-      id: `db_err_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      type: "DATABASE_QUERY",
+    await logDatabaseOperation({
       operation: "getNotifications_error",
-      source: "database",
-      duration: Date.now() - startTime,
-      data: {
-        error: error instanceof Error ? error.message : "Unknown error",
-        userId,
-        limit,
-        offset,
-      },
+      startTime,
+      data: { userId, limit, offset },
+      error,
     });
 
-    console.error('Error getting notifications:', error);
+    console.error("Error getting notifications:", error);
     return [];
   }
 }

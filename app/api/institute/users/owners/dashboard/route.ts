@@ -1,57 +1,99 @@
-// app/api/institute/users/owners/dashboard/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db/db';
-import { instituteUsers } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/db/db";
+import { instituteUsers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import jwt from "jsonwebtoken";
 
-// ============ TYPES ============
 interface JwtPayload {
   id: number;
   email: string;
   name: string;
   role: string;
-  accountType?: string;
+  accountType: string;
 }
 
-// ============ HELPER: Verify Token ============
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Verify institute authentication token
 function verifyAuthToken(request: NextRequest): JwtPayload | null {
   try {
-    const token = request.cookies.get('authToken')?.value;
-    if (!token) return null;
+    const token = request.cookies.get("authToken")?.value;
+
+    if (!token) {
+      return null;
+    }
 
     const secret = process.env.JWT_SECRET;
-    if (!secret) return null;
 
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    if (!secret) {
+      console.error("JWT_SECRET is not configured");
+      return null;
+    }
 
-    // ✅ Sirf institute users allow
-    if (decoded.role !== 'institute') return null;
+    const decoded: unknown = jwt.verify(token, secret);
 
-    return decoded;
+    if (!isRecord(decoded)) {
+      return null;
+    }
+
+    const id = decoded.id;
+    const email = decoded.email;
+    const name = decoded.name;
+    const role = decoded.role;
+    const accountType = decoded.accountType;
+
+    if (
+      typeof id !== "number" ||
+      !Number.isSafeInteger(id) ||
+      id <= 0 ||
+      typeof email !== "string" ||
+      typeof name !== "string" ||
+      role !== "institute" ||
+      accountType !== "institute"
+    ) {
+      return null;
+    }
+
+    return {
+      id,
+      email,
+      name,
+      role,
+      accountType,
+    };
   } catch {
     return null;
   }
 }
 
-// ============ GET /api/institute/users/owners/dashboard ============
+// GET /api/institute/users/owners/dashboard
 export async function GET(request: NextRequest) {
   try {
-    // ===== 1. AUTH CHECK =====
+    // 1. Authentication
     const decodedUser = verifyAuthToken(request);
 
     if (!decodedUser) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Unauthorized. Please sign in.',
+          message: "Unauthorized. Please sign in.",
         },
-        { status: 401 }
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    // ===== 2. FETCH OWNER FROM DB =====
+    // 2. Database connection at request runtime
+    const db = getDb();
+
+    // 3. Fetch owner from database
     const owners = await db
       .select({
         id: instituteUsers.id,
@@ -69,22 +111,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: 'User account not found.',
+          message: "User account not found.",
         },
-        { status: 404 }
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
     const owner = owners[0];
 
-    // ===== 3. INSTITUTE DATA =====
-    // ⚠️ Abhi ke liye null — jab institutes table banega tab query add karo
-    // const institutes = await db.select().from(institutes).where(eq(institutes.ownerId, owner.id)).limit(1);
-    // const institute = institutes.length > 0 ? institutes[0] : null;
+    // 4. Institute data
+    // Placeholder until the institutes table and owner relationship are implemented.
     const institute = null;
 
-    // ===== 4. STATS =====
-    // ⚠️ Abhi placeholder — jab tables banenge tab queries add karo
+    // 5. Dashboard statistics
+    // Placeholder until student, teacher, staff, attendance and fee tables are implemented.
     const stats = {
       totalStudents: 0,
       totalTeachers: 0,
@@ -98,7 +143,7 @@ export async function GET(request: NextRequest) {
       monthlyGrowth: 0,
     };
 
-    // ===== 5. RESPONSE =====
+    // 6. Response
     return NextResponse.json(
       {
         success: true,
@@ -115,19 +160,24 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate',
+          "Cache-Control": "no-store, must-revalidate",
         },
       }
     );
+  } catch (error) {
+    console.error("Institute owner dashboard error:", error);
 
-  } catch (err) {
-    console.error('DASHBOARD ERROR:', err);
     return NextResponse.json(
       {
         success: false,
-        message: 'Unable to load dashboard. Please try again.',
+        message: "Unable to load dashboard. Please try again.",
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   }
 }
