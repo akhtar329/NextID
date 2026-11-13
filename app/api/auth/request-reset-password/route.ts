@@ -1,77 +1,37 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
-import { adminUsers } from "@/db/schema";
+import { db, adminUsers } from "@/db/db";
 import { eq } from "drizzle-orm";
-import nodemailer from "nodemailer";
-
-export const runtime = "nodejs";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000;
 
 const GENERIC_RESPONSE = {
   success: true,
   message:
-    "If an account exists with this email, you will receive a password reset link.",
+    "If an account exists with this email, a password reset link has been sent.",
 };
 
-function jsonError(message: string, status: number) {
-  return NextResponse.json(
-    {
-      success: false,
-      error: message,
+interface RuntimeEnv {
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
+  NEXT_PUBLIC_SITE_URL?: string;
+}
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  status = 200
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
     },
-    {
-      status,
-      headers: {
-        "Cache-Control": "no-store, must-revalidate",
-      },
-    }
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
-
-async function parseRequestBody(
-  request: Request
-): Promise<{ email: string } | null> {
-  try {
-    const body: unknown = await request.json();
-
-    if (!isRecord(body) || typeof body.email !== "string") {
-      return null;
-    }
-
-    return {
-      email: body.email,
-    };
-  } catch {
-    return null;
-  }
+  });
 }
 
 function isValidEmail(email: string): boolean {
-  if (email.length > 254) {
-    return false;
-  }
-
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-function generateResetToken(): string {
-  const bytes = new Uint8Array(32);
-
-  globalThis.crypto.getRandomValues(bytes);
-
-  return Array.from(bytes)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function escapeHtml(value: string): string {
@@ -83,233 +43,224 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function getEmailConfiguration() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT);
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+function generateResetToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
 
-  if (
-    !host ||
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65535 ||
-    !smtpUser ||
-    !smtpPass ||
-    !siteUrl
-  ) {
-    return null;
-  }
-
-  let parsedSiteUrl: URL;
-
-  try {
-    parsedSiteUrl = new URL(siteUrl);
-  } catch {
-    return null;
-  }
-
-  if (
-    parsedSiteUrl.protocol !== "https:" &&
-    process.env.NODE_ENV === "production"
-  ) {
-    return null;
-  }
-
-  const secure = process.env.SMTP_SECURE === "true";
-
-  return {
-    host,
-    port,
-    smtpUser,
-    smtpPass,
-    secure,
-    siteUrl: parsedSiteUrl.origin,
-  };
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function createResetEmail(resetUrl: string): string {
-  const safeResetUrl = escapeHtml(resetUrl);
+async function sendResetEmail(
+  apiKey: string,
+  fromEmail: string,
+  recipient: string,
+  resetUrl: string
+): Promise<boolean> {
+  const safeUrl = escapeHtml(resetUrl);
 
-  return `
+  const html = `
     <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Reset Your Password - NextID.pk</title>
-      </head>
+    <html>
+      <body style="margin:0;padding:30px;background:#f4f4f5;font-family:Arial,sans-serif;">
+        <div style="max-width:600px;margin:auto;background:#ffffff;padding:35px;border-radius:8px;">
+          <h2 style="color:#18181b;">Password Reset Request</h2>
 
-      <body style="margin:0;padding:20px;background:#f3f4f6;font-family:Arial,sans-serif;">
-        <div style="max-width:600px;margin:30px auto;background:#ffffff;padding:35px;border-radius:12px;">
-
-          <h2 style="color:#2563eb;margin-top:0;">
-            Password Reset Request
-          </h2>
-
-          <p style="color:#374151;line-height:1.7;">
-            You requested a password reset for your NextID.pk account.
+          <p style="color:#52525b;line-height:1.6;">
+            We received a request to reset your NextID.pk account password.
           </p>
 
-          <p style="color:#374151;line-height:1.7;">
-            Click the button below to create a new password:
-          </p>
-
-          <div style="margin:25px 0;">
+          <p style="margin:30px 0;">
             <a
-              href="${safeResetUrl}"
-              style="display:inline-block;background:#2563eb;color:#ffffff;padding:13px 25px;text-decoration:none;border-radius:8px;font-weight:bold;"
+              href="${safeUrl}"
+              style="background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 24px;border-radius:6px;display:inline-block;"
             >
-              Reset Password
-            </a>
-          </div>
-
-          <p style="color:#6b7280;font-size:13px;line-height:1.6;">
-            If the button does not work, copy and paste this link into your browser:
-          </p>
-
-          <p style="font-size:13px;word-break:break-all;">
-            <a href="${safeResetUrl}" style="color:#2563eb;">
-              ${safeResetUrl}
+              Reset Your Password
             </a>
           </p>
 
-          <p style="color:#374151;">
-            This link will expire in <strong>1 hour</strong>.
+          <p style="color:#52525b;line-height:1.6;">
+            This link will expire in 1 hour.
           </p>
 
-          <hr style="border:none;border-top:1px solid #e5e7eb;margin:25px 0;" />
-
-          <p style="color:#6b7280;font-size:12px;line-height:1.6;">
-            If you did not request this password reset, please ignore this email.
+          <p style="color:#71717a;font-size:13px;line-height:1.6;">
+            If you did not request a password reset, you can safely ignore this email.
             Your password will remain unchanged.
           </p>
 
-          <p style="color:#6b7280;font-size:12px;">
-            NextID Support
-          </p>
+          <hr style="border:none;border-top:1px solid #e4e4e7;margin:25px 0;" />
 
+          <p style="color:#a1a1aa;font-size:12px;">
+            NextID.pk Support
+          </p>
         </div>
       </body>
     </html>
   `;
+
+  const text = [
+    "Password Reset Request - NextID.pk",
+    "",
+    "We received a request to reset your account password.",
+    "",
+    `Reset your password using this link: ${resetUrl}`,
+    "",
+    "This link will expire in 1 hour.",
+    "",
+    "If you did not request this, ignore this email.",
+  ].join("\n");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [recipient],
+      subject: "Reset Your Password - NextID.pk",
+      html,
+      text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    console.error("Resend email error:", response.status, errorText);
+
+    return false;
+  }
+
+  return true;
 }
 
-// POST /api/auth/request-reset-password
 export async function POST(request: NextRequest) {
+  let userId: number | null = null;
+
   try {
-    // 1. Validate request
-    const body = await parseRequestBody(request);
+    const { env } = await getCloudflareContext({
+      async: true,
+    });
 
-    if (!body) {
-      return jsonError("Valid email is required", 400);
-    }
+    const runtimeEnv = env as typeof env & RuntimeEnv;
 
-    const normalizedEmail = body.email.trim().toLowerCase();
+    const apiKey = runtimeEnv.RESEND_API_KEY;
+    const fromEmail = runtimeEnv.RESEND_FROM_EMAIL;
+    const siteUrl = runtimeEnv.NEXT_PUBLIC_SITE_URL;
 
-    if (!isValidEmail(normalizedEmail)) {
-      return jsonError("Invalid email format", 400);
-    }
-
-    // 2. Validate server configuration
-    const emailConfig = getEmailConfiguration();
-
-    if (!emailConfig) {
+    if (!apiKey || !fromEmail || !siteUrl) {
       console.error(
-        "Password reset email configuration is incomplete or invalid"
+        "Missing RESEND_API_KEY, RESEND_FROM_EMAIL or NEXT_PUBLIC_SITE_URL."
       );
 
-      return jsonError(
-        "Password reset service is temporarily unavailable",
+      return jsonResponse(
+        { success: false, message: "Email service is not configured." },
         500
       );
     }
 
-    // 3. Find admin user
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse(
+        { success: false, message: "Invalid request body." },
+        400
+      );
+    }
+
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("email" in body) ||
+      typeof body.email !== "string"
+    ) {
+      return jsonResponse(
+        { success: false, message: "Please provide a valid email." },
+        400
+      );
+    }
+
+    const normalizedEmail = body.email.trim().toLowerCase();
+
+    if (
+      normalizedEmail.length > 254 ||
+      !isValidEmail(normalizedEmail)
+    ) {
+      return jsonResponse(
+        { success: false, message: "Please provide a valid email." },
+        400
+      );
+    }
+
+    const normalizedSiteUrl = siteUrl.trim();
+
+    let resetUrl: URL;
+
+    try {
+      const parsedSiteUrl = new URL(normalizedSiteUrl);
+
+      if (
+        parsedSiteUrl.protocol !== "https:" &&
+        parsedSiteUrl.hostname !== "localhost"
+      ) {
+        throw new Error("HTTPS is required.");
+      }
+
+      resetUrl = new URL("/reset-password", parsedSiteUrl.origin);
+    } catch {
+      console.error("Invalid NEXT_PUBLIC_SITE_URL configuration.");
+
+      return jsonResponse(
+        { success: false, message: "Invalid site configuration." },
+        500
+      );
+    }
+
     const [user] = await db
       .select({
         id: adminUsers.id,
-        email: adminUsers.email,
       })
       .from(adminUsers)
       .where(eq(adminUsers.email, normalizedEmail))
       .limit(1);
 
-    // Do not reveal whether an account exists
+    // Do not reveal whether an email address has an account.
     if (!user) {
-      return NextResponse.json(GENERIC_RESPONSE, {
-        status: 200,
-        headers: {
-          "Cache-Control": "no-store, must-revalidate",
-        },
-      });
+      return jsonResponse(GENERIC_RESPONSE);
     }
 
-    // 4. Generate secure reset token
+    userId = user.id;
+
     const token = generateResetToken();
 
-    const expires = new Date(
+    const expiresAt = new Date(
       Date.now() + RESET_TOKEN_EXPIRY_MS
-    );
-
-    // 5. Save reset token in database
-    await db
-      .update(adminUsers)
-      .set({
-        passwordResetToken: token,
-        passwordResetExpires: expires,
-      })
-      .where(eq(adminUsers.id, user.id));
-
-    // 6. Create reset URL
-    const resetUrl = new URL(
-      "/reset-password",
-      emailConfig.siteUrl
     );
 
     resetUrl.searchParams.set("token", token);
     resetUrl.searchParams.set("email", normalizedEmail);
 
-    // 7. Configure SMTP transporter
-    const transporter = nodemailer.createTransport({
-      host: emailConfig.host,
-      port: emailConfig.port,
-      secure: emailConfig.secure,
-      auth: {
-        user: emailConfig.smtpUser,
-        pass: emailConfig.smtpPass,
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-    });
+    await db
+      .update(adminUsers)
+      .set({
+        passwordResetToken: token,
+        passwordResetExpires: expiresAt,
+      })
+      .where(eq(adminUsers.id, user.id));
 
-    // 8. Send password reset email
-    try {
-      await transporter.sendMail({
-        from: `"NextID Support" <${emailConfig.smtpUser}>`,
-        to: normalizedEmail,
-        subject: "Reset Your Password - NextID.pk",
-        text: `
-Password Reset Request
+    const emailSent = await sendResetEmail(
+      apiKey,
+      fromEmail,
+      normalizedEmail,
+      resetUrl.toString()
+    );
 
-You requested a password reset for your NextID.pk account.
-
-Open this link to reset your password:
-
-${resetUrl.toString()}
-
-This link will expire in 1 hour.
-
-If you did not request this, please ignore this email.
-        `.trim(),
-        html: createResetEmail(resetUrl.toString()),
-      });
-    } catch (emailError) {
-      console.error("Password reset email sending failed:", emailError);
-
-      // Remove unused token if email delivery fails
+    if (!emailSent) {
       await db
         .update(adminUsers)
         .set({
@@ -318,24 +269,35 @@ If you did not request this, please ignore this email.
         })
         .where(eq(adminUsers.id, user.id));
 
-      return jsonError(
-        "Unable to send password reset email. Please try again later.",
+      userId = null;
+
+      return jsonResponse(
+        { success: false, message: "Unable to send reset email. Please try again later." },
         500
       );
     }
 
-    // 9. Successful response
-    return NextResponse.json(GENERIC_RESPONSE, {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store, must-revalidate",
-      },
-    });
+    return jsonResponse(GENERIC_RESPONSE);
   } catch (error) {
-    console.error("Request reset password error:", error);
+    console.error("Password reset request error:", error);
 
-    return jsonError(
-      "Unable to process request. Please try again later.",
+    // Remove the token if an error occurs after it was saved.
+    if (userId !== null) {
+      try {
+        await db
+          .update(adminUsers)
+          .set({
+            passwordResetToken: null,
+            passwordResetExpires: null,
+          })
+          .where(eq(adminUsers.id, userId));
+      } catch (cleanupError) {
+        console.error("Reset token cleanup error:", cleanupError);
+      }
+    }
+
+    return jsonResponse(
+      { success: false, message: "Something went wrong. Please try again later." },
       500
     );
   }
