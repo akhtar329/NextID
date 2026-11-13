@@ -1,17 +1,29 @@
+
 // repositories/post/post.repository.ts
 
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { posts } from "@/db/schema";
-import { eq, and, not, inArray, sql } from "drizzle-orm";
+import {
+  eq,
+  and,
+  not,
+  inArray,
+  sql,
+} from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";
 
 // ============================================================
 // POST REPOSITORY - PURE DATABASE ACCESS LAYER
+// Cloudflare Workers + Hyperdrive compatible
 // ============================================================
 
 export class PostRepository {
+  private get db() {
+    return getDb();
+  }
 
-  private lightFields = {
+  private readonly lightFields = {
     id: posts.id,
     slug: posts.slug,
     type: posts.type,
@@ -28,7 +40,7 @@ export class PostRepository {
     meta: posts.meta,
   };
 
-  private fullFields = {
+  private readonly fullFields = {
     ...this.lightFields,
     content: posts.content,
     tags: posts.tags,
@@ -61,13 +73,40 @@ export class PostRepository {
     return row as Post;
   }
 
+  private normalizeLimit(limit: number, fallback = 10): number {
+    if (!Number.isFinite(limit)) return fallback;
+    return Math.min(1000, Math.max(1, Math.floor(limit)));
+  }
+
+  private normalizeOffset(offset: number): number {
+    if (!Number.isFinite(offset)) return 0;
+    return Math.max(0, Math.floor(offset));
+  }
+
+  private async getLightRows(
+    conditions: SQL[],
+    limit: number,
+  ): Promise<Post[]> {
+    const rows = await this.db
+      .select(this.lightFields)
+      .from(posts)
+      .where(and(...conditions))
+      .orderBy(
+        sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`
+      )
+      .limit(this.normalizeLimit(limit));
+
+    return rows.map((row) => this.castPost(row));
+  }
+
   // ============================================================
-  // ✅ getList - Database query only
+  // GET LIST
   // ============================================================
+
   async getList(
-    type: PostType | 'all',
-    limit: number = 10,
-    offset: number = 0,
+    type: PostType | "all",
+    limit = 10,
+    offset = 0,
     filters?: {
       featured?: boolean;
       popular?: boolean;
@@ -75,55 +114,82 @@ export class PostRepository {
     }
   ): Promise<Post[]> {
     try {
-      const conditions = [eq(posts.status, "published")];
+      const conditions: SQL[] = [
+        eq(posts.status, "published"),
+      ];
 
-      if (type !== 'all') {
+      if (type !== "all") {
         conditions.push(eq(posts.type, type));
       }
 
-      if (filters?.featured) conditions.push(eq(posts.isFeatured, true));
-      if (filters?.popular) conditions.push(eq(posts.isPopular, true));
-      if (filters?.breaking) conditions.push(eq(posts.isBreaking, true));
+      if (filters?.featured) {
+        conditions.push(eq(posts.isFeatured, true));
+      }
 
-      const rows = await db
+      if (filters?.popular) {
+        conditions.push(eq(posts.isPopular, true));
+      }
+
+      if (filters?.breaking) {
+        conditions.push(eq(posts.isBreaking, true));
+      }
+
+      const rows = await this.db
         .select(this.lightFields)
         .from(posts)
         .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit)
-        .offset(offset);
+        .orderBy(
+          sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`
+        )
+        .limit(this.normalizeLimit(limit))
+        .offset(this.normalizeOffset(offset));
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getList:', error);
+      console.error("Error in getList:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getDetail - Database query only
+  // GET DETAIL
   // ============================================================
+
   async getDetail(slug: string): Promise<Post | null> {
     try {
-      const [row] = await db
+      const cleanSlug = slug.trim();
+
+      if (!cleanSlug) return null;
+
+      const [row] = await this.db
         .select(this.fullFields)
         .from(posts)
-        .where(and(eq(posts.slug, slug), eq(posts.status, "published")))
+        .where(
+          and(
+            eq(posts.slug, cleanSlug),
+            eq(posts.status, "published")
+          )
+        )
         .limit(1);
 
       return row ? this.castPost(row) : null;
     } catch (error) {
-      console.error('Error in getDetail:', error);
+      console.error("Error in getDetail:", error);
       return null;
     }
   }
 
   // ============================================================
-  // ✅ getById - Get post by ID
+  // GET BY ID
   // ============================================================
+
   async getById(id: number): Promise<Post | null> {
     try {
-      const [row] = await db
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        return null;
+      }
+
+      const [row] = await this.db
         .select(this.fullFields)
         .from(posts)
         .where(eq(posts.id, id))
@@ -131,109 +197,121 @@ export class PostRepository {
 
       return row ? this.castPost(row) : null;
     } catch (error) {
-      console.error('Error in getById:', error);
+      console.error("Error in getById:", error);
       return null;
     }
   }
 
   // ============================================================
-  // ✅ getRelated - Database query only
+  // GET RELATED
   // ============================================================
+
   async getRelated(
     currentId: number,
     type: PostType,
-    limit: number = 5
+    limit = 5
   ): Promise<Post[]> {
     try {
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(
-          and(
-            eq(posts.type, type),
-            eq(posts.status, "published"),
-            not(eq(posts.id, currentId))
-          )
-        )
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(
+        [
+          eq(posts.type, type),
+          eq(posts.status, "published"),
+          not(eq(posts.id, currentId)),
+        ],
+        limit
+      );
     } catch (error) {
-      console.error('Error in getRelated:', error);
+      console.error("Error in getRelated:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getHomepageData - Database query only
+  // GET HOMEPAGE DATA
+  // Each post type gets its own limit
   // ============================================================
+
   async getHomepageData(
     types: PostType[],
-    limitPerType: number = 5
+    limitPerType = 5
   ): Promise<Record<PostType, Post[]>> {
+    const grouped = {} as Record<PostType, Post[]>;
+
+    for (const type of types) {
+      grouped[type] = [];
+    }
+
+    if (types.length === 0) {
+      return grouped;
+    }
+
     try {
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(
-          and(
-            inArray(posts.type, types),
-            eq(posts.status, "published")
-          )
-        )
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(types.length * limitPerType);
+      const limit = this.normalizeLimit(limitPerType, 5);
+      const uniqueTypes = Array.from(new Set(types));
 
-      const grouped = {} as Record<PostType, Post[]>;
-      for (const t of types) grouped[t] = [];
+      const results = await Promise.all(
+        uniqueTypes.map(async (type) => {
+          const rows = await this.getLightRows(
+            [
+              eq(posts.type, type),
+              eq(posts.status, "published"),
+            ],
+            limit
+          );
 
-      for (const row of rows) {
-        const typed = this.castPost(row);
-        if (!grouped[typed.type]) continue;
-        if (grouped[typed.type].length < limitPerType) {
-          grouped[typed.type].push(typed);
-        }
+          return { type, rows };
+        })
+      );
+
+      for (const result of results) {
+        grouped[result.type] = result.rows;
       }
 
       return grouped;
     } catch (error) {
-      console.error('Error in getHomepageData:', error);
-      const empty = {} as Record<PostType, Post[]>;
-      for (const t of types) empty[t] = [];
-      return empty;
+      console.error("Error in getHomepageData:", error);
+      return grouped;
     }
   }
 
   // ============================================================
-  // ✅ getTotalCount - Database query only
+  // GET TOTAL COUNT
   // ============================================================
-  async getTotalCount(type: PostType | 'all'): Promise<number> {
-    try {
-      const conditions = [eq(posts.status, "published")];
 
-      if (type !== 'all') {
+  async getTotalCount(type: PostType | "all"): Promise<number> {
+    try {
+      const conditions: SQL[] = [
+        eq(posts.status, "published"),
+      ];
+
+      if (type !== "all") {
         conditions.push(eq(posts.type, type));
       }
 
-      const result = await db
-        .select({ count: sql<number>`count(*)` })
+      const result = await this.db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
         .from(posts)
         .where(and(...conditions));
 
-      return result[0]?.count || 0;
+      return Number(result[0]?.count ?? 0);
     } catch (error) {
-      console.error('Error in getTotalCount:', error);
+      console.error("Error in getTotalCount:", error);
       return 0;
     }
   }
 
   // ============================================================
-  // ✅ incrementViewCount - Increment view count
+  // INCREMENT VIEW COUNT
   // ============================================================
-  async incrementViewCount(type: PostType, slug: string): Promise<void> {
+
+  async incrementViewCount(
+    type: PostType,
+    slug: string
+  ): Promise<void> {
     try {
-      await db
+      await this.db
         .update(posts)
         .set({
           viewCount: sql`${posts.viewCount} + 1`,
@@ -245,21 +323,30 @@ export class PostRepository {
           )
         );
     } catch (error) {
-      console.error('Error in incrementViewCount:', error);
+      console.error("Error in incrementViewCount:", error);
     }
   }
 
   // ============================================================
-  // ✅ search - Search posts by keyword
+  // SEARCH
   // ============================================================
-  async search(query: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async search(
+    query: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const cleanQuery = query.trim();
+
+      if (!cleanQuery) return [];
+
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`(
-          ${posts.title} ILIKE ${`%${query}%`} OR
-          ${posts.content} ILIKE ${`%${query}%`} OR
-          ${posts.excerpt} ILIKE ${`%${query}%`}
+          ${posts.title} ILIKE ${`%${cleanQuery}%`} OR
+          ${posts.content} ILIKE ${`%${cleanQuery}%`} OR
+          ${posts.excerpt} ILIKE ${`%${cleanQuery}%`}
         )`,
       ];
 
@@ -267,26 +354,24 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in search:', error);
+      console.error("Error in search:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByCategory - Get posts by category
+  // GET BY CATEGORY
   // ============================================================
-  async getByCategory(category: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByCategory(
+    category: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'category' = ${category}`,
       ];
@@ -295,26 +380,24 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByCategory:', error);
+      console.error("Error in getByCategory:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByTag - Get posts by tag
+  // GET BY TAG
   // ============================================================
-  async getByTag(tag: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByTag(
+    tag: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${tag} = ANY(${posts.tags})`,
       ];
@@ -323,26 +406,28 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByTag:', error);
+      console.error("Error in getByTag:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByYear - Get posts by year
+  // GET BY YEAR
   // ============================================================
-  async getByYear(year: number, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByYear(
+    year: number,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+        return [];
+      }
+
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'year' = ${String(year)}`,
       ];
@@ -351,26 +436,24 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByYear:', error);
+      console.error("Error in getByYear:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByBoard - Get posts by board
+  // GET BY BOARD
   // ============================================================
-  async getByBoard(boardSlug: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByBoard(
+    boardSlug: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'boardSlug' = ${boardSlug}`,
       ];
@@ -379,26 +462,24 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByBoard:', error);
+      console.error("Error in getByBoard:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByInstitution - Get posts by institution
+  // GET BY INSTITUTION
   // ============================================================
-  async getByInstitution(instituteSlug: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByInstitution(
+    instituteSlug: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'instituteSlug' = ${instituteSlug}`,
       ];
@@ -407,54 +488,54 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByInstitution:', error);
+      console.error("Error in getByInstitution:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByProvider - Get posts by provider (for scholarships)
+  // GET BY PROVIDER
   // ============================================================
-  async getByProvider(provider: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByProvider(
+    provider: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`(${posts.meta}->>'provider' = ${provider} OR ${posts.meta}->>'organization' = ${provider} OR ${posts.meta}->>'organizationName' = ${provider})`,
+        sql`(
+          ${posts.meta}->>'provider' = ${provider}
+          OR ${posts.meta}->>'organization' = ${provider}
+          OR ${posts.meta}->>'organizationName' = ${provider}
+        )`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByProvider:', error);
+      console.error("Error in getByProvider:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByStudyLevel - Get scholarships by study level
+  // GET BY STUDY LEVEL
   // ============================================================
-  async getByStudyLevel(studyLevel: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByStudyLevel(
+    studyLevel: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'studyLevel' = ${studyLevel}`,
       ];
@@ -463,54 +544,53 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByStudyLevel:', error);
+      console.error("Error in getByStudyLevel:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByExamType - Get posts by exam type
+  // GET BY EXAM TYPE
   // ============================================================
-  async getByExamType(examType: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByExamType(
+    examType: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`(${posts.meta}->>'examType' = ${examType} OR ${posts.meta}->>'type' = ${examType})`,
+        sql`(
+          ${posts.meta}->>'examType' = ${examType}
+          OR ${posts.meta}->>'type' = ${examType}
+        )`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByExamType:', error);
+      console.error("Error in getByExamType:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByJobType - Get jobs by job type
+  // GET BY JOB TYPE
   // ============================================================
-  async getByJobType(jobType: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByJobType(
+    jobType: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'jobType' = ${jobType}`,
       ];
@@ -519,82 +599,81 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByJobType:', error);
+      console.error("Error in getByJobType:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByLocation - Get jobs by location
+  // GET BY LOCATION
   // ============================================================
-  async getByLocation(location: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByLocation(
+    location: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`(${posts.meta}->>'location' = ${location} OR ${posts.meta}->>'city' = ${location})`,
+        sql`(
+          ${posts.meta}->>'location' = ${location}
+          OR ${posts.meta}->>'city' = ${location}
+        )`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByLocation:', error);
+      console.error("Error in getByLocation:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getByCompany - Get jobs by company
+  // GET BY COMPANY
   // ============================================================
-  async getByCompany(company: string, type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getByCompany(
+    company: string,
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`(${posts.meta}->>'company' = ${company} OR ${posts.meta}->>'organization' = ${company})`,
+        sql`(
+          ${posts.meta}->>'company' = ${company}
+          OR ${posts.meta}->>'organization' = ${company}
+        )`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getByCompany:', error);
+      console.error("Error in getByCompany:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getBreakingNews - Get breaking news
+  // GET BREAKING NEWS
   // ============================================================
-  async getBreakingNews(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getBreakingNews(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         eq(posts.isBreaking, true),
       ];
@@ -603,26 +682,23 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getBreakingNews:', error);
+      console.error("Error in getBreakingNews:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getFeatured - Get featured posts
+  // GET FEATURED
   // ============================================================
-  async getFeatured(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getFeatured(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         eq(posts.isFeatured, true),
       ];
@@ -631,26 +707,23 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getFeatured:', error);
+      console.error("Error in getFeatured:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getPopular - Get popular posts
+  // GET POPULAR
   // ============================================================
-  async getPopular(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getPopular(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         eq(posts.isPopular, true),
       ];
@@ -659,54 +732,48 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getPopular:', error);
+      console.error("Error in getPopular:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getUrgent - Get urgent posts (for jobs)
+  // GET URGENT
   // ============================================================
-  async getUrgent(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getUrgent(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`${posts.meta}->>'isUrgent' = ${'true'}`,
+        sql`${posts.meta}->>'isUrgent' = 'true'`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getUrgent:', error);
+      console.error("Error in getUrgent:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getOpen - Get open posts (for jobs, scholarships, admissions)
+  // GET OPEN
   // ============================================================
-  async getOpen(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getOpen(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'status' = 'Open'`,
       ];
@@ -715,54 +782,51 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getOpen:', error);
+      console.error("Error in getOpen:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getFullyFunded - Get fully funded scholarships
+  // GET FULLY FUNDED
   // ============================================================
-  async getFullyFunded(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getFullyFunded(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
-        sql`(${posts.meta}->>'isFullyFunded' = 'true' OR ${posts.meta}->>'type' ILIKE '%full%')`,
+        sql`(
+          ${posts.meta}->>'isFullyFunded' = 'true'
+          OR ${posts.meta}->>'type' ILIKE '%full%'
+        )`,
       ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getFullyFunded:', error);
+      console.error("Error in getFullyFunded:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getAbroad - Get abroad scholarships
+  // GET ABROAD
   // ============================================================
-  async getAbroad(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getAbroad(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [
+      const conditions: SQL[] = [
         eq(posts.status, "published"),
         sql`${posts.meta}->>'location' = 'abroad'`,
       ];
@@ -771,41 +835,33 @@ export class PostRepository {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getAbroad:', error);
+      console.error("Error in getAbroad:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getRecent - Get recent posts
+  // GET RECENT
   // ============================================================
-  async getRecent(type?: PostType, limit: number = 10): Promise<Post[]> {
+
+  async getRecent(
+    type?: PostType,
+    limit = 10
+  ): Promise<Post[]> {
     try {
-      const conditions = [eq(posts.status, "published")];
+      const conditions: SQL[] = [
+        eq(posts.status, "published"),
+      ];
 
       if (type) {
         conditions.push(eq(posts.type, type));
       }
 
-      const rows = await db
-        .select(this.lightFields)
-        .from(posts)
-        .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
-
-      return rows.map(r => this.castPost(r));
+      return await this.getLightRows(conditions, limit);
     } catch (error) {
-      console.error('Error in getRecent:', error);
+      console.error("Error in getRecent:", error);
       return [];
     }
   }

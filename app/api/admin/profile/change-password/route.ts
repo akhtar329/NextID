@@ -5,7 +5,7 @@ import jwt, {
   TokenExpiredError,
 } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { adminUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -32,7 +32,12 @@ function jsonError(message: string, status: number) {
       success: false,
       error: message,
     },
-    { status }
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
 
@@ -41,8 +46,7 @@ function verifyToken(token: string): AuthenticatedUser | null {
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
-      console.error("JWT_SECRET is not configured");
-      return null;
+      throw new Error("JWT_SECRET is not configured");
     }
 
     const decoded: unknown = jwt.verify(token, secret);
@@ -67,8 +71,7 @@ function verifyToken(token: string): AuthenticatedUser | null {
       return null;
     }
 
-    console.error("JWT verification error:", error);
-    return null;
+    throw error;
   }
 }
 
@@ -110,7 +113,10 @@ export async function POST(request: NextRequest) {
     const authenticatedUser = verifyToken(token);
 
     if (!authenticatedUser) {
-      return jsonError("Invalid or expired authentication token", 401);
+      return jsonError(
+        "Invalid or expired authentication token",
+        401
+      );
     }
 
     // Parse request
@@ -129,7 +135,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (currentPassword.length > 1024 || newPassword.length > 1024) {
+    if (
+      currentPassword.length > 1024 ||
+      newPassword.length > 1024
+    ) {
       return jsonError("Password is too long", 400);
     }
 
@@ -146,6 +155,9 @@ export async function POST(request: NextRequest) {
         400
       );
     }
+
+    // Database connection
+    const db = getDb();
 
     // Fetch user password
     const [user] = await db
@@ -166,7 +178,10 @@ export async function POST(request: NextRequest) {
         `Password is missing for admin user ID ${authenticatedUser.id}`
       );
 
-      return jsonError("Unable to verify current password", 500);
+      return jsonError(
+        "Unable to verify current password",
+        500
+      );
     }
 
     // Verify current password
@@ -180,7 +195,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
 
     // Update password
     const [updatedUser] = await db
@@ -198,10 +216,17 @@ export async function POST(request: NextRequest) {
       return jsonError("Failed to update password", 500);
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Password changed successfully",
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Password changed successfully",
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error("Password change error:", error);
 

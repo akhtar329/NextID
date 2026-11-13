@@ -1,77 +1,153 @@
-// app/api/admin/notifications/read-all/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { notifications } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import jwt from "jsonwebtoken";
+import jwt, {
+  JsonWebTokenError,
+  TokenExpiredError,
+} from "jsonwebtoken";
+
+interface AuthenticatedPayload {
+  id: number;
+}
+
+function isValidPayload(
+  payload: unknown
+): payload is AuthenticatedPayload {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
+    return false;
+  }
+
+  const data = payload as Record<string, unknown>;
+
+  return (
+    typeof data.id === "number" &&
+    Number.isSafeInteger(data.id) &&
+    data.id > 0
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ Get token from cookie (custom auth)
+    // 1. Get authentication token
     const token = request.cookies.get("authToken")?.value;
-    
+
     if (!token) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized - No token provided" },
+        {
+          success: false,
+          error: "Unauthorized - No token provided",
+        },
         { status: 401 }
       );
     }
 
-    // ✅ Verify JWT token
-    let decoded: { id: string } | null = null;
+    // 2. Verify JWT secret configuration
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      console.error("JWT_SECRET is not configured");
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server authentication is not configured",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 3. Verify JWT token
+    let decoded: unknown;
+
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key") as { id: string };
-    } catch {
-      // Silent catch - jwtError not needed
+      decoded = jwt.verify(token, secret);
+    } catch (error) {
+      if (
+        error instanceof TokenExpiredError ||
+        error instanceof JsonWebTokenError
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unauthorized - Invalid or expired token",
+          },
+          { status: 401 }
+        );
+      }
+
+      console.error("JWT verification error:", error);
+
       return NextResponse.json(
-        { success: false, error: "Unauthorized - Invalid token" },
+        {
+          success: false,
+          error: "Authentication failed",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 4. Validate JWT payload
+    if (!isValidPayload(decoded)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized - Invalid token payload",
+        },
         { status: 401 }
       );
     }
 
-    const userId = decoded?.id;
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized - Invalid token payload" },
-        { status: 401 }
-      );
-    }
+    const userId = decoded.id;
 
-    // ✅ Convert userId from string to number (since database column is integer)
-    const userIdNumber = parseInt(userId, 10);
-    
-    if (isNaN(userIdNumber)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid user ID format" },
-        { status: 400 }
-      );
-    }
+    // 5. Initialize database
+    const db = getDb();
 
-    // Mark all unread notifications as read
+    // 6. Mark all unread notifications as read
     await db
       .update(notifications)
-      .set({ 
+      .set({
         read: true,
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(notifications.userId, userIdNumber), // ✅ Now using number
+          eq(notifications.userId, userId),
           eq(notifications.read, false)
         )
       );
 
-    return NextResponse.json({
-      success: true,
-      message: "All notifications marked as read",
-    });
-
-  } catch (error) {
-    console.error("Error marking all as read:", error);
+    // 7. Return success response
     return NextResponse.json(
-      { success: false, error: "Failed to mark all as read" },
-      { status: 500 }
+      {
+        success: true,
+        message: "All notifications marked as read",
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to mark all notifications as read",
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
     );
   }
 }

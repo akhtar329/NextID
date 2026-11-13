@@ -1,8 +1,6 @@
 
-// app/api/admin/notifications/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { notifications } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
@@ -49,7 +47,10 @@ function authenticateRequest(
     return {
       success: false,
       response: NextResponse.json(
-        { success: false, error: "Server authentication is not configured" },
+        {
+          success: false,
+          error: "Server authentication is not configured",
+        },
         { status: 500 }
       ),
     };
@@ -67,7 +68,10 @@ function authenticateRequest(
       return {
         success: false,
         response: NextResponse.json(
-          { success: false, error: "Invalid authentication token" },
+          {
+            success: false,
+            error: "Invalid authentication token",
+          },
           { status: 401 }
         ),
       };
@@ -85,7 +89,10 @@ function authenticateRequest(
       return {
         success: false,
         response: NextResponse.json(
-          { success: false, error: "Invalid or expired token" },
+          {
+            success: false,
+            error: "Invalid or expired token",
+          },
           { status: 401 }
         ),
       };
@@ -96,7 +103,10 @@ function authenticateRequest(
     return {
       success: false,
       response: NextResponse.json(
-        { success: false, error: "Authentication failed" },
+        {
+          success: false,
+          error: "Authentication failed",
+        },
         { status: 500 }
       ),
     };
@@ -123,9 +133,10 @@ export async function GET(request: NextRequest) {
     return authentication.response;
   }
 
-  const userId = authentication.user.id;
-
   try {
+    const db = getDb();
+    const userId = authentication.user.id;
+
     const [userNotifications, unreadResult] = await Promise.all([
       db
         .select()
@@ -172,8 +183,6 @@ export async function POST(request: NextRequest) {
     return authentication.response;
   }
 
-  const userId = authentication.user.id;
-
   let body: unknown;
 
   try {
@@ -201,6 +210,9 @@ export async function POST(request: NextRequest) {
   const requestBody = body as NotificationRequestBody;
 
   try {
+    const db = getDb();
+    const userId = authentication.user.id;
+
     // Clear all notifications belonging to the authenticated user
     if (requestBody.action === "clearAll") {
       if (requestBody.notificationId !== undefined) {
@@ -256,7 +268,9 @@ export async function POST(request: NextRequest) {
             eq(notifications.userId, userId)
           )
         )
-        .returning({ id: notifications.id });
+        .returning({
+          id: notifications.id,
+        });
 
       if (updated.length === 0) {
         return noStoreResponse(

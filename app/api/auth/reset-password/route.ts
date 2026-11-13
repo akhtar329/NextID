@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { adminUsers } from "@/db/schema";
 import bcrypt from "bcryptjs";
 import { and, eq, gt } from "drizzle-orm";
@@ -15,14 +15,17 @@ function jsonResponse(
   return NextResponse.json(body, {
     status,
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      "Cache-Control":
+        "no-store, no-cache, must-revalidate, private",
       Pragma: "no-cache",
       Expires: "0",
     },
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -59,14 +62,20 @@ export async function POST(req: NextRequest) {
       body = await req.json();
     } catch {
       return jsonResponse(
-        { success: false, error: "Invalid request body." },
+        {
+          success: false,
+          error: "Invalid request body.",
+        },
         400
       );
     }
 
     if (!isRecord(body)) {
       return jsonResponse(
-        { success: false, error: "Invalid request body." },
+        {
+          success: false,
+          error: "Invalid request body.",
+        },
         400
       );
     }
@@ -74,17 +83,29 @@ export async function POST(req: NextRequest) {
     const { token, newPassword } = body;
 
     // 2. Validate reset token
-    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
+    if (
+      typeof token !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(token)
+    ) {
       return jsonResponse(
-        { success: false, error: "A valid reset token is required." },
+        {
+          success: false,
+          error: "A valid reset token is required.",
+        },
         400
       );
     }
 
     // 3. Validate new password
-    if (typeof newPassword !== "string" || !newPassword) {
+    if (
+      typeof newPassword !== "string" ||
+      !newPassword
+    ) {
       return jsonResponse(
-        { success: false, error: "New password is required." },
+        {
+          success: false,
+          error: "New password is required.",
+        },
         400
       );
     }
@@ -93,16 +114,27 @@ export async function POST(req: NextRequest) {
 
     if (passwordError) {
       return jsonResponse(
-        { success: false, error: passwordError },
+        {
+          success: false,
+          error: passwordError,
+        },
         400
       );
     }
 
     // 4. Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      12
+    );
 
-    // 5. Atomically verify token and update password
+    // 5. Initialize database
+    const db = getDb();
+
+    // 6. Atomically verify token and update password
     const result = await db.transaction(async (tx) => {
+      const now = new Date();
+
       const [user] = await tx
         .select({
           id: adminUsers.id,
@@ -111,7 +143,7 @@ export async function POST(req: NextRequest) {
         .where(
           and(
             eq(adminUsers.passwordResetToken, token),
-            gt(adminUsers.passwordResetExpires, new Date())
+            gt(adminUsers.passwordResetExpires, now)
           )
         )
         .limit(1);
@@ -142,7 +174,7 @@ export async function POST(req: NextRequest) {
       return updatedUsers.length === 1;
     });
 
-    // 6. Invalid or expired token
+    // 7. Invalid or expired token
     if (!result) {
       return jsonResponse(
         {
@@ -154,7 +186,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 7. Successful password reset
+    // 8. Successful password reset
     return jsonResponse({
       success: true,
       message:
@@ -166,7 +198,8 @@ export async function POST(req: NextRequest) {
     return jsonResponse(
       {
         success: false,
-        error: "Unable to reset password. Please try again later.",
+        error:
+          "Unable to reset password. Please try again later.",
       },
       500
     );

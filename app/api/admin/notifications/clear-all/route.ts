@@ -1,57 +1,141 @@
-// app/api/admin/notifications/clear-all/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { notifications } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import jwt from "jsonwebtoken";
+import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
+
+interface AuthenticatedPayload {
+  id: number;
+}
+
+function isValidPayload(
+  payload: unknown
+): payload is AuthenticatedPayload {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
+    return false;
+  }
+
+  const data = payload as Record<string, unknown>;
+
+  return (
+    typeof data.id === "number" &&
+    Number.isSafeInteger(data.id) &&
+    data.id > 0
+  );
+}
 
 export async function DELETE(request: NextRequest) {
   try {
-    // ✅ Get token from cookie (custom auth)
+    // 1. Get authentication token
     const token = request.cookies.get("authToken")?.value;
-    
+
     if (!token) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized - No token provided" },
+        {
+          success: false,
+          error: "Unauthorized - No token provided",
+        },
         { status: 401 }
       );
     }
 
-    // ✅ Verify JWT token
-    let decoded: jwt.JwtPayload | string;
+    // 2. Verify JWT secret configuration
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      console.error("JWT_SECRET is not configured");
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server authentication is not configured",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 3. Verify JWT token
+    let decoded: unknown;
+
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-    } catch {
+      decoded = jwt.verify(token, secret);
+    } catch (error) {
+      if (
+        error instanceof TokenExpiredError ||
+        error instanceof JsonWebTokenError
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unauthorized - Invalid or expired token",
+          },
+          { status: 401 }
+        );
+      }
+
+      console.error("JWT verification error:", error);
+
       return NextResponse.json(
-        { success: false, error: "Unauthorized - Invalid token" },
+        {
+          success: false,
+          error: "Authentication failed",
+        },
+        { status: 500 }
+      );
+    }
+
+    // 4. Validate token payload
+    if (!isValidPayload(decoded)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized - Invalid token payload",
+        },
         { status: 401 }
       );
     }
 
-    if (typeof decoded === "string" || !decoded?.id) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized - Invalid token payload" },
-        { status: 401 }
-      );
-    }
+    const userId = decoded.id;
 
-    const userId = decoded.id; // Get userId from token
+    // 5. Initialize database
+    const db = getDb();
 
-    // Delete all notifications for this user
+    // 6. Delete only this user's notifications
     await db
       .delete(notifications)
       .where(eq(notifications.userId, userId));
 
-    return NextResponse.json({
-      success: true,
-      message: "All notifications cleared",
-    });
-
+    // 7. Return success response
+    return NextResponse.json(
+      {
+        success: true,
+        message: "All notifications cleared",
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error clearing notifications:", error);
+
     return NextResponse.json(
-      { success: false, error: "Failed to clear notifications" },
-      { status: 500 }
+      {
+        success: false,
+        error: "Failed to clear notifications",
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
     );
   }
 }

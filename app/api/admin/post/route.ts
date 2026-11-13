@@ -1,8 +1,6 @@
 
-// app/api/admin/post/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { posts } from "@/db/schema";
 import {
   and,
@@ -425,10 +423,7 @@ function validateCreateBody(
   return null;
 }
 
-// ============================================
 // GET: Fetch posts with database pagination
-// ============================================
-
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest(request);
 
@@ -437,6 +432,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const db = getDb();
     const { searchParams } = new URL(request.url);
 
     const type = searchParams.get("type")?.trim() || "";
@@ -517,10 +513,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ============================================
 // POST: Create new post
-// ============================================
-
 export async function POST(request: NextRequest) {
   const auth = await authenticateRequest(request);
 
@@ -541,6 +534,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const db = getDb();
+
     const slug = (body.slug as string).trim();
     const title = (body.title as string).trim();
     const type = (body.type as string).trim();
@@ -704,10 +699,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ============================================
 // DELETE: Bulk archive posts
-// ============================================
-
 export async function DELETE(request: NextRequest) {
   const auth = await authenticateRequest(request);
 
@@ -751,6 +743,8 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const db = getDb();
+
     const existingPosts = await db
       .select({
         id: posts.id,

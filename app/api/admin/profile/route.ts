@@ -1,6 +1,10 @@
+
 import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-import { getDb } from "@/db/db";";
+import jwt, {
+  JsonWebTokenError,
+  TokenExpiredError,
+} from "jsonwebtoken";
+import { getDb } from "@/db/db";
 import { adminUsers, adminRoles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -8,17 +12,29 @@ import { eq } from "drizzle-orm";
 // TYPES
 // =====================
 
-interface JWTPayload {
+interface AuthenticatedUser {
   id: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }
 
 // =====================
 // CONFIG
 // =====================
 
-function getJWTSecret() {
+function getJWTSecret(): string {
   const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET not set");
+
+  if (!secret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+
   return secret;
 }
 
@@ -26,15 +42,58 @@ function getJWTSecret() {
 // PERMISSIONS
 // =====================
 
-function getPermissions(role: string) {
+function getPermissions(role: string): string[] {
   const map: Record<string, string[]> = {
-    "Super Admin": ["full_access", "user_management", "settings_manage"],
-    Admin: ["content_management", "user_view"],
-    Editor: ["content_management"],
-    Viewer: ["analytics_view"],
+    "Super Admin": [
+      "full_access",
+      "user_management",
+      "settings_manage",
+    ],
+    Admin: [
+      "content_management",
+      "user_view",
+    ],
+    Editor: [
+      "content_management",
+    ],
+    Viewer: [
+      "analytics_view",
+    ],
   };
 
-  return map[role] || map["Viewer"];
+  return map[role] ?? map.Viewer;
+}
+
+// =====================
+// AUTHENTICATION
+// =====================
+
+function verifyAuthToken(token: string): AuthenticatedUser | null {
+  try {
+    const decoded: unknown = jwt.verify(token, getJWTSecret());
+
+    if (
+      !isRecord(decoded) ||
+      typeof decoded.id !== "number" ||
+      !Number.isSafeInteger(decoded.id) ||
+      decoded.id <= 0
+    ) {
+      return null;
+    }
+
+    return {
+      id: decoded.id,
+    };
+  } catch (error) {
+    if (
+      error instanceof JsonWebTokenError ||
+      error instanceof TokenExpiredError
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 // =====================
@@ -47,25 +106,38 @@ export async function GET(req: NextRequest) {
 
     if (!token) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    // verify JWT
-    let decoded: JWTPayload;
-    try {
-      decoded = jwt.verify(token, getJWTSecret()) as JWTPayload;
-    } catch {
+    const authenticatedUser = verifyAuthToken(token);
+
+    if (!authenticatedUser) {
       return NextResponse.json(
-        { success: false, error: "Invalid token" },
-        { status: 401 }
+        {
+          success: false,
+          error: "Invalid or expired token",
+        },
+        {
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    const userId = decoded.id;
+    const db = getDb();
 
-    // JOIN query (optimized)
     const user = await db
       .select({
         id: adminUsers.id,
@@ -77,46 +149,80 @@ export async function GET(req: NextRequest) {
         role: adminRoles.name,
       })
       .from(adminUsers)
-      .leftJoin(adminRoles, eq(adminUsers.roleId, adminRoles.id))
-      .where(eq(adminUsers.id, userId))
+      .leftJoin(
+        adminRoles,
+        eq(adminUsers.roleId, adminRoles.id)
+      )
+      .where(eq(adminUsers.id, authenticatedUser.id))
       .limit(1);
 
-    if (!user.length) {
+    if (user.length === 0) {
       return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
+        {
+          success: false,
+          error: "User not found",
+        },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    const u = user[0];
+    const currentUser = user[0];
 
-    if (u.status === false) {
+    if (currentUser.status === false) {
       return NextResponse.json(
-        { success: false, error: "Account disabled" },
-        { status: 403 }
+        {
+          success: false,
+          error: "Account disabled",
+        },
+        {
+          status: 403,
+          headers: {
+            "Cache-Control": "no-store",
+          },
+        }
       );
     }
 
-    const role = u.role || "Admin";
-
-    return NextResponse.json({
-      success: true,
-      profile: {
-        id: u.id.toString(),
-        name: u.name,
-        email: u.email,
-        role,
-        permissions: getPermissions(role),
-        lastLogin: u.lastLogin || null,
-        joinDate: u.createdAt || null,
-      },
-    });
-  } catch (err) {
-    console.error("PROFILE ERROR:", err);
+    const role = currentUser.role || "Admin";
 
     return NextResponse.json(
-      { success: false, error: "Server error" },
-      { status: 500 }
+      {
+        success: true,
+        profile: {
+          id: currentUser.id.toString(),
+          name: currentUser.name,
+          email: currentUser.email,
+          role,
+          permissions: getPermissions(role),
+          lastLogin: currentUser.lastLogin || null,
+          joinDate: currentUser.createdAt || null,
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("GET admin profile error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Server error",
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   }
 }

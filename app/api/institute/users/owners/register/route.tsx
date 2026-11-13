@@ -1,14 +1,19 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { instituteUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { hash } from "bcryptjs";
+
 import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
 } from "@/lib/rate-limit";
+
+// =====================
+// CONFIGURATION
+// =====================
 
 const RATE_LIMIT_OPTIONS = {
   maxAttempts: 5,
@@ -20,12 +25,20 @@ const RATE_LIMIT_OPTIONS = {
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 
+// =====================
+// TYPES
+// =====================
+
 interface RegisterBody {
   name: string;
   email: string;
   password: string;
   phone?: string | null;
 }
+
+// =====================
+// RESPONSE HELPERS
+// =====================
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -35,14 +48,17 @@ function jsonResponse(
   return NextResponse.json(body, {
     status,
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      "Cache-Control":
+        "no-store, no-cache, must-revalidate, private",
       Pragma: "no-cache",
       ...additionalHeaders,
     },
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -50,21 +66,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+// =====================
+// IP HELPER
+// =====================
+
 function getClientIP(request: NextRequest): string {
-  // Cloudflare's connecting IP is the preferred trusted source.
-  const cfIP = request.headers.get("cf-connecting-ip")?.trim();
+  // Cloudflare's connecting IP is preferred.
+  const cfIP = request.headers
+    .get("cf-connecting-ip")
+    ?.trim();
 
   if (cfIP) {
     return cfIP;
   }
 
-  const realIP = request.headers.get("x-real-ip")?.trim();
+  const realIP = request.headers
+    .get("x-real-ip")
+    ?.trim();
 
   if (realIP) {
     return realIP;
   }
 
-  // Fallback for environments without Cloudflare.
+  // Fallback for non-Cloudflare environments.
   const forwarded = request.headers.get("x-forwarded-for");
 
   if (forwarded) {
@@ -78,6 +102,10 @@ function getClientIP(request: NextRequest): string {
   return "unknown";
 }
 
+// =====================
+// VALIDATION HELPERS
+// =====================
+
 function isValidEmail(email: string): boolean {
   if (email.length > 254) {
     return false;
@@ -88,7 +116,10 @@ function isValidEmail(email: string): boolean {
 
 function getValidationError(
   body: Record<string, unknown>
-): { data: RegisterBody | null; error: string | null } {
+): {
+  data: RegisterBody | null;
+  error: string | null;
+} {
   const { name, email, password, phone } = body;
 
   if (
@@ -113,7 +144,10 @@ function getValidationError(
     };
   }
 
-  if (cleanName.length < 2 || cleanName.length > 150) {
+  if (
+    cleanName.length < 2 ||
+    cleanName.length > 150
+  ) {
     return {
       data: null,
       error: "Name must be between 2 and 150 characters",
@@ -172,10 +206,19 @@ function getValidationError(
   };
 }
 
+// =====================
+// RATE LIMIT RESPONSE
+// =====================
+
 function rateLimitResponse(retryAfterSeconds: number) {
+  const retryAfter = Math.max(
+    1,
+    Math.ceil(retryAfterSeconds)
+  );
+
   const minutesLeft = Math.max(
     1,
-    Math.ceil(retryAfterSeconds / 60)
+    Math.ceil(retryAfter / 60)
   );
 
   const message = `Too many registration attempts. Try again in ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.`;
@@ -185,16 +228,19 @@ function rateLimitResponse(retryAfterSeconds: number) {
       success: false,
       error: message,
       message,
-      retryAfter: retryAfterSeconds,
+      retryAfter,
     },
     429,
     {
-      "Retry-After": String(retryAfterSeconds),
+      "Retry-After": String(retryAfter),
     }
   );
 }
 
+// =====================
 // POST /api/institute/users/owners/register
+// =====================
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Parse request body safely
@@ -228,7 +274,8 @@ export async function POST(request: NextRequest) {
     const validation = getValidationError(body);
 
     if (!validation.data) {
-      const message = validation.error ?? "Invalid registration details";
+      const message =
+        validation.error ?? "Invalid registration details";
 
       return jsonResponse(
         {
@@ -240,17 +287,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, phone } = validation.data;
+    const {
+      name,
+      email,
+      password,
+      phone,
+    } = validation.data;
 
     // 3. IP-based rate limiting
     const clientIP = getClientIP(request);
     const ipKey = `institute:register:ip:${clientIP}`;
 
-    const ipCheck = checkRateLimit(ipKey, {
-      maxAttempts: RATE_LIMIT_OPTIONS.maxAttempts,
-      windowMs: RATE_LIMIT_OPTIONS.windowMs,
-      lockoutMs: RATE_LIMIT_OPTIONS.lockoutMs,
-    });
+    const ipCheck = checkRateLimit(
+      ipKey,
+      RATE_LIMIT_OPTIONS
+    );
 
     if (!ipCheck.allowed) {
       return rateLimitResponse(
@@ -258,7 +309,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Check duplicate email
+    // 4. Initialize database
+    const db = getDb();
+
+    // 5. Check duplicate email
     const [existingUser] = await db
       .select({
         id: instituteUsers.id,
@@ -268,22 +322,27 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (existingUser) {
-      recordFailedAttempt(ipKey, RATE_LIMIT_OPTIONS);
+      recordFailedAttempt(
+        ipKey,
+        RATE_LIMIT_OPTIONS
+      );
 
       return jsonResponse(
         {
           success: false,
-          error: "This email is already registered. Please sign in instead.",
-          message: "This email is already registered. Please sign in instead.",
+          error:
+            "This email is already registered. Please sign in instead.",
+          message:
+            "This email is already registered. Please sign in instead.",
         },
         409
       );
     }
 
-    // 5. Hash password
+    // 6. Hash password
     const hashedPassword = await hash(password, 10);
 
-    // 6. Create institute owner account
+    // 7. Create institute owner account
     const [newUser] = await db
       .insert(instituteUsers)
       .values({
@@ -301,17 +360,20 @@ export async function POST(request: NextRequest) {
       });
 
     if (!newUser) {
-      throw new Error("Institute owner account creation failed");
+      throw new Error(
+        "Institute owner account creation failed"
+      );
     }
 
-    // 7. Reset rate limit after successful registration
+    // 8. Reset rate limit after successful registration
     resetRateLimit(ipKey);
 
-    // 8. Success response
+    // 9. Success response
     return jsonResponse(
       {
         success: true,
-        message: "Account created successfully! You can now sign in.",
+        message:
+          "Account created successfully! You can now sign in.",
         user: {
           id: newUser.id,
           name: newUser.name,
@@ -326,16 +388,16 @@ export async function POST(request: NextRequest) {
 
     // Handle PostgreSQL unique constraint violation
     if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
+      isRecord(error) &&
       error.code === "23505"
     ) {
       return jsonResponse(
         {
           success: false,
-          error: "This email is already registered. Please sign in instead.",
-          message: "This email is already registered. Please sign in instead.",
+          error:
+            "This email is already registered. Please sign in instead.",
+          message:
+            "This email is already registered. Please sign in instead.",
         },
         409
       );

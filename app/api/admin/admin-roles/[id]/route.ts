@@ -1,8 +1,6 @@
 
-// app/api/admin/admin-roles/[id]/route.ts
-
 import { NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { adminRoles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -14,7 +12,11 @@ interface RoleUpdateData {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }
 
 function getIdFromUrl(request: Request): number | null {
@@ -44,7 +46,10 @@ function isForeignKeyViolation(error: unknown): boolean {
     return true;
   }
 
-  return isRecord(error.cause) && error.cause.code === "23503";
+  return (
+    isRecord(error.cause) &&
+    error.cause.code === "23503"
+  );
 }
 
 // GET: Fetch a single role
@@ -58,6 +63,8 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+
+    const db = getDb();
 
     const roles = await db
       .select({
@@ -165,6 +172,8 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const db = getDb();
+
     const existing = await db
       .select({ id: adminRoles.id })
       .from(adminRoles)
@@ -220,6 +229,8 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const db = getDb();
+
     const existing = await db
       .select({ id: adminRoles.id })
       .from(adminRoles)
@@ -233,7 +244,9 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await db.delete(adminRoles).where(eq(adminRoles.id, roleId));
+    await db
+      .delete(adminRoles)
+      .where(eq(adminRoles.id, roleId));
 
     return NextResponse.json({
       success: true,

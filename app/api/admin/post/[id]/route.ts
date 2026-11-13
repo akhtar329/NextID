@@ -1,10 +1,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePostCache } from "@/lib/post-cache";
-import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
+import jwt, {
+  JsonWebTokenError,
+  TokenExpiredError,
+} from "jsonwebtoken";
 
 type PostUpdate = Partial<typeof posts.$inferInsert>;
 
@@ -18,7 +21,11 @@ interface RouteContext {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }
 
 function unauthorizedResponse() {
@@ -219,6 +226,8 @@ async function invalidateChangedPostCache(
 }
 
 async function findPost(id: number) {
+  const db = getDb();
+
   const [post] = await db
     .select()
     .from(posts)
@@ -240,10 +249,7 @@ async function parseRequestBody(
   }
 }
 
-// ==========================================
 // GET: Fetch Single Post
-// ==========================================
-
 export async function GET(
   request: NextRequest,
   context: RouteContext
@@ -285,10 +291,7 @@ export async function GET(
   }
 }
 
-// ==========================================
 // PUT: Update Full Post
-// ==========================================
-
 export async function PUT(
   request: NextRequest,
   context: RouteContext
@@ -320,6 +323,7 @@ export async function PUT(
   }
 
   try {
+    const db = getDb();
     const existing = await findPost(numericId);
 
     if (!existing) {
@@ -362,7 +366,6 @@ export async function PUT(
       return errorResponse("Invalid schema markup JSON", 400);
     }
 
-    // Validate incoming boolean values separately.
     const booleanFields = [
       "isFeatured",
       "isPopular",
@@ -378,7 +381,6 @@ export async function PUT(
       }
     }
 
-    // Existing database values may legitimately be null.
     const isFeatured = getBoolean(
       body.isFeatured,
       existing.isFeatured
@@ -642,10 +644,7 @@ export async function PUT(
   }
 }
 
-// ==========================================
 // PATCH: Partial Post Update
-// ==========================================
-
 export async function PATCH(
   request: NextRequest,
   context: RouteContext
@@ -669,6 +668,7 @@ export async function PATCH(
   }
 
   try {
+    const db = getDb();
     const existing = await findPost(numericId);
 
     if (!existing) {
@@ -677,7 +677,6 @@ export async function PATCH(
 
     const updateData: PostUpdate = {};
 
-    // Basic information
     if (body.title !== undefined) {
       if (
         typeof body.title !== "string" ||
@@ -718,7 +717,6 @@ export async function PATCH(
       updateData.authorName = getString(body.authorName);
     }
 
-    // Media
     if (body.featuredImage !== undefined) {
       updateData.featuredImage = getString(body.featuredImage);
     }
@@ -738,7 +736,6 @@ export async function PATCH(
         result.data as typeof posts.$inferInsert.galleryImages;
     }
 
-    // Status
     if (body.status !== undefined) {
       if (typeof body.status !== "string" || !body.status.trim()) {
         return errorResponse("Invalid post status", 400);
@@ -747,7 +744,6 @@ export async function PATCH(
       updateData.status = body.status.trim();
     }
 
-    // Boolean flags
     const booleanFields = [
       "isFeatured",
       "isPopular",
@@ -764,7 +760,6 @@ export async function PATCH(
       }
     }
 
-    // Dates
     if (body.publishedAt !== undefined) {
       if (body.publishedAt === null || body.publishedAt === "") {
         return errorResponse("publishedAt cannot be empty", 400);
@@ -810,7 +805,6 @@ export async function PATCH(
       }
     }
 
-    // Meta
     if (body.meta !== undefined || body.deadline !== undefined) {
       let metaData: Record<string, unknown> = {};
 
@@ -845,7 +839,6 @@ export async function PATCH(
         result.data as typeof posts.$inferInsert.tags;
     }
 
-    // SEO metadata
     const stringFields = [
       "metaTitle",
       "metaDescription",
@@ -884,7 +877,6 @@ export async function PATCH(
       }
     }
 
-    // Structured data
     if (body.schemaMarkup !== undefined) {
       const result = parseJsonValue(body.schemaMarkup);
 
@@ -896,7 +888,6 @@ export async function PATCH(
         result.data as typeof posts.$inferInsert.schemaMarkup;
     }
 
-    // SEO scores
     if (body.readabilityScore !== undefined) {
       const value = getNumber(body.readabilityScore);
 
@@ -966,10 +957,7 @@ export async function PATCH(
   }
 }
 
-// ==========================================
 // DELETE: Soft Delete / Archive Post
-// ==========================================
-
 export async function DELETE(
   request: NextRequest,
   context: RouteContext
@@ -987,6 +975,7 @@ export async function DELETE(
   }
 
   try {
+    const db = getDb();
     const existing = await findPost(numericId);
 
     if (!existing) {

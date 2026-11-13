@@ -1,10 +1,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import jwt from "jsonwebtoken";
+import { getDb } from "@/db/db";
 import { instituteUsers } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { compare } from "bcryptjs";
-import jwt from "jsonwebtoken";
 
 import {
   checkRateLimit,
@@ -13,6 +13,10 @@ import {
   getThrottleDelay,
   RATE_LIMIT_CONFIG,
 } from "@/lib/rate-limit";
+
+// =====================
+// TYPES
+// =====================
 
 interface LoginRequestBody {
   email: string;
@@ -24,6 +28,10 @@ interface AuthenticatedInstituteUser {
   email: string;
   name: string;
 }
+
+// =====================
+// HELPERS
+// =====================
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
@@ -60,14 +68,12 @@ async function parseRequestBody(
 }
 
 function getClientIP(request: NextRequest): string {
-  // Cloudflare-provided client IP is preferred.
   const cfIP = request.headers.get("cf-connecting-ip");
 
   if (cfIP?.trim()) {
     return cfIP.trim();
   }
 
-  // Fallback for local development or non-Cloudflare environments.
   const realIP = request.headers.get("x-real-ip");
 
   if (realIP?.trim()) {
@@ -87,9 +93,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getMinutesLeft(seconds: number | undefined): number {
+function getMinutesLeft(
+  seconds: number | null | undefined
+): number {
   return Math.max(1, Math.ceil((seconds ?? 0) / 60));
 }
+
+// =====================
+// RESPONSE HELPERS
+// =====================
 
 function rateLimitResponse(
   message: string,
@@ -132,13 +144,19 @@ function invalidCredentialsResponse(
       status: 401,
       headers: {
         ...(remaining !== undefined
-          ? { "X-RateLimit-Remaining": remaining.toString() }
+          ? {
+              "X-RateLimit-Remaining": remaining.toString(),
+            }
           : {}),
         "Cache-Control": "no-store",
       },
     }
   );
 }
+
+// =====================
+// RATE LIMIT HELPERS
+// =====================
 
 function recordLoginFailure(
   accountKey: string,
@@ -217,7 +235,10 @@ function createLoginFailureResponse(
   );
 }
 
-// POST /api/institute/login
+// =====================
+// POST /api/auth/institute/login
+// =====================
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Validate request body
@@ -232,7 +253,9 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Cache-Control": "no-store" },
+          headers: {
+            "Cache-Control": "no-store",
+          },
         }
       );
     }
@@ -249,7 +272,9 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Cache-Control": "no-store" },
+          headers: {
+            "Cache-Control": "no-store",
+          },
         }
       );
     }
@@ -267,14 +292,17 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 400,
-          headers: { "Cache-Control": "no-store" },
+          headers: {
+            "Cache-Control": "no-store",
+          },
         }
       );
     }
 
+    // 2. Get client IP
     const clientIP = getClientIP(request);
 
-    // 2. IP rate limit
+    // 3. IP rate limit
     const ipKey = `institute:login:ip:${clientIP}`;
 
     const ipCheck = checkRateLimit(
@@ -293,7 +321,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Account rate limit
+    // 4. Account rate limit
     const accountKey = `institute:login:account:${email}`;
 
     const accountCheck = checkRateLimit(
@@ -315,14 +343,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Throttle repeated attempts
+    // 5. Throttle repeated attempts
     const delay = getThrottleDelay(accountCheck.attemptCount);
 
     if (delay > 0) {
       await sleep(delay);
     }
 
-    // 5. Find institute user
+    // 6. Database connection
+    const db = getDb();
+
+    // 7. Find institute user
     const [user] = await db
       .select()
       .from(instituteUsers)
@@ -344,7 +375,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Check account status
+    // 8. Check account status
     if (user.status === false) {
       const { accountResult, ipResult } = recordLoginFailure(
         accountKey,
@@ -357,7 +388,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. Verify password
+    // 9. Verify password
     const isValid = await compare(password, user.password);
 
     if (!isValid) {
@@ -372,7 +403,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. Check JWT configuration
+    // 10. Check JWT configuration
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!jwtSecret) {
@@ -386,16 +417,18 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 500,
-          headers: { "Cache-Control": "no-store" },
+          headers: {
+            "Cache-Control": "no-store",
+          },
         }
       );
     }
 
-    // 9. Reset account failure counter.
+    // 11. Reset account failure counter.
     // IP counter intentionally remains unchanged.
     resetRateLimit(accountKey);
 
-    // 10. Create institute-specific JWT
+    // 12. Create institute-specific JWT
     const authenticatedUser: AuthenticatedInstituteUser = {
       id: user.id,
       email: user.email,
@@ -416,7 +449,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // 11. Update last login.
+    // 13. Update last login.
     // Login remains successful if this optional update fails.
     try {
       await db
@@ -426,10 +459,13 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(instituteUsers.id, user.id));
     } catch (error) {
-      console.error("Institute last login update failed:", error);
+      console.error(
+        "Institute last login update failed:",
+        error
+      );
     }
 
-    // 12. Response and authentication cookie
+    // 14. Response and authentication cookie
     const response = NextResponse.json(
       {
         success: true,
@@ -469,7 +505,9 @@ export async function POST(request: NextRequest) {
       },
       {
         status: 500,
-        headers: { "Cache-Control": "no-store" },
+        headers: {
+          "Cache-Control": "no-store",
+        },
       }
     );
   }

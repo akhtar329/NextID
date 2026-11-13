@@ -1,10 +1,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
-import { adminUsers, adminRoles } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
-import { compare } from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { compare } from "bcryptjs";
+import { eq, sql } from "drizzle-orm";
+
+import { getDb } from "@/db/db";
+import { adminUsers, adminRoles } from "@/db/schema";
 
 import {
   checkRateLimit,
@@ -13,6 +14,10 @@ import {
   getThrottleDelay,
   RATE_LIMIT_CONFIG,
 } from "@/lib/rate-limit";
+
+// =====================
+// TYPES
+// =====================
 
 interface LoginRequestBody {
   email: string;
@@ -26,6 +31,10 @@ interface AuthenticatedAdmin {
   roleId: number | null;
   role: string;
 }
+
+// =====================
+// HELPERS
+// =====================
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
@@ -61,7 +70,6 @@ async function parseRequestBody(
   }
 }
 
-// Cloudflare client IP detection
 function getClientIP(request: NextRequest): string {
   const cfIP = request.headers.get("cf-connecting-ip");
 
@@ -88,9 +96,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getMinutesLeft(seconds: number | undefined): number {
+function getMinutesLeft(
+  seconds: number | null | undefined
+): number {
   return Math.max(1, Math.ceil((seconds ?? 0) / 60));
 }
+
+// =====================
+// RESPONSE HELPERS
+// =====================
 
 function noStoreHeaders(): HeadersInit {
   return {
@@ -134,6 +148,10 @@ function rateLimitResponse(
     }
   );
 }
+
+// =====================
+// RATE LIMIT HELPERS
+// =====================
 
 function recordLoginFailure(
   accountKey: string,
@@ -211,7 +229,10 @@ function createLoginFailureResponse(
   );
 }
 
+// =====================
 // POST /api/auth/login
+// =====================
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Validate request body
@@ -236,9 +257,10 @@ export async function POST(request: NextRequest) {
       return jsonError("Invalid email or password format", 400);
     }
 
+    // 2. Get client IP
     const clientIP = getClientIP(request);
 
-    // 2. IP rate limit
+    // 3. IP rate limit
     const ipKey = `login:ip:${clientIP}`;
 
     const ipCheck = checkRateLimit(
@@ -257,7 +279,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Account rate limit
+    // 4. Account rate limit
     const accountKey = `login:account:${cleanEmail}`;
 
     const accountCheck = checkRateLimit(
@@ -279,14 +301,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Throttle repeated attempts
+    // 5. Throttle repeated attempts
     const delay = getThrottleDelay(accountCheck.attemptCount);
 
     if (delay > 0) {
       await sleep(delay);
     }
 
-    // 5. Find admin user
+    // 6. Initialize database
+    const db = getDb();
+
+    // 7. Find admin user
     const [user] = await db
       .select()
       .from(adminUsers)
@@ -308,7 +333,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Check account status
+    // 8. Check account status
     if (!user.status) {
       const { accountResult, ipResult } = recordLoginFailure(
         accountKey,
@@ -321,7 +346,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7. Verify password
+    // 9. Verify password
     const isValid = await compare(password, user.password);
 
     if (!isValid) {
@@ -336,7 +361,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 8. Validate JWT configuration
+    // 10. Validate JWT configuration
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!jwtSecret) {
@@ -348,7 +373,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 9. Get admin role
+    // 11. Get admin role
     let roleName = "admin";
 
     if (user.roleId) {
@@ -365,11 +390,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 10. Reset account rate limit after successful authentication
+    // 12. Reset account rate limit after successful authentication.
     // IP counter intentionally remains unchanged.
     resetRateLimit(accountKey);
 
-    // 11. Create admin JWT
+    // 13. Create admin JWT
     const authenticatedAdmin: AuthenticatedAdmin = {
       id: user.id,
       email: user.email,
@@ -385,6 +410,7 @@ export async function POST(request: NextRequest) {
         name: authenticatedAdmin.name,
         roleId: authenticatedAdmin.roleId,
         role: authenticatedAdmin.role,
+        accountType: "admin",
       },
       jwtSecret,
       {
@@ -392,7 +418,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // 12. Update last login
+    // 14. Update last login.
     // Login remains successful if this optional update fails.
     try {
       await db
@@ -402,10 +428,13 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(adminUsers.id, user.id));
     } catch (error) {
-      console.error("Admin last login update failed:", error);
+      console.error(
+        "Admin last login update failed:",
+        error
+      );
     }
 
-    // 13. Response and authentication cookie
+    // 15. Response and authentication cookie
     const response = NextResponse.json(
       {
         success: true,
@@ -415,6 +444,7 @@ export async function POST(request: NextRequest) {
           name: authenticatedAdmin.name,
           roleId: authenticatedAdmin.roleId,
           role: authenticatedAdmin.role,
+          accountType: "admin",
         },
       },
       {

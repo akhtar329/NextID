@@ -1,17 +1,27 @@
+
 // repositories/sidebar/sidebar.repository.ts
 
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { posts } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";
 
 // ============================================================
 // SIDEBAR REPOSITORY - PURE DATABASE ACCESS LAYER
 // ============================================================
 
-export class SidebarRepository {
+const POST_TYPES: PostType[] = [
+  "admission",
+  "result",
+  "news",
+  "date_sheet",
+  "scholarship",
+  "job",
+  "blog",
+];
 
-  private lightFields = {
+export class SidebarRepository {
+  private readonly lightFields = {
     id: posts.id,
     slug: posts.slug,
     type: posts.type,
@@ -32,43 +42,65 @@ export class SidebarRepository {
     return row as Post;
   }
 
+  private normalizeLimit(limit: number, fallback: number): number {
+    if (!Number.isFinite(limit)) return fallback;
+
+    return Math.min(1000, Math.max(1, Math.floor(limit)));
+  }
+
+  private getTypeCondition(types?: PostType[]) {
+    if (!types || types.length === 0) {
+      return undefined;
+    }
+
+    return inArray(posts.type, types);
+  }
+
   // ============================================================
-  // ✅ getTrendingPosts - Get trending posts across all types
+  // GET TRENDING POSTS
   // ============================================================
+
   async getTrendingPosts(
     limit: number = 10,
     types?: PostType[]
   ): Promise<Post[]> {
     try {
-      const conditions = [eq(posts.status, "published")];
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 10);
+      const typeCondition = this.getTypeCondition(types);
 
-      if (types && types.length > 0) {
-        conditions.push(sql`${posts.type} IN (${sql.join(types.map(t => sql`${t}`), sql`, `)})`);
-      }
+      const conditions = [
+        eq(posts.status, "published"),
+        ...(typeCondition ? [typeCondition] : []),
+      ];
 
       const rows = await db
         .select(this.lightFields)
         .from(posts)
         .where(and(...conditions))
         .orderBy(
-          sql`${posts.viewCount} DESC NULLS LAST, ${posts.isPopular} DESC, ${posts.publishedAt} DESC NULLS LAST`
+          sql`${posts.viewCount} DESC NULLS LAST,
+              ${posts.isPopular} DESC,
+              ${posts.publishedAt} DESC NULLS LAST`
         )
-        .limit(limit);
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getTrendingPosts:', error);
+      console.error("Error in getTrendingPosts:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getBreakingNews - Get breaking news posts
+  // GET BREAKING NEWS
   // ============================================================
-  async getBreakingNews(
-    limit: number = 5
-  ): Promise<Post[]> {
+
+  async getBreakingNews(limit: number = 5): Promise<Post[]> {
     try {
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 5);
+
       const rows = await db
         .select(this.lightFields)
         .from(posts)
@@ -79,92 +111,108 @@ export class SidebarRepository {
             eq(posts.isBreaking, true)
           )
         )
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
+        .orderBy(
+          sql`${posts.publishedAt} DESC NULLS LAST,
+              ${posts.createdAt} DESC`
+        )
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getBreakingNews:', error);
+      console.error("Error in getBreakingNews:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getFeaturedPosts - Get featured posts across all types
+  // GET FEATURED POSTS
   // ============================================================
+
   async getFeaturedPosts(
     limit: number = 10,
     types?: PostType[]
   ): Promise<Post[]> {
     try {
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 10);
+      const typeCondition = this.getTypeCondition(types);
+
       const conditions = [
         eq(posts.status, "published"),
-        eq(posts.isFeatured, true)
+        eq(posts.isFeatured, true),
+        ...(typeCondition ? [typeCondition] : []),
       ];
-
-      if (types && types.length > 0) {
-        conditions.push(sql`${posts.type} IN (${sql.join(types.map(t => sql`${t}`), sql`, `)})`);
-      }
 
       const rows = await db
         .select(this.lightFields)
         .from(posts)
         .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
+        .orderBy(
+          sql`${posts.publishedAt} DESC NULLS LAST,
+              ${posts.createdAt} DESC`
+        )
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getFeaturedPosts:', error);
+      console.error("Error in getFeaturedPosts:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getQuickAccessCounts - Get counts for all post types
+  // GET QUICK ACCESS COUNTS
   // ============================================================
+
   async getQuickAccessCounts(): Promise<Record<string, number>> {
     try {
-      const types: PostType[] = [
-        'admission',
-        'result',
-        'news',
-        'date_sheet',
-        'scholarship',
-        'job',
-        'blog'
-      ];
+      const db = getDb();
+
+      const rows = await db
+        .select({
+          type: posts.type,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(posts)
+        .where(
+          and(
+            eq(posts.status, "published"),
+            inArray(posts.type, POST_TYPES)
+          )
+        )
+        .groupBy(posts.type);
 
       const result: Record<string, number> = {};
 
-      for (const type of types) {
-        const [count] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(posts)
-          .where(
-            and(
-              eq(posts.type, type),
-              eq(posts.status, "published")
-            )
-          );
-        
-        result[type] = count?.count || 0;
+      for (const type of POST_TYPES) {
+        result[type] = 0;
+      }
+
+      for (const row of rows) {
+        if (row.type) {
+          result[row.type] = Number(row.count) || 0;
+        }
       }
 
       return result;
     } catch (error) {
-      console.error('Error in getQuickAccessCounts:', error);
+      console.error("Error in getQuickAccessCounts:", error);
       return {};
     }
   }
 
   // ============================================================
-  // ✅ getCountByType - Get count for a specific type
+  // GET COUNT BY TYPE
   // ============================================================
+
   async getCountByType(type: PostType): Promise<number> {
     try {
-      const [count] = await db
-        .select({ count: sql<number>`count(*)` })
+      const db = getDb();
+
+      const [result] = await db
+        .select({
+          count: sql<number>`count(*)::int`,
+        })
         .from(posts)
         .where(
           and(
@@ -173,21 +221,25 @@ export class SidebarRepository {
           )
         );
 
-      return count?.count || 0;
+      return Number(result?.count ?? 0);
     } catch (error) {
-      console.error('Error in getCountByType:', error);
+      console.error("Error in getCountByType:", error);
       return 0;
     }
   }
 
   // ============================================================
-  // ✅ getTrendingByType - Get trending posts for a specific type
+  // GET TRENDING POSTS BY TYPE
   // ============================================================
+
   async getTrendingByType(
     type: PostType,
     limit: number = 5
   ): Promise<Post[]> {
     try {
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 5);
+
       const rows = await db
         .select(this.lightFields)
         .from(posts)
@@ -198,25 +250,31 @@ export class SidebarRepository {
           )
         )
         .orderBy(
-          sql`${posts.viewCount} DESC NULLS LAST, ${posts.isPopular} DESC, ${posts.publishedAt} DESC NULLS LAST`
+          sql`${posts.viewCount} DESC NULLS LAST,
+              ${posts.isPopular} DESC,
+              ${posts.publishedAt} DESC NULLS LAST`
         )
-        .limit(limit);
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getTrendingByType:', error);
+      console.error("Error in getTrendingByType:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getFeaturedByType - Get featured posts for a specific type
+  // GET FEATURED POSTS BY TYPE
   // ============================================================
+
   async getFeaturedByType(
     type: PostType,
     limit: number = 5
   ): Promise<Post[]> {
     try {
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 5);
+
       const rows = await db
         .select(this.lightFields)
         .from(posts)
@@ -227,24 +285,31 @@ export class SidebarRepository {
             eq(posts.isFeatured, true)
           )
         )
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
+        .orderBy(
+          sql`${posts.publishedAt} DESC NULLS LAST,
+              ${posts.createdAt} DESC`
+        )
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getFeaturedByType:', error);
+      console.error("Error in getFeaturedByType:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getPopularByType - Get popular posts for a specific type
+  // GET POPULAR POSTS BY TYPE
   // ============================================================
+
   async getPopularByType(
     type: PostType,
     limit: number = 5
   ): Promise<Post[]> {
     try {
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 5);
+
       const rows = await db
         .select(this.lightFields)
         .from(posts)
@@ -255,47 +320,58 @@ export class SidebarRepository {
             eq(posts.isPopular, true)
           )
         )
-        .orderBy(sql`${posts.viewCount} DESC NULLS LAST, ${posts.publishedAt} DESC NULLS LAST`)
-        .limit(limit);
+        .orderBy(
+          sql`${posts.viewCount} DESC NULLS LAST,
+              ${posts.publishedAt} DESC NULLS LAST`
+        )
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getPopularByType:', error);
+      console.error("Error in getPopularByType:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getRecentPosts - Get recent posts across all types
+  // GET RECENT POSTS
   // ============================================================
+
   async getRecentPosts(
     limit: number = 10,
     types?: PostType[]
   ): Promise<Post[]> {
     try {
-      const conditions = [eq(posts.status, "published")];
+      const db = getDb();
+      const safeLimit = this.normalizeLimit(limit, 10);
+      const typeCondition = this.getTypeCondition(types);
 
-      if (types && types.length > 0) {
-        conditions.push(sql`${posts.type} IN (${sql.join(types.map(t => sql`${t}`), sql`, `)})`);
-      }
+      const conditions = [
+        eq(posts.status, "published"),
+        ...(typeCondition ? [typeCondition] : []),
+      ];
 
       const rows = await db
         .select(this.lightFields)
         .from(posts)
         .where(and(...conditions))
-        .orderBy(sql`${posts.publishedAt} DESC NULLS LAST, ${posts.createdAt} DESC`)
-        .limit(limit);
+        .orderBy(
+          sql`${posts.publishedAt} DESC NULLS LAST,
+              ${posts.createdAt} DESC`
+        )
+        .limit(safeLimit);
 
-      return rows.map(r => this.castPost(r));
+      return rows.map((row) => this.castPost(row));
     } catch (error) {
-      console.error('Error in getRecentPosts:', error);
+      console.error("Error in getRecentPosts:", error);
       return [];
     }
   }
 
   // ============================================================
-  // ✅ getAllSidebarData - Get all sidebar data in one query
+  // GET ALL SIDEBAR DATA
   // ============================================================
+
   async getAllSidebarData(
     trendingLimit: number = 10,
     breakingLimit: number = 5,
@@ -307,7 +383,12 @@ export class SidebarRepository {
     quickAccess: Record<string, number>;
   }> {
     try {
-      const [trending, breaking, featured, quickAccess] = await Promise.all([
+      const [
+        trending,
+        breaking,
+        featured,
+        quickAccess,
+      ] = await Promise.all([
         this.getTrendingPosts(trendingLimit),
         this.getBreakingNews(breakingLimit),
         this.getFeaturedPosts(featuredLimit),
@@ -321,7 +402,8 @@ export class SidebarRepository {
         quickAccess,
       };
     } catch (error) {
-      console.error('Error in getAllSidebarData:', error);
+      console.error("Error in getAllSidebarData:", error);
+
       return {
         trending: [],
         breaking: [],

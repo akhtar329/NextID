@@ -1,8 +1,6 @@
 
-// app/api/admin/admin-users/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { adminUsers, adminRoles } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -47,7 +45,7 @@ async function getUserId(context: {
   return parseUserId(id);
 }
 
-async function getAdminCount() {
+async function getAdminCount(db: ReturnType<typeof getDb>) {
   return db
     .select({ id: adminUsers.id })
     .from(adminUsers)
@@ -68,6 +66,8 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    const db = getDb();
 
     const users = await db
       .select({
@@ -139,6 +139,8 @@ export async function PATCH(
         { status: 400 }
       );
     }
+
+    const db = getDb();
 
     const existingUsers = await db
       .select({
@@ -279,9 +281,12 @@ export async function PATCH(
       }
 
       if (body.password.trim().length > 0) {
-        if (body.password.length < 8) {
+        if (body.password.length < 8 || body.password.length > 128) {
           return NextResponse.json(
-            { success: false, error: "Password must be at least 8 characters" },
+            {
+              success: false,
+              error: "Password must be between 8 and 128 characters",
+            },
             { status: 400 }
           );
         }
@@ -296,7 +301,7 @@ export async function PATCH(
       body.status === false && existingUser.status === true;
 
     if (isAdminUser && isBeingDeactivated) {
-      const adminUsersList = await getAdminCount();
+      const adminUsersList = await getAdminCount(db);
 
       if (adminUsersList.length <= 1) {
         return NextResponse.json(
@@ -315,7 +320,7 @@ export async function PATCH(
       updateData.roleId !== undefined &&
       updateData.roleId !== 1
     ) {
-      const adminUsersList = await getAdminCount();
+      const adminUsersList = await getAdminCount(db);
 
       if (adminUsersList.length <= 1) {
         return NextResponse.json(
@@ -392,6 +397,8 @@ export async function DELETE(
       );
     }
 
+    const db = getDb();
+
     const existingUsers = await db
       .select({
         id: adminUsers.id,
@@ -411,7 +418,7 @@ export async function DELETE(
     }
 
     if (existingUser.roleId === 1) {
-      const adminUsersList = await getAdminCount();
+      const adminUsersList = await getAdminCount(db);
 
       if (adminUsersList.length <= 1) {
         return NextResponse.json(

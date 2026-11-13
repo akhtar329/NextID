@@ -1,8 +1,6 @@
 
-// app/api/admin/admin-users/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db/db";";
+import { getDb } from "@/db/db";
 import { adminUsers, adminRoles } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -11,7 +9,6 @@ interface CreateUserBody {
   name: string;
   email: string;
   role?: string;
-  password?: string;
   status?: boolean;
 }
 
@@ -47,7 +44,10 @@ function generateTemporaryPassword(): string {
 }
 
 // Resolve role ID using the actual database role name.
-async function getRoleIdFromName(roleName: string): Promise<number> {
+async function getRoleIdFromName(
+  db: ReturnType<typeof getDb>,
+  roleName: string
+): Promise<number> {
   const dbRoleName = ROLE_MAPPING[roleName] ?? roleName;
 
   const role = await db
@@ -83,6 +83,8 @@ async function getRoleIdFromName(roleName: string): Promise<number> {
 // GET: List all admin users
 export async function GET() {
   try {
+    const db = getDb();
+
     const users = await db
       .select({
         id: adminUsers.id,
@@ -197,14 +199,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      body.password !== undefined &&
+      typeof body.password === "string" &&
       body.password.length > 0 &&
-      body.password.length < 8
+      (body.password.length < 8 || body.password.length > 128)
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Password must be at least 8 characters",
+          error: "Password must be between 8 and 128 characters",
         },
         { status: 400 }
       );
@@ -233,6 +235,8 @@ export async function POST(req: NextRequest) {
       status: body.status === undefined ? true : body.status,
     };
 
+    const db = getDb();
+
     // Check for duplicate email.
     const existingUser = await db
       .select({
@@ -253,7 +257,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Resolve the actual database role ID.
-    const roleId = await getRoleIdFromName(userData.role ?? "viewer");
+    const roleId = await getRoleIdFromName(
+      db,
+      userData.role ?? "viewer"
+    );
 
     // Generate a password if one was not provided.
     const plainPassword =
