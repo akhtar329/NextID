@@ -1,6 +1,4 @@
 
-// app/api/logs/route.ts
-
 import { NextResponse } from "next/server";
 import {
   getLogsWithFilter,
@@ -11,6 +9,22 @@ import {
   type LogEntry,
 } from "@/lib/logger";
 
+const LOG_TYPES = [
+  "CACHE_HIT",
+  "CACHE_MISS",
+  "DATABASE_QUERY",
+  "CACHE_SAVE",
+  "CACHE_EXPIRE",
+] as const satisfies readonly LogEntry["type"][];
+
+const LOG_SOURCES = [
+  "cache",
+  "database",
+] as const satisfies readonly NonNullable<LogEntry["source"]>[];
+
+type LogType = (typeof LOG_TYPES)[number];
+type LogSource = (typeof LOG_SOURCES)[number];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
@@ -19,19 +33,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
-function getOptionalString(
-  value: unknown,
-  fieldName: string
-): string | null {
+function isLogType(value: unknown): value is LogType {
+  return (
+    typeof value === "string" &&
+    LOG_TYPES.some((item) => item === value)
+  );
+}
+
+function isLogSource(value: unknown): value is LogSource {
+  return (
+    typeof value === "string" &&
+    LOG_SOURCES.some((item) => item === value)
+  );
+}
+
+function getOptionalString(value: unknown): string | null {
   if (value === undefined) {
     return "";
   }
 
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  if (value.length > 2048) {
+  if (typeof value !== "string" || value.length > 2048) {
     return null;
   }
 
@@ -62,7 +83,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Fetch log statistics.
     if (searchParams.get("analysis") === "true") {
       const stats = await getLogStats();
 
@@ -72,7 +92,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Validate and limit the requested number of logs.
     const rawLimit = searchParams.get("limit") ?? "100";
 
     if (!/^\d+$/.test(rawLimit)) {
@@ -109,7 +128,7 @@ export async function GET(request: Request) {
       count: logs.length,
     });
   } catch (error) {
-    console.error("GET logs error:", error);
+    console.error("GET admin logs error:", error);
 
     return NextResponse.json(
       {
@@ -137,7 +156,6 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Delete all logs.
     if (id === "all") {
       await clearLogs();
 
@@ -147,7 +165,6 @@ export async function DELETE(request: Request) {
       });
     }
 
-    // Validate individual log ID.
     if (id.length > 256) {
       return NextResponse.json(
         {
@@ -175,7 +192,7 @@ export async function DELETE(request: Request) {
       message: `Log ${id} deleted successfully`,
     });
   } catch (error) {
-    console.error("DELETE logs error:", error);
+    console.error("DELETE admin logs error:", error);
 
     return NextResponse.json(
       {
@@ -214,29 +231,55 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate required operation.
     if (
       typeof body.operation !== "string" ||
-      !body.operation.trim()
+      !body.operation.trim() ||
+      body.operation.length > 512
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "operation is required",
+          error: "A valid operation is required",
         },
         { status: 400 }
       );
     }
 
-    const type = getOptionalString(body.type, "type");
-    const source = getOptionalString(body.source, "source");
-    const userAgent = getOptionalString(body.userAgent, "userAgent");
-    const path = getOptionalString(body.path, "path");
-    const ip = getOptionalString(body.ip, "ip");
+    const typeValue = body.type;
+    const sourceValue = body.source;
+
+    const type: LogType =
+      typeValue === undefined
+        ? "CACHE_HIT"
+        : isLogType(typeValue)
+          ? typeValue
+          : "INVALID" as LogType;
+
+    const source: LogSource =
+      sourceValue === undefined
+        ? "cache"
+        : isLogSource(sourceValue)
+          ? sourceValue
+          : "INVALID" as LogSource;
 
     if (
-      type === null ||
-      source === null ||
+      (typeValue !== undefined && !isLogType(typeValue)) ||
+      (sourceValue !== undefined && !isLogSource(sourceValue))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid log type or source",
+        },
+        { status: 400 }
+      );
+    }
+
+    const userAgent = getOptionalString(body.userAgent);
+    const path = getOptionalString(body.path);
+    const ip = getOptionalString(body.ip);
+
+    if (
       userAgent === null ||
       path === null ||
       ip === null
@@ -263,7 +306,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate bot information.
     let bot: LogEntry["bot"] = {
       isBot: false,
       name: "Human",
@@ -296,13 +338,12 @@ export async function POST(request: Request) {
       };
     }
 
-    // Create log entry.
     const logEntry: LogEntry = {
       id: `log_${Date.now()}_${crypto.randomUUID()}`,
       timestamp: new Date().toISOString(),
-      type: type || "CACHE_HIT",
+      type,
       operation: body.operation.trim(),
-      source: source || "cache",
+      source,
       duration,
       bot,
       userAgent: userAgent || "",
@@ -322,7 +363,7 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("POST logs error:", error);
+    console.error("POST admin logs error:", error);
 
     return NextResponse.json(
       {
