@@ -1,7 +1,14 @@
+
 // app/admin/logs/page.tsx
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import type { ReactNode } from "react";
 import {
   RefreshCw,
   Trash2,
@@ -23,12 +30,20 @@ import {
 // TYPES
 // ============================================================
 
+type LogType =
+  | "CACHE_HIT"
+  | "CACHE_MISS"
+  | "DATABASE_QUERY"
+  | "CACHE_SAVE";
+
+type LogSource = "cache" | "database";
+
 interface LogEntry {
   id: string;
   timestamp: string;
-  type: "CACHE_HIT" | "CACHE_MISS" | "DATABASE_QUERY" | "CACHE_SAVE";
+  type: LogType;
   operation: string;
-  source?: "cache" | "database";
+  source?: LogSource;
   duration?: number;
   bot?: {
     isBot: boolean;
@@ -52,61 +67,212 @@ interface LogStats {
   topBots: { name: string; count: number }[];
 }
 
-// ============================================================
-// SORT CONFIG TYPE
-// ============================================================
-
 interface SortConfig {
   key: keyof LogEntry | null;
   direction: "asc" | "desc";
+}
+
+interface ColumnFilter {
+  key: keyof LogEntry | null;
+  value: string;
+}
+
+const AUTO_REFRESH_INTERVAL = 5 * 60;
+
+// ============================================================
+// API VALIDATION HELPERS
+// ============================================================
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readJsonObject(response: Response): Promise<Record<string, unknown>> {
+  const contentType = response.headers.get("content-type");
+
+  if (!contentType?.includes("application/json")) {
+    throw new Error("Invalid response from server");
+  }
+
+  const data: unknown = await response.json();
+
+  if (!isRecord(data)) {
+    throw new Error("Invalid server response");
+  }
+
+  return data;
+}
+
+function parseLogEntry(value: unknown): LogEntry | null {
+  if (!isRecord(value)) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.timestamp !== "string" ||
+    typeof value.operation !== "string"
+  ) {
+    return null;
+  }
+
+  const validTypes: LogType[] = [
+    "CACHE_HIT",
+    "CACHE_MISS",
+    "DATABASE_QUERY",
+    "CACHE_SAVE",
+  ];
+
+  if (
+    typeof value.type !== "string" ||
+    !validTypes.includes(value.type as LogType)
+  ) {
+    return null;
+  }
+
+  let bot: LogEntry["bot"];
+
+  if (isRecord(value.bot)) {
+    bot = {
+      isBot: value.bot.isBot === true,
+      name: typeof value.bot.name === "string" ? value.bot.name : "Unknown",
+    };
+  }
+
+  const source =
+    value.source === "cache" || value.source === "database"
+      ? value.source
+      : undefined;
+
+  return {
+    id: value.id,
+    timestamp: value.timestamp,
+    type: value.type as LogType,
+    operation: value.operation,
+    source,
+    duration:
+      typeof value.duration === "number" && Number.isFinite(value.duration)
+        ? value.duration
+        : undefined,
+    bot,
+    userAgent:
+      typeof value.userAgent === "string" ? value.userAgent : undefined,
+    path: typeof value.path === "string" ? value.path : undefined,
+    ip: typeof value.ip === "string" ? value.ip : undefined,
+  };
+}
+
+function parseLogs(value: unknown): LogEntry[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map(parseLogEntry)
+    .filter((log): log is LogEntry => log !== null);
+}
+
+function parseCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function parseNamedCounts(
+  value: unknown
+): { name: string; count: number }[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(isRecord)
+    .map((item) => ({
+      name: typeof item.name === "string" ? item.name : "Unknown",
+      count: parseCount(item.count),
+    }));
+}
+
+function parseLogStats(value: unknown): LogStats | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    total: parseCount(value.total),
+    cacheHits: parseCount(value.cacheHits),
+    cacheMisses: parseCount(value.cacheMisses),
+    dbQueries: parseCount(value.dbQueries),
+    hitRatio: parseCount(value.hitRatio),
+    avgDuration: parseCount(value.avgDuration),
+    topOperations: parseNamedCounts(value.topOperations),
+    botRequests: parseCount(value.botRequests),
+    humanRequests: parseCount(value.humanRequests),
+    topBots: parseNamedCounts(value.topBots),
+  };
+}
+
+function getFilterValue(log: LogEntry, key: keyof LogEntry): string {
+  if (key === "bot") {
+    return log.bot?.isBot ? log.bot.name : "Human";
+  }
+
+  const value = log[key];
+
+  if (value === undefined || value === null) return "";
+
+  return String(value);
+}
+
+function formatCountdown(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 // ============================================================
 // LOGS TABLE COMPONENT
 // ============================================================
 
-function LogsTable({ 
-  logs, 
-  deleting, 
+function LogsTable({
+  logs,
+  deleting,
   onDelete,
   sortConfig,
   onSort,
   onColumnFilter,
   activeFilter,
-}: { 
-  logs: LogEntry[]; 
-  deleting: boolean; 
+}: {
+  logs: LogEntry[];
+  deleting: boolean;
   onDelete: (id: string) => void;
   sortConfig: SortConfig;
   onSort: (key: keyof LogEntry) => void;
   onColumnFilter: (key: keyof LogEntry, value: string) => void;
-  activeFilter: { key: keyof LogEntry | null; value: string };
+  activeFilter: ColumnFilter;
 }) {
   if (logs.length === 0) {
     return (
       <div className="p-10 text-center text-gray-500">
         <BarChart3 className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-        <p>No logs found</p>
-        <p className="text-sm">Try changing your filters</p>
+        <p className="font-medium">No logs found</p>
+        <p className="text-sm mt-1">Try changing your filters</p>
       </div>
     );
   }
 
-  const renderSortableHeader = (label: string, key: keyof LogEntry) => {
+  const renderSortableHeader = (
+    label: string,
+    key: keyof LogEntry
+  ) => {
     const isActive = sortConfig.key === key;
-    const direction = isActive ? sortConfig.direction : "asc";
 
     return (
-      <th 
-        className="text-left p-3 cursor-pointer hover:bg-gray-100 transition select-none whitespace-nowrap"
+      <th
+        className="p-3 text-left whitespace-nowrap cursor-pointer select-none hover:bg-gray-100 transition"
         onClick={() => onSort(key)}
       >
         <div className="flex items-center gap-1">
           {label}
-          <ArrowUpDown className={`w-3 h-3 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+          <ArrowUpDown
+            className={`w-3 h-3 ${
+              isActive ? "text-blue-600" : "text-gray-400"
+            }`}
+          />
           {isActive && (
             <span className="text-[10px] text-blue-600 font-medium">
-              {direction === "desc" ? "↓" : "↑"}
+              {sortConfig.direction === "desc" ? "↓" : "↑"}
             </span>
           )}
         </div>
@@ -114,35 +280,44 @@ function LogsTable({
     );
   };
 
-  // Check if a value is currently filtered
-  const isFiltered = (key: keyof LogEntry, value: string) => {
-    return activeFilter.key === key && activeFilter.value === value;
-  };
+  const isFiltered = (key: keyof LogEntry, value: string) =>
+    activeFilter.key === key && activeFilter.value === value;
 
-  // Render cell with click-to-filter
-  const renderFilterableCell = (key: keyof LogEntry, value: string | number | undefined, displayValue: string) => {
-    const stringValue = String(value || "");
-    if (!stringValue || stringValue === "") return <span className="text-gray-400">—</span>;
-    
+  const renderFilterableCell = (
+    key: keyof LogEntry,
+    value: string | number | undefined,
+    displayValue: string
+  ) => {
+    const stringValue =
+      value === undefined || value === null ? "" : String(value);
+
+    if (!stringValue) {
+      return <span className="text-gray-400">—</span>;
+    }
+
     const filtered = isFiltered(key, stringValue);
-    
+
     return (
-      <span 
-        className={`cursor-pointer hover:underline transition px-1 py-0.5 rounded ${
-          filtered ? 'bg-blue-100 text-blue-700 font-medium' : 'hover:bg-gray-100'
-        }`}
+      <button
+        type="button"
+        title={`Filter by ${displayValue}`}
         onClick={() => onColumnFilter(key, stringValue)}
+        className={`rounded px-1 py-0.5 text-left transition hover:underline ${
+          filtered
+            ? "bg-blue-100 text-blue-700 font-medium"
+            : "hover:bg-gray-100"
+        }`}
       >
         {displayValue}
         {filtered && <span className="ml-1 text-xs">✕</span>}
-      </span>
+      </button>
     );
   };
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b sticky top-0">
+        <thead className="sticky top-0 border-b bg-gray-50">
           <tr>
             {renderSortableHeader("Time", "timestamp")}
             {renderSortableHeader("Type", "type")}
@@ -150,60 +325,97 @@ function LogsTable({
             {renderSortableHeader("Source", "source")}
             {renderSortableHeader("Duration", "duration")}
             {renderSortableHeader("Bot/Human", "bot")}
-            <th className="text-right p-3">Actions</th>
+            <th className="p-3 text-right">Actions</th>
           </tr>
         </thead>
+
         <tbody>
           {logs.map((log) => {
-            const isBot = log.bot?.isBot || false;
-            const botName = log.bot?.name || "Human";
+            const isBot = log.bot?.isBot === true;
+            const botName = isBot ? log.bot?.name ?? "Bot" : "Human";
+
+            const typeColor =
+              log.type === "CACHE_HIT"
+                ? "bg-green-100 text-green-700"
+                : log.type === "CACHE_MISS"
+                  ? "bg-yellow-100 text-yellow-700"
+                  : log.type === "DATABASE_QUERY"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-700";
 
             return (
-              <tr key={log.id} className="border-b hover:bg-gray-50 transition-colors">
-                <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
-                  {renderFilterableCell("timestamp", log.timestamp, new Date(log.timestamp).toLocaleString())}
+              <tr
+                key={log.id}
+                className="border-b transition-colors hover:bg-gray-50"
+              >
+                <td className="p-3 whitespace-nowrap text-xs text-gray-500">
+                  {renderFilterableCell(
+                    "timestamp",
+                    log.timestamp,
+                    new Date(log.timestamp).toLocaleString()
+                  )}
                 </td>
+
                 <td className="p-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap
-                    ${log.type === "CACHE_HIT" ? "bg-green-100 text-green-700" :
-                    log.type === "CACHE_MISS" ? "bg-yellow-100 text-yellow-700" :
-                    log.type === "DATABASE_QUERY" ? "bg-blue-100 text-blue-700" :
-                    "bg-gray-100 text-gray-700"}
-                  `}>
-                    {renderFilterableCell("type", log.type, log.type.replace("_", " "))}
-                  </span>
-                </td>
-                <td className="p-3 font-mono text-xs">
-                  {renderFilterableCell("operation", log.operation, log.operation)}
-                </td>
-                <td className="p-3">
-                  {renderFilterableCell("source", log.source, log.source || "—")}
-                </td>
-                <td className="p-3 text-xs">
-                  {renderFilterableCell("duration", log.duration, log.duration !== undefined ? `${log.duration}ms` : "—")}
-                </td>
-                <td className="p-3">
-                  <span className="flex items-center gap-1 text-xs">
-                    {isBot ? (
-                      <>
-                        <Bot className="w-3 h-3 text-blue-600" />
-                        {renderFilterableCell("bot", botName, botName)}
-                      </>
-                    ) : (
-                      <>
-                        <User className="w-3 h-3 text-gray-600" />
-                        {renderFilterableCell("bot", "Human", "Human")}
-                      </>
+                  <span
+                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap ${typeColor}`}
+                  >
+                    {renderFilterableCell(
+                      "type",
+                      log.type,
+                      log.type.replace("_", " ")
                     )}
                   </span>
                 </td>
+
+                <td className="p-3 font-mono text-xs">
+                  {renderFilterableCell(
+                    "operation",
+                    log.operation,
+                    log.operation
+                  )}
+                </td>
+
+                <td className="p-3">
+                  {renderFilterableCell(
+                    "source",
+                    log.source,
+                    log.source ?? "—"
+                  )}
+                </td>
+
+                <td className="p-3 text-xs">
+                  {renderFilterableCell(
+                    "duration",
+                    log.duration,
+                    log.duration !== undefined
+                      ? `${log.duration}ms`
+                      : "—"
+                  )}
+                </td>
+
+                <td className="p-3">
+                  <span className="flex items-center gap-1 text-xs">
+                    {isBot ? (
+                      <Bot className="h-3 w-3 text-blue-600" />
+                    ) : (
+                      <User className="h-3 w-3 text-gray-600" />
+                    )}
+
+                    {renderFilterableCell("bot", botName, botName)}
+                  </span>
+                </td>
+
                 <td className="p-3 text-right">
                   <button
+                    type="button"
                     onClick={() => onDelete(log.id)}
                     disabled={deleting}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                    aria-label="Delete log"
+                    title="Delete log"
+                    className="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </td>
               </tr>
@@ -221,41 +433,46 @@ function LogsTable({
 
 function StatsCards({ stats }: { stats: LogStats }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
       <StatCard
         label="Total"
         value={stats.total}
-        icon={<BarChart3 className="w-4 h-4" />}
+        icon={<BarChart3 className="h-4 w-4" />}
         color="blue"
       />
+
       <StatCard
         label="Cache Hits"
         value={stats.cacheHits}
-        icon={<Zap className="w-4 h-4" />}
+        icon={<Zap className="h-4 w-4" />}
         color="green"
       />
+
       <StatCard
         label="Cache Misses"
         value={stats.cacheMisses}
-        icon={<Database className="w-4 h-4" />}
+        icon={<Database className="h-4 w-4" />}
         color="yellow"
       />
+
       <StatCard
         label="DB Queries"
         value={stats.dbQueries}
-        icon={<Database className="w-4 h-4" />}
+        icon={<Database className="h-4 w-4" />}
         color="purple"
       />
+
       <StatCard
         label="Hit Ratio"
         value={`${stats.hitRatio}%`}
-        icon={<BarChart3 className="w-4 h-4" />}
+        icon={<BarChart3 className="h-4 w-4" />}
         color="indigo"
       />
+
       <StatCard
         label="Avg Time"
         value={`${stats.avgDuration}ms`}
-        icon={<Clock className="w-4 h-4" />}
+        icon={<Clock className="h-4 w-4" />}
         color="gray"
       />
     </div>
@@ -269,7 +486,7 @@ function StatsCards({ stats }: { stats: LogStats }) {
 interface StatCardProps {
   label: string;
   value: string | number;
-  icon: React.ReactNode;
+  icon: ReactNode;
   color: "blue" | "green" | "yellow" | "purple" | "indigo" | "gray";
 }
 
@@ -284,14 +501,15 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
   };
 
   return (
-    <div className="bg-white border rounded-lg p-4">
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2">
-        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+        <div className={`rounded-lg p-2 ${colorClasses[color]}`}>
           {icon}
         </div>
         <span className="text-xs text-gray-500">{label}</span>
       </div>
-      <p className="text-xl font-bold mt-1">{value}</p>
+
+      <p className="mt-2 text-xl font-bold text-gray-900">{value}</p>
     </div>
   );
 }
@@ -303,84 +521,80 @@ function StatCard({ label, value, icon, color }: StatCardProps) {
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState<LogStats | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [isTableLoading, setIsTableLoading] = useState(false);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+
+  const [refreshKey, setRefreshKey] = useState(0);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isTableLoading, setIsTableLoading] = useState(false);
-  const [countdown, setCountdown] = useState(300);
-  const AUTO_REFRESH_INTERVAL = 5 * 60;
+  const [countdown, setCountdown] = useState(AUTO_REFRESH_INTERVAL);
 
-  // ✅ Sort Configuration
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "timestamp",
     direction: "desc",
   });
 
-  // ✅ Column Filter
-  const [columnFilter, setColumnFilter] = useState<{ key: keyof LogEntry | null; value: string }>({
+  const [columnFilter, setColumnFilter] = useState<ColumnFilter>({
     key: null,
     value: "",
   });
 
-  // Filters
   const [filterType, setFilterType] = useState("ALL");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(100);
 
-  // Message
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // Refs
-  const autoRefreshTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   // ============================================================
-  // SORT & FILTER HELPERS
+  // FILTER & SORT LOGS
   // ============================================================
 
-  const getFilteredAndSortedLogs = useCallback((logsData: LogEntry[]) => {
-    let filtered = [...logsData];
+  const visibleLogs = useMemo(() => {
+    let result = [...logs];
 
-    // ✅ Column filter
     if (columnFilter.key && columnFilter.value) {
-      filtered = filtered.filter(log => {
-        const val = log[columnFilter.key as keyof LogEntry];
-        return String(val) === columnFilter.value;
-      });
+      result = result.filter(
+        (log) =>
+          getFilterValue(log, columnFilter.key!) === columnFilter.value
+      );
     }
 
-    // ✅ Sort
     if (sortConfig.key) {
-      filtered.sort((a, b) => {
-        let aVal = a[sortConfig.key as keyof LogEntry];
-        let bVal = b[sortConfig.key as keyof LogEntry];
+      const key = sortConfig.key;
 
-        if (sortConfig.key === "timestamp") {
-          aVal = new Date(aVal as string).getTime();
-          bVal = new Date(bVal as string).getTime();
-        } else if (sortConfig.key === "duration") {
-          aVal = aVal || 0;
-          bVal = bVal || 0;
-        } else if (sortConfig.key === "bot") {
-          aVal = a.bot?.isBot ? "Bot" : "Human";
-          bVal = b.bot?.isBot ? "Bot" : "Human";
+      result.sort((a, b) => {
+        let aValue: string | number = getFilterValue(a, key);
+        let bValue: string | number = getFilterValue(b, key);
+
+        if (key === "timestamp") {
+          aValue = new Date(a.timestamp).getTime();
+          bValue = new Date(b.timestamp).getTime();
+        } else if (key === "duration") {
+          aValue = a.duration ?? 0;
+          bValue = b.duration ?? 0;
         } else {
-          aVal = String(aVal || "");
-          bVal = String(bVal || "");
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
         }
 
-        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        if (aValue < bValue) {
+          return sortConfig.direction === "asc" ? -1 : 1;
+        }
+
+        if (aValue > bValue) {
+          return sortConfig.direction === "asc" ? 1 : -1;
+        }
+
         return 0;
       });
     }
 
-    return filtered;
-  }, [columnFilter, sortConfig]);
+    return result;
+  }, [logs, columnFilter, sortConfig]);
 
   // ============================================================
   // FETCH LOGS
@@ -392,36 +606,44 @@ export default function LogsPage() {
       setError("");
 
       const params = new URLSearchParams();
-      if (filterType !== "ALL") params.set("type", filterType);
-      if (search) params.set("search", search);
-      if (limit) params.set("limit", String(limit));
 
-      const res = await fetch(`/api/admin/logs?${params.toString()}`);
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Invalid response from server");
+      if (filterType !== "ALL") {
+        params.set("type", filterType);
       }
 
-      const data = await res.json();
-
-      if (data.success) {
-        const filteredAndSorted = getFilteredAndSortedLogs(data.data || []);
-        setLogs(filteredAndSorted);
-        setLastUpdated(new Date());
-        if (autoRefreshEnabled) {
-          setCountdown(AUTO_REFRESH_INTERVAL);
-        }
-      } else {
-        setError(data.error || "Failed to fetch logs");
+      if (search.trim()) {
+        params.set("search", search.trim());
       }
-    } catch {
-      setError("Failed to fetch logs. Please check if the API is working.");
+
+      params.set("limit", String(limit));
+
+      const response = await fetch(
+        `/api/admin/logs?${params.toString()}`
+      );
+
+      const data = await readJsonObject(response);
+
+      if (!response.ok || data.success !== true) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to fetch logs"
+        );
+      }
+
+      setLogs(parseLogs(data.data));
+      setLastUpdated(new Date());
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch logs. Please check if the API is working."
+      );
     } finally {
       setIsTableLoading(false);
       setLoading(false);
     }
-  }, [filterType, search, limit, autoRefreshEnabled, AUTO_REFRESH_INTERVAL, getFilteredAndSortedLogs]);
+  }, [filterType, search, limit]);
 
   // ============================================================
   // FETCH STATS
@@ -429,292 +651,268 @@ export default function LogsPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/logs?analysis=true");
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
+      const response = await fetch("/api/admin/logs?analysis=true");
+      const data = await readJsonObject(response);
+
+      if (!response.ok || data.success !== true) {
         return;
       }
 
-      const data = await res.json();
+      const parsedStats = parseLogStats(data.data);
 
-      if (data.success) {
-        setStats(data.data);
+      if (parsedStats) {
+        setStats(parsedStats);
       }
     } catch {
-      // Silent fail
+      // Stats failure should not block the logs table.
     }
   }, []);
 
   // ============================================================
-  // HANDLE SORT
+  // SORT
   // ============================================================
 
   const handleSort = useCallback((key: keyof LogEntry) => {
-    setSortConfig(prev => {
-      if (prev.key === key) {
-        return {
-          key,
-          direction: prev.direction === "asc" ? "desc" : "asc",
-        };
-      }
-      return { key, direction: "desc" };
-    });
-    // Re-apply sort on current logs
-    setLogs(prev => getFilteredAndSortedLogs(prev));
-  }, [getFilteredAndSortedLogs]);
-
-  // ============================================================
-  // HANDLE COLUMN FILTER
-  // ============================================================
-
-  const handleColumnFilter = useCallback((key: keyof LogEntry, value: string) => {
-    setColumnFilter(prev => {
-      if (prev.key === key && prev.value === value) {
-        return { key: null, value: "" };
-      }
-      return { key, value };
-    });
+    setSortConfig((previous) => ({
+      key,
+      direction:
+        previous.key === key && previous.direction === "asc"
+          ? "desc"
+          : "asc",
+    }));
   }, []);
+
+  // ============================================================
+  // COLUMN FILTER
+  // ============================================================
+
+  const handleColumnFilter = useCallback(
+    (key: keyof LogEntry, value: string) => {
+      setColumnFilter((previous) => {
+        if (previous.key === key && previous.value === value) {
+          return { key: null, value: "" };
+        }
+
+        return { key, value };
+      });
+    },
+    []
+  );
 
   const clearColumnFilter = useCallback(() => {
     setColumnFilter({ key: null, value: "" });
   }, []);
 
   // ============================================================
-  // DELETE LOG
+  // DELETE SINGLE LOG
   // ============================================================
 
-  const deleteLog = useCallback(async (id: string) => {
-    if (!confirm("Delete this log?")) return;
+  const deleteLog = useCallback(
+    async (id: string) => {
+      if (deleting) return;
 
-    try {
-      setDeleting(true);
-      const res = await fetch(`/api/admin/logs?id=${id}`, { method: "DELETE" });
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Invalid response from server");
-      }
+      if (!confirm("Delete this log?")) return;
 
-      const data = await res.json();
+      try {
+        setDeleting(true);
+        setError("");
+        setMessage("");
 
-      if (data.success) {
+        const response = await fetch(
+          `/api/admin/logs?id=${encodeURIComponent(id)}`,
+          { method: "DELETE" }
+        );
+
+        const data = await readJsonObject(response);
+
+        if (!response.ok || data.success !== true) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Failed to delete log"
+          );
+        }
+
         setMessage("Log deleted successfully");
-        setTimeout(() => setMessage(""), 3000);
-        await fetchLogs();
-        await fetchStats();
-      } else {
-        setError(data.error || "Failed to delete log");
+
+        await Promise.all([fetchLogs(), fetchStats()]);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to delete log"
+        );
+      } finally {
+        setDeleting(false);
       }
-    } catch {
-      setError("Failed to delete log");
-    } finally {
-      setDeleting(false);
-    }
-  }, [fetchLogs, fetchStats]);
+    },
+    [deleting, fetchLogs, fetchStats]
+  );
 
   // ============================================================
   // CLEAR ALL LOGS
   // ============================================================
 
   const clearAllLogs = useCallback(async () => {
+    if (deleting) return;
+
     if (!confirm("Delete ALL logs? This cannot be undone!")) return;
 
     try {
       setDeleting(true);
-      const res = await fetch(`/api/admin/logs?id=all`, { method: "DELETE" });
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Invalid response from server");
+      setError("");
+      setMessage("");
+
+      const response = await fetch("/api/admin/logs?id=all", {
+        method: "DELETE",
+      });
+
+      const data = await readJsonObject(response);
+
+      if (!response.ok || data.success !== true) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to clear logs"
+        );
       }
 
-      const data = await res.json();
+      setMessage("All logs cleared successfully");
 
-      if (data.success) {
-        setMessage("All logs cleared successfully");
-        setTimeout(() => setMessage(""), 3000);
-        await fetchLogs();
-        await fetchStats();
-      } else {
-        setError(data.error || "Failed to clear logs");
-      }
-    } catch {
-      setError("Failed to clear logs");
+      await Promise.all([fetchLogs(), fetchStats()]);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to clear logs"
+      );
     } finally {
       setDeleting(false);
     }
-  }, [fetchLogs, fetchStats]);
+  }, [deleting, fetchLogs, fetchStats]);
 
   // ============================================================
-  // AUTO-REFRESH
-  // ============================================================
-
-  const startAutoRefresh = useCallback(() => {
-    if (autoRefreshTimerRef.current) {
-      clearInterval(autoRefreshTimerRef.current);
-    }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-    }
-
-    if (!autoRefreshEnabled) {
-      setCountdown(0);
-      return;
-    }
-
-    setCountdown(AUTO_REFRESH_INTERVAL);
-
-    countdownTimerRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) return 0;
-        return prev - 1;
-      });
-    }, 1000);
-
-    autoRefreshTimerRef.current = setInterval(() => {
-      setIsAutoRefreshing(true);
-      setRefreshKey(prev => prev + 1);
-      setCountdown(AUTO_REFRESH_INTERVAL);
-      setTimeout(() => setIsAutoRefreshing(false), 1000);
-    }, AUTO_REFRESH_INTERVAL * 1000);
-  }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
-
-  const stopAutoRefresh = useCallback(() => {
-    if (autoRefreshTimerRef.current) {
-      clearInterval(autoRefreshTimerRef.current);
-      autoRefreshTimerRef.current = null;
-    }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    setCountdown(0);
-  }, []);
-
-  const toggleAutoRefresh = useCallback(() => {
-    setAutoRefreshEnabled(prev => {
-      const newState = !prev;
-      if (newState) {
-        startAutoRefresh();
-      } else {
-        stopAutoRefresh();
-      }
-      return newState;
-    });
-  }, [startAutoRefresh, stopAutoRefresh]);
-
-  // ============================================================
-  // REFRESH (Manual)
+  // MANUAL REFRESH
   // ============================================================
 
   const refresh = useCallback(() => {
     setError("");
     setMessage("");
-    setRefreshKey(prev => prev + 1);
-    if (autoRefreshEnabled) {
-      setCountdown(AUTO_REFRESH_INTERVAL);
-    }
-  }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
+    setRefreshKey((previous) => previous + 1);
+    setCountdown(AUTO_REFRESH_INTERVAL);
+  }, []);
 
   // ============================================================
-  // FORMAT COUNTDOWN
+  // AUTO REFRESH TOGGLE
   // ============================================================
 
-  const formatCountdown = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  const toggleAutoRefresh = useCallback(() => {
+    setAutoRefreshEnabled((previous) => !previous);
+  }, []);
 
   // ============================================================
-  // HANDLE FILTER CHANGE
+  // FILTER HANDLERS
   // ============================================================
 
   const handleFilterChange = useCallback((newFilterType: string) => {
     setFilterType(newFilterType);
-    if (autoRefreshEnabled) setCountdown(AUTO_REFRESH_INTERVAL);
-  }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
+    setCountdown(AUTO_REFRESH_INTERVAL);
+  }, []);
 
   const handleSearchChange = useCallback((newSearch: string) => {
     setSearch(newSearch);
-    if (autoRefreshEnabled) setCountdown(AUTO_REFRESH_INTERVAL);
-  }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
+    setCountdown(AUTO_REFRESH_INTERVAL);
+  }, []);
 
   const handleLimitChange = useCallback((newLimit: number) => {
     setLimit(newLimit);
-    if (autoRefreshEnabled) setCountdown(AUTO_REFRESH_INTERVAL);
-  }, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]);
+    setCountdown(AUTO_REFRESH_INTERVAL);
+  }, []);
 
-// ============================================================
-// USE EFFECTS
-// ============================================================
+  // ============================================================
+  // EFFECT: FETCH LOGS WHEN FILTERS OR REFRESH CHANGE
+  // ============================================================
 
-// ✅ Initial load + refresh
-useEffect(() => {
-  let isMounted = true;
-  
-  const loadData = async () => {
-    if (isMounted) {
-      await fetchLogs();
-      await fetchStats();
-    }
-  };
-  
-  loadData();
-  
-  return () => {
-    isMounted = false;
-  };
-}, [refreshKey, fetchLogs, fetchStats]); // ✅ Added missing dependencies
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchLogs();
+    }, 300);
 
-// ✅ Auto-refresh when filters change
-useEffect(() => {
-  const timer = setTimeout(() => {
-    fetchLogs();
-  }, 300);
-  return () => clearTimeout(timer);
-}, [filterType, search, limit, fetchLogs]); // ✅ Added fetchLogs
+    return () => clearTimeout(timer);
+  }, [fetchLogs, refreshKey]);
 
-// ✅ Auto-refresh timer - FIXED
-useEffect(() => {
-  // ✅ Don't start if auto-refresh is disabled
-  if (!autoRefreshEnabled) return;
-  
-  const interval = setInterval(() => {
-    setIsAutoRefreshing(true);
-    
-    Promise.all([fetchLogs(), fetchStats()]).finally(() => {
+  // ============================================================
+  // EFFECT: INITIAL STATS + MANUAL/AUTO REFRESH
+  // ============================================================
+
+  useEffect(() => {
+    void fetchStats();
+  }, [fetchStats, refreshKey]);
+
+  // ============================================================
+  // EFFECT: AUTO REFRESH INTERVAL
+  // ============================================================
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      setCountdown(0);
       setIsAutoRefreshing(false);
+      return;
+    }
+
+    setCountdown(AUTO_REFRESH_INTERVAL);
+
+    const interval = setInterval(() => {
+      setIsAutoRefreshing(true);
+      setRefreshKey((previous) => previous + 1);
       setCountdown(AUTO_REFRESH_INTERVAL);
-    });
-  }, AUTO_REFRESH_INTERVAL * 1000);
+    }, AUTO_REFRESH_INTERVAL * 1000);
 
-  return () => {
-    clearInterval(interval);
-    setIsAutoRefreshing(false);
-  };
-}, [fetchLogs, fetchStats, autoRefreshEnabled, AUTO_REFRESH_INTERVAL]); // ✅ All dependencies
+    return () => {
+      clearInterval(interval);
+      setIsAutoRefreshing(false);
+    };
+  }, [autoRefreshEnabled]);
 
-// ✅ Countdown timer - separate effect
-useEffect(() => {
-  if (!autoRefreshEnabled) {
-    setCountdown(0);
-    return;
-  }
+  // ============================================================
+  // EFFECT: COUNTDOWN
+  // ============================================================
 
-  setCountdown(AUTO_REFRESH_INTERVAL);
-  
-  const countdownInterval = setInterval(() => {
-    setCountdown(prev => {
-      if (prev <= 1) return 0;
-      return prev - 1;
-    });
-  }, 1000);
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
 
-  return () => clearInterval(countdownInterval);
-}, [autoRefreshEnabled, AUTO_REFRESH_INTERVAL]); // ✅ All dependencies
+    const countdownInterval = setInterval(() => {
+      setCountdown((previous) =>
+        previous <= 1 ? AUTO_REFRESH_INTERVAL : previous - 1
+      );
+    }, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, [autoRefreshEnabled]);
+
+  // ============================================================
+  // EFFECT: AUTO REFRESH STATUS
+  // ============================================================
+
+  useEffect(() => {
+    if (!isAutoRefreshing) return;
+
+    const timer = setTimeout(() => {
+      setIsAutoRefreshing(false);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [isAutoRefreshing, refreshKey]);
+
+  // ============================================================
+  // EFFECT: CLEAR SUCCESS MESSAGE
+  // ============================================================
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timer = setTimeout(() => {
+      setMessage("");
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [message]);
 
   // ============================================================
   // RENDER
@@ -722,155 +920,182 @@ useEffect(() => {
 
   if (loading && logs.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         <span className="ml-2 text-gray-500">Loading logs...</span>
       </div>
     );
   }
 
-  const columnFilterInfo = columnFilter.key 
-    ? `${String(columnFilter.key)}: ${columnFilter.value}` 
+  const columnFilterInfo = columnFilter.key
+    ? `${String(columnFilter.key)}: ${columnFilter.value}`
     : null;
 
+  const botPercentage =
+    stats && stats.total > 0
+      ? Math.min(100, (stats.botRequests / stats.total) * 100)
+      : 0;
+
   return (
-    <div className="p-6 space-y-6 max-w-full">
-      {/* ==================== HEADER ==================== */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="max-w-full space-y-6 p-4 md:p-6">
+      {/* HEADER */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-blue-600" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+            <BarChart3 className="h-6 w-6 text-blue-600" />
             Performance Logs
           </h1>
-          <p className="text-sm text-gray-500 flex items-center gap-2 flex-wrap">
-            Track cache hits, database queries, and bot activity
+
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+            Track cache hits, database queries, and bot activity.
+
             {isAutoRefreshing && (
-              <span className="text-xs text-blue-600 animate-pulse flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="flex items-center gap-1 text-xs text-blue-600">
+                <Loader2 className="h-3 w-3 animate-spin" />
                 Auto-refreshing...
               </span>
             )}
+
             {lastUpdated && (
               <span className="text-xs text-gray-400">
-                • Last updated: {lastUpdated.toLocaleTimeString()}
-              </span>
-            )}
-            {sortConfig.key && (
-              <span className="text-xs text-gray-400">
-                • Sorted by: {sortConfig.key} ({sortConfig.direction === "desc" ? "↓" : "↑"})
-              </span>
-            )}
-            {columnFilterInfo && (
-              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Filter className="w-3 h-3" />
-                Filter: {columnFilterInfo}
-                <button onClick={clearColumnFilter} className="hover:text-red-600">✕</button>
+                Last updated: {lastUpdated.toLocaleTimeString()}
               </span>
             )}
           </p>
+
+          {sortConfig.key && (
+            <p className="mt-1 text-xs text-gray-400">
+              Sorted by: {sortConfig.key} ({sortConfig.direction})
+            </p>
+          )}
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={toggleAutoRefresh}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm ${
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
               autoRefreshEnabled
-                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                ? "bg-green-100 text-green-700 hover:bg-green-200"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
             {autoRefreshEnabled ? (
               <>
-                <Play className="w-3 h-3" />
+                <Play className="h-3 w-3" />
                 Auto On
               </>
             ) : (
               <>
-                <Pause className="w-3 h-3" />
+                <Pause className="h-3 w-3" />
                 Paused
               </>
             )}
           </button>
 
           <button
+            type="button"
             onClick={refresh}
-            className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+            disabled={isTableLoading}
+            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isAutoRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${
+                isTableLoading || isAutoRefreshing ? "animate-spin" : ""
+              }`}
+            />
             Refresh
           </button>
 
           <button
+            type="button"
             onClick={clearAllLogs}
             disabled={deleting || logs.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
             Clear All
           </button>
         </div>
       </div>
 
-      {/* ==================== MESSAGES ==================== */}
+      {/* MESSAGES */}
       {message && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-green-700">
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
           {message}
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      {/* ==================== STATS CARDS ==================== */}
+      {/* STATS */}
       {stats && <StatsCards stats={stats} />}
 
-      {/* ==================== BOT VS HUMAN ==================== */}
+      {/* BOT VS HUMAN */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border rounded-lg p-4">
-            <h3 className="font-semibold text-sm text-gray-600 mb-3 flex items-center gap-2">
-              <Bot className="w-4 h-4" />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <Bot className="h-4 w-4" />
               Bot vs Human Requests
             </h3>
-            <div className="flex justify-between items-center">
+
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold">{stats.botRequests}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.botRequests}
+                </p>
                 <p className="text-sm text-gray-500">Bot Requests</p>
               </div>
-              <div className="text-gray-300 text-2xl">|</div>
+
+              <div className="h-10 border-l border-gray-200" />
+
               <div>
-                <p className="text-2xl font-bold">{stats.humanRequests}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {stats.humanRequests}
+                </p>
                 <p className="text-sm text-gray-500">Human Requests</p>
               </div>
             </div>
-            <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
               <div
-                className="h-full bg-blue-600 transition-all"
-                style={{
-                  width: `${stats.total > 0 ? (stats.botRequests / stats.total) * 100 : 0}%`,
-                }}
+                className="h-full rounded-full bg-blue-600 transition-all"
+                style={{ width: `${botPercentage}%` }}
               />
             </div>
-            <p className="text-xs text-gray-400 mt-1">
-              {stats.total > 0 ? Math.round((stats.botRequests / stats.total) * 100) : 0}% Bot
+
+            <p className="mt-1 text-xs text-gray-400">
+              {Math.round(botPercentage)}% Bot Requests
             </p>
           </div>
 
-          <div className="bg-white border rounded-lg p-4">
-            <h3 className="font-semibold text-sm text-gray-600 mb-3 flex items-center gap-2">
-              🔥 Top Bots
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <Bot className="h-4 w-4" />
+              Top Bots
             </h3>
+
             {stats.topBots.length === 0 ? (
               <p className="text-sm text-gray-400">No bots detected</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {stats.topBots.map((bot) => (
-                  <div key={bot.name} className="flex justify-between items-center">
-                    <span className="text-sm font-medium">{bot.name}</span>
-                    <span className="text-sm text-gray-500">{bot.count} requests</span>
+                  <div
+                    key={bot.name}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="truncate text-sm font-medium text-gray-700">
+                      {bot.name}
+                    </span>
+
+                    <span className="whitespace-nowrap text-sm text-gray-500">
+                      {bot.count} requests
+                    </span>
                   </div>
                 ))}
               </div>
@@ -879,33 +1104,47 @@ useEffect(() => {
         </div>
       )}
 
-      {/* ==================== TOP OPERATIONS ==================== */}
+      {/* TOP OPERATIONS */}
       {stats && stats.topOperations.length > 0 && (
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold text-sm text-gray-600 mb-3">🔥 Top Operations</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-            {stats.topOperations.map((op) => (
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-gray-700">
+            Top Operations
+          </h3>
+
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+            {stats.topOperations.map((operation) => (
               <div
-                key={op.name}
-                className="bg-gray-50 rounded-lg p-3 text-center"
+                key={operation.name}
+                className="rounded-lg bg-gray-50 p-3 text-center"
               >
-                <p className="text-sm font-medium truncate">{op.name}</p>
-                <p className="text-xs text-gray-500">{op.count} requests</p>
+                <p className="truncate text-sm font-medium text-gray-800">
+                  {operation.name}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {operation.count} requests
+                </p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ==================== FILTERS ==================== */}
-      <div className="bg-white border rounded-lg p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+      {/* FILTERS */}
+      <div className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row">
           <div className="flex-1">
-            <label className="text-xs text-gray-500 block mb-1">Type</label>
+            <label
+              htmlFor="log-type"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
+              Type
+            </label>
+
             <select
+              id="log-type"
               value={filterType}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              onChange={(event) => handleFilterChange(event.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value="ALL">All Types</option>
               <option value="CACHE_HIT">Cache Hit</option>
@@ -916,25 +1155,42 @@ useEffect(() => {
           </div>
 
           <div className="flex-[2]">
-            <label className="text-xs text-gray-500 block mb-1">Search</label>
+            <label
+              htmlFor="log-search"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
+              Search
+            </label>
+
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
               <input
+                id="log-search"
                 type="text"
                 placeholder="Search by operation, type, or bot..."
                 value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full border rounded-lg pl-10 pr-3 py-2 text-sm"
+                onChange={(event) => handleSearchChange(event.target.value)}
+                className="w-full rounded-lg border py-2 pl-10 pr-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
           </div>
 
-          <div className="w-32">
-            <label className="text-xs text-gray-500 block mb-1">Limit</label>
+          <div className="w-full md:w-32">
+            <label
+              htmlFor="log-limit"
+              className="mb-1 block text-xs font-medium text-gray-500"
+            >
+              Limit
+            </label>
+
             <select
+              id="log-limit"
               value={limit}
-              onChange={(e) => handleLimitChange(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              onChange={(event) =>
+                handleLimitChange(Number(event.target.value))
+              }
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -943,51 +1199,66 @@ useEffect(() => {
             </select>
           </div>
         </div>
-      </div>
 
-      {/* ==================== LOGS TABLE ==================== */}
-      <div className="bg-white border rounded-lg overflow-hidden">
-        {isTableLoading && logs.length === 0 ? (
-          <div className="flex items-center justify-center p-10">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-500">Loading logs...</span>
-          </div>
-        ) : (
-          <>
-            {isTableLoading && logs.length > 0 && (
-              <div className="flex items-center justify-center p-2 bg-gray-50 border-b">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                <span className="ml-2 text-xs text-gray-500">Updating...</span>
-              </div>
-            )}
-            <LogsTable 
-              logs={logs} 
-              deleting={deleting} 
-              onDelete={deleteLog}
-              sortConfig={sortConfig}
-              onSort={handleSort}
-              onColumnFilter={handleColumnFilter}
-              activeFilter={columnFilter}
-            />
-          </>
-        )}
-      </div>
-
-      {/* ==================== FOOTER ==================== */}
-      <div className="text-xs text-gray-400 text-center">
-        Showing {logs.length} logs
-        {logs.length > 0 && lastUpdated && ` • Last updated: ${lastUpdated.toLocaleTimeString()}`}
-        {autoRefreshEnabled && countdown > 0 && (
-          <span className="ml-2"> • Next refresh: {formatCountdown(countdown)}</span>
-        )}
-        {sortConfig.key && (
-          <span className="ml-2">
-            • Sorted by: {sortConfig.key} ({sortConfig.direction === "desc" ? "Newest first" : "Oldest first"})
-          </span>
-        )}
         {columnFilterInfo && (
-          <span className="ml-2"> • Filter: {columnFilterInfo}</span>
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-3">
+            <span className="flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700">
+              <Filter className="h-3 w-3" />
+              Filter: {columnFilterInfo}
+            </span>
+
+            <button
+              type="button"
+              onClick={clearColumnFilter}
+              className="text-xs font-medium text-red-600 hover:underline"
+            >
+              Clear column filter
+            </button>
+          </div>
         )}
+      </div>
+
+      {/* LOGS TABLE */}
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        {isTableLoading && (
+          <div className="flex items-center justify-center gap-2 border-b bg-gray-50 p-2">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <span className="text-xs text-gray-500">Updating logs...</span>
+          </div>
+        )}
+
+        <LogsTable
+          logs={visibleLogs}
+          deleting={deleting}
+          onDelete={deleteLog}
+          sortConfig={sortConfig}
+          onSort={handleSort}
+          onColumnFilter={handleColumnFilter}
+          activeFilter={columnFilter}
+        />
+      </div>
+
+      {/* FOOTER */}
+      <div className="flex flex-col items-center justify-between gap-2 text-xs text-gray-400 sm:flex-row">
+        <span>
+          Showing {visibleLogs.length} of {logs.length} loaded logs
+        </span>
+
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {lastUpdated && (
+            <span>Updated: {lastUpdated.toLocaleTimeString()}</span>
+          )}
+
+          {autoRefreshEnabled && countdown > 0 && (
+            <span>Next refresh: {formatCountdown(countdown)}</span>
+          )}
+
+          {sortConfig.key && (
+            <span>
+              Sorted: {sortConfig.key} ({sortConfig.direction})
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

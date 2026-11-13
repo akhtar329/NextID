@@ -11,6 +11,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+async function readJsonObject(
+  response: Response
+): Promise<Record<string, unknown>> {
+  const data: unknown = await response.json();
+  return isRecord(data) ? data : {};
+}
+
 function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,9 +44,9 @@ function LoginForm() {
     const checkAuth = async () => {
       try {
         const res = await fetch("/api/admin/check-auth");
-        const data = await res.json();
+        const data = await readJsonObject(res);
 
-        if (active && data.authenticated) {
+        if (active && data.authenticated === true) {
           router.replace(redirectPath);
         }
       } catch {
@@ -69,14 +84,18 @@ function LoginForm() {
         }),
       });
 
-      const data = await response.json();
+      const data = await readJsonObject(response);
 
-      if (response.ok && data.success) {
+      if (response.ok && data.success === true) {
         toast.success("Welcome back!");
         router.push(redirectPath);
         router.refresh();
       } else {
-        toast.error(data.error || "Invalid email or password");
+        toast.error(
+          typeof data.error === "string"
+            ? data.error
+            : "Invalid email or password"
+        );
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -88,7 +107,6 @@ function LoginForm() {
 
   return (
     <div className="w-full">
-
       {/* Login Heading */}
       <div className="mb-9">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">
@@ -106,7 +124,6 @@ function LoginForm() {
 
       {/* Login Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
-
         {/* Email */}
         <div>
           <label

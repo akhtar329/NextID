@@ -1,31 +1,9 @@
-// app/robots.txt/route.ts
 
 import { NextResponse } from "next/server";
 
-const AI_BOTS = [
-  "GPTBot",
-  "ChatGPT-User",
-  "OAI-SearchBot",
-  "ClaudeBot",
-  "Claude-Web",
-  "anthropic-ai",
-  "Google-Extended",
-  "CCBot",
-  "PerplexityBot",
-  "Bytespider",
-  "Diffbot",
-  "cohere-ai",
-  "cohere-training-crawler",
-  "Amazonbot",
-  "FacebookBot",
-  "FacebookExternalHit",
-  "Applebot-Extended",
-  "SemrushBot",
-  "AhrefsBot",
-  "MJ12bot",
-  "Dotbot",
-  "DataForSeoBot",
-] as const;
+const SITE_URL = "https://www.nextid.pk";
+
+
 
 const DISALLOW_PATHS = [
   "/admin/",
@@ -38,30 +16,13 @@ const DISALLOW_PATHS = [
   "/api/",
 ];
 
-function getBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://www.nextid.pk")
-  );
-}
-
-function generateRobots(baseUrl: string) {
+function generateRobots() {
   const lines: string[] = [];
 
   lines.push("# robots.txt");
   lines.push("# NextID.pk");
   lines.push("");
 
-  // Block AI Crawlers
-  AI_BOTS.forEach((bot) => {
-    lines.push(`User-agent: ${bot}`);
-    lines.push("Disallow: /");
-    lines.push("");
-  });
-
-  // Default Rule
   lines.push("User-agent: *");
 
   DISALLOW_PATHS.forEach((path) => {
@@ -71,13 +32,13 @@ function generateRobots(baseUrl: string) {
   lines.push("Allow: /");
   lines.push("");
 
-  lines.push(`Sitemap: ${baseUrl}/sitemap.xml`);
+  lines.push(`Sitemap: ${SITE_URL}/sitemap.xml`);
 
   return lines.join("\n");
 }
 
 export async function GET() {
-  const robots = generateRobots(getBaseUrl());
+  const robots = generateRobots();
 
   return new NextResponse(robots, {
     headers: {

@@ -1,17 +1,13 @@
-// app/(public)/layout.tsx
 
 import { Suspense } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import type { Metadata } from "next";
-import { postService } from "@/services/post/post.service";
-
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "Latest Education News, Results & Admissions in Pakistan | NextID",
-  description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+  description:
+    "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
   metadataBase: new URL("https://www.nextid.pk"),
   alternates: {
     canonical: "https://www.nextid.pk",
@@ -30,7 +26,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     title: "NextID - Pakistan's Leading Education Portal",
-    description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+    description:
+      "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
     siteName: "NextID",
     locale: "en_PK",
     url: "https://www.nextid.pk",
@@ -46,7 +43,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "NextID - Pakistan's Leading Education Portal",
-    description: "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
+    description:
+      "Get latest education news, board results, test dates, admissions updates, and exam information across Pakistan.",
     images: ["/og-image.png"],
   },
 };
@@ -56,19 +54,15 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-
-
   return (
     <>
       <Suspense fallback={<div className="h-16 bg-transparent" />}>
         <Header />
       </Suspense>
-      <main className="min-h-screen pt-16">
-        {children}
-      </main>
+
+      <main className="min-h-screen pt-16">{children}</main>
+
       <Footer />
-      <Analytics />
-      <SpeedInsights />
     </>
   );
 }

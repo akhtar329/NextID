@@ -1,6 +1,8 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ImageUpload from '@/components/Image/ImageUpload';
@@ -8,14 +10,30 @@ import RichTextEditor, { type EditorSection } from '@/components/ui/RichTextEdit
 import { toast } from 'sonner';
 import { generateSchema } from '@/lib/generateSchema';
 import {
-  FiSave, FiSearch, FiAlertCircle, FiCheckCircle,
-  FiPlus, FiTrash2, FiLink,
-  FiTag, FiEye, FiImage, FiUser, FiGlobe,
-  FiClock, FiCalendar, FiStar, FiTrendingUp, FiZap,
-  FiFileText, FiExternalLink, FiFilePlus
+  FiSave,
+  FiSearch,
+  FiAlertCircle,
+  FiCheckCircle,
+  FiPlus,
+  FiTrash2,
+  FiLink,
+  FiTag,
+  FiEye,
+  FiImage,
+  FiUser,
+  FiGlobe,
+  FiClock,
+  FiCalendar,
+  FiStar,
+  FiTrendingUp,
+  FiZap,
+  FiFileText,
+  FiExternalLink,
+  FiFilePlus,
 } from 'react-icons/fi';
 
 // ==================== TYPES ====================
+
 interface SlugCheck {
   available: boolean;
   checking: boolean;
@@ -96,7 +114,6 @@ interface FormData {
   imageAlt: string;
 }
 
-// ==================== PROPS ====================
 interface PublishMetaBoxProps {
   status: string;
   onStatusChange: (value: string) => void;
@@ -154,15 +171,34 @@ interface PreviewBoxProps {
   url: string;
 }
 
+// ==================== SAFE JSON HELPERS ====================
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readJsonObject = async (
+  response: Response
+): Promise<Record<string, unknown>> => {
+  const value: unknown = await response.json();
+  return isRecord(value) ? value : {};
+};
+
+const getString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback;
+
+const getBoolean = (value: unknown, fallback = false): boolean =>
+  typeof value === 'boolean' ? value : fallback;
+
 // ==================== CONSTANTS ====================
+
 const POST_TYPES = [
-  { value: 'admission', label: 'Admission', icon: '🎓', color: 'bg-purple-100 text-purple-700', border: 'border-purple-200' },
-  { value: 'result', label: 'Result', icon: '📊', color: 'bg-green-100 text-green-700', border: 'border-green-200' },
-  { value: 'news', label: 'News', icon: '📰', color: 'bg-blue-100 text-blue-700', border: 'border-blue-200' },
-  { value: 'date_sheet', label: 'Date Sheet', icon: '📅', color: 'bg-orange-100 text-orange-700', border: 'border-orange-200' },
-  { value: 'scholarship', label: 'Scholarship', icon: '💰', color: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-200' },
-  { value: 'job', label: 'Job', icon: '💼', color: 'bg-indigo-100 text-indigo-700', border: 'border-indigo-200' },
-  { value: 'blog', label: 'Blog', icon: '📝', color: 'bg-pink-100 text-pink-700', border: 'border-pink-200' },
+  { value: 'admission', label: 'Admission', icon: '🎓', color: 'bg-purple-100 text-purple-700' },
+  { value: 'result', label: 'Result', icon: '📊', color: 'bg-green-100 text-green-700' },
+  { value: 'news', label: 'News', icon: '📰', color: 'bg-blue-100 text-blue-700' },
+  { value: 'date_sheet', label: 'Date Sheet', icon: '📅', color: 'bg-orange-100 text-orange-700' },
+  { value: 'scholarship', label: 'Scholarship', icon: '💰', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'job', label: 'Job', icon: '💼', color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'blog', label: 'Blog', icon: '📝', color: 'bg-pink-100 text-pink-700' },
 ];
 
 const STATUS_OPTIONS = [
@@ -224,10 +260,65 @@ const getUrlFolder = (type: string): string => {
     news: 'news',
     blog: 'blog',
   };
+
   return map[type] || type;
 };
 
+const generateSlug = (title: string): string =>
+  title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+
+const generateMetaTitle = (title: string, type: string): string => {
+  if (!title) return '';
+
+  const prefix =
+    type === 'admission'
+      ? 'Admissions 2026: '
+      : type === 'scholarship'
+        ? 'Scholarship: '
+        : type === 'news'
+          ? 'Breaking: '
+          : '';
+
+  const metaTitle = prefix + title;
+
+  return metaTitle.length > 60
+    ? metaTitle.substring(0, 57) + '...'
+    : metaTitle;
+};
+
+const generateMetaDescription = (
+  content: string,
+  excerpt: string
+): string => {
+  if (excerpt && excerpt.trim()) {
+    const clean = excerpt
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return clean.length > 160
+      ? clean.substring(0, 157) + '...'
+      : clean;
+  }
+
+  if (!content) return '';
+
+  const plain = content
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return plain.length > 160
+    ? plain.substring(0, 157) + '...'
+    : plain;
+};
+
 // ==================== LOADING SKELETON ====================
+
 const LoadingSkeleton = () => (
   <div className="min-h-screen bg-gray-100 animate-pulse">
     <div className="bg-gray-300 h-10 w-full" />
@@ -249,7 +340,11 @@ const LoadingSkeleton = () => (
 );
 
 // ==================== COMPONENTS ====================
-const AuthorBox = ({ authorName, onAuthorNameChange }: AuthorBoxProps) => (
+
+const AuthorBox = ({
+  authorName,
+  onAuthorNameChange,
+}: AuthorBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
@@ -268,17 +363,33 @@ const AuthorBox = ({ authorName, onAuthorNameChange }: AuthorBoxProps) => (
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="e.g., John Doe"
         />
-        <p className="text-xs text-gray-400 mt-1">This name will appear as the post author.</p>
+        <p className="text-xs text-gray-400 mt-1">
+          This name will appear as the post author.
+        </p>
       </div>
     </div>
   </div>
 );
 
 const PublishMetaBox = ({
-  status, onStatusChange, publishedAt, onPublishedAtChange,
-  deadline, onDeadlineChange, isFeatured, onFeaturedChange,
-  isPopular, onPopularChange, isBreaking, onBreakingChange,
-  loading, slugCheck, onSaveDraft, onPreview, onViewWebsite, canViewWebsite,
+  status,
+  onStatusChange,
+  publishedAt,
+  onPublishedAtChange,
+  deadline,
+  onDeadlineChange,
+  isFeatured,
+  onFeaturedChange,
+  isPopular,
+  onPopularChange,
+  isBreaking,
+  onBreakingChange,
+  loading,
+  slugCheck,
+  onSaveDraft,
+  onPreview,
+  onViewWebsite,
+  canViewWebsite,
 }: PublishMetaBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 border-b border-gray-200">
@@ -286,16 +397,21 @@ const PublishMetaBox = ({
         <FiSave className="w-4 h-4 text-green-600" /> Publish
       </h3>
     </div>
+
     <div className="p-4 space-y-4">
       <div>
-        <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">
+          Status
+        </label>
         <select
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.icon} {opt.label}</option>
+            <option key={opt.value} value={opt.value}>
+              {opt.icon} {opt.label}
+            </option>
           ))}
         </select>
       </div>
@@ -326,16 +442,39 @@ const PublishMetaBox = ({
 
       <div className="space-y-2 pt-2 border-t border-gray-100">
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input type="checkbox" checked={isFeatured} onChange={(e) => onFeaturedChange(e.target.checked)} className="w-4 h-4" />
-          <span className="text-sm text-gray-700"><FiStar className="w-4 h-4 inline text-amber-500" /> Featured</span>
+          <input
+            type="checkbox"
+            checked={isFeatured}
+            onChange={(e) => onFeaturedChange(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm text-gray-700">
+            <FiStar className="w-4 h-4 inline text-amber-500" /> Featured
+          </span>
         </label>
+
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input type="checkbox" checked={isPopular} onChange={(e) => onPopularChange(e.target.checked)} className="w-4 h-4" />
-          <span className="text-sm text-gray-700"><FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular</span>
+          <input
+            type="checkbox"
+            checked={isPopular}
+            onChange={(e) => onPopularChange(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm text-gray-700">
+            <FiTrendingUp className="w-4 h-4 inline text-red-500" /> Popular
+          </span>
         </label>
+
         <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-          <input type="checkbox" checked={isBreaking} onChange={(e) => onBreakingChange(e.target.checked)} className="w-4 h-4" />
-          <span className="text-sm text-gray-700"><FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking</span>
+          <input
+            type="checkbox"
+            checked={isBreaking}
+            onChange={(e) => onBreakingChange(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span className="text-sm text-gray-700">
+            <FiZap className="w-4 h-4 inline text-yellow-500" /> Breaking
+          </span>
         </label>
       </div>
     </div>
@@ -350,6 +489,7 @@ const PublishMetaBox = ({
           <FiExternalLink className="w-4 h-4" /> View on Website
         </button>
       )}
+
       <button
         type="button"
         onClick={onPreview}
@@ -357,6 +497,7 @@ const PublishMetaBox = ({
       >
         <FiEye className="w-4 h-4" /> Preview
       </button>
+
       <div className="flex gap-2">
         <button
           type="button"
@@ -366,15 +507,18 @@ const PublishMetaBox = ({
         >
           <FiFilePlus className="w-4 h-4" /> Draft
         </button>
+
         <button
           type="submit"
-          disabled={loading || !slugCheck.available}
+          disabled={loading || !slugCheck.available || slugCheck.checking}
           className="flex-1 bg-blue-600 text-white rounded-md px-3 py-2 text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {loading ? (
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : (
-            <><FiSave className="w-4 h-4" /> Publish</>
+            <>
+              <FiSave className="w-4 h-4" /> Publish
+            </>
           )}
         </button>
       </div>
@@ -382,12 +526,23 @@ const PublishMetaBox = ({
   </div>
 );
 
-const PermalinkBox = ({ slug, onSlugChange, type, slugCheck }: PermalinkBoxProps) => {
+const PermalinkBox = ({
+  slug,
+  onSlugChange,
+  type,
+  slugCheck,
+}: PermalinkBoxProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempSlug, setTempSlug] = useState(slug);
 
+  useEffect(() => {
+    if (!isEditing) {
+      setTempSlug(slug);
+    }
+  }, [slug, isEditing]);
+
   const handleSaveSlug = () => {
-    onSlugChange(tempSlug);
+    onSlugChange(tempSlug.trim());
     setIsEditing(false);
   };
 
@@ -398,42 +553,87 @@ const PermalinkBox = ({ slug, onSlugChange, type, slugCheck }: PermalinkBoxProps
           <FiLink className="w-4 h-4 text-purple-600" /> Permalink
         </h3>
       </div>
+
       <div className="p-4">
         <div className="text-xs text-gray-500 mb-1">URL</div>
+
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-500">/nextid.pk/{getUrlFolder(type)}/</span>
+          <span className="text-sm text-gray-500">
+            /nextid.pk/{getUrlFolder(type)}/
+          </span>
+
           {isEditing ? (
             <div className="flex items-center gap-2 flex-1">
               <input
                 type="text"
                 value={tempSlug}
                 onChange={(e) => setTempSlug(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-md px-2 py-1 text-sm"
+                className="flex-1 min-w-0 border border-gray-300 rounded-md px-2 py-1 text-sm"
                 autoFocus
               />
-              <button type="button" onClick={handleSaveSlug} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Save</button>
-              <button type="button" onClick={() => { setTempSlug(slug); setIsEditing(false); }} className="px-2 py-1 border rounded text-xs">Cancel</button>
+
+              <button
+                type="button"
+                onClick={handleSaveSlug}
+                className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+              >
+                Save
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTempSlug(slug);
+                  setIsEditing(false);
+                }}
+                className="px-2 py-1 border rounded text-xs"
+              >
+                Cancel
+              </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 flex-1">
-              <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">{slug || 'example-post'}</code>
-              <button type="button" onClick={() => setIsEditing(true)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <code className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded break-all">
+                {slug || 'example-post'}
+              </code>
+
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                Edit
+              </button>
             </div>
           )}
         </div>
+
         {slugCheck.message && (
-          <p className={`text-xs mt-2 ${slugCheck.available ? 'text-green-600' : 'text-red-600'}`}>{slugCheck.message}</p>
+          <p
+            className={`text-xs mt-2 ${
+              slugCheck.available ? 'text-green-600' : 'text-red-600'
+            }`}
+          >
+            {slugCheck.message}
+          </p>
         )}
       </div>
     </div>
   );
 };
 
-const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxProps) => {
+const CategoriesTagsBox = ({
+  tags,
+  onTagsChange,
+  postType,
+}: CategoriesTagsBoxProps) => {
   const [newTag, setNewTag] = useState('');
+
   const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      onTagsChange([...tags, newTag.trim()]);
+    const tag = newTag.trim();
+
+    if (tag && !tags.includes(tag)) {
+      onTagsChange([...tags, tag]);
       setNewTag('');
     }
   };
@@ -445,35 +645,66 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
           <FiTag className="w-4 h-4 text-yellow-600" /> Categories & Tags
         </h3>
       </div>
+
       <div className="p-4">
         <div className="mb-4">
-          <label className="text-xs font-medium text-gray-600 mb-1 block">Post Type</label>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
+            Post Type
+          </label>
+
           <div className="inline-flex px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
-            {POST_TYPES.find(t => t.value === postType)?.icon} {POST_TYPES.find(t => t.value === postType)?.label}
+            {POST_TYPES.find((t) => t.value === postType)?.icon}{' '}
+            {POST_TYPES.find((t) => t.value === postType)?.label || postType}
           </div>
         </div>
+
         <div>
-          <label className="text-xs font-medium text-gray-600 mb-2 block">Tags</label>
+          <label className="text-xs font-medium text-gray-600 mb-2 block">
+            Tags
+          </label>
+
           <div className="flex flex-wrap gap-2 mb-3">
-            {tags.map((tag, idx) => (
-              <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs"
+              >
                 #{tag}
-                <button type="button" onClick={() => onTagsChange(tags.filter(t => t !== tag))} className="text-gray-400 hover:text-red-500">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onTagsChange(tags.filter((item) => item !== tag))
+                  }
+                  className="text-gray-400 hover:text-red-500"
+                  aria-label={`Remove ${tag} tag`}
+                >
                   <FiTrash2 className="w-3 h-3" />
                 </button>
               </span>
             ))}
           </div>
+
           <div className="flex gap-2">
             <input
               type="text"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
               placeholder="Add new tag..."
-              className="flex-1 border border-gray-300 rounded-md px-3 py-1 text-sm"
+              className="flex-1 min-w-0 border border-gray-300 rounded-md px-3 py-1 text-sm"
             />
-            <button type="button" onClick={addTag} className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
+
+            <button
+              type="button"
+              onClick={addTag}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+              aria-label="Add tag"
+            >
               <FiPlus className="w-4 h-4" />
             </button>
           </div>
@@ -483,18 +714,35 @@ const CategoriesTagsBox = ({ tags, onTagsChange, postType }: CategoriesTagsBoxPr
   );
 };
 
-const FeaturedImageBox = ({ image, onImageSelect, imageAlt, onImageAltChange }: FeaturedImageBoxProps) => (
+const FeaturedImageBox = ({
+  image,
+  onImageSelect,
+  imageAlt,
+  onImageAltChange,
+}: FeaturedImageBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-        <FiImage className="w-4 h-4 text-indigo-600" /> Featured Image <span className="text-red-500">*</span>
+        <FiImage className="w-4 h-4 text-indigo-600" /> Featured Image{' '}
+        <span className="text-red-500">*</span>
       </h3>
     </div>
+
     <div className="p-4 space-y-3">
-      <ImageUpload onImageSelect={onImageSelect} currentImage={image} postSlug="" postTitle="" postType="" />
+      <ImageUpload
+        onImageSelect={onImageSelect}
+        currentImage={image}
+        postSlug=""
+        postTitle=""
+        postType=""
+      />
+
       {image && (
         <div>
-          <label className="text-xs font-medium text-gray-600 mb-1 block">Image Alt Text (for SEO)</label>
+          <label className="text-xs font-medium text-gray-600 mb-1 block">
+            Image Alt Text (for SEO)
+          </label>
+
           <input
             type="text"
             value={imageAlt}
@@ -508,15 +756,22 @@ const FeaturedImageBox = ({ image, onImageSelect, imageAlt, onImageAltChange }: 
   </div>
 );
 
-const RedirectBox = ({ oldSlug, onOldSlugChange }: RedirectBoxProps) => (
+const RedirectBox = ({
+  oldSlug,
+  onOldSlugChange,
+}: RedirectBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-red-50 to-orange-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <FiLink className="w-4 h-4 text-red-600" /> Redirects (301)
       </h3>
     </div>
+
     <div className="p-4">
-      <label className="text-xs font-medium text-gray-600 mb-1 block">Old Slug</label>
+      <label className="text-xs font-medium text-gray-600 mb-1 block">
+        Old Slug
+      </label>
+
       <input
         type="text"
         value={oldSlug}
@@ -524,29 +779,55 @@ const RedirectBox = ({ oldSlug, onOldSlugChange }: RedirectBoxProps) => (
         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         placeholder="e.g., old-post-slug"
       />
-      <p className="text-xs text-gray-400 mt-1">If you change the slug, enter the old slug here.</p>
+
+      <p className="text-xs text-gray-400 mt-1">
+        If you change the slug, enter the old slug here.
+      </p>
     </div>
   </div>
 );
 
-const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
+const PreviewBox = ({
+  title,
+  description,
+  url,
+}: PreviewBoxProps) => (
   <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
     <div className="bg-gradient-to-r from-cyan-50 to-blue-50 px-4 py-3 border-b border-gray-200">
       <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
         <FiEye className="w-4 h-4 text-cyan-600" /> Google Preview
       </h3>
     </div>
+
     <div className="p-4">
       <div className="bg-gray-50 rounded-lg p-4 border">
         <div className="text-blue-600 text-sm mb-1 truncate">{url}</div>
-        <div className="text-xl text-blue-800 font-medium mb-1 line-clamp-1">{title || 'Your Title Here'}</div>
-        <div className="text-sm text-gray-600 line-clamp-2">{description || 'Your description...'}</div>
+        <div className="text-xl text-blue-800 font-medium mb-1 line-clamp-1">
+          {title || 'Your Title Here'}
+        </div>
+        <div className="text-sm text-gray-600 line-clamp-2">
+          {description || 'Your description...'}
+        </div>
       </div>
+
       <div className="mt-3 flex gap-4">
-        <div className={`flex-1 text-center p-2 rounded-lg text-xs ${title.length > 60 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+        <div
+          className={`flex-1 text-center p-2 rounded-lg text-xs ${
+            title.length > 60
+              ? 'bg-red-50 text-red-600'
+              : 'bg-green-50 text-green-600'
+          }`}
+        >
           Title: {title.length}/60
         </div>
-        <div className={`flex-1 text-center p-2 rounded-lg text-xs ${description.length > 160 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+
+        <div
+          className={`flex-1 text-center p-2 rounded-lg text-xs ${
+            description.length > 160
+              ? 'bg-red-50 text-red-600'
+              : 'bg-green-50 text-green-600'
+          }`}
+        >
           Description: {description.length}/160
         </div>
       </div>
@@ -555,97 +836,242 @@ const PreviewBox = ({ title, description, url }: PreviewBoxProps) => (
 );
 
 // ==================== MAIN COMPONENT ====================
+
 export default function CreatePostPage() {
   const router = useRouter();
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState<'content' | 'seo' | 'advanced'>('content');
   const [isDirty, setIsDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [savedPostSlug, setSavedPostSlug] = useState<string>('');
-  const [countdown, setCountdown] = useState<{ text: string; color: string } | null>(null);
-
-  const [isInitialized] = useState(true);
+  const [savedPostSlug, setSavedPostSlug] = useState('');
+  const [countdown, setCountdown] = useState<{
+    text: string;
+    color: string;
+  } | null>(null);
 
   const today = new Date().toISOString().slice(0, 16);
   const DRAFT_KEY = 'nextid_post_draft';
 
   const [formData, setFormData] = useState<FormData>({
-    title: '', slug: '', content: '', excerpt: '', type: 'news',
-    featuredImage: '', actualImage: '', galleryImages: [], status: 'draft',
-    isFeatured: false, isPopular: false, isBreaking: false,
-    publishedAt: today, expiresAt: '', deadline: '', authorName: '',
-    metaTitle: '', metaDescription: '', metaKeywords: '', focusKeyword: '',
-    canonicalUrl: '', robots: 'index, follow',
-    ogTitle: '', ogDescription: '', ogImage: '', ogType: 'article',
-    twitterTitle: '', twitterDescription: '', twitterImage: '', twitterCard: 'summary_large_image',
-    schemaMarkup: '', breadcrumbTitle: '', priority: '0.5', changefreq: 'weekly', oldSlug: '', tags: [],
-    company: '', location: '', jobType: 'Full Time', salary: '', experience: '', qualification: '', industry: '', officialLink: '', applicationLink: '',
-    source: '', sourceUrl: '',
-    institute: '', session: '', program: '', eligibility: '', feeStructure: '',
-    board: '', examType: 'Annual', examYear: '', resultDate: '', className: '',
+    title: '',
+    slug: '',
+    content: '',
+    excerpt: '',
+    type: 'news',
+    featuredImage: '',
+    actualImage: '',
+    galleryImages: [],
+    status: 'draft',
+    isFeatured: false,
+    isPopular: false,
+    isBreaking: false,
+    publishedAt: today,
+    expiresAt: '',
+    deadline: '',
+    authorName: '',
+    metaTitle: '',
+    metaDescription: '',
+    metaKeywords: '',
+    focusKeyword: '',
+    canonicalUrl: '',
+    robots: 'index, follow',
+    ogTitle: '',
+    ogDescription: '',
+    ogImage: '',
+    ogType: 'article',
+    twitterTitle: '',
+    twitterDescription: '',
+    twitterImage: '',
+    twitterCard: 'summary_large_image',
+    schemaMarkup: '',
+    breadcrumbTitle: '',
+    priority: '0.5',
+    changefreq: 'weekly',
+    oldSlug: '',
+    tags: [],
+    company: '',
+    location: '',
+    jobType: 'Full Time',
+    salary: '',
+    experience: '',
+    qualification: '',
+    industry: '',
+    officialLink: '',
+    applicationLink: '',
+    source: '',
+    sourceUrl: '',
+    institute: '',
+    session: '',
+    program: '',
+    eligibility: '',
+    feeStructure: '',
+    board: '',
+    examType: 'Annual',
+    examYear: '',
+    resultDate: '',
+    className: '',
     dateSheetExamStartDate: '',
-    organization: '', amount: '', scholarshipEligibility: '',
+    organization: '',
+    amount: '',
+    scholarshipEligibility: '',
     imageAlt: '',
   });
 
-  const [slugCheck, setSlugCheck] = useState<SlugCheck>({ available: true, checking: false, message: '' });
-  const [charCount, setCharCount] = useState<CharCount>({ title: 0, desc: 0, ogTitle: 0, ogDesc: 0, twitterTitle: 0, twitterDesc: 0 });
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
-  const checkSlugTimer = useRef<NodeJS.Timeout | null>(null);
-  // ✅ NEW: Flag to stop auto-save after successful publish
+  const [slugCheck, setSlugCheck] = useState<SlugCheck>({
+    available: true,
+    checking: false,
+    message: '',
+  });
+
+  const [charCount, setCharCount] = useState<CharCount>({
+    title: 0,
+    desc: 0,
+    ogTitle: 0,
+    ogDesc: 0,
+    twitterTitle: 0,
+    twitterDesc: 0,
+  });
+
+  const autoSaveTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const checkSlugTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPublished = useRef(false);
+  const latestSlugRequest = useRef(0);
+
+  // ==================== DEADLINE COUNTDOWN ====================
 
   useEffect(() => {
     if (!formData.deadline) {
       setCountdown(null);
       return;
     }
-    const days = Math.ceil((new Date(formData.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-    if (days < 0) setCountdown({ text: 'Deadline passed', color: 'bg-gray-100 text-gray-600' });
-    else if (days === 0) setCountdown({ text: 'Last day today!', color: 'bg-red-100 text-red-700' });
-    else if (days <= 3) setCountdown({ text: `${days} days left!`, color: 'bg-red-100 text-red-700' });
-    else if (days <= 7) setCountdown({ text: `${days} days left`, color: 'bg-orange-100 text-orange-700' });
-    else if (days <= 30) setCountdown({ text: `${days} days left`, color: 'bg-yellow-100 text-yellow-700' });
-    else setCountdown({ text: `${days} days left`, color: 'bg-green-100 text-green-700' });
+
+    const deadlineDate = new Date(formData.deadline);
+    if (Number.isNaN(deadlineDate.getTime())) {
+      setCountdown(null);
+      return;
+    }
+
+    const days = Math.ceil(
+      (deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (days < 0) {
+      setCountdown({
+        text: 'Deadline passed',
+        color: 'bg-gray-100 text-gray-600',
+      });
+    } else if (days === 0) {
+      setCountdown({
+        text: 'Last day today!',
+        color: 'bg-red-100 text-red-700',
+      });
+    } else if (days <= 3) {
+      setCountdown({
+        text: `${days} days left!`,
+        color: 'bg-red-100 text-red-700',
+      });
+    } else if (days <= 7) {
+      setCountdown({
+        text: `${days} days left`,
+        color: 'bg-orange-100 text-orange-700',
+      });
+    } else if (days <= 30) {
+      setCountdown({
+        text: `${days} days left`,
+        color: 'bg-yellow-100 text-yellow-700',
+      });
+    } else {
+      setCountdown({
+        text: `${days} days left`,
+        color: 'bg-green-100 text-green-700',
+      });
+    }
   }, [formData.deadline]);
 
-  // Load draft on mount — ✅ Skip if already published in this session
+  // ==================== RESTORE DRAFT ====================
+
   useEffect(() => {
     if (hasPublished.current) return;
 
     const draft = localStorage.getItem(DRAFT_KEY);
     if (!draft) return;
+
     try {
-      const parsed = JSON.parse(draft);
+      const parsed: unknown = JSON.parse(draft);
+
+      if (!isRecord(parsed) || !isRecord(parsed.formData)) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+
+      const restoredData = parsed.formData;
+
       const timer = setTimeout(() => {
-        toast.custom((t) => (
-          <div className="bg-white border rounded-lg shadow-lg p-4 max-w-sm">
-            <p className="text-sm font-medium text-gray-800 mb-2">📝 Unsaved draft found</p>
-            <p className="text-xs text-gray-500 mb-3">Do you want to restore it?</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setFormData(parsed.formData); toast.dismiss(t); toast.success('Draft restored!'); }}
-                className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium"
-              >
-                Restore
-              </button>
-              <button
-                onClick={() => { localStorage.removeItem(DRAFT_KEY); toast.dismiss(t); }}
-                className="flex-1 px-3 py-1.5 border rounded text-xs"
-              >
-                Discard
-              </button>
+        toast.custom(
+          (t) => (
+            <div className="bg-white border rounded-lg shadow-lg p-4 max-w-sm">
+              <p className="text-sm font-medium text-gray-800 mb-2">
+                Unsaved draft found
+              </p>
+
+              <p className="text-xs text-gray-500 mb-3">
+                Do you want to restore it?
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setFormData((current) => ({
+                      ...current,
+                      ...restoredData,
+                      galleryImages: Array.isArray(restoredData.galleryImages)
+                        ? restoredData.galleryImages.filter(
+                            (item): item is string => typeof item === 'string'
+                          )
+                        : current.galleryImages,
+                      tags: Array.isArray(restoredData.tags)
+                        ? restoredData.tags.filter(
+                            (item): item is string => typeof item === 'string'
+                          )
+                        : current.tags,
+                    }));
+
+                    setIsDirty(true);
+                    toast.dismiss(t);
+                    toast.success('Draft restored!');
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium"
+                >
+                  Restore
+                </button>
+
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(DRAFT_KEY);
+                    toast.dismiss(t);
+                  }}
+                  className="flex-1 px-3 py-1.5 border rounded text-xs"
+                >
+                  Discard
+                </button>
+              </div>
             </div>
-          </div>
-        ), { duration: Infinity });
+          ),
+          { duration: Infinity }
+        );
       }, 100);
+
       return () => clearTimeout(timer);
-    } catch { localStorage.removeItem(DRAFT_KEY); }
+    } catch {
+      localStorage.removeItem(DRAFT_KEY);
+    }
   }, []);
 
-  // ✅ Auto-save — only if dirty AND not published AND has content
+  // ==================== AUTO SAVE ====================
+
   useEffect(() => {
     autoSaveTimer.current = setInterval(() => {
       if (
@@ -654,132 +1080,362 @@ export default function CreatePostPage() {
         !hasPublished.current &&
         (formData.title || formData.content)
       ) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, savedAt: new Date().toISOString() }));
-        setLastSaved(new Date());
+        try {
+          localStorage.setItem(
+            DRAFT_KEY,
+            JSON.stringify({
+              formData,
+              savedAt: new Date().toISOString(),
+            })
+          );
+
+          setLastSaved(new Date());
+        } catch (saveError) {
+          console.error('Draft auto-save failed:', saveError);
+        }
       }
     }, 30000);
-    return () => { if (autoSaveTimer.current) clearInterval(autoSaveTimer.current); };
+
+    return () => {
+      if (autoSaveTimer.current) {
+        clearInterval(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+    };
   }, [formData, isDirty, success]);
+
+  // ==================== BEFORE UNLOAD ====================
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (isDirty && !success) { e.preventDefault(); e.returnValue = ''; }
+      if (isDirty && !success) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     };
+
     window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+    };
   }, [isDirty, success]);
 
-  const checkSlugDebounced = (slug: string) => {
-    if (checkSlugTimer.current) clearTimeout(checkSlugTimer.current);
-    checkSlugTimer.current = setTimeout(() => checkSlug(slug), 500);
-  };
+  // ==================== SLUG CHECK ====================
 
-  // ==================== HELPERS ====================
-  const generateSlug = (title: string) =>
-    title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 100);
-
-  const generateMetaTitle = (title: string, type: string) => {
-    if (!title) return '';
-    const prefix = type === 'admission' ? 'Admissions 2026: ' : type === 'scholarship' ? 'Scholarship: ' : type === 'news' ? 'Breaking: ' : '';
-    const metaTitle = prefix + title;
-    return metaTitle.length > 60 ? metaTitle.substring(0, 57) + '...' : metaTitle;
-  };
-
-  const generateMetaDescription = (content: string, excerpt: string) => {
-    if (excerpt && excerpt.trim()) {
-      const clean = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-      return clean.length > 160 ? clean.substring(0, 157) + '...' : clean;
+  const checkSlug = async (slug: string) => {
+    if (!slug.trim()) {
+      setSlugCheck({
+        available: false,
+        checking: false,
+        message: 'Slug is required',
+      });
+      return;
     }
-    if (!content) return '';
-    const plain = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-    return plain.length > 160 ? plain.substring(0, 157) + '...' : plain;
+
+    const requestId = ++latestSlugRequest.current;
+
+    setSlugCheck({
+      available: false,
+      checking: true,
+      message: 'Checking...',
+    });
+
+    try {
+      const res = await fetch('/api/admin/post/check-slug', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ slug }),
+      });
+
+      const data = await readJsonObject(res);
+
+      if (requestId !== latestSlugRequest.current) return;
+
+      if (!res.ok || typeof data.isAvailable !== 'boolean') {
+        setSlugCheck({
+          available: false,
+          checking: false,
+          message: 'Unable to check',
+        });
+        return;
+      }
+
+      const available = data.isAvailable;
+
+      setSlugCheck({
+        available,
+        checking: false,
+        message: available ? '✓ Available' : '✗ Already exists',
+      });
+    } catch {
+      if (requestId !== latestSlugRequest.current) return;
+
+      setSlugCheck({
+        available: false,
+        checking: false,
+        message: 'Unable to check',
+      });
+    }
   };
+
+  const checkSlugDebounced = (slug: string) => {
+    if (checkSlugTimer.current) {
+      clearTimeout(checkSlugTimer.current);
+    }
+
+    latestSlugRequest.current++;
+
+    if (!slug.trim()) {
+      setSlugCheck({
+        available: false,
+        checking: false,
+        message: 'Slug is required',
+      });
+      return;
+    }
+
+    setSlugCheck({
+      available: false,
+      checking: true,
+      message: 'Waiting to check...',
+    });
+
+    checkSlugTimer.current = setTimeout(() => {
+      void checkSlug(slug);
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (checkSlugTimer.current) {
+        clearTimeout(checkSlugTimer.current);
+      }
+
+      latestSlugRequest.current++;
+    };
+  }, []);
 
   // ==================== HANDLERS ====================
+
   const handleTitleChange = (title: string) => {
     const slug = generateSlug(title);
     const metaTitle = generateMetaTitle(title, formData.type);
-    const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    setFormData(prev => ({ ...prev, title, slug, metaTitle, ogTitle: metaTitle, twitterTitle: metaTitle, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription, breadcrumbTitle: title }));
+    const metaDescription = generateMetaDescription(
+      formData.content,
+      formData.excerpt
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      title,
+      slug,
+      metaTitle,
+      ogTitle: metaTitle,
+      twitterTitle: metaTitle,
+      metaDescription,
+      ogDescription: metaDescription,
+      twitterDescription: metaDescription,
+      breadcrumbTitle: title,
+    }));
+
     setIsDirty(true);
-    if (slug) checkSlugDebounced(slug);
-    setCharCount(prev => ({ ...prev, title: metaTitle.length, ogTitle: metaTitle.length, twitterTitle: metaTitle.length }));
+
+    if (slug) {
+      checkSlugDebounced(slug);
+    } else {
+      latestSlugRequest.current++;
+
+      if (checkSlugTimer.current) {
+        clearTimeout(checkSlugTimer.current);
+      }
+
+      setSlugCheck({
+        available: false,
+        checking: false,
+        message: '',
+      });
+    }
+
+    setCharCount((prev) => ({
+      ...prev,
+      title: metaTitle.length,
+      ogTitle: metaTitle.length,
+      twitterTitle: metaTitle.length,
+    }));
   };
 
   const handleExcerptChange = (excerpt: string) => {
-    const metaDescription = generateMetaDescription(formData.content, excerpt);
-    setFormData(prev => ({ ...prev, excerpt, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+    const metaDescription = generateMetaDescription(
+      formData.content,
+      excerpt
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      excerpt,
+      metaDescription,
+      ogDescription: metaDescription,
+      twitterDescription: metaDescription,
+    }));
+
+    setCharCount((prev) => ({
+      ...prev,
+      desc: metaDescription.length,
+      ogDesc: metaDescription.length,
+      twitterDesc: metaDescription.length,
+    }));
+
     setIsDirty(true);
   };
 
   const handleContentChange = (value: string | EditorSection[]) => {
     const content = typeof value === 'string' ? value : '';
-    const metaDescription = generateMetaDescription(content, formData.excerpt);
-    setFormData(prev => ({ ...prev, content, metaDescription, ogDescription: metaDescription, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, desc: metaDescription.length, ogDesc: metaDescription.length, twitterDesc: metaDescription.length }));
+
+    const metaDescription = generateMetaDescription(
+      content,
+      formData.excerpt
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      content,
+      metaDescription,
+      ogDescription: metaDescription,
+      twitterDescription: metaDescription,
+    }));
+
+    setCharCount((prev) => ({
+      ...prev,
+      desc: metaDescription.length,
+      ogDesc: metaDescription.length,
+      twitterDesc: metaDescription.length,
+    }));
+
     setIsDirty(true);
   };
 
   const handleSlugChange = (slug: string) => {
-    setFormData(prev => ({ ...prev, slug }));
+    setFormData((prev) => ({
+      ...prev,
+      slug,
+    }));
+
     setIsDirty(true);
-    if (slug) checkSlugDebounced(slug);
+    checkSlugDebounced(slug);
   };
 
   const handleImageSelect = (url: string) => {
-    setFormData(prev => ({ ...prev, featuredImage: url, ogImage: url, twitterImage: url }));
+    setFormData((prev) => ({
+      ...prev,
+      featuredImage: url,
+      ogImage: url,
+      twitterImage: url,
+    }));
+
     setIsDirty(true);
   };
 
-  const checkSlug = async (slug: string) => {
-    if (!slug) return;
-    setSlugCheck(prev => ({ ...prev, checking: true, message: 'Checking...' }));
-    try {
-      const res = await fetch('/api/admin/post/check-slug', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug }),
-      });
-      const data = await res.json();
-      setSlugCheck({ available: data.isAvailable, checking: false, message: data.isAvailable ? '✓ Available' : '✗ Already exists' });
-    } catch {
-      setSlugCheck({ available: true, checking: false, message: 'Unable to check' });
-    }
-  };
-
   const regenerateMeta = () => {
-    const metaTitle = generateMetaTitle(formData.title, formData.type);
-    const metaDescription = generateMetaDescription(formData.content, formData.excerpt);
-    setFormData(prev => ({ ...prev, metaTitle, metaDescription, ogTitle: metaTitle, ogDescription: metaDescription, twitterTitle: metaTitle, twitterDescription: metaDescription }));
-    setCharCount(prev => ({ ...prev, title: metaTitle.length, desc: metaDescription.length, ogTitle: metaTitle.length, ogDesc: metaDescription.length, twitterTitle: metaTitle.length, twitterDesc: metaDescription.length }));
+    const metaTitle = generateMetaTitle(
+      formData.title,
+      formData.type
+    );
+
+    const metaDescription = generateMetaDescription(
+      formData.content,
+      formData.excerpt
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      metaTitle,
+      metaDescription,
+      ogTitle: metaTitle,
+      ogDescription: metaDescription,
+      twitterTitle: metaTitle,
+      twitterDescription: metaDescription,
+    }));
+
+    setCharCount((prev) => ({
+      ...prev,
+      title: metaTitle.length,
+      desc: metaDescription.length,
+      ogTitle: metaTitle.length,
+      ogDesc: metaDescription.length,
+      twitterTitle: metaTitle.length,
+      twitterDesc: metaDescription.length,
+    }));
+
+    setIsDirty(true);
     toast.success('Meta tags regenerated!');
   };
 
   const buildMetaObject = (): Record<string, unknown> => {
     const meta: Record<string, unknown> = {};
-    if (formData.deadline) meta.deadline = formData.deadline;
+
+    if (formData.deadline) {
+      meta.deadline = formData.deadline;
+    }
+
     meta.isFeatured = formData.isFeatured;
+
     return meta;
   };
 
   // ==================== VALIDATION ====================
+
   const validateForm = (): string | null => {
-    if (!formData.title.trim()) return 'Title is required';
-    if (!slugCheck.available) return 'Please choose a different slug';
-    if (!formData.content || formData.content.trim() === '' || formData.content === '<p></p>') return 'Content is required';
-    if (!formData.featuredImage) return 'Featured image is required';
-    if (!formData.imageAlt.trim()) return 'Image alt text is required for SEO';
-    if (!formData.authorName.trim()) return 'Author name is required';
+    if (!formData.title.trim()) {
+      return 'Title is required';
+    }
+
+    if (!formData.slug.trim()) {
+      return 'Slug is required';
+    }
+
+    if (slugCheck.checking) {
+      return 'Please wait while slug availability is checked';
+    }
+
+    if (!slugCheck.available) {
+      return 'Please choose a different slug';
+    }
+
+    if (
+      !formData.content ||
+      formData.content.trim() === '' ||
+      formData.content === '<p></p>'
+    ) {
+      return 'Content is required';
+    }
+
+    if (!formData.featuredImage) {
+      return 'Featured image is required';
+    }
+
+    if (!formData.imageAlt.trim()) {
+      return 'Image alt text is required for SEO';
+    }
+
+    if (!formData.authorName.trim()) {
+      return 'Author name is required';
+    }
+
     return null;
   };
 
   // ==================== SUBMIT ====================
+
   const submitPost = async (status: 'draft' | 'published') => {
     setLoading(true);
     setError('');
     setSuccess('');
 
     const validationError = validateForm();
+
     if (validationError) {
       setError(validationError);
       toast.error(validationError);
@@ -788,7 +1444,9 @@ export default function CreatePostPage() {
     }
 
     const url = `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug}`;
+
     const meta = buildMetaObject();
+
     const autoSchema = generateSchema({
       title: formData.title,
       description: formData.metaDescription || formData.excerpt,
@@ -810,33 +1468,38 @@ export default function CreatePostPage() {
 
     try {
       const res = await fetch('/api/admin/post/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
 
-      if (data.success) {
-        // ✅ STEP 1: Mark as published so auto-save won't run again
+      const data = await readJsonObject(res);
+
+      if (res.ok && data.success === true) {
         hasPublished.current = true;
 
-        // ✅ STEP 2: Stop the auto-save timer immediately
         if (autoSaveTimer.current) {
           clearInterval(autoSaveTimer.current);
           autoSaveTimer.current = null;
         }
 
-        // ✅ STEP 3: Remove draft from localStorage
         localStorage.removeItem(DRAFT_KEY);
 
-        // ✅ STEP 4: Reset state
         setIsDirty(false);
         setSavedPostSlug(formData.slug);
-        setSuccess(status === 'draft' ? 'Draft saved!' : 'Post published successfully!');
-        toast.success(status === 'draft' ? 'Draft saved!' : 'Post published!');
 
-        // ✅ STEP 5: Clear form data (only for published — draft needs data to keep editing)
+        const successMessage =
+          status === 'draft'
+            ? 'Draft saved!'
+            : 'Post published successfully!';
+
+        setSuccess(successMessage);
+        toast.success(successMessage);
+
         if (status === 'published') {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             title: '',
             content: '',
@@ -851,11 +1514,15 @@ export default function CreatePostPage() {
           }));
         }
 
-        // ✅ STEP 6: Navigate after 1.5 sec
-        setTimeout(() => router.push('/admin/post'), 1500);
+        setTimeout(() => {
+          router.push('/admin/post');
+        }, 1500);
       } else {
-        setError(data.error || 'Failed to save post');
-        toast.error(data.error || 'Failed to save post');
+        const errorMessage =
+          getString(data.error) || 'Failed to save post';
+
+        setError(errorMessage);
+        toast.error(errorMessage);
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -865,34 +1532,67 @@ export default function CreatePostPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    await submitPost(formData.status === 'draft' ? 'draft' : 'published');
+
+    await submitPost(
+      formData.status === 'draft' ? 'draft' : 'published'
+    );
   };
 
   const handleSaveDraft = () => {
     const originalStatus = formData.status;
-    submitPost('draft').finally(() => setFormData(prev => ({ ...prev, status: originalStatus })));
+
+    void submitPost('draft').finally(() => {
+      setFormData((prev) => ({
+        ...prev,
+        status: originalStatus,
+      }));
+    });
   };
 
   const handlePreview = () => {
-    if (!formData.slug) { toast.error('Add a title first to generate slug'); return; }
+    if (!formData.slug) {
+      toast.error('Add a title first to generate slug');
+      return;
+    }
+
     toast.info('Preview coming soon');
   };
 
   const handleViewWebsite = () => {
     const slug = savedPostSlug || formData.slug;
-    if (!slug) { toast.error('Post not published yet'); return; }
-    window.open(`/${getUrlFolder(formData.type)}/${slug}`, '_blank');
+
+    if (!slug) {
+      toast.error('Post not published yet');
+      return;
+    }
+
+    window.open(
+      `/${getUrlFolder(formData.type)}/${slug}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
   };
 
   const seoPreview = {
-    title: formData.metaTitle || formData.title || 'Your Title Here',
-    description: formData.metaDescription || formData.excerpt || formData.content?.replace(/<[^>]*>/g, '').substring(0, 160) || 'Your description will appear here...',
+    title:
+      formData.metaTitle ||
+      formData.title ||
+      'Your Title Here',
+
+    description:
+      formData.metaDescription ||
+      formData.excerpt ||
+      formData.content
+        ?.replace(/<[^>]*>/g, '')
+        .substring(0, 160) ||
+      'Your description will appear here...',
+
     url: `https://www.nextid.pk/${getUrlFolder(formData.type)}/${formData.slug || 'example-post'}`,
   };
 
-  if (!isInitialized) return <LoadingSkeleton />;
+  // ==================== RENDER ====================
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -900,24 +1600,52 @@ export default function CreatePostPage() {
       <div className="bg-gray-900 text-white px-4 py-2 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/admin/dashboard" className="text-sm font-medium hover:text-gray-300">Dashboard</Link>
-            <Link href="/admin/post" className="text-sm font-medium hover:text-gray-300">All Posts</Link>
+            <Link
+              href="/admin/dashboard"
+              className="text-sm font-medium hover:text-gray-300"
+            >
+              Dashboard
+            </Link>
+
+            <Link
+              href="/admin/post"
+              className="text-sm font-medium hover:text-gray-300"
+            >
+              All Posts
+            </Link>
+
             <span className="text-sm text-gray-400">|</span>
-            <span className="text-sm font-semibold">Add New Post</span>
+
+            <span className="text-sm font-semibold">
+              Add New Post
+            </span>
+
             {lastSaved && (
-              <span className="text-xs text-gray-400">✓ Saved {lastSaved.toLocaleTimeString()}</span>
+              <span className="text-xs text-gray-400">
+                ✓ Saved {lastSaved.toLocaleTimeString()}
+              </span>
             )}
           </div>
+
           <div className="flex items-center gap-3">
             {formData.status === 'published' ? (
-              <span className="text-xs bg-green-600 px-2 py-1 rounded">Published</span>
+              <span className="text-xs bg-green-600 px-2 py-1 rounded">
+                Published
+              </span>
             ) : (
-              <span className="text-xs bg-yellow-600 px-2 py-1 rounded">Draft</span>
+              <span className="text-xs bg-yellow-600 px-2 py-1 rounded">
+                Draft
+              </span>
             )}
+
             <button
               type="submit"
               form="post-form"
-              disabled={loading || !slugCheck.available}
+              disabled={
+                loading ||
+                !slugCheck.available ||
+                slugCheck.checking
+              }
               className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? 'Saving...' : 'Save'}
@@ -928,13 +1656,21 @@ export default function CreatePostPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Add New Post</h1>
-          <p className="text-sm text-gray-500 mt-1">Create a new post with all SEO features.</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Add New Post
+          </h1>
+
+          <p className="text-sm text-gray-500 mt-1">
+            Create a new post with all SEO features.
+          </p>
         </div>
 
         {countdown && (
-          <div className={`${countdown.color} rounded-lg px-4 py-2 mb-4 flex items-center gap-2 text-sm font-medium`}>
-            <FiClock className="w-4 h-4" /> Deadline: {countdown.text}
+          <div
+            className={`${countdown.color} rounded-lg px-4 py-2 mb-4 flex items-center gap-2 text-sm font-medium`}
+          >
+            <FiClock className="w-4 h-4" />
+            Deadline: {countdown.text}
           </div>
         )}
 
@@ -944,6 +1680,7 @@ export default function CreatePostPage() {
             <span className="text-green-700">{success}</span>
           </div>
         )}
+
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 mb-6 flex items-center gap-3">
             <FiAlertCircle className="w-5 h-5 text-red-500" />
@@ -957,7 +1694,7 @@ export default function CreatePostPage() {
             { key: 'content' as const, label: '📝 Content' },
             { key: 'seo' as const, label: '🔍 SEO' },
             { key: 'advanced' as const, label: '⚙️ Advanced' },
-          ].map(tab => (
+          ].map((tab) => (
             <button
               key={tab.key}
               type="button"
@@ -991,20 +1728,54 @@ export default function CreatePostPage() {
               {activeTab === 'content' && (
                 <>
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                    <label className="text-sm font-medium text-gray-700 mb-2 block">Post Type</label>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Post Type
+                    </label>
+
                     <div className="flex flex-wrap gap-2">
                       {POST_TYPES.map((type) => (
                         <button
                           key={type.value}
                           type="button"
                           onClick={() => {
-                            setFormData(prev => ({ ...prev, type: type.value }));
-                            const newMetaTitle = generateMetaTitle(formData.title, type.value);
-                            setFormData(prev => ({ ...prev, metaTitle: newMetaTitle, ogTitle: newMetaTitle }));
+                            const newMetaTitle = generateMetaTitle(
+                              formData.title,
+                              type.value
+                            );
+
+                            const newMetaDescription =
+                              generateMetaDescription(
+                                formData.content,
+                                formData.excerpt
+                              );
+
+                            setFormData((prev) => ({
+                              ...prev,
+                              type: type.value,
+                              metaTitle: newMetaTitle,
+                              ogTitle: newMetaTitle,
+                              twitterTitle: newMetaTitle,
+                              metaDescription: newMetaDescription,
+                              ogDescription: newMetaDescription,
+                              twitterDescription: newMetaDescription,
+                            }));
+
+                            setCharCount((prev) => ({
+                              ...prev,
+                              title: newMetaTitle.length,
+                              ogTitle: newMetaTitle.length,
+                              twitterTitle: newMetaTitle.length,
+                              desc: newMetaDescription.length,
+                              ogDesc: newMetaDescription.length,
+                              twitterDesc: newMetaDescription.length,
+                            }));
+
                             setIsDirty(true);
                           }}
                           className={`px-3 py-1.5 rounded-full text-sm font-medium transition flex items-center gap-1 ${
-                            formData.type === type.value ? type.color + ' ring-2 ring-offset-1 ring-blue-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            formData.type === type.value
+                              ? `${type.color} ring-2 ring-offset-1 ring-blue-500`
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                         >
                           <span>{type.icon}</span> {type.label}
@@ -1013,11 +1784,13 @@ export default function CreatePostPage() {
                     </div>
                   </div>
 
-                  {/* SINGLE CONTENT BOX (for all post types) */}
+                  {/* SINGLE CONTENT BOX */}
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                     <label className="text-sm font-medium text-gray-700 mb-2 block">
-                      <FiFileText className="w-4 h-4 inline mr-1 text-blue-600" /> Content <span className="text-red-500">*</span>
+                      <FiFileText className="w-4 h-4 inline mr-1 text-blue-600" />
+                      Content <span className="text-red-500">*</span>
                     </label>
+
                     <RichTextEditor
                       value={formData.content}
                       onChange={handleContentChange}
@@ -1028,11 +1801,17 @@ export default function CreatePostPage() {
 
                     <div className="mt-4">
                       <label className="text-sm font-medium text-gray-700 mb-1 block">
-                        📌 Excerpt <span className="text-xs text-green-600 ml-2">→ Becomes Meta Description</span>
+                        Excerpt{' '}
+                        <span className="text-xs text-green-600 ml-2">
+                          → Becomes Meta Description
+                        </span>
                       </label>
+
                       <textarea
                         value={formData.excerpt}
-                        onChange={(e) => handleExcerptChange(e.target.value)}
+                        onChange={(e) =>
+                          handleExcerptChange(e.target.value)
+                        }
                         rows={3}
                         className="w-full border border-gray-300 rounded-md px-4 py-2 text-sm"
                         placeholder="Brief summary..."
@@ -1046,118 +1825,414 @@ export default function CreatePostPage() {
                 <>
                   <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
                     <div className="flex justify-between items-center border-b pb-2">
-                      <h3 className="text-sm font-semibold flex items-center gap-2"><FiSearch className="w-4 h-4 text-blue-600" /> SEO Settings</h3>
-                      <button type="button" onClick={regenerateMeta} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200">Regenerate</button>
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <FiSearch className="w-4 h-4 text-blue-600" />
+                        SEO Settings
+                      </h3>
+
+                      <button
+                        type="button"
+                        onClick={regenerateMeta}
+                        className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 bg-white rounded border border-blue-200"
+                      >
+                        Regenerate
+                      </button>
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">🎯 Focus Keyword</label>
-                      <input type="text" value={formData.focusKeyword} onChange={(e) => setFormData(prev => ({ ...prev, focusKeyword: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="e.g., university admission 2026" />
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Focus Keyword
+                      </label>
+
+                      <input
+                        type="text"
+                        value={formData.focusKeyword}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            focusKeyword: e.target.value,
+                          }));
+                          setIsDirty(true);
+                        }}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        placeholder="e.g., university admission 2026"
+                      />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">📝 Meta Keywords</label>
-                      <input type="text" value={formData.metaKeywords} onChange={(e) => setFormData(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="keyword1, keyword2" />
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Meta Keywords
+                      </label>
+
+                      <input
+                        type="text"
+                        value={formData.metaKeywords}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            metaKeywords: e.target.value,
+                          }));
+                          setIsDirty(true);
+                        }}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        placeholder="keyword1, keyword2"
+                      />
                     </div>
 
                     <div>
                       <div className="flex justify-between mb-1">
-                        <label className="text-xs font-medium text-gray-600">Meta Title</label>
-                        <span className={`text-xs ${charCount.title > 60 ? 'text-red-500' : 'text-green-500'}`}>{charCount.title}/60</span>
+                        <label className="text-xs font-medium text-gray-600">
+                          Meta Title
+                        </label>
+
+                        <span
+                          className={`text-xs ${
+                            charCount.title > 60
+                              ? 'text-red-500'
+                              : 'text-green-500'
+                          }`}
+                        >
+                          {charCount.title}/60
+                        </span>
                       </div>
-                      <input type="text" value={formData.metaTitle} onChange={(e) => { setFormData(prev => ({ ...prev, metaTitle: e.target.value })); setCharCount(prev => ({ ...prev, title: e.target.value.length })); }} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.title > 60 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+
+                      <input
+                        type="text"
+                        value={formData.metaTitle}
+                        onChange={(e) => {
+                          const value = e.target.value;
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            metaTitle: value,
+                          }));
+
+                          setCharCount((prev) => ({
+                            ...prev,
+                            title: value.length,
+                          }));
+
+                          setIsDirty(true);
+                        }}
+                        className={`w-full border rounded-md px-3 py-2 text-sm ${
+                          charCount.title > 60
+                            ? 'border-red-500 bg-red-50'
+                            : 'border-gray-300'
+                        }`}
+                      />
                     </div>
 
                     <div>
                       <div className="flex justify-between mb-1">
-                        <label className="text-xs font-medium text-gray-600">Meta Description</label>
-                        <span className={`text-xs ${charCount.desc > 160 ? 'text-red-500' : 'text-green-500'}`}>{charCount.desc}/160</span>
+                        <label className="text-xs font-medium text-gray-600">
+                          Meta Description
+                        </label>
+
+                        <span
+                          className={`text-xs ${
+                            charCount.desc > 160
+                              ? 'text-red-500'
+                              : 'text-green-500'
+                          }`}
+                        >
+                          {charCount.desc}/160
+                        </span>
                       </div>
-                      <textarea value={formData.metaDescription} onChange={(e) => { setFormData(prev => ({ ...prev, metaDescription: e.target.value })); setCharCount(prev => ({ ...prev, desc: e.target.value.length })); }} rows={3} className={`w-full border rounded-md px-3 py-2 text-sm ${charCount.desc > 160 ? 'border-red-500 bg-red-50' : 'border-gray-300'}`} />
+
+                      <textarea
+                        value={formData.metaDescription}
+                        onChange={(e) => {
+                          const value = e.target.value;
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            metaDescription: value,
+                          }));
+
+                          setCharCount((prev) => ({
+                            ...prev,
+                            desc: value.length,
+                          }));
+
+                          setIsDirty(true);
+                        }}
+                        rows={3}
+                        className={`w-full border rounded-md px-3 py-2 text-sm ${
+                          charCount.desc > 160
+                            ? 'border-red-500 bg-red-50'
+                            : 'border-gray-300'
+                        }`}
+                      />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">Canonical URL</label>
-                      <input type="text" value={formData.canonicalUrl} onChange={(e) => setFormData(prev => ({ ...prev, canonicalUrl: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="https://..." />
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Canonical URL
+                      </label>
+
+                      <input
+                        type="text"
+                        value={formData.canonicalUrl}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            canonicalUrl: e.target.value,
+                          }));
+                          setIsDirty(true);
+                        }}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        placeholder="https://..."
+                      />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1 block">Robots</label>
-                      <select value={formData.robots} onChange={(e) => setFormData(prev => ({ ...prev, robots: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-                        {ROBOTS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      <label className="text-xs font-medium text-gray-600 mb-1 block">
+                        Robots
+                      </label>
+
+                      <select
+                        value={formData.robots}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            robots: e.target.value,
+                          }));
+                          setIsDirty(true);
+                        }}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      >
+                        {ROBOTS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
-                  <PreviewBox title={seoPreview.title} description={seoPreview.description} url={seoPreview.url} />
+                  <PreviewBox
+                    title={seoPreview.title}
+                    description={seoPreview.description}
+                    url={seoPreview.url}
+                  />
                 </>
               )}
 
               {activeTab === 'advanced' && (
                 <div className="bg-white rounded-lg border shadow-sm p-4 space-y-4">
-                  <h3 className="text-sm font-semibold flex items-center gap-2"><FiGlobe className="w-4 h-4" /> Advanced Settings</h3>
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <FiGlobe className="w-4 h-4" />
+                    Advanced Settings
+                  </h3>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Type</label>
-                    <select value={formData.ogType} onChange={(e) => setFormData(prev => ({ ...prev, ogType: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                      {OG_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      OG Type
+                    </label>
+
+                    <select
+                      value={formData.ogType}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          ogType: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {OG_TYPES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Title</label>
-                    <input type="text" value={formData.ogTitle} onChange={(e) => setFormData(prev => ({ ...prev, ogTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      OG Title
+                    </label>
+
+                    <input
+                      type="text"
+                      value={formData.ogTitle}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          ogTitle: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">OG Description</label>
-                    <textarea value={formData.ogDescription} onChange={(e) => setFormData(prev => ({ ...prev, ogDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      OG Description
+                    </label>
+
+                    <textarea
+                      value={formData.ogDescription}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          ogDescription: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      rows={2}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Card</label>
-                    <select value={formData.twitterCard} onChange={(e) => setFormData(prev => ({ ...prev, twitterCard: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                      {TWITTER_CARDS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Twitter Card
+                    </label>
+
+                    <select
+                      value={formData.twitterCard}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          twitterCard: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {TWITTER_CARDS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Title</label>
-                    <input type="text" value={formData.twitterTitle} onChange={(e) => setFormData(prev => ({ ...prev, twitterTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Twitter Title
+                    </label>
+
+                    <input
+                      type="text"
+                      value={formData.twitterTitle}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          twitterTitle: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Twitter Description</label>
-                    <textarea value={formData.twitterDescription} onChange={(e) => setFormData(prev => ({ ...prev, twitterDescription: e.target.value }))} rows={2} className="w-full border rounded-md px-3 py-2 text-sm" />
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Twitter Description
+                    </label>
+
+                    <textarea
+                      value={formData.twitterDescription}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          twitterDescription: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      rows={2}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Sitemap Priority</label>
-                    <select value={formData.priority} onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                      {PRIORITY_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Sitemap Priority
+                    </label>
+
+                    <select
+                      value={formData.priority}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          priority: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {PRIORITY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Change Frequency</label>
-                    <select value={formData.changefreq} onChange={(e) => setFormData(prev => ({ ...prev, changefreq: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm">
-                      {CHANGEFREQ_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Change Frequency
+                    </label>
+
+                    <select
+                      value={formData.changefreq}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          changefreq: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {CHANGEFREQ_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-600 mb-1 block">Breadcrumb Title</label>
-                    <input type="text" value={formData.breadcrumbTitle} onChange={(e) => setFormData(prev => ({ ...prev, breadcrumbTitle: e.target.value }))} className="w-full border rounded-md px-3 py-2 text-sm" />
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      Breadcrumb Title
+                    </label>
+
+                    <input
+                      type="text"
+                      value={formData.breadcrumbTitle}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          breadcrumbTitle: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
                   </div>
 
                   <div>
                     <label className="text-xs font-medium text-gray-600 mb-1 block">
                       Schema Markup (JSON-LD)
-                      <span className="text-green-600 ml-2 text-xs">✓ Auto-generated if empty</span>
+                      <span className="text-green-600 ml-2 text-xs">
+                        ✓ Auto-generated if empty
+                      </span>
                     </label>
+
                     <textarea
                       value={formData.schemaMarkup}
-                      onChange={(e) => setFormData(prev => ({ ...prev, schemaMarkup: e.target.value }))}
+                      onChange={(e) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          schemaMarkup: e.target.value,
+                        }));
+                        setIsDirty(true);
+                      }}
                       rows={6}
                       className="w-full border rounded-md px-3 py-2 text-sm font-mono"
                       placeholder="Auto-generated based on post type..."
@@ -1171,17 +2246,53 @@ export default function CreatePostPage() {
             <div className="space-y-6">
               <PublishMetaBox
                 status={formData.status}
-                onStatusChange={(val) => { setFormData(prev => ({ ...prev, status: val })); setIsDirty(true); }}
+                onStatusChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    status: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 publishedAt={formData.publishedAt}
-                onPublishedAtChange={(val) => setFormData(prev => ({ ...prev, publishedAt: val }))}
+                onPublishedAtChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    publishedAt: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 deadline={formData.deadline}
-                onDeadlineChange={(val) => setFormData(prev => ({ ...prev, deadline: val }))}
+                onDeadlineChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    deadline: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 isFeatured={formData.isFeatured}
-                onFeaturedChange={(val) => setFormData(prev => ({ ...prev, isFeatured: val }))}
+                onFeaturedChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    isFeatured: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 isPopular={formData.isPopular}
-                onPopularChange={(val) => setFormData(prev => ({ ...prev, isPopular: val }))}
+                onPopularChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    isPopular: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 isBreaking={formData.isBreaking}
-                onBreakingChange={(val) => setFormData(prev => ({ ...prev, isBreaking: val }))}
+                onBreakingChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    isBreaking: val,
+                  }));
+                  setIsDirty(true);
+                }}
                 loading={loading}
                 slugCheck={slugCheck}
                 onSaveDraft={handleSaveDraft}
@@ -1190,11 +2301,59 @@ export default function CreatePostPage() {
                 canViewWebsite={!!savedPostSlug}
               />
 
-              <AuthorBox authorName={formData.authorName} onAuthorNameChange={(val) => setFormData(prev => ({ ...prev, authorName: val }))} />
-              <PermalinkBox slug={formData.slug} onSlugChange={handleSlugChange} type={formData.type} slugCheck={slugCheck} />
-              <FeaturedImageBox image={formData.featuredImage} onImageSelect={handleImageSelect} imageAlt={formData.imageAlt} onImageAltChange={(val) => setFormData(prev => ({ ...prev, imageAlt: val }))} />
-              <CategoriesTagsBox tags={formData.tags} onTagsChange={(tags) => setFormData(prev => ({ ...prev, tags }))} postType={formData.type} />
-              <RedirectBox oldSlug={formData.oldSlug} onOldSlugChange={(val) => setFormData(prev => ({ ...prev, oldSlug: val }))} />
+              <AuthorBox
+                authorName={formData.authorName}
+                onAuthorNameChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    authorName: val,
+                  }));
+                  setIsDirty(true);
+                }}
+              />
+
+              <PermalinkBox
+                slug={formData.slug}
+                onSlugChange={handleSlugChange}
+                type={formData.type}
+                slugCheck={slugCheck}
+              />
+
+              <FeaturedImageBox
+                image={formData.featuredImage}
+                onImageSelect={handleImageSelect}
+                imageAlt={formData.imageAlt}
+                onImageAltChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    imageAlt: val,
+                  }));
+                  setIsDirty(true);
+                }}
+              />
+
+              <CategoriesTagsBox
+                tags={formData.tags}
+                onTagsChange={(tags) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    tags,
+                  }));
+                  setIsDirty(true);
+                }}
+                postType={formData.type}
+              />
+
+              <RedirectBox
+                oldSlug={formData.oldSlug}
+                onOldSlugChange={(val) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    oldSlug: val,
+                  }));
+                  setIsDirty(true);
+                }}
+              />
             </div>
           </div>
         </form>

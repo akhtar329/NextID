@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
@@ -5,6 +6,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FloatingInput } from "../InstituteAuthLayout";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+async function readJsonObject(
+  response: Response
+): Promise<Record<string, unknown>> {
+  const data: unknown = await response.json();
+  return isRecord(data) ? data : {};
+}
 
 export default function InstituteLoginPage() {
   const router = useRouter();
@@ -17,16 +33,19 @@ export default function InstituteLoginPage() {
   // Countdown timer for lockout
   useEffect(() => {
     if (lockoutSeconds <= 0) return;
+
     const timer = setInterval(() => {
-      setLockoutSeconds((s) => {
-        if (s <= 1) {
+      setLockoutSeconds((seconds) => {
+        if (seconds <= 1) {
           clearInterval(timer);
           setRemaining(null);
           return 0;
         }
-        return s - 1;
+
+        return seconds - 1;
       });
     }, 1000);
+
     return () => clearInterval(timer);
   }, [lockoutSeconds]);
 
@@ -34,12 +53,18 @@ export default function InstituteLoginPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (isLocked) return;
+
+    if (isLocked || loading) return;
 
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const email = formData.get("email")?.toString().trim().toLowerCase();
+    const email = formData
+      .get("email")
+      ?.toString()
+      .trim()
+      .toLowerCase();
+
     const password = formData.get("password")?.toString();
 
     if (!email || !password) {
@@ -63,24 +88,44 @@ export default function InstituteLoginPage() {
         }),
       });
 
-      const result = await response.json();
+      const result = await readJsonObject(response);
 
       // Handle rate limiting (429)
       if (response.status === 429) {
-        if (result.retryAfter) {
-          setLockoutSeconds(result.retryAfter);
+        const retryAfter = result.retryAfter;
+
+        if (
+          typeof retryAfter === "number" &&
+          Number.isFinite(retryAfter) &&
+          retryAfter > 0
+        ) {
+          setLockoutSeconds(Math.ceil(retryAfter));
         }
-        toast.error(result.message || "Too many attempts. Please wait.");
+
+        toast.error(
+          typeof result.message === "string"
+            ? result.message
+            : "Too many attempts. Please wait."
+        );
+
         return;
       }
 
       // Show remaining attempts warning
-      if (typeof result.remaining === "number") {
-        setRemaining(result.remaining);
+      if (
+        typeof result.remaining === "number" &&
+        Number.isFinite(result.remaining)
+      ) {
+        setRemaining(Math.max(0, result.remaining));
       }
 
-      if (!response.ok || !result.success) {
-        toast.error(result.message || "Login failed. Please try again.");
+      if (!response.ok || result.success !== true) {
+        toast.error(
+          typeof result.message === "string"
+            ? result.message
+            : "Login failed. Please try again."
+        );
+
         return;
       }
 
@@ -112,13 +157,14 @@ export default function InstituteLoginPage() {
         </p>
       </div>
 
-      {/* Lockout banner — NEW */}
+      {/* Lockout banner */}
       {isLocked && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <div className="flex items-center gap-2 font-semibold">
             <span>🔒</span>
             <span>Account temporarily locked</span>
           </div>
+
           <p className="mt-1 text-xs">
             Too many failed attempts. Try again in{" "}
             <strong>
@@ -129,13 +175,16 @@ export default function InstituteLoginPage() {
         </div>
       )}
 
-      {/* Remaining attempts warning — NEW */}
-      {!isLocked && remaining !== null && remaining > 0 && remaining <= 2 && (
-        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          ⚠️ {remaining} attempt{remaining !== 1 ? "s" : ""} remaining before
-          lockout
-        </div>
-      )}
+      {/* Remaining attempts warning */}
+      {!isLocked &&
+        remaining !== null &&
+        remaining > 0 &&
+        remaining <= 2 && (
+          <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            ⚠️ {remaining} attempt{remaining !== 1 ? "s" : ""} remaining
+            before lockout
+          </div>
+        )}
 
       {/* Login Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -185,7 +234,7 @@ export default function InstituteLoginPage() {
           </Link>
         </div>
 
-        {/* Submit Button — UPDATED */}
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={loading || isLocked}

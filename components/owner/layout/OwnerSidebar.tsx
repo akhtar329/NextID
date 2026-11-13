@@ -33,7 +33,7 @@ const menuGroups = [
     items: [
       {
         label: "Dashboard",
-        href: "/owner",
+        href: "/users/owner/institute/dashboard",
         icon: LayoutDashboard,
       },
     ],
@@ -43,17 +43,17 @@ const menuGroups = [
     items: [
       {
         label: "My Institutes",
-        href: "/owner/institutes",
+        href: "/users/owner/institute",
         icon: Building2,
       },
       {
         label: "Register Institute",
-        href: "/owner/institutes/register",
+        href: "/users/owner/institute/register",
         icon: PlusCircle,
       },
       {
         label: "Institute Registrations",
-        href: "/owner/registrations",
+        href: "/users/owner/institute/registrations",
         icon: FileCheck,
       },
     ],
@@ -63,17 +63,17 @@ const menuGroups = [
     items: [
       {
         label: "Subscription Plans",
-        href: "/owner/subscription",
+        href: "/users/owner/institute/subscription",
         icon: Package,
       },
       {
         label: "Payments",
-        href: "/owner/payments",
+        href: "/users/owner/institute/payments",
         icon: CreditCard,
       },
       {
         label: "Invoices",
-        href: "/owner/invoices",
+        href: "/users/owner/institute/invoices",
         icon: Receipt,
       },
     ],
@@ -83,22 +83,22 @@ const menuGroups = [
     items: [
       {
         label: "My Profile",
-        href: "/owner/profile",
+        href: "/users/owner/institute/profile",
         icon: UserRound,
       },
       {
         label: "Account Settings",
-        href: "/owner/settings",
+        href: "/users/owner/institute/settings",
         icon: Settings,
       },
       {
         label: "Security",
-        href: "/owner/security",
+        href: "/users/owner/institute/security",
         icon: ShieldCheck,
       },
       {
         label: "Support & Complaints",
-        href: "/owner/support",
+        href: "/users/owner/institute/support",
         icon: Headset,
       },
     ],

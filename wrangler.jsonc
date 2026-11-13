@@ -1,0 +1,23 @@
+
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nextid",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "2a6f0a1d597745f7b550465d8d21d0cc"
+    }
+  ]
+}

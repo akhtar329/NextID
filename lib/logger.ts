@@ -1,17 +1,13 @@
-// lib/logger.ts - Updated
-
-import fs from "fs";
-import path from "path";
-import { put, list, del } from "@vercel/blob";
-
-// ============================================================
-// 1. TYPES
-// ============================================================
 
 export interface LogEntry {
   id: string;
   timestamp: string;
-  type: "CACHE_HIT" | "CACHE_MISS" | "DATABASE_QUERY" | "CACHE_SAVE" | "CACHE_EXPIRE";
+  type:
+    | "CACHE_HIT"
+    | "CACHE_MISS"
+    | "DATABASE_QUERY"
+    | "CACHE_SAVE"
+    | "CACHE_EXPIRE";
   operation: string;
   source?: "cache" | "database";
   duration?: number;
@@ -26,215 +22,88 @@ export interface LogEntry {
   data?: Record<string, unknown>;
 }
 
-// ============================================================
-// 2. FORCE BLOB SAVE - ✅ FIX
-// ============================================================
+// Logging configuration
+const isQueryLoggingEnabled =
+  process.env.ENABLE_QUERY_LOGGING === "true";
 
-// ✅ ALWAYS use blob if token exists (regardless of VERCEL env)
-const hasBlobToken = !!process.env.BLOB_READ_WRITE_TOKEN;
-// A token can remain after a store is suspended. Blob logging must be opt-in.
-const useBlob = hasBlobToken && process.env.ENABLE_BLOB_LOGS === "true";
-const isQueryLoggingEnabled = process.env.ENABLE_QUERY_LOGGING === "true";
-
-const LOG_KEY = "logs/performance.json";
-const LOG_FILE = path.join(process.cwd(), "logs", "performance.log");
+// Temporary in-memory storage.
+// Cloudflare Worker restart/isolate change hone par logs clear ho sakte hain.
+const MAX_LOGS = 1000;
+const logs: LogEntry[] = [];
 
 // ============================================================
-// 3. ENSURE DIRECTORY EXISTS (Local only)
-// ============================================================
-
-function ensureLogDir() {
-  if (!useBlob) {
-    const dir = path.dirname(LOG_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-  }
-}
-
-// ============================================================
-// 4. READ LOGS (Vercel Blob + Local)
+// GET LOGS
 // ============================================================
 
 export async function getLogs(): Promise<LogEntry[]> {
   try {
-    // ✅ ALWAYS try blob first if token exists
-    if (useBlob) {
-      console.log('[LOGGER] 📖 Reading logs from blob...');
-      
-      const { blobs } = await list({ 
-        prefix: "logs/",
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      
-      console.log(`[LOGGER] 📁 Found ${blobs.length} blobs in logs/`);
-      blobs.forEach(b => console.log(`[LOGGER]   - ${b.pathname}`));
-      
-      const blob = blobs.find(b => b.pathname === LOG_KEY);
-      if (!blob) {
-        console.log('[LOGGER] ⚠️ No log file found in blob');
-        // ✅ Try local fallback
-        return getLogsLocal();
-      }
-      
-      const response = await fetch(blob.url);
-      if (!response.ok) {
-        console.error(`[LOGGER] ❌ Failed to read logs: ${response.status}`);
-        return getLogsLocal();
-      }
-      
-      const data = await response.json();
-      console.log(`[LOGGER] ✅ Read ${data.length} logs from blob`);
-      return Array.isArray(data) ? data : [];
-    }
-
-    // ✅ Local fallback
-    return getLogsLocal();
+    return [...logs];
   } catch (error) {
     console.error("[LOGGER] Error reading logs:", error);
-    return getLogsLocal();
-  }
-}
-
-// ✅ Local logs reader
-function getLogsLocal(): LogEntry[] {
-  try {
-    console.log('[LOGGER] 📖 Reading logs from local file...');
-    ensureLogDir();
-    if (!fs.existsSync(LOG_FILE)) {
-      console.log('[LOGGER] ⚠️ No local log file found');
-      return [];
-    }
-    const data = fs.readFileSync(LOG_FILE, "utf-8");
-    const lines = data.split("\n").filter((line) => line.trim());
-    console.log(`[LOGGER] ✅ Read ${lines.length} logs from local file`);
-    return lines.map((line) => JSON.parse(line));
-  } catch (error) {
-    console.error("[LOGGER] Local read error:", error);
     return [];
   }
 }
 
 // ============================================================
-// 5. WRITE LOG - ✅ FIXED
+// WRITE LOG
 // ============================================================
 
 export async function writeLog(entry: LogEntry): Promise<void> {
-  // Logging must not add a network request to every public page render or
-  // affect the response when an observability store is unavailable.
   if (!isQueryLoggingEnabled) return;
 
   try {
-    // ✅ Add ID if not present
-    if (!entry.id) {
-      entry.id = `log_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const newEntry: LogEntry = {
+      ...entry,
+      id:
+        entry.id ||
+        `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: entry.timestamp || new Date().toISOString(),
+    };
+
+    logs.unshift(newEntry);
+
+    if (logs.length > MAX_LOGS) {
+      logs.length = MAX_LOGS;
     }
-
-    // ✅ Add timestamp if not present
-    if (!entry.timestamp) {
-      entry.timestamp = new Date().toISOString();
-    }
-
-    console.log(`[LOGGER] 📝 Writing log: ${entry.type} - ${entry.operation}`);
-    console.log(`[LOGGER] useBlob: ${useBlob}`);
-    console.log(`[LOGGER] hasBlobToken: ${hasBlobToken}`);
-
-    // ✅ ALWAYS save to blob if token exists
-    if (useBlob) {
-      try {
-        console.log('[LOGGER] 💾 Saving to Vercel Blob...');
-        
-        const existing = await getLogs();
-        const updated = [entry, ...existing];
-        const limited = updated.slice(0, 1000);
-        
-        console.log(`[LOGGER] 📦 Saving ${limited.length} logs to blob...`);
-        
-        const result = await put(LOG_KEY, JSON.stringify(limited, null, 2), {
-          access: "public",
-          contentType: "application/json",
-          allowOverwrite: true,
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-        });
-        
-        console.log(`[LOGGER] ✅ Log saved to blob: ${result.url}`);
-        console.log(`[LOGGER] ✅ Blob path: ${result.pathname}`);
-        return;
-      } catch (blobError) {
-        console.error('[LOGGER] ❌ Blob save failed:', blobError);
-        // ✅ Fallback to local
-        console.log('[LOGGER] 📝 Falling back to local...');
-      }
-    }
-
-    // ✅ Local fallback
-    console.log('[LOGGER] 💾 Saving to local file...');
-    ensureLogDir();
-    const logLine = JSON.stringify(entry) + "\n";
-    fs.appendFileSync(LOG_FILE, logLine, "utf-8");
-    console.log(`[LOGGER] ✅ Log saved locally: ${entry.id}`);
-    
   } catch (error) {
-    console.error("[LOGGER] ❌ Error writing log:", error);
+    console.error("[LOGGER] Error writing log:", error);
   }
 }
 
 // ============================================================
-// 6. DELETE SINGLE LOG
+// DELETE SINGLE LOG
 // ============================================================
 
 export async function deleteLog(id: string): Promise<boolean> {
   try {
-    const logs = await getLogs();
-    const filtered = logs.filter((log) => log.id !== id);
+    const index = logs.findIndex((log) => log.id === id);
 
-    if (filtered.length === logs.length) {
+    if (index === -1) {
       return false;
     }
 
-    if (useBlob) {
-      await put(LOG_KEY, JSON.stringify(filtered, null, 2), {
-        access: "public",
-        contentType: "application/json",
-        allowOverwrite: true,
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      return true;
-    }
-
-    const content = filtered.map((log) => JSON.stringify(log)).join("\n");
-    fs.writeFileSync(LOG_FILE, content, "utf-8");
+    logs.splice(index, 1);
     return true;
   } catch (error) {
-    console.error("Error deleting log:", error);
+    console.error("[LOGGER] Error deleting log:", error);
     return false;
   }
 }
 
 // ============================================================
-// 7. CLEAR ALL LOGS
+// CLEAR ALL LOGS
 // ============================================================
 
 export async function clearLogs(): Promise<void> {
   try {
-    if (useBlob) {
-      await del(LOG_KEY, {
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      console.log('[LOGGER] ✅ All logs cleared from blob');
-      return;
-    }
-
-    ensureLogDir();
-    fs.writeFileSync(LOG_FILE, "", "utf-8");
-    console.log('[LOGGER] ✅ All logs cleared locally');
+    logs.length = 0;
   } catch (error) {
     console.error("[LOGGER] Error clearing logs:", error);
   }
 }
 
 // ============================================================
-// 8. GET LOGS WITH LIMIT & FILTER
+// GET LOGS WITH LIMIT & FILTER
 // ============================================================
 
 export async function getLogsWithFilter(
@@ -242,50 +111,67 @@ export async function getLogsWithFilter(
   type?: string,
   search?: string
 ): Promise<LogEntry[]> {
-  const logs = await getLogs();
+  const allLogs = await getLogs();
 
-  let filtered = logs;
+  let filtered = allLogs;
+
   if (type && type !== "ALL") {
     filtered = filtered.filter((log) => log.type === type);
   }
 
   if (search) {
     const query = search.toLowerCase();
+
     filtered = filtered.filter(
       (log) =>
         log.operation.toLowerCase().includes(query) ||
         log.type.toLowerCase().includes(query) ||
-        (log.bot?.name && log.bot.name.toLowerCase().includes(query))
+        (log.bot?.name &&
+          log.bot.name.toLowerCase().includes(query))
     );
   }
 
-  return filtered.slice(-limit).reverse();
+  return filtered.slice(0, Math.max(0, limit));
 }
 
 // ============================================================
-// 9. GET STATS / ANALYSIS
+// GET STATS / ANALYSIS
 // ============================================================
 
 export async function getLogStats() {
-  const logs = await getLogs();
+  const allLogs = await getLogs();
 
-  const total = logs.length;
-  const cacheHits = logs.filter((l) => l.type === "CACHE_HIT").length;
-  const cacheMisses = logs.filter((l) => l.type === "CACHE_MISS").length;
-  const dbQueries = logs.filter((l) => l.type === "DATABASE_QUERY").length;
-  const cacheExpires = logs.filter((l) => l.type === "CACHE_EXPIRE").length;
+  const total = allLogs.length;
+  const cacheHits = allLogs.filter(
+    (log) => log.type === "CACHE_HIT"
+  ).length;
+  const cacheMisses = allLogs.filter(
+    (log) => log.type === "CACHE_MISS"
+  ).length;
+  const dbQueries = allLogs.filter(
+    (log) => log.type === "DATABASE_QUERY"
+  ).length;
+  const cacheExpires = allLogs.filter(
+    (log) => log.type === "CACHE_EXPIRE"
+  ).length;
 
-  const hitRatio = total > 0 ? Math.round((cacheHits / total) * 100) : 0;
+  const hitRatio =
+    total > 0 ? Math.round((cacheHits / total) * 100) : 0;
 
-  const durations = logs.map((l) => l.duration || 0);
+  const durations = allLogs.map((log) => log.duration || 0);
+
   const avgDuration =
     durations.length > 0
-      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      ? Math.round(
+          durations.reduce((a, b) => a + b, 0) / durations.length
+        )
       : 0;
 
   const operationCount: Record<string, number> = {};
-  logs.forEach((log) => {
-    operationCount[log.operation] = (operationCount[log.operation] || 0) + 1;
+
+  allLogs.forEach((log) => {
+    operationCount[log.operation] =
+      (operationCount[log.operation] || 0) + 1;
   });
 
   const topOperations = Object.entries(operationCount)
@@ -293,13 +179,18 @@ export async function getLogStats() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
-  const botRequests = logs.filter((l) => l.bot?.isBot).length;
+  const botRequests = allLogs.filter(
+    (log) => log.bot?.isBot
+  ).length;
+
   const humanRequests = total - botRequests;
 
   const botCount: Record<string, number> = {};
-  logs.forEach((log) => {
+
+  allLogs.forEach((log) => {
     if (log.bot?.isBot && log.bot.name) {
-      botCount[log.bot.name] = (botCount[log.bot.name] || 0) + 1;
+      botCount[log.bot.name] =
+        (botCount[log.bot.name] || 0) + 1;
     }
   });
 

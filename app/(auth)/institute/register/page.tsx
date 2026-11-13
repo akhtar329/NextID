@@ -7,6 +7,21 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FloatingInput } from "../InstituteAuthLayout";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+async function readJsonObject(
+  response: Response
+): Promise<Record<string, unknown>> {
+  const result: unknown = await response.json();
+  return isRecord(result) ? result : {};
+}
+
 export default function InstituteRegisterPage() {
   const router = useRouter();
 
@@ -15,6 +30,8 @@ export default function InstituteRegisterPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (loading) return;
 
     const form = e.currentTarget;
     const data = new FormData(form);
@@ -63,6 +80,7 @@ export default function InstituteRegisterPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "same-origin",
         body: JSON.stringify({
           name,
           email,
@@ -71,11 +89,13 @@ export default function InstituteRegisterPage() {
         }),
       });
 
-      const result = await response.json();
+      const result = await readJsonObject(response);
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || result.success !== true) {
         toast.error(
-          result.message || "Registration failed. Please try again."
+          typeof result.message === "string"
+            ? result.message
+            : "Registration failed. Please try again."
         );
         return;
       }
@@ -86,7 +106,6 @@ export default function InstituteRegisterPage() {
 
       // Redirect to login page
       router.push("/institute/login");
-
     } catch (error) {
       console.error("Registration error:", error);
       toast.error("Unable to connect to the server. Please try again.");
@@ -145,7 +164,8 @@ export default function InstituteRegisterPage() {
 
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
+              onClick={() => setShowPassword((previous) => !previous)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-indigo-600"
             >
               {showPassword ? "Hide" : "Show"}
@@ -197,7 +217,9 @@ export default function InstituteRegisterPage() {
 
       <div className="my-6 flex items-center gap-3">
         <div className="h-px flex-1 bg-slate-200" />
+
         <span className="text-xs text-slate-400">ALREADY REGISTERED?</span>
+
         <div className="h-px flex-1 bg-slate-200" />
       </div>
 

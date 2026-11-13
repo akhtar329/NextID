@@ -1,21 +1,11 @@
-// =====================================================
-// IMPORTS
-// =====================================================
 
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 
 import { Toaster } from "sonner";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "./globals.css";
-
-
-// =====================================================
-// FONT CONFIGURATION
-// =====================================================
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,11 +13,6 @@ const inter = Inter({
   preload: true,
   fallback: ["Arial", "Helvetica", "sans-serif"],
 });
-
-
-// =====================================================
-// ENVIRONMENT VARIABLES (No Throw Errors)
-// =====================================================
 
 const SITE_NAME = "NextID";
 const SITE_URL = "https://www.nextid.pk";
@@ -48,14 +33,7 @@ const SITE_KEYWORDS = [
   "NextID",
 ];
 
-// Environment variables with fallback (no crashes)
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "";
-const ADSENSE_CLIENT = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? "";
-
-
-// =====================================================
-// VIEWPORT
-// =====================================================
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -63,11 +41,6 @@ export const viewport: Viewport = {
   themeColor: "#0F172A",
   colorScheme: "light",
 };
-
-
-// =====================================================
-// GLOBAL METADATA
-// =====================================================
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -139,23 +112,15 @@ export const metadata: Metadata = {
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
     ],
     shortcut: ["/favicon.ico"],
-    apple: [
-      { url: "/apple-touch-icon.png" },
-    ],
+    apple: [{ url: "/apple-touch-icon.png" }],
   },
 };
-
-
-// =====================================================
-// ROOT LAYOUT
-// =====================================================
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // JSON-LD Data (without empty social profiles)
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "NewsMediaOrganization",
@@ -175,45 +140,20 @@ export default function RootLayout({
     name: SITE_NAME,
     url: SITE_URL,
     description: SITE_DESCRIPTION,
-
   };
 
   return (
     <html lang="en" className={inter.className}>
       <head>
-        {/* =====================================================
-            DNS PREFETCH - Third Party Domains
-        ===================================================== */}
-        <link rel="dns-prefetch" href="//pagead2.googlesyndication.com" />
+        
         <link rel="dns-prefetch" href="//www.googletagmanager.com" />
 
-        {/* =====================================================
-            GOOGLE SITE VERIFICATION
-        ===================================================== */}
-        {/* Add actual verification codes before deployment */}
-        {/* <meta name="google-site-verification" content="YOUR_ACTUAL_CODE" /> */}
-        {/* <meta name="msvalidate.01" content="YOUR_ACTUAL_BING_CODE" /> */}
-
-        {/* =====================================================
-            GOOGLE ADSENSE ACCOUNT - In HEAD (✅ Correct)
-        ===================================================== */}
-        {ADSENSE_CLIENT && (
-          <meta
-            name="google-adsense-account"
-            content={ADSENSE_CLIENT}
-          />
-        )}
+  
       </head>
 
       <body>
-        {/* =====================================================
-            PAGE CONTENT
-        ===================================================== */}
         {children}
 
-        {/* =====================================================
-            TOASTER
-        ===================================================== */}
         <Toaster
           position="top-right"
           richColors
@@ -222,9 +162,6 @@ export default function RootLayout({
           duration={4000}
         />
 
-        {/* =====================================================
-            ORGANIZATION JSON-LD
-        ===================================================== */}
         <Script
           id="organization-schema"
           type="application/ld+json"
@@ -233,9 +170,6 @@ export default function RootLayout({
           }}
         />
 
-        {/* =====================================================
-            WEBSITE JSON-LD
-        ===================================================== */}
         <Script
           id="website-schema"
           type="application/ld+json"
@@ -244,22 +178,6 @@ export default function RootLayout({
           }}
         />
 
-        {/* =====================================================
-            GOOGLE ADSENSE SCRIPT - Conditional
-        ===================================================== */}
-        {ADSENSE_CLIENT && (
-          <Script
-            id="adsense"
-            async
-            strategy="afterInteractive"
-            crossOrigin="anonymous"
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
-          />
-        )}
-
-        {/* =====================================================
-            GOOGLE ANALYTICS 4 - Conditional
-        ===================================================== */}
         {GA_ID && (
           <>
             <Script
@@ -283,12 +201,6 @@ export default function RootLayout({
             />
           </>
         )}
-
-        {/* =====================================================
-            VERCEL ANALYTICS & SPEED INSIGHTS (Last)
-        ===================================================== */}
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

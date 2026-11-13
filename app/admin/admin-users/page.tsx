@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -17,104 +18,215 @@ type AdminUser = {
   status: boolean;
 };
 
+type AdminRole = {
+  id: number;
+  name: string;
+};
+
+interface ApiResponse {
+  success: boolean;
+  error?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+async function readJsonObject(
+  response: Response
+): Promise<Record<string, unknown>> {
+  const data: unknown = await response.json();
+  return isRecord(data) ? data : {};
+}
+
+function parseRoles(value: unknown): AdminRole[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is AdminRole => {
+    return (
+      isRecord(item) &&
+      typeof item.id === "number" &&
+      typeof item.name === "string"
+    );
+  });
+}
+
+function parseUser(value: unknown): AdminUser | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "number" ||
+    typeof value.name !== "string" ||
+    typeof value.email !== "string" ||
+    typeof value.roleId !== "number" ||
+    typeof value.status !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    name: value.name,
+    email: value.email,
+    roleId: value.roleId,
+    roleName:
+      typeof value.roleName === "string" ? value.roleName : "",
+    status: value.status,
+  };
+}
+
+function parseApiResponse(
+  data: Record<string, unknown>
+): ApiResponse {
+  return {
+    success: data.success === true,
+    error: typeof data.error === "string" ? data.error : undefined,
+  };
+}
+
 export default function AdminUsersPage() {
   const router = useRouter();
+
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<AdminRole[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<number | null>(null);
+  const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
 
-  const [roles, setRoles] = useState<{ id: number; name: string }[]>([]);
+  // Fetch users and roles
+  useEffect(() => {
+    let cancelled = false;
 
-  // Fetch users
-const fetchUsers = async () => {
-  setLoading(true);
-  try {
-    const res = await fetch("/api/admin/admin-users");
-    if (!res.ok) throw new Error("Failed to fetch users");
-    const data = await res.json();
+    async function fetchData() {
+      setLoading(true);
 
-    if (data.users && roles.length > 0) {
-      // Map roleName from roles array
-      const usersWithRoleNames = data.users.map((u: any) => {
-        const role = roles.find(r => r.id === u.roleId);
-        return { ...u, roleName: role?.name || "" };
-      });
-      setUsers(usersWithRoleNames);
-    } else {
-      setUsers(data.users || []);
-    }
+      try {
+        // Fetch roles first
+        const rolesRes = await fetch("/api/admin/admin-roles");
 
-  } catch (err) {
-    console.error(err);
-    toast.error(err instanceof Error ? err.message : "Failed to fetch users");
-  } finally {
-    setLoading(false);
-  }
-};
+        if (!rolesRes.ok) {
+          throw new Error("Failed to fetch admin roles");
+        }
 
+        const rolesData = await readJsonObject(rolesRes);
 
-  // Fetch roles for filters and inline changes
-  const fetchRoles = async () => {
-    try {
-      const res = await fetch("/api/admin/admin-roles");
-      const data = await res.json();
-      if (data.success) setRoles(data.roles || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+        if (rolesData.success !== true) {
+          throw new Error(
+            typeof rolesData.error === "string"
+              ? rolesData.error
+              : "Invalid roles response"
+          );
+        }
 
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      // 1️⃣ Fetch roles first
-      const rolesRes = await fetch("/api/admin/admin-roles");
-      const rolesData = await rolesRes.json();
-      if (rolesData.success) setRoles(rolesData.roles);
+        const parsedRoles = parseRoles(rolesData.roles);
 
-      // 2️⃣ Fetch users next
-      const usersRes = await fetch("/api/admin/admin-users");
-      const usersData = await usersRes.json();
+        if (cancelled) return;
 
-      if (usersData.users && rolesData.roles) {
-        const usersWithRoleNames = usersData.users.map((u: any) => {
-          const role = rolesData.roles.find((r: any) => r.id === u.roleId);
-          return { ...u, roleName: role?.name || "" };
-        });
-        setUsers(usersWithRoleNames);
-      } else {
-        setUsers(usersData.users || []);
+        setRoles(parsedRoles);
+
+        // Fetch users
+        const usersRes = await fetch("/api/admin/admin-users");
+
+        if (!usersRes.ok) {
+          throw new Error("Failed to fetch users");
+        }
+
+        const usersData = await readJsonObject(usersRes);
+
+        if (!Array.isArray(usersData.users)) {
+          throw new Error(
+            typeof usersData.error === "string"
+              ? usersData.error
+              : "Invalid users response"
+          );
+        }
+
+        const parsedUsers = usersData.users
+          .map(parseUser)
+          .filter((user): user is AdminUser => user !== null)
+          .map((user) => {
+            const role = parsedRoles.find(
+              (item) => item.id === user.roleId
+            );
+
+            return {
+              ...user,
+              roleName: role?.name || user.roleName || "",
+            };
+          });
+
+        if (!cancelled) {
+          setUsers(parsedUsers);
+        }
+      } catch (err) {
+        console.error("Fetch admin users error:", err);
+
+        if (!cancelled) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Failed to fetch users or roles"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch users or roles");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  fetchData();
-}, []);
+    void fetchData();
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Delete user
   const deleteUser = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
+    if (deleteLoading !== null) return;
+
+    if (!confirm("Are you sure you want to delete this user?")) {
+      return;
+    }
 
     setDeleteLoading(id);
-    toast.loading("Deleting user...", { id: `delete-${id}` });
+
+    toast.loading("Deleting user...", {
+      id: `delete-${id}`,
+    });
 
     try {
-      const res = await fetch(`/api/admin/admin-users/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete user");
-      setUsers(prev => prev.filter(u => u.id !== id));
-      toast.success("User deleted successfully", { id: `delete-${id}` });
+      const res = await fetch(`/api/admin/admin-users/${id}`, {
+        method: "DELETE",
+      });
+
+      const rawData = await readJsonObject(res);
+      const data = parseApiResponse(rawData);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete user");
+      }
+
+      setUsers((prev) => prev.filter((user) => user.id !== id));
+
+      toast.success("User deleted successfully", {
+        id: `delete-${id}`,
+      });
     } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to delete user", { id: `delete-${id}` });
+      console.error("Delete user error:", err);
+
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete user",
+        { id: `delete-${id}` }
+      );
     } finally {
       setDeleteLoading(null);
     }
@@ -122,56 +234,161 @@ useEffect(() => {
 
   // Toggle user status
   const toggleStatus = async (user: AdminUser) => {
+    if (updatingUserId !== null) return;
+
+    const newStatus = !user.status;
+
+    setUpdatingUserId(user.id);
+
+    // Optimistic update
+    setUsers((prev) =>
+      prev.map((item) =>
+        item.id === user.id
+          ? { ...item, status: newStatus }
+          : item
+      )
+    );
+
     try {
       const res = await fetch(`/api/admin/admin-users/${user.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: !user.status }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to update status");
-      setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, status: !u.status } : u)));
+
+      const rawData = await readJsonObject(res);
+      const data = parseApiResponse(rawData);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to update status");
+      }
+
       toast.success(`Status updated for ${user.name}`);
     } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to update status");
+      console.error("Update user status error:", err);
+
+      // Restore previous status if request fails
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === user.id
+            ? { ...item, status: user.status }
+            : item
+        )
+      );
+
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update status"
+      );
+    } finally {
+      setUpdatingUserId(null);
     }
   };
 
   // Change role inline
-  const changeRole = async (user: AdminUser, newRoleId: number) => {
+  const changeRole = async (
+    user: AdminUser,
+    newRoleId: number
+  ) => {
+    if (
+      updatingUserId !== null ||
+      newRoleId === user.roleId ||
+      !roles.some((role) => role.id === newRoleId)
+    ) {
+      return;
+    }
+
+    const previousRoleId = user.roleId;
+    const previousRoleName = user.roleName;
+
+    const newRole = roles.find((role) => role.id === newRoleId);
+
+    if (!newRole) return;
+
+    setUpdatingUserId(user.id);
+
+    // Optimistic update
+    setUsers((prev) =>
+      prev.map((item) =>
+        item.id === user.id
+          ? {
+              ...item,
+              roleId: newRoleId,
+              roleName: newRole.name,
+            }
+          : item
+      )
+    );
+
     try {
       const res = await fetch(`/api/admin/admin-users/${user.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ roleId: newRoleId }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to update role");
-      const newRole = roles.find(r => r.id === newRoleId);
-      setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, roleId: newRoleId, roleName: newRole?.name || "" } : u)));
+
+      const rawData = await readJsonObject(res);
+      const data = parseApiResponse(rawData);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to update role");
+      }
+
       toast.success(`Role updated for ${user.name}`);
     } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to update role");
+      console.error("Change user role error:", err);
+
+      // Restore previous role if request fails
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                roleId: previousRoleId,
+                roleName: previousRoleName,
+              }
+            : item
+        )
+      );
+
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update role"
+      );
+    } finally {
+      setUpdatingUserId(null);
     }
   };
 
   // Table columns
   const columns = [
-    { header: "Name", accessor: "name" as keyof AdminUser },
-    { header: "Email", accessor: "email" as keyof AdminUser },
+    {
+      header: "Name",
+      accessor: "name" as keyof AdminUser,
+    },
+    {
+      header: "Email",
+      accessor: "email" as keyof AdminUser,
+    },
     {
       header: "Role",
       accessor: "roleId" as keyof AdminUser,
-      render: (_: any, user: AdminUser) => (
+      render: (_value: unknown, user: AdminUser) => (
         <select
           value={user.roleId}
-          onChange={e => changeRole(user, Number(e.target.value))}
-          className="border rounded px-1 text-sm"
+          onChange={(e) =>
+            void changeRole(user, Number(e.target.value))
+          }
+          disabled={updatingUserId !== null}
+          className="max-w-[180px] rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+          aria-label={`Change role for ${user.name}`}
         >
-          {roles.map(r => (
-            <option key={r.id} value={r.id}>{r.name}</option>
+          {roles.map((role) => (
+            <option key={role.id} value={role.id}>
+              {role.name}
+            </option>
           ))}
         </select>
       ),
@@ -179,29 +396,48 @@ useEffect(() => {
     {
       header: "Status",
       accessor: "status" as keyof AdminUser,
-      render: (_: any, user: AdminUser) => (
-        <input
-          type="checkbox"
-          checked={user.status}
-          onChange={() => toggleStatus(user)}
-        />
+      render: (_value: unknown, user: AdminUser) => (
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={user.status}
+            onChange={() => void toggleStatus(user)}
+            disabled={updatingUserId !== null}
+            className="h-4 w-4 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+            aria-label={`Toggle status for ${user.name}`}
+          />
+
+          <span
+            className={`text-xs font-medium ${
+              user.status ? "text-green-700" : "text-gray-500"
+            }`}
+          >
+            {user.status ? "Active" : "Inactive"}
+          </span>
+        </label>
       ),
     },
     {
       header: "Actions",
       accessor: "id" as keyof AdminUser,
-      render: (_: any, user: AdminUser) => (
-        <div className="flex gap-2">
+      render: (_value: unknown, user: AdminUser) => (
+        <div className="flex items-center gap-3">
           <Link
             href={`/admin/admin-users/${user.id}/edit`}
-            className="text-blue-600 hover:text-blue-800 text-sm"
+            className="rounded-md bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
           >
             Edit
           </Link>
+
           <button
-            onClick={() => deleteUser(user.id)}
-            disabled={deleteLoading === user.id}
-            className={`text-sm ${deleteLoading === user.id ? "text-gray-400 cursor-not-allowed" : "text-red-600 hover:text-red-800"}`}
+            type="button"
+            onClick={() => void deleteUser(user.id)}
+            disabled={deleteLoading !== null}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              deleteLoading === user.id
+                ? "cursor-not-allowed bg-gray-100 text-gray-400"
+                : "bg-red-50 text-red-700 hover:bg-red-100"
+            }`}
           >
             {deleteLoading === user.id ? "Deleting..." : "Delete"}
           </button>
@@ -210,55 +446,175 @@ useEffect(() => {
     },
   ];
 
-  const filteredUsers = users.filter(u =>
-    (u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())) &&
-    (roleFilter ? u.roleId === Number(roleFilter) : true)
-  );
+  // Search and role filtering
+  const filteredUsers = users.filter((user) => {
+    const searchTerm = search.trim().toLowerCase();
+
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchTerm) ||
+      user.email.toLowerCase().includes(searchTerm);
+
+    const matchesRole = roleFilter
+      ? user.roleId === Number(roleFilter)
+      : true;
+
+    return matchesSearch && matchesRole;
+  });
+
+  const activeUsers = users.filter((user) => user.status).length;
+  const inactiveUsers = users.length - activeUsers;
 
   return (
-    <div className="p-6">
+    <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Admin Users</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage admin users</p>
+          <div className="mb-2 text-sm text-gray-500">
+            Admin Dashboard / Admin Users
+          </div>
+
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            Admin Users
+          </h1>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Manage administrator accounts, roles and access status.
+          </p>
         </div>
-        <PrimaryButton onClick={() => router.push("/admin/admin-users/create")}>
+
+        <PrimaryButton
+          onClick={() => router.push("/admin/admin-users/create")}
+        >
           + Add User
         </PrimaryButton>
       </div>
 
+      {/* Summary */}
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            Total Users
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-gray-900">
+            {users.length}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            Active Users
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-green-600">
+            {activeUsers}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            Inactive Users
+          </p>
+
+          <p className="mt-2 text-2xl font-bold text-gray-500">
+            {inactiveUsers}
+          </p>
+        </div>
+      </div>
+
       {/* Filters */}
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email..." />
-        <select
-          value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Roles</option>
-          {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
+      <div className="mb-5 grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Search Users
+          </label>
+
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by name or email..."
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="role-filter"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500"
+          >
+            Filter by Role
+          </label>
+
+          <select
+            id="role-filter"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="">All Roles</option>
+
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
       {loading && users.length === 0 ? (
-        <div className="flex justify-center items-center h-64 text-gray-500">Loading users...</div>
+        <div className="flex h-64 items-center justify-center rounded-xl border border-gray-200 bg-white text-sm text-gray-500">
+          <span className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+          Loading users...
+        </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <div className="text-4xl mb-2">👤</div>
-          <div className="text-gray-500">
-            {search || roleFilter ? "No users match your filters" : "No admin users found. Add your first user!"}
-          </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+          <div className="mb-3 text-3xl">Users</div>
+
+          <h2 className="font-semibold text-gray-800">
+            {search || roleFilter
+              ? "No users match your filters"
+              : "No admin users found"}
+          </h2>
+
+          <p className="mt-2 text-sm text-gray-500">
+            {search || roleFilter
+              ? "Try changing your search or role filter."
+              : "Add your first administrator to get started."}
+          </p>
+
           {!search && !roleFilter && (
-            <button onClick={() => router.push("/admin/admin-users/create")} className="mt-4 text-blue-600 hover:text-blue-800 text-sm">
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/admin/admin-users/create")
+              }
+              className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
               + Add User
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow">
-          <Table columns={columns} data={filteredUsers} />
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">
+                All Admin Users
+              </h2>
+
+              <p className="mt-1 text-xs text-gray-500">
+                Showing {filteredUsers.length} of {users.length} users
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              data={filteredUsers}
+            />
+          </div>
         </div>
       )}
     </div>
