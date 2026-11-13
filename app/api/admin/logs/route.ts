@@ -1,36 +1,107 @@
+
 // app/api/logs/route.ts
-import { NextRequest, NextResponse } from "next/server";
+
+import { NextResponse } from "next/server";
 import {
   getLogsWithFilter,
   getLogStats,
   deleteLog,
   clearLogs,
+  writeLog,
   type LogEntry,
 } from "@/lib/logger";
 
-// ============================================================
-// GET: Fetch logs with optional filters
-// ============================================================
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = request.nextUrl;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
 
-    // ✅ Check if analysis is requested
+function getOptionalString(
+  value: unknown,
+  fieldName: string
+): string | null {
+  if (value === undefined) {
+    return "";
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  if (value.length > 2048) {
+    return null;
+  }
+
+  return value;
+}
+
+function getOptionalNumber(
+  value: unknown,
+  defaultValue = 0
+): number | null {
+  if (value === undefined || value === null) {
+    return defaultValue;
+  }
+
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+// GET: Fetch logs with optional filters
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+
+    // Fetch log statistics.
     if (searchParams.get("analysis") === "true") {
-      const stats = await getLogStats(); // ✅ await
+      const stats = await getLogStats();
+
       return NextResponse.json({
         success: true,
         data: stats,
       });
     }
 
-    // ✅ Get filter parameters
-    const limit = parseInt(searchParams.get("limit") || "100");
+    // Validate and limit the requested number of logs.
+    const rawLimit = searchParams.get("limit") ?? "100";
+
+    if (!/^\d+$/.test(rawLimit)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid limit parameter",
+        },
+        { status: 400 }
+      );
+    }
+
+    const requestedLimit = Number(rawLimit);
+
+    if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Limit must be a positive integer",
+        },
+        { status: 400 }
+      );
+    }
+
+    const limit = Math.min(requestedLimit, 1000);
     const type = searchParams.get("type") || undefined;
     const search = searchParams.get("search") || undefined;
 
-    // ✅ Fetch logs with filters
-    const logs = await getLogsWithFilter(limit, type, search); // ✅ await
+    const logs = await getLogsWithFilter(limit, type, search);
 
     return NextResponse.json({
       success: true,
@@ -38,7 +109,8 @@ export async function GET(request: NextRequest) {
       count: logs.length,
     });
   } catch (error) {
-    console.error("Error fetching logs:", error);
+    console.error("GET logs error:", error);
+
     return NextResponse.json(
       {
         success: false,
@@ -49,71 +121,104 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ============================================================
-// DELETE: Delete single or all logs
-// ============================================================
-export async function DELETE(request: NextRequest) {
+// DELETE: Delete one log or all logs
+export async function DELETE(request: Request) {
   try {
-    const { searchParams } = request.nextUrl;
+    const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
-    // ✅ Delete all logs
+    if (!id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Please provide an id or 'all' to delete",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Delete all logs.
     if (id === "all") {
-      await clearLogs(); // ✅ await
+      await clearLogs();
+
       return NextResponse.json({
         success: true,
         message: "All logs cleared successfully",
       });
     }
 
-    // ✅ Delete single log
-    if (id) {
-      const deleted = await deleteLog(id); // ✅ await
-      if (deleted) {
-        return NextResponse.json({
-          success: true,
-          message: `Log ${id} deleted successfully`,
-        });
-      } else {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Log with id ${id} not found`,
-          },
-          { status: 404 }
-        );
-      }
+    // Validate individual log ID.
+    if (id.length > 256) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid log ID",
+        },
+        { status: 400 }
+      );
     }
 
-    // ✅ No id provided
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Please provide an id or 'all' to delete",
-      },
-      { status: 400 }
-    );
+    const deleted = await deleteLog(id);
+
+    if (!deleted) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Log with id ${id} not found`,
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Log ${id} deleted successfully`,
+    });
   } catch (error) {
-    console.error("Error deleting log:", error);
+    console.error("DELETE logs error:", error);
+
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to delete log",
+        error: "Failed to delete logs",
       },
       { status: 500 }
     );
   }
 }
 
-// ============================================================
-// POST: Add a new log (for testing)
-// ============================================================
-export async function POST(request: NextRequest) {
+// POST: Add a new log
+export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body: unknown;
 
-    // ✅ Validate required fields
-    if (!body.operation) {
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request body",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isRecord(body)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid request data",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate required operation.
+    if (
+      typeof body.operation !== "string" ||
+      !body.operation.trim()
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -123,32 +228,102 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ Create log entry
-    const logEntry: LogEntry = {
-      id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      timestamp: new Date().toISOString(),
-      type: body.type || "CACHE_HIT",
-      operation: body.operation,
-      source: body.source || "cache",
-      duration: body.duration || 0,
-      bot: body.bot || { isBot: false, name: "Human" },
-      userAgent: body.userAgent || "",
-      path: body.path || "",
-      ip: body.ip || "",
-      dataSize: body.dataSize || 0,
+    const type = getOptionalString(body.type, "type");
+    const source = getOptionalString(body.source, "source");
+    const userAgent = getOptionalString(body.userAgent, "userAgent");
+    const path = getOptionalString(body.path, "path");
+    const ip = getOptionalString(body.ip, "ip");
+
+    if (
+      type === null ||
+      source === null ||
+      userAgent === null ||
+      path === null ||
+      ip === null
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Log string fields must contain valid strings",
+        },
+        { status: 400 }
+      );
+    }
+
+    const duration = getOptionalNumber(body.duration);
+    const dataSize = getOptionalNumber(body.dataSize);
+
+    if (duration === null || dataSize === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Duration and dataSize must be valid non-negative numbers",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate bot information.
+    let bot: LogEntry["bot"] = {
+      isBot: false,
+      name: "Human",
     };
 
-    // ✅ Save to file
-    const { writeLog } = await import("@/lib/logger");
-    await writeLog(logEntry); // ✅ await
+    if (body.bot !== undefined) {
+      if (
+        !isRecord(body.bot) ||
+        typeof body.bot.isBot !== "boolean" ||
+        (body.bot.name !== undefined &&
+          typeof body.bot.name !== "string")
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Invalid bot information",
+          },
+          { status: 400 }
+        );
+      }
 
-    return NextResponse.json({
-      success: true,
-      message: "Log added successfully",
-      data: logEntry,
-    });
+      bot = {
+        isBot: body.bot.isBot,
+        name:
+          typeof body.bot.name === "string"
+            ? body.bot.name.slice(0, 256)
+            : body.bot.isBot
+              ? "Bot"
+              : "Human",
+      };
+    }
+
+    // Create log entry.
+    const logEntry: LogEntry = {
+      id: `log_${Date.now()}_${crypto.randomUUID()}`,
+      timestamp: new Date().toISOString(),
+      type: type || "CACHE_HIT",
+      operation: body.operation.trim(),
+      source: source || "cache",
+      duration,
+      bot,
+      userAgent: userAgent || "",
+      path: path || "",
+      ip: ip || "",
+      dataSize,
+    };
+
+    await writeLog(logEntry);
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Log added successfully",
+        data: logEntry,
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("Error adding log:", error);
+    console.error("POST logs error:", error);
+
     return NextResponse.json(
       {
         success: false,

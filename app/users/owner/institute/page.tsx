@@ -1,4 +1,3 @@
-// app/users/owner/institutes/page.tsx
 
 "use client";
 
@@ -15,7 +14,6 @@ import {
   MapPin,
   Mail,
   Phone,
-  Users,
   MoreVertical,
   Edit,
   Trash2,
@@ -25,12 +23,14 @@ import {
 
 // ==================== TYPES ====================
 
+type InstituteStatus = "pending" | "active" | "inactive" | "suspended";
+
 interface Institute {
   id: number;
   name: string;
   slug: string | null;
   logo: string | null;
-  status: "pending" | "active" | "inactive" | "suspended";
+  status: InstituteStatus;
   email: string | null;
   phone: string | null;
   address: string | null;
@@ -44,11 +44,115 @@ interface Institute {
   };
 }
 
+interface InstitutesApiResponse {
+  success: boolean;
+  message?: string;
+  institutes?: Institute[];
+}
+
+// ==================== VALIDATION HELPERS ====================
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function getNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function getNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0
+    ? value
+    : undefined;
+}
+
+function isInstituteStatus(value: unknown): value is InstituteStatus {
+  return (
+    value === "pending" ||
+    value === "active" ||
+    value === "inactive" ||
+    value === "suspended"
+  );
+}
+
+function parseInstitute(value: unknown): Institute | null {
+  if (!isRecord(value)) return null;
+
+  if (
+    typeof value.id !== "number" ||
+    !Number.isSafeInteger(value.id) ||
+    value.id <= 0 ||
+    typeof value.name !== "string" ||
+    !isInstituteStatus(value.status)
+  ) {
+    return null;
+  }
+
+  const rawStats = isRecord(value.stats) ? value.stats : undefined;
+
+  return {
+    id: value.id,
+    name: value.name,
+    slug: getNullableString(value.slug),
+    logo: getNullableString(value.logo),
+    status: value.status,
+    email: getNullableString(value.email),
+    phone: getNullableString(value.phone),
+    address: getNullableString(value.address),
+    city: getNullableString(value.city),
+    subdomain: getNullableString(value.subdomain),
+    createdAt: getString(value.createdAt),
+    stats: rawStats
+      ? {
+          totalStudents: getNonNegativeNumber(rawStats.totalStudents),
+          totalTeachers: getNonNegativeNumber(rawStats.totalTeachers),
+          totalClasses: getNonNegativeNumber(rawStats.totalClasses),
+        }
+      : undefined,
+  };
+}
+
+function parseApiResponse(value: unknown): InstitutesApiResponse {
+  if (!isRecord(value) || typeof value.success !== "boolean") {
+    throw new Error("Invalid response received from server");
+  }
+
+  if (value.success === false) {
+    throw new Error(
+      typeof value.message === "string"
+        ? value.message
+        : "Unable to load institutes"
+    );
+  }
+
+  if (!Array.isArray(value.institutes)) {
+    throw new Error("Invalid institutes data received from server");
+  }
+
+  return {
+    success: true,
+    message: getString(value.message),
+    institutes: value.institutes
+      .map(parseInstitute)
+      .filter((institute): institute is Institute => institute !== null),
+  };
+}
+
 // ==================== HELPERS ====================
 
 function formatDate(date: string) {
   const value = new Date(date);
-  if (Number.isNaN(value.getTime())) return "Date unavailable";
+
+  if (Number.isNaN(value.getTime())) {
+    return "Date unavailable";
+  }
+
   return value.toLocaleDateString("en-PK", {
     day: "numeric",
     month: "short",
@@ -56,7 +160,7 @@ function formatDate(date: string) {
   });
 }
 
-function getStatusConfig(status: string) {
+function getStatusConfig(status: InstituteStatus) {
   switch (status) {
     case "active":
       return {
@@ -64,18 +168,21 @@ function getStatusConfig(status: string) {
         color: "bg-emerald-100 text-emerald-700 border-emerald-200",
         icon: CheckCircle2,
       };
+
     case "pending":
       return {
         label: "Pending",
         color: "bg-amber-100 text-amber-700 border-amber-200",
         icon: Clock,
       };
+
     case "suspended":
       return {
         label: "Suspended",
         color: "bg-red-100 text-red-700 border-red-200",
         icon: AlertCircle,
       };
+
     default:
       return {
         label: "Inactive",
@@ -91,6 +198,7 @@ function InstitutesSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="h-32 bg-gray-200 rounded-2xl" />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-64 bg-gray-200 rounded-2xl" />
@@ -104,6 +212,7 @@ function InstitutesSkeleton() {
 
 function InstituteCard({ institute }: { institute: Institute }) {
   const [menuOpen, setMenuOpen] = useState(false);
+
   const status = getStatusConfig(institute.status);
   const StatusIcon = status.icon;
 
@@ -114,7 +223,8 @@ function InstituteCard({ institute }: { institute: Institute }) {
         {institute.logo ? (
           <img
             src={institute.logo}
-            alt={institute.name}
+            alt={`${institute.name} logo`}
+            loading="lazy"
             className="w-20 h-20 rounded-2xl object-cover bg-white shadow-lg"
           />
         ) : (
@@ -141,6 +251,7 @@ function InstituteCard({ institute }: { institute: Institute }) {
             <h3 className="font-bold text-gray-900 truncate">
               {institute.name}
             </h3>
+
             {institute.slug && (
               <p className="text-xs text-gray-500 truncate mt-1">
                 {institute.slug}
@@ -151,7 +262,10 @@ function InstituteCard({ institute }: { institute: Institute }) {
           {/* Menu */}
           <div className="relative">
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
+              type="button"
+              onClick={() => setMenuOpen((previous) => !previous)}
+              aria-label={`Options for ${institute.name}`}
+              aria-expanded={menuOpen}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition"
             >
               <MoreVertical className="w-4 h-4 text-gray-500" />
@@ -159,29 +273,36 @@ function InstituteCard({ institute }: { institute: Institute }) {
 
             {menuOpen && (
               <>
-                <div
-                  className="fixed inset-0 z-10"
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  className="fixed inset-0 z-10 cursor-default"
                   onClick={() => setMenuOpen(false)}
                 />
+
                 <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
                   <Link
                     href={`/institute/users/owner/institutes/${institute.id}`}
+                    onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <Eye className="w-4 h-4" />
                     View
                   </Link>
+
                   <Link
                     href={`/institute/users/owner/institutes/${institute.id}/edit`}
+                    onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
                     <Edit className="w-4 h-4" />
                     Edit
                   </Link>
+
                   <button
+                    type="button"
                     onClick={() => {
                       setMenuOpen(false);
-                      // TODO: Delete confirmation
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
@@ -202,12 +323,14 @@ function InstituteCard({ institute }: { institute: Institute }) {
               <span className="truncate">{institute.city}</span>
             </p>
           )}
+
           {institute.email && (
             <p className="flex items-center gap-2 text-xs text-gray-600">
               <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
               <span className="truncate">{institute.email}</span>
             </p>
           )}
+
           {institute.phone && (
             <p className="flex items-center gap-2 text-xs text-gray-600">
               <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -220,23 +343,25 @@ function InstituteCard({ institute }: { institute: Institute }) {
         <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-2">
           <div className="text-center">
             <p className="text-lg font-bold text-gray-900">
-              {institute.stats?.totalStudents || 0}
+              {(institute.stats?.totalStudents ?? 0).toLocaleString("en-PK")}
             </p>
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">
               Students
             </p>
           </div>
+
           <div className="text-center">
             <p className="text-lg font-bold text-gray-900">
-              {institute.stats?.totalTeachers || 0}
+              {(institute.stats?.totalTeachers ?? 0).toLocaleString("en-PK")}
             </p>
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">
               Teachers
             </p>
           </div>
+
           <div className="text-center">
             <p className="text-lg font-bold text-gray-900">
-              {institute.stats?.totalClasses || 0}
+              {(institute.stats?.totalClasses ?? 0).toLocaleString("en-PK")}
             </p>
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">
               Classes
@@ -247,6 +372,7 @@ function InstituteCard({ institute }: { institute: Institute }) {
         {/* Footer */}
         <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
           <span>Created {formatDate(institute.createdAt)}</span>
+
           <Link
             href={`/institute/users/owner/institutes/${institute.id}`}
             className="text-indigo-600 font-semibold hover:text-indigo-800"
@@ -277,6 +403,7 @@ export default function InstitutesPage() {
     } else {
       setLoading(true);
     }
+
     setError("");
 
     try {
@@ -284,7 +411,9 @@ export default function InstitutesPage() {
         method: "GET",
         credentials: "same-origin",
         cache: "no-store",
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+        },
       });
 
       if (response.status === 401 || response.status === 403) {
@@ -293,19 +422,28 @@ export default function InstitutesPage() {
       }
 
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
+
+      if (!contentType.toLowerCase().includes("application/json")) {
         throw new Error("Invalid response from server");
       }
 
-      const result = await response.json();
+      const rawResult: unknown = await response.json();
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to load institutes");
+      if (!response.ok) {
+        const message =
+          isRecord(rawResult) && typeof rawResult.message === "string"
+            ? rawResult.message
+            : "Unable to load institutes";
+
+        throw new Error(message);
       }
 
-      setInstitutes(result.institutes || []);
-    } catch (err) {
+      const result = parseApiResponse(rawResult);
+
+      setInstitutes(result.institutes ?? []);
+    } catch (err: unknown) {
       console.error("Institutes load error:", err);
+
       setError(
         err instanceof Error ? err.message : "Something went wrong"
       );
@@ -316,20 +454,23 @@ export default function InstitutesPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       void loadInstitutes();
     }, 0);
-    return () => clearTimeout(timer);
+
+    return () => window.clearTimeout(timer);
   }, [loadInstitutes]);
 
   // ==================== FILTER ====================
 
+  const normalizedSearch = search.trim().toLowerCase();
+
   const filteredInstitutes = institutes.filter((inst) => {
     const matchesSearch =
-      !search ||
-      inst.name.toLowerCase().includes(search.toLowerCase()) ||
-      inst.city?.toLowerCase().includes(search.toLowerCase()) ||
-      inst.email?.toLowerCase().includes(search.toLowerCase());
+      !normalizedSearch ||
+      inst.name.toLowerCase().includes(normalizedSearch) ||
+      inst.city?.toLowerCase().includes(normalizedSearch) ||
+      inst.email?.toLowerCase().includes(normalizedSearch);
 
     const matchesStatus =
       statusFilter === "all" || inst.status === statusFilter;
@@ -354,12 +495,16 @@ export default function InstitutesPage() {
       <div className="max-w-7xl mx-auto p-4 sm:p-6">
         <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center shadow-sm">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+
           <h2 className="text-xl font-bold text-gray-900">
             Failed to load institutes
           </h2>
+
           <p className="text-sm text-gray-500 mt-2">{error}</p>
+
           <button
-            onClick={() => loadInstitutes()}
+            type="button"
+            onClick={() => void loadInstitutes()}
             className="mt-6 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold"
           >
             Try Again
@@ -379,22 +524,26 @@ export default function InstitutesPage() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Building2 className="w-5 h-5 text-indigo-200" />
+
               <span className="text-xs font-bold uppercase tracking-widest text-indigo-100">
                 My Institutes
               </span>
             </div>
+
             <h1 className="text-2xl sm:text-3xl font-bold">
               Manage Your Institutes
             </h1>
+
             <p className="text-indigo-100 mt-2 text-sm">
-              {institutes.length} institute{institutes.length !== 1 ? "s" : ""}{" "}
-              registered
+              {institutes.length} institute
+              {institutes.length !== 1 ? "s" : ""} registered
             </p>
           </div>
 
           <div className="flex gap-2">
             <button
-              onClick={() => loadInstitutes(true)}
+              type="button"
+              onClick={() => void loadInstitutes(true)}
               disabled={refreshing}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-sm font-semibold transition disabled:opacity-50"
             >
@@ -419,6 +568,7 @@ export default function InstitutesPage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+
           <input
             type="text"
             placeholder="Search by name, city, or email..."
@@ -449,18 +599,18 @@ export default function InstitutesPage() {
           </div>
 
           <h3 className="text-lg font-bold text-gray-900">
-            {search || statusFilter !== "all"
+            {normalizedSearch || statusFilter !== "all"
               ? "No institutes found"
               : "No institutes yet"}
           </h3>
 
           <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-            {search || statusFilter !== "all"
+            {normalizedSearch || statusFilter !== "all"
               ? "Try adjusting your search or filter criteria."
               : "You haven't created any institute yet. Create your first institute to start managing students, teachers, and classes."}
           </p>
 
-          {!search && statusFilter === "all" && (
+          {!normalizedSearch && statusFilter === "all" && (
             <Link
               href="/institute/users/owner/institutes/create"
               className="inline-flex items-center gap-2 mt-6 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition"

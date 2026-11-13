@@ -1,8 +1,7 @@
-// app/admin/settings/redirects/page.tsx
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -12,12 +11,126 @@ import {
   RefreshCw,
   ArrowRight,
   Search,
+  Loader2,
+  Link2,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 
 interface RedirectRule {
   from: string;
   to: string;
   status: 301 | 302;
+}
+
+interface ApiResponse {
+  success?: unknown;
+  data?: unknown;
+  message?: unknown;
+  error?: unknown;
+}
+
+const DEFAULT_REDIRECT: RedirectRule = {
+  from: "",
+  to: "",
+  status: 301,
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readApiResponse(response: Response): Promise<ApiResponse> {
+  const result: unknown = await response.json();
+
+  if (!isRecord(result)) {
+    throw new Error("Invalid server response");
+  }
+
+  return result as ApiResponse;
+}
+
+function parseRedirects(value: unknown): RedirectRule[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const result: RedirectRule[] = [];
+
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+
+    if (
+      typeof item.from !== "string" ||
+      typeof item.to !== "string" ||
+      (item.status !== 301 && item.status !== 302)
+    ) {
+      return null;
+    }
+
+    result.push({
+      from: item.from,
+      to: item.to,
+      status: item.status,
+    });
+  }
+
+  return result;
+}
+
+function normalizePath(value: string): string | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) return null;
+
+  // Redirect rules should use local paths, not external URLs.
+  if (
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.includes("\\") ||
+    /[\u0000-\u001F\u007F]/.test(trimmed)
+  ) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed, "https://nextid.pk");
+
+    if (parsed.origin !== "https://nextid.pk") {
+      return null;
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function validateRedirect(
+  redirect: RedirectRule,
+  redirects: RedirectRule[],
+  originalFrom?: string
+): string | null {
+  const from = normalizePath(redirect.from);
+  const to = normalizePath(redirect.to);
+
+  if (!from || !to) {
+    return "Use valid local paths starting with /. External URLs are not allowed.";
+  }
+
+  if (from === to) {
+    return "Source and destination URLs cannot be the same.";
+  }
+
+  const duplicate = redirects.some(
+    (item) =>
+      item.from.trim() === from &&
+      item.from !== originalFrom
+  );
+
+  if (duplicate) {
+    return "A redirect with this source URL already exists.";
+  }
+
+  return null;
 }
 
 export default function RedirectsPage() {
@@ -31,48 +144,92 @@ export default function RedirectsPage() {
 
   const [isAdding, setIsAdding] = useState(false);
 
-  const [newRedirect, setNewRedirect] = useState<RedirectRule>({
-    from: "",
-    to: "",
-    status: 301,
-  });
+  const [newRedirect, setNewRedirect] =
+    useState<RedirectRule>(DEFAULT_REDIRECT);
 
   const [editing, setEditing] = useState<RedirectRule | null>(null);
   const [editingOriginal, setEditingOriginal] = useState("");
 
-  useEffect(() => {
-    fetchRedirects();
+  const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showMessage = useCallback((text: string) => {
+    if (messageTimer.current) {
+      clearTimeout(messageTimer.current);
+    }
+
+    setMessage(text);
+
+    messageTimer.current = setTimeout(() => {
+      setMessage("");
+      messageTimer.current = null;
+    }, 3500);
   }, []);
 
-  async function fetchRedirects() {
+  useEffect(() => {
+    return () => {
+      if (messageTimer.current) {
+        clearTimeout(messageTimer.current);
+        messageTimer.current = null;
+      }
+    };
+  }, []);
+
+  const fetchRedirects = useCallback(async () => {
+    if (saving) return;
+
     try {
       setLoading(true);
       setError("");
 
-      const res = await fetch("/api/admin/redirects", {
+      const response = await fetch("/api/admin/redirects", {
+        method: "GET",
         cache: "no-store",
       });
 
-      const data = await res.json();
+      const data = await readApiResponse(response);
 
-      if (data?.success) {
-        setRedirects(data.data || []);
-      } else {
-        setError(data?.error || "Failed to load redirects");
+      if (!response.ok || data.success !== true) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to load redirects"
+        );
       }
-    } catch {
-      setError("Failed to load redirects");
+
+      const parsedRedirects = parseRedirects(data.data);
+
+      if (!parsedRedirects) {
+        throw new Error("Invalid redirect data received from server");
+      }
+
+      setRedirects(parsedRedirects);
+    } catch (err) {
+      console.error("Fetch redirects error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load redirects"
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, [saving]);
 
-  async function saveRedirects(updatedRedirects: RedirectRule[]) {
+  useEffect(() => {
+    void fetchRedirects();
+  }, []);
+
+  async function saveRedirects(
+    updatedRedirects: RedirectRule[]
+  ): Promise<boolean> {
+    if (saving) return false;
+
     try {
       setSaving(true);
       setError("");
 
-      const res = await fetch("/api/admin/redirects", {
+      const response = await fetch("/api/admin/redirects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -82,21 +239,34 @@ export default function RedirectsPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = await readApiResponse(response);
 
-      if (!res.ok || !data.success) {
-        setError(data.error || "Failed to save redirects");
-        return false;
+      if (!response.ok || data.success !== true) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to save redirects"
+        );
       }
 
       setRedirects(updatedRedirects);
 
-      setMessage(data.message || "Redirects updated");
-      setTimeout(() => setMessage(""), 3000);
+      showMessage(
+        typeof data.message === "string"
+          ? data.message
+          : "Redirects updated successfully"
+      );
 
       return true;
-    } catch {
-      setError("Failed to save redirects");
+    } catch (err) {
+      console.error("Save redirects error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to save redirects"
+      );
+
       return false;
     } finally {
       setSaving(false);
@@ -104,41 +274,107 @@ export default function RedirectsPage() {
   }
 
   async function handleAdd() {
-    if (!newRedirect.from.trim() || !newRedirect.to.trim()) {
-      setError("From URL and To URL are required");
+    if (saving) return;
+
+    const normalized: RedirectRule = {
+      from: newRedirect.from.trim(),
+      to: newRedirect.to.trim(),
+      status: newRedirect.status,
+    };
+
+    if (!normalized.from || !normalized.to) {
+      setError("From URL and To URL are required.");
       return;
     }
 
-    const updated = [...redirects, newRedirect];
+    const validationError = validateRedirect(
+      normalized,
+      redirects
+    );
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    const updated = [
+      ...redirects,
+      {
+        ...normalized,
+        from: normalizePath(normalized.from) as string,
+        to: normalizePath(normalized.to) as string,
+      },
+    ];
 
     const success = await saveRedirects(updated);
 
     if (success) {
-      setNewRedirect({
-        from: "",
-        to: "",
-        status: 301,
-      });
-
+      setNewRedirect(DEFAULT_REDIRECT);
       setIsAdding(false);
+      setError("");
     }
   }
 
   async function handleDelete(from: string) {
-    const updated = redirects.filter((r) => r.from !== from);
-    await saveRedirects(updated);
+    if (saving) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the redirect for ${from}?`
+    );
+
+    if (!confirmed) return;
+
+    const updated = redirects.filter(
+      (redirect) => redirect.from !== from
+    );
+
+    const success = await saveRedirects(updated);
+
+    if (success && editingOriginal === from) {
+      setEditing(null);
+      setEditingOriginal("");
+    }
   }
 
   function startEdit(rule: RedirectRule) {
+    setError("");
     setEditing({ ...rule });
     setEditingOriginal(rule.from);
   }
 
   async function handleUpdate() {
-    if (!editing) return;
+    if (!editing || saving) return;
 
-    const updated = redirects.map((r) =>
-      r.from === editingOriginal ? editing : r
+    const normalized: RedirectRule = {
+      from: editing.from.trim(),
+      to: editing.to.trim(),
+      status: editing.status,
+    };
+
+    if (!normalized.from || !normalized.to) {
+      setError("From URL and To URL are required.");
+      return;
+    }
+
+    const validationError = validateRedirect(
+      normalized,
+      redirects,
+      editingOriginal
+    );
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    const updated = redirects.map((redirect) =>
+      redirect.from === editingOriginal
+        ? {
+            ...normalized,
+            from: normalizePath(normalized.from) as string,
+            to: normalizePath(normalized.to) as string,
+          }
+        : redirect
     );
 
     const success = await saveRedirects(updated);
@@ -146,46 +382,73 @@ export default function RedirectsPage() {
     if (success) {
       setEditing(null);
       setEditingOriginal("");
+      setError("");
     }
   }
 
   const filteredRedirects = useMemo(() => {
-    if (!search.trim()) return redirects;
+    const query = search.trim().toLowerCase();
+
+    if (!query) return redirects;
 
     return redirects.filter(
-      (r) =>
-        r.from.toLowerCase().includes(search.toLowerCase()) ||
-        r.to.toLowerCase().includes(search.toLowerCase())
+      (redirect) =>
+        redirect.from.toLowerCase().includes(query) ||
+        redirect.to.toLowerCase().includes(query) ||
+        String(redirect.status).includes(query)
     );
   }, [redirects, search]);
 
-  const total301 = redirects.filter((r) => r.status === 301).length;
-  const total302 = redirects.filter((r) => r.status === 302).length;
+  const total301 = redirects.filter(
+    (redirect) => redirect.status === 301
+  ).length;
+
+  const total302 = redirects.filter(
+    (redirect) => redirect.status === 302
+  ).length;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
       {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
+            <Link2 className="h-6 w-6 text-blue-600" />
+          </div>
 
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Redirect Manager</h1>
-          <p className="text-gray-500 mt-1">
-            Manage SEO redirects from a single dashboard
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+              Redirect Manager
+            </h1>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Manage website redirects and SEO URL changes.
+            </p>
+          </div>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={fetchRedirects}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border bg-white hover:bg-gray-50"
+            type="button"
+            onClick={() => void fetchRedirects()}
+            disabled={loading || saving}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
           >
-            <RefreshCw size={16} />
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
             Refresh
           </button>
 
           <button
-            onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+            type="button"
+            onClick={() => {
+              setError("");
+              setIsAdding(true);
+            }}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
             <Plus size={16} />
             Add Redirect
@@ -194,45 +457,209 @@ export default function RedirectsPage() {
       </div>
 
       {/* Stats */}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-gray-500 text-sm">Total Redirects</p>
-          <h2 className="text-3xl font-bold mt-2">{redirects.length}</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            Total Redirects
+          </p>
+          <h2 className="mt-2 text-3xl font-bold text-gray-900">
+            {redirects.length}
+          </h2>
+          <p className="mt-1 text-xs text-gray-400">
+            All configured rules
+          </p>
         </div>
 
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-gray-500 text-sm">301 Permanent</p>
-          <h2 className="text-3xl font-bold text-green-600 mt-2">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            301 Permanent
+          </p>
+          <h2 className="mt-2 text-3xl font-bold text-green-600">
             {total301}
           </h2>
+          <p className="mt-1 text-xs text-gray-400">
+            Permanent URL changes
+          </p>
         </div>
 
-        <div className="bg-white border rounded-2xl p-5">
-          <p className="text-gray-500 text-sm">302 Temporary</p>
-          <h2 className="text-3xl font-bold text-amber-600 mt-2">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            302 Temporary
+          </p>
+          <h2 className="mt-2 text-3xl font-bold text-amber-600">
             {total302}
           </h2>
+          <p className="mt-1 text-xs text-gray-400">
+            Temporary URL changes
+          </p>
         </div>
       </div>
 
       {/* Alerts */}
-
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-          {error}
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span>{error}</span>
+
+          <button
+            type="button"
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+            className="ml-auto shrink-0"
+          >
+            <X size={18} />
+          </button>
         </div>
       )}
 
       {message && (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
-          {message}
+        <div
+          role="status"
+          className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+        >
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <span>{message}</span>
+        </div>
+      )}
+
+      {/* Add Form */}
+      {isAdding && (
+        <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 bg-blue-50/50 px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">
+                Add New Redirect
+              </h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Enter the old and replacement URL paths.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdding(false);
+                setNewRedirect(DEFAULT_REDIRECT);
+                setError("");
+              }}
+              disabled={saving}
+              aria-label="Close add form"
+              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="grid gap-4 p-5 lg:grid-cols-4">
+            <div>
+              <label
+                htmlFor="new-from"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
+                From URL
+              </label>
+              <input
+                id="new-from"
+                value={newRedirect.from}
+                onChange={(event) =>
+                  setNewRedirect((previous) => ({
+                    ...previous,
+                    from: event.target.value,
+                  }))
+                }
+                placeholder="/old-url"
+                disabled={saving}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="new-to"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
+                To URL
+              </label>
+              <input
+                id="new-to"
+                value={newRedirect.to}
+                onChange={(event) =>
+                  setNewRedirect((previous) => ({
+                    ...previous,
+                    to: event.target.value,
+                  }))
+                }
+                placeholder="/new-url"
+                disabled={saving}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="new-status"
+                className="mb-2 block text-sm font-medium text-gray-700"
+              >
+                Redirect Type
+              </label>
+              <select
+                id="new-status"
+                value={newRedirect.status}
+                onChange={(event) =>
+                  setNewRedirect((previous) => ({
+                    ...previous,
+                    status: Number(event.target.value) as 301 | 302,
+                  }))
+                }
+                disabled={saving}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value={301}>301 Permanent</option>
+                <option value={302}>302 Temporary</option>
+              </select>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={() => void handleAdd()}
+                disabled={saving}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+                Save
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdding(false);
+                  setNewRedirect(DEFAULT_REDIRECT);
+                  setError("");
+                }}
+                disabled={saving}
+                className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <p className="px-5 pb-5 text-xs text-gray-400">
+            Use local paths beginning with /. Example: /old-page to /new-page.
+          </p>
         </div>
       )}
 
       {/* Search */}
-
-      <div className="bg-white border rounded-2xl p-4">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -241,204 +668,220 @@ export default function RedirectsPage() {
 
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search redirects..."
-            className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search source URL, destination URL or status..."
+            className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
+
+        {search && (
+          <p className="mt-2 text-xs text-gray-500">
+            Showing {filteredRedirects.length} of {redirects.length} redirects
+          </p>
+        )}
       </div>
 
-      {/* Add Form */}
-
-      {isAdding && (
-        <div className="bg-white border rounded-2xl p-5">
-          <h2 className="font-semibold text-lg mb-4">Add Redirect</h2>
-
-          <div className="grid lg:grid-cols-4 gap-4">
-            <input
-              value={newRedirect.from}
-              onChange={(e) =>
-                setNewRedirect({
-                  ...newRedirect,
-                  from: e.target.value,
-                })
-              }
-              placeholder="/old-url"
-              className="border rounded-xl px-4 py-3"
-            />
-
-            <input
-              value={newRedirect.to}
-              onChange={(e) =>
-                setNewRedirect({
-                  ...newRedirect,
-                  to: e.target.value,
-                })
-              }
-              placeholder="/new-url"
-              className="border rounded-xl px-4 py-3"
-            />
-
-            <select
-              value={newRedirect.status}
-              onChange={(e) =>
-                setNewRedirect({
-                  ...newRedirect,
-                  status: Number(e.target.value) as 301 | 302,
-                })
-              }
-              className="border rounded-xl px-4 py-3"
-            >
-              <option value={301}>301 Permanent</option>
-              <option value={302}>302 Temporary</option>
-            </select>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleAdd}
-                disabled={saving}
-                className="flex-1 bg-green-600 text-white rounded-xl py-3 hover:bg-green-700"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-
-              <button
-                onClick={() => setIsAdding(false)}
-                className="px-4 border rounded-xl"
-              >
-                Cancel
-              </button>
-            </div>
+      {/* Redirect Table */}
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">
+              Redirect Rules
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {redirects.length} configured rules
+            </p>
           </div>
+
+          {saving && (
+            <span className="inline-flex items-center gap-2 text-xs font-medium text-blue-600">
+              <Loader2 size={14} className="animate-spin" />
+              Saving changes...
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Table */}
-
-      <div className="bg-white border rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="p-10 text-center text-gray-500">
+          <div className="flex min-h-[250px] items-center justify-center gap-3 text-sm text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
             Loading redirects...
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
+            <table className="w-full min-w-[750px]">
+              <thead className="border-b border-gray-100 bg-gray-50">
                 <tr>
-                  <th className="text-left p-4">From</th>
-                  <th className="text-center p-4"></th>
-                  <th className="text-left p-4">To</th>
-                  <th className="text-left p-4">Status</th>
-                  <th className="text-right p-4">Actions</th>
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    From
+                  </th>
+                  <th className="w-12 p-4 text-center" />
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    To
+                  </th>
+                  <th className="p-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Status
+                  </th>
+                  <th className="p-4 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Actions
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
                 {filteredRedirects.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="text-center text-gray-500 py-10"
-                    >
-                      No redirects found
+                    <td colSpan={5} className="px-4 py-14 text-center">
+                      <Link2 className="mx-auto mb-3 h-9 w-9 text-gray-300" />
+                      <p className="font-medium text-gray-600">
+                        No redirects found
+                      </p>
+                      <p className="mt-1 text-sm text-gray-400">
+                        {search
+                          ? "Try a different search term."
+                          : "Add your first redirect to get started."}
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   filteredRedirects.map((redirect) => {
                     const isEditing =
-                      editing &&
+                      editing !== null &&
                       editingOriginal === redirect.from;
 
                     return (
                       <tr
                         key={redirect.from}
-                        className="border-b last:border-b-0"
+                        className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50/70"
                       >
                         <td className="p-4">
-                          {isEditing ? (
+                          {isEditing && editing ? (
                             <input
                               value={editing.from}
-                              onChange={(e) =>
-                                setEditing({
-                                  ...editing,
-                                  from: e.target.value,
-                                })
+                              onChange={(event) =>
+                                setEditing((previous) =>
+                                  previous
+                                    ? {
+                                        ...previous,
+                                        from: event.target.value,
+                                      }
+                                    : null
+                                )
                               }
-                              className="w-full border rounded-lg px-3 py-2"
+                              disabled={saving}
+                              aria-label="Edit source URL"
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500"
                             />
                           ) : (
-                            <code>{redirect.from}</code>
+                            <code className="break-all rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                              {redirect.from}
+                            </code>
                           )}
                         </td>
 
                         <td className="p-4 text-center">
-                          <ArrowRight size={18} />
+                          <ArrowRight
+                            size={17}
+                            className="mx-auto text-gray-400"
+                          />
                         </td>
 
                         <td className="p-4">
-                          {isEditing ? (
+                          {isEditing && editing ? (
                             <input
                               value={editing.to}
-                              onChange={(e) =>
-                                setEditing({
-                                  ...editing,
-                                  to: e.target.value,
-                                })
+                              onChange={(event) =>
+                                setEditing((previous) =>
+                                  previous
+                                    ? {
+                                        ...previous,
+                                        to: event.target.value,
+                                      }
+                                    : null
+                                )
                               }
-                              className="w-full border rounded-lg px-3 py-2"
+                              disabled={saving}
+                              aria-label="Edit destination URL"
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500"
                             />
                           ) : (
-                            <code>{redirect.to}</code>
+                            <code className="break-all rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                              {redirect.to}
+                            </code>
                           )}
                         </td>
 
                         <td className="p-4">
-                          {isEditing ? (
+                          {isEditing && editing ? (
                             <select
                               value={editing.status}
-                              onChange={(e) =>
-                                setEditing({
-                                  ...editing,
-                                  status: Number(
-                                    e.target.value
-                                  ) as 301 | 302,
-                                })
+                              onChange={(event) =>
+                                setEditing((previous) =>
+                                  previous
+                                    ? {
+                                        ...previous,
+                                        status: Number(
+                                          event.target.value
+                                        ) as 301 | 302,
+                                      }
+                                    : null
+                                )
                               }
-                              className="border rounded-lg px-3 py-2"
+                              disabled={saving}
+                              aria-label="Edit redirect status"
+                              className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
                             >
                               <option value={301}>301</option>
                               <option value={302}>302</option>
                             </select>
                           ) : (
                             <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                                 redirect.status === 301
                                   ? "bg-green-100 text-green-700"
                                   : "bg-amber-100 text-amber-700"
                               }`}
                             >
                               {redirect.status}
+                              {redirect.status === 301
+                                ? " Permanent"
+                                : " Temporary"}
                             </span>
                           )}
                         </td>
 
                         <td className="p-4">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-1">
                             {isEditing ? (
                               <>
                                 <button
-                                  onClick={handleUpdate}
-                                  className="p-2 text-green-600"
+                                  type="button"
+                                  onClick={() => void handleUpdate()}
+                                  disabled={saving}
+                                  aria-label="Save redirect"
+                                  title="Save"
+                                  className="rounded-lg p-2 text-green-600 transition hover:bg-green-50 disabled:opacity-40"
                                 >
-                                  <Save size={18} />
+                                  {saving ? (
+                                    <Loader2
+                                      size={18}
+                                      className="animate-spin"
+                                    />
+                                  ) : (
+                                    <Save size={18} />
+                                  )}
                                 </button>
 
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setEditing(null);
                                     setEditingOriginal("");
+                                    setError("");
                                   }}
-                                  className="p-2 text-gray-500"
+                                  disabled={saving}
+                                  aria-label="Cancel editing"
+                                  title="Cancel"
+                                  className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100"
                                 >
                                   <X size={18} />
                                 </button>
@@ -446,17 +889,25 @@ export default function RedirectsPage() {
                             ) : (
                               <>
                                 <button
+                                  type="button"
                                   onClick={() => startEdit(redirect)}
-                                  className="p-2 text-blue-600"
+                                  disabled={saving}
+                                  aria-label="Edit redirect"
+                                  title="Edit"
+                                  className="rounded-lg p-2 text-blue-600 transition hover:bg-blue-50 disabled:opacity-40"
                                 >
                                   <Edit3 size={18} />
                                 </button>
 
                                 <button
+                                  type="button"
                                   onClick={() =>
-                                    handleDelete(redirect.from)
+                                    void handleDelete(redirect.from)
                                   }
-                                  className="p-2 text-red-600"
+                                  disabled={saving}
+                                  aria-label="Delete redirect"
+                                  title="Delete"
+                                  className="rounded-lg p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
                                 >
                                   <Trash2 size={18} />
                                 </button>
@@ -474,19 +925,32 @@ export default function RedirectsPage() {
         )}
       </div>
 
-      {/* Info */}
+      {/* SEO Information */}
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-blue-600" />
+          <h3 className="font-semibold text-blue-900">
+            Redirect Best Practices
+          </h3>
+        </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
-        <h3 className="font-semibold mb-2">
-          Redirect Best Practices
-        </h3>
-
-        <ul className="space-y-2 text-sm text-gray-700">
-          <li>301 = Permanent redirect (SEO value passes)</li>
-          <li>302 = Temporary redirect</li>
-          <li>Use 301 for deleted pages reported in Search Console</li>
-          <li>Avoid redirect chains</li>
-          <li>Redirect only when a relevant replacement exists</li>
+        <ul className="mt-3 space-y-2 text-sm leading-6 text-blue-900/80">
+          <li>
+            <strong>301:</strong> Use for permanent URL changes when the
+            replacement page is relevant.
+          </li>
+          <li>
+            <strong>302:</strong> Use when the redirect is temporary.
+          </li>
+          <li>
+            Redirect old URLs to the closest relevant replacement page.
+          </li>
+          <li>
+            Avoid redirect chains and redirect loops.
+          </li>
+          <li>
+            Update internal links and your sitemap after permanent URL changes.
+          </li>
         </ul>
       </div>
     </div>

@@ -12,11 +12,7 @@ import {
   BookOpen,
   CalendarCheck,
   Wallet,
-  TrendingUp,
-  TrendingDown,
   RefreshCw,
-  Bell,
-  Settings,
   Plus,
   ChevronRight,
   Clock,
@@ -25,13 +21,11 @@ import {
   CalendarDays,
   School,
   CreditCard,
-  FileText,
-  ShieldCheck,
+  Settings,
   Activity,
   Phone,
   Mail,
   MapPin,
-  ClipboardList,
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -93,6 +87,126 @@ interface DashboardResponse {
   upcomingEvents: UpcomingEvent[];
 }
 
+// ==================== RESPONSE VALIDATION ====================
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function isValidNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isValidString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isOwner(value: unknown): value is Owner {
+  if (!isRecord(value)) return false;
+
+  return (
+    isValidNumber(value.id) &&
+    isValidString(value.name) &&
+    isValidString(value.email) &&
+    (value.phone === undefined || isValidString(value.phone))
+  );
+}
+
+function isInstitute(value: unknown): value is Institute {
+  if (!isRecord(value)) return false;
+
+  const validStatuses = [
+    "pending",
+    "active",
+    "inactive",
+    "suspended",
+  ];
+
+  return (
+    isValidNumber(value.id) &&
+    isValidString(value.name) &&
+    isValidString(value.status) &&
+    validStatuses.includes(value.status) &&
+    (value.slug === undefined || isValidString(value.slug)) &&
+    (value.logo === undefined ||
+      value.logo === null ||
+      isValidString(value.logo)) &&
+    (value.email === undefined || isValidString(value.email)) &&
+    (value.phone === undefined || isValidString(value.phone)) &&
+    (value.address === undefined || isValidString(value.address)) &&
+    (value.city === undefined || isValidString(value.city)) &&
+    (value.subdomain === undefined || isValidString(value.subdomain))
+  );
+}
+
+function isDashboardStats(value: unknown): value is DashboardStats {
+  if (!isRecord(value)) return false;
+
+  const requiredNumbers = [
+    "totalStudents",
+    "totalTeachers",
+    "totalStaff",
+    "totalClasses",
+    "presentToday",
+    "absentToday",
+    "totalFees",
+    "collectedFees",
+    "pendingFees",
+  ];
+
+  return (
+    requiredNumbers.every((key) => isValidNumber(value[key])) &&
+    (value.monthlyGrowth === undefined ||
+      isValidNumber(value.monthlyGrowth))
+  );
+}
+
+function isRecentActivity(value: unknown): value is RecentActivity {
+  if (!isRecord(value)) return false;
+
+  return (
+    isValidNumber(value.id) &&
+    isValidString(value.title) &&
+    isValidString(value.type) &&
+    isValidString(value.createdAt) &&
+    (value.description === undefined ||
+      isValidString(value.description))
+  );
+}
+
+function isUpcomingEvent(value: unknown): value is UpcomingEvent {
+  if (!isRecord(value)) return false;
+
+  return (
+    isValidNumber(value.id) &&
+    isValidString(value.title) &&
+    isValidString(value.date) &&
+    (value.description === undefined ||
+      isValidString(value.description))
+  );
+}
+
+function isDashboardResponse(
+  value: unknown
+): value is DashboardResponse {
+  if (!isRecord(value)) return false;
+
+  return (
+    value.success === true &&
+    isOwner(value.user) &&
+    (value.institute === null || isInstitute(value.institute)) &&
+    isDashboardStats(value.stats) &&
+    Array.isArray(value.recentActivities) &&
+    value.recentActivities.every(isRecentActivity) &&
+    Array.isArray(value.upcomingEvents) &&
+    value.upcomingEvents.every(isUpcomingEvent)
+  );
+}
+
 // ==================== SKELETON ====================
 
 function DashboardSkeleton() {
@@ -133,14 +247,21 @@ function StatCard({
   description: string;
   href?: string;
 }) {
+  const formattedValue =
+    typeof value === "number"
+      ? value.toLocaleString("en-PK")
+      : value;
+
   const content = (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 hover:shadow-lg transition-all group">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
+
           <p className="text-3xl font-bold text-gray-900 mt-2">
-            {value.toLocaleString()}
+            {formattedValue}
           </p>
+
           <p className="text-xs text-gray-400 mt-2">{description}</p>
         </div>
 
@@ -160,6 +281,7 @@ function StatCard({
   );
 
   if (href) return <Link href={href}>{content}</Link>;
+
   return content;
 }
 
@@ -200,7 +322,9 @@ function QuickAction({
 function formatDate(date: string) {
   const value = new Date(date);
 
-  if (Number.isNaN(value.getTime())) return "Date unavailable";
+  if (Number.isNaN(value.getTime())) {
+    return "Date unavailable";
+  }
 
   return value.toLocaleDateString("en-PK", {
     day: "numeric",
@@ -214,7 +338,7 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "PKR",
     maximumFractionDigits: 0,
-  }).format(value || 0);
+  }).format(value);
 }
 
 function getGreeting() {
@@ -222,6 +346,7 @@ function getGreeting() {
 
   if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
+
   return "Good evening";
 }
 
@@ -274,79 +399,106 @@ export default function InstituteOwnerDashboard() {
 
   // ==================== LOAD DASHBOARD ====================
 
-  const loadDashboard = useCallback(async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
-    setError("");
-
-    try {
-      const response = await fetch("/api/institute/users/owners/dashboard", {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        router.replace("/institute/login");
-        return;
+  const loadDashboard = useCallback(
+    async (isRefresh = false, signal?: AbortSignal) => {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
-      const contentType = response.headers.get("content-type") || "";
+      setError("");
 
-if (!contentType.includes("application/json")) {
-  const responseText = await response.text();
-
-  console.error("Expected JSON but received:", {
-    status: response.status,
-    contentType,
-    response: responseText.slice(0, 500),
-  });
-
-  throw new Error(
-    `API returned HTML or invalid response. Status: ${response.status}`
-  );
-}
-
-const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Unable to load institute dashboard."
+      try {
+        const response = await fetch(
+          "/api/institute/users/owners/dashboard",
+          {
+            method: "GET",
+            credentials: "same-origin",
+            cache: "no-store",
+            signal,
+            headers: {
+              Accept: "application/json",
+            },
+          }
         );
+
+        if (response.status === 401 || response.status === 403) {
+          router.replace("/institute/login");
+          return;
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+
+        if (!contentType.toLowerCase().includes("application/json")) {
+          const responseText = await response.text();
+
+          console.error("Expected JSON but received:", {
+            status: response.status,
+            contentType,
+            response: responseText.slice(0, 500),
+          });
+
+          throw new Error(
+            `API returned HTML or invalid response. Status: ${response.status}`
+          );
+        }
+
+        const result: unknown = await response.json();
+
+        if (!response.ok) {
+          const message =
+            isRecord(result) && isValidString(result.message)
+              ? result.message
+              : "Unable to load institute dashboard.";
+
+          throw new Error(message);
+        }
+
+        if (!isDashboardResponse(result)) {
+          throw new Error(
+            "Dashboard API returned an invalid response format."
+          );
+        }
+
+        setOwner(result.user);
+        setInstitute(result.institute);
+        setStats(result.stats);
+        setActivities(result.recentActivities);
+        setEvents(result.upcomingEvents);
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          err.name === "AbortError"
+        ) {
+          return;
+        }
+
+        console.error("Institute dashboard error:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong while loading dashboard."
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
-
-      setOwner(result.user);
-      setInstitute(result.institute || null);
-      setStats(result.stats || null);
-      setActivities(result.recentActivities || []);
-      setEvents(result.upcomingEvents || []);
-    } catch (err) {
-      console.error("Institute dashboard error:", err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while loading dashboard."
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadDashboard();
-    }, 0);
+    const controller = new AbortController();
 
-    return () => window.clearTimeout(timeoutId);
+    void loadDashboard(false, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
   }, [loadDashboard]);
 
   // ==================== LOADING ====================
@@ -370,10 +522,12 @@ const result = await response.json();
           <p className="text-sm text-gray-500 mt-2">{error}</p>
 
           <button
-            onClick={() => loadDashboard()}
-            className="mt-6 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold"
+            type="button"
+            onClick={() => void loadDashboard(true)}
+            disabled={refreshing}
+            className="mt-6 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold disabled:opacity-50"
           >
-            Try Again
+            {refreshing ? "Retrying..." : "Try Again"}
           </button>
         </div>
       </div>
@@ -449,12 +603,28 @@ const result = await response.json();
 
   const attendanceRate =
     stats && stats.totalStudents > 0
-      ? Math.round((stats.presentToday / stats.totalStudents) * 100)
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(
+              (stats.presentToday / stats.totalStudents) * 100
+            )
+          )
+        )
       : 0;
 
   const feeCollectionRate =
     stats && stats.totalFees > 0
-      ? Math.round((stats.collectedFees / stats.totalFees) * 100)
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round(
+              (stats.collectedFees / stats.totalFees) * 100
+            )
+          )
+        )
       : 0;
 
   // ==================== MAIN UI ====================
@@ -462,7 +632,6 @@ const result = await response.json();
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4 sm:p-8">
       <div className="max-w-[1600px] mx-auto space-y-6">
-
         {/* WELCOME HEADER */}
 
         <div className="relative overflow-hidden bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 rounded-3xl p-6 sm:p-8 shadow-xl">
@@ -493,7 +662,9 @@ const result = await response.json();
                   {institute.name}
                 </span>
 
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${status.color}`}>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${status.color}`}
+                >
                   <StatusIcon className="w-4 h-4" />
                   {status.label}
                 </span>
@@ -501,11 +672,14 @@ const result = await response.json();
             </div>
 
             <button
-              onClick={() => loadDashboard(true)}
+              type="button"
+              onClick={() => void loadDashboard(true)}
               disabled={refreshing}
               className="inline-flex items-center gap-2 px-4 py-3 bg-white/15 hover:bg-white/25 border border-white/20 text-white rounded-xl text-sm font-semibold transition disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+              />
               Refresh
             </button>
           </div>
@@ -605,7 +779,6 @@ const result = await response.json();
         {/* ATTENDANCE AND FEES */}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
           {/* ATTENDANCE */}
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -613,7 +786,7 @@ const result = await response.json();
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                   <CalendarCheck className="w-5 h-5 text-blue-600" />
-                  Today's Attendance
+                  Today&apos;s Attendance
                 </h2>
 
                 <p className="text-sm text-gray-500 mt-1">
@@ -696,7 +869,10 @@ const result = await response.json();
 
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-gray-500">Total Expected Fees</p>
+                <p className="text-xs text-gray-500">
+                  Total Expected Fees
+                </p>
+
                 <p className="text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(stats?.totalFees || 0)}
                 </p>
@@ -707,6 +883,7 @@ const result = await response.json();
                   <p className="text-xs text-emerald-700 font-semibold">
                     COLLECTED
                   </p>
+
                   <p className="text-lg font-bold text-emerald-800 mt-1">
                     {formatCurrency(stats?.collectedFees || 0)}
                   </p>
@@ -716,6 +893,7 @@ const result = await response.json();
                   <p className="text-xs text-amber-700 font-semibold">
                     PENDING
                   </p>
+
                   <p className="text-lg font-bold text-amber-800 mt-1">
                     {formatCurrency(stats?.pendingFees || 0)}
                   </p>
@@ -724,7 +902,10 @@ const result = await response.json();
 
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-500">Collection progress</span>
+                  <span className="text-gray-500">
+                    Collection progress
+                  </span>
+
                   <span className="font-bold text-gray-900">
                     {feeCollectionRate}%
                   </span>
@@ -744,7 +925,6 @@ const result = await response.json();
         {/* LOWER SECTION */}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
           {/* RECENT ACTIVITIES */}
 
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -771,9 +951,11 @@ const result = await response.json();
             {activities.length === 0 ? (
               <div className="text-center py-12 bg-gray-50 rounded-xl">
                 <Activity className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+
                 <p className="text-sm font-semibold text-gray-600">
                   No activities yet
                 </p>
+
                 <p className="text-xs text-gray-400 mt-1">
                   Institute activities will appear here.
                 </p>
@@ -890,6 +1072,7 @@ const result = await response.json();
           {events.length === 0 ? (
             <div className="text-center py-8 bg-gray-50 rounded-xl">
               <CalendarDays className="w-9 h-9 text-gray-300 mx-auto mb-2" />
+
               <p className="text-sm text-gray-500">
                 No upcoming events scheduled.
               </p>
@@ -901,7 +1084,9 @@ const result = await response.json();
                   key={event.id}
                   className="border border-gray-100 rounded-xl p-4"
                 >
-                  <p className="font-bold text-gray-800">{event.title}</p>
+                  <p className="font-bold text-gray-800">
+                    {event.title}
+                  </p>
 
                   <p className="text-xs text-blue-600 font-semibold mt-2">
                     {formatDate(event.date)}
@@ -938,8 +1123,12 @@ const result = await response.json();
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-5">
             <div className="flex items-center gap-3">
               <Building2 className="w-5 h-5 text-gray-400" />
+
               <div>
-                <p className="text-xs text-gray-400">Institute Name</p>
+                <p className="text-xs text-gray-400">
+                  Institute Name
+                </p>
+
                 <p className="text-sm font-semibold text-gray-800">
                   {institute.name}
                 </p>
@@ -949,8 +1138,10 @@ const result = await response.json();
             {institute.email && (
               <div className="flex items-center gap-3">
                 <Mail className="w-5 h-5 text-gray-400" />
+
                 <div>
                   <p className="text-xs text-gray-400">Email</p>
+
                   <p className="text-sm font-semibold text-gray-800">
                     {institute.email}
                   </p>
@@ -961,8 +1152,10 @@ const result = await response.json();
             {institute.phone && (
               <div className="flex items-center gap-3">
                 <Phone className="w-5 h-5 text-gray-400" />
+
                 <div>
                   <p className="text-xs text-gray-400">Phone</p>
+
                   <p className="text-sm font-semibold text-gray-800">
                     {institute.phone}
                   </p>
@@ -973,10 +1166,14 @@ const result = await response.json();
             {(institute.address || institute.city) && (
               <div className="flex items-center gap-3">
                 <MapPin className="w-5 h-5 text-gray-400" />
+
                 <div>
                   <p className="text-xs text-gray-400">Address</p>
+
                   <p className="text-sm font-semibold text-gray-800">
-                    {[institute.address, institute.city].filter(Boolean).join(", ")}
+                    {[institute.address, institute.city]
+                      .filter(Boolean)
+                      .join(", ")}
                   </p>
                 </div>
               </div>
@@ -985,8 +1182,12 @@ const result = await response.json();
             {institute.subdomain && (
               <div className="flex items-center gap-3">
                 <School className="w-5 h-5 text-gray-400" />
+
                 <div>
-                  <p className="text-xs text-gray-400">Institute Website</p>
+                  <p className="text-xs text-gray-400">
+                    Institute Website
+                  </p>
+
                   <p className="text-sm font-semibold text-blue-600">
                     {institute.subdomain}
                   </p>

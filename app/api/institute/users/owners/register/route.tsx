@@ -1,168 +1,297 @@
-// app/api/institute/users/owners/register/route.ts
 
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db/db';
-import { instituteUsers } from '@/db/schema';
-import { sql } from 'drizzle-orm';
-import { hash } from 'bcryptjs';
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db/db";
+import { instituteUsers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { hash } from "bcryptjs";
 import {
   checkRateLimit,
   recordFailedAttempt,
   resetRateLimit,
-  RATE_LIMIT_CONFIG,
-} from '@/lib/rate-limit';
+} from "@/lib/rate-limit";
 
-// ============ HELPERS ============
+const RATE_LIMIT_OPTIONS = {
+  maxAttempts: 5,
+  windowMs: 15 * 60 * 1000,
+  lockoutMs: 60 * 60 * 1000,
+  exponential: false,
+} as const;
+
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
+
+interface RegisterBody {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string | null;
+}
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  status = 200,
+  additionalHeaders?: Record<string, string>
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      Pragma: "no-cache",
+      ...additionalHeaders,
+    },
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
 function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIP = request.headers.get('x-real-ip');
-  const cfIP = request.headers.get('cf-connecting-ip');
+  // Cloudflare's connecting IP is the preferred trusted source.
+  const cfIP = request.headers.get("cf-connecting-ip")?.trim();
 
-  if (forwarded) return forwarded.split(',')[0].trim();
-  if (realIP) return realIP;
-  if (cfIP) return cfIP;
-  return 'unknown';
+  if (cfIP) {
+    return cfIP;
+  }
+
+  const realIP = request.headers.get("x-real-ip")?.trim();
+
+  if (realIP) {
+    return realIP;
+  }
+
+  // Fallback for environments without Cloudflare.
+  const forwarded = request.headers.get("x-forwarded-for");
+
+  if (forwarded) {
+    const firstIP = forwarded.split(",")[0]?.trim();
+
+    if (firstIP) {
+      return firstIP;
+    }
+  }
+
+  return "unknown";
 }
 
-// ============ EMAIL VALIDATION ============
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (email.length > 254) {
+    return false;
+  }
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
-// ============ POST /api/institute/users/owners/register ============
+function getValidationError(
+  body: Record<string, unknown>
+): { data: RegisterBody | null; error: string | null } {
+  const { name, email, password, phone } = body;
+
+  if (
+    typeof name !== "string" ||
+    typeof email !== "string" ||
+    typeof password !== "string"
+  ) {
+    return {
+      data: null,
+      error: "Name, email and password are required",
+    };
+  }
+
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password;
+
+  if (!cleanName || !cleanEmail || !cleanPassword) {
+    return {
+      data: null,
+      error: "Name, email and password are required",
+    };
+  }
+
+  if (cleanName.length < 2 || cleanName.length > 150) {
+    return {
+      data: null,
+      error: "Name must be between 2 and 150 characters",
+    };
+  }
+
+  if (!isValidEmail(cleanEmail)) {
+    return {
+      data: null,
+      error: "Invalid email address",
+    };
+  }
+
+  if (
+    cleanPassword.length < PASSWORD_MIN_LENGTH ||
+    cleanPassword.length > PASSWORD_MAX_LENGTH
+  ) {
+    return {
+      data: null,
+      error: "Password must be between 8 and 128 characters",
+    };
+  }
+
+  let cleanPhone: string | null = null;
+
+  if (phone !== undefined && phone !== null) {
+    if (typeof phone !== "string") {
+      return {
+        data: null,
+        error: "Invalid phone number",
+      };
+    }
+
+    cleanPhone = phone.trim();
+
+    if (cleanPhone.length > 30) {
+      return {
+        data: null,
+        error: "Phone number is too long",
+      };
+    }
+
+    if (!cleanPhone) {
+      cleanPhone = null;
+    }
+  }
+
+  return {
+    data: {
+      name: cleanName,
+      email: cleanEmail,
+      password: cleanPassword,
+      phone: cleanPhone,
+    },
+    error: null,
+  };
+}
+
+function rateLimitResponse(retryAfterSeconds: number) {
+  const minutesLeft = Math.max(
+    1,
+    Math.ceil(retryAfterSeconds / 60)
+  );
+
+  const message = `Too many registration attempts. Try again in ${minutesLeft} minute${minutesLeft > 1 ? "s" : ""}.`;
+
+  return jsonResponse(
+    {
+      success: false,
+      error: message,
+      message,
+      retryAfter: retryAfterSeconds,
+    },
+    429,
+    {
+      "Retry-After": String(retryAfterSeconds),
+    }
+  );
+}
+
+// POST /api/institute/users/owners/register
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, phone, password } = body;
+    // 1. Parse request body safely
+    let body: unknown;
 
-    // ===== 1. VALIDATION =====
-    if (!name || !email || !password) {
-      return NextResponse.json(
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse(
         {
           success: false,
-          error: 'Name, email and password are required',
-          message: 'Name, email and password are required',
+          error: "Invalid request body",
+          message: "Invalid request body",
         },
-        { status: 400 }
+        400
       );
     }
 
-    // Name validation
-    const cleanName = String(name).trim();
-    if (cleanName.length < 2 || cleanName.length > 150) {
-      return NextResponse.json(
+    if (!isRecord(body)) {
+      return jsonResponse(
         {
           success: false,
-          error: 'Name must be between 2 and 150 characters',
-          message: 'Name must be between 2 and 150 characters',
+          error: "Invalid request body",
+          message: "Invalid request body",
         },
-        { status: 400 }
+        400
       );
     }
 
-    // Email validation
-    const cleanEmail = String(email).trim().toLowerCase();
-    if (!isValidEmail(cleanEmail)) {
-      return NextResponse.json(
+    // 2. Validate registration fields
+    const validation = getValidationError(body);
+
+    if (!validation.data) {
+      const message = validation.error ?? "Invalid registration details";
+
+      return jsonResponse(
         {
           success: false,
-          error: 'Invalid email address',
-          message: 'Invalid email address',
+          error: message,
+          message,
         },
-        { status: 400 }
+        400
       );
     }
 
-    // Password validation
-    if (password.length < 8 || password.length > 128) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Password must be between 8 and 128 characters',
-          message: 'Password must be between 8 and 128 characters',
-        },
-        { status: 400 }
-      );
-    }
+    const { name, email, password, phone } = validation.data;
 
-    // Phone validation (optional)
-    const cleanPhone = phone ? String(phone).trim() : null;
-    if (cleanPhone && cleanPhone.length > 30) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Phone number is too long',
-          message: 'Phone number is too long',
-        },
-        { status: 400 }
-      );
-    }
-
+    // 3. IP-based rate limiting
     const clientIP = getClientIP(request);
-
-    // ===== 2. IP RATE LIMIT (register abuse prevent) =====
     const ipKey = `institute:register:ip:${clientIP}`;
+
     const ipCheck = checkRateLimit(ipKey, {
-      maxAttempts: 5,           // 5 registrations per 15 min
-      windowMs: 15 * 60 * 1000,
-      lockoutMs: 60 * 60 * 1000, // 1 hour block
+      maxAttempts: RATE_LIMIT_OPTIONS.maxAttempts,
+      windowMs: RATE_LIMIT_OPTIONS.windowMs,
+      lockoutMs: RATE_LIMIT_OPTIONS.lockoutMs,
     });
 
     if (!ipCheck.allowed) {
-      const minutesLeft = Math.ceil((ipCheck.retryAfterSeconds || 0) / 60);
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Too many registration attempts. Try again in ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''}.`,
-          message: `Too many registration attempts. Try again in ${minutesLeft} minute${minutesLeft > 1 ? 's' : ''}.`,
-          retryAfter: ipCheck.retryAfterSeconds,
-        },
-        {
-          status: 429,
-          headers: { 'Retry-After': ipCheck.retryAfterSeconds.toString() },
-        }
+      return rateLimitResponse(
+        ipCheck.retryAfterSeconds ?? 60
       );
     }
 
-    // ===== 3. CHECK IF EMAIL ALREADY EXISTS =====
-    const existingUsers = await db
-      .select({ id: instituteUsers.id })
+    // 4. Check duplicate email
+    const [existingUser] = await db
+      .select({
+        id: instituteUsers.id,
+      })
       .from(instituteUsers)
-      .where(sql`LOWER(${instituteUsers.email}) = ${cleanEmail}`)
+      .where(eq(instituteUsers.email, email))
       .limit(1);
 
-    if (existingUsers.length > 0) {
-      // Record attempt (prevent email enumeration spam)
-      recordFailedAttempt(ipKey, {
-        maxAttempts: 5,
-        windowMs: 15 * 60 * 1000,
-        lockoutMs: 60 * 60 * 1000,
-        exponential: false,
-      });
+    if (existingUser) {
+      recordFailedAttempt(ipKey, RATE_LIMIT_OPTIONS);
 
-      return NextResponse.json(
+      return jsonResponse(
         {
           success: false,
-          error: 'This email is already registered. Please sign in instead.',
-          message: 'This email is already registered. Please sign in instead.',
+          error: "This email is already registered. Please sign in instead.",
+          message: "This email is already registered. Please sign in instead.",
         },
-        { status: 409 }  // 409 Conflict
+        409
       );
     }
 
-    // ===== 4. HASH PASSWORD =====
+    // 5. Hash password
     const hashedPassword = await hash(password, 10);
 
-    // ===== 5. INSERT USER =====
+    // 6. Create institute owner account
     const [newUser] = await db
       .insert(instituteUsers)
       .values({
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
+        name,
+        email,
+        phone,
         password: hashedPassword,
-        status: true,               // Active by default
-        // emailVerifiedAt: null,   // Verify later (optional)
+        status: true,
       })
       .returning({
         id: instituteUsers.id,
@@ -171,14 +300,18 @@ export async function POST(request: NextRequest) {
         createdAt: instituteUsers.createdAt,
       });
 
-    // ===== 6. RESET IP COUNTER ON SUCCESS =====
+    if (!newUser) {
+      throw new Error("Institute owner account creation failed");
+    }
+
+    // 7. Reset rate limit after successful registration
     resetRateLimit(ipKey);
 
-    // ===== 7. RESPONSE =====
-    return NextResponse.json(
+    // 8. Success response
+    return jsonResponse(
       {
         success: true,
-        message: 'Account created successfully! You can now sign in.',
+        message: "Account created successfully! You can now sign in.",
         user: {
           id: newUser.id,
           name: newUser.name,
@@ -186,23 +319,35 @@ export async function POST(request: NextRequest) {
           createdAt: newUser.createdAt,
         },
       },
-      {
-        status: 201,  // 201 Created
-        headers: {
-          'Cache-Control': 'no-store, must-revalidate',
-        },
-      }
+      201
     );
+  } catch (error) {
+    console.error("INSTITUTE REGISTER ERROR:", error);
 
-  } catch (err) {
-    console.error('INSTITUTE REGISTER ERROR:', err);
-    return NextResponse.json(
+    // Handle PostgreSQL unique constraint violation
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "23505"
+    ) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "This email is already registered. Please sign in instead.",
+          message: "This email is already registered. Please sign in instead.",
+        },
+        409
+      );
+    }
+
+    return jsonResponse(
       {
         success: false,
-        error: 'Registration failed. Please try again.',
-        message: 'Registration failed. Please try again.',
+        error: "Registration failed. Please try again.",
+        message: "Registration failed. Please try again.",
       },
-      { status: 500 }
+      500
     );
   }
 }
