@@ -2,7 +2,7 @@
 // app/api/admin/notifications/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { notifications } from "@/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import jwt, { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";

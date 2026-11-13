@@ -1,8 +1,6 @@
 
-// app/api/admin/admin-roles/route.ts
-
 import { NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";
 import { adminRoles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -23,6 +21,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // GET: Fetch all roles
 export async function GET() {
   try {
+    const db = getDb();
+
     const roles = await db
       .select({
         id: adminRoles.id,
@@ -120,6 +120,8 @@ export async function POST(req: Request) {
           : "",
       status: body.status === undefined ? true : body.status,
     };
+
+    const db = getDb();
 
     // Check duplicate role name
     const existing = await db

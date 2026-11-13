@@ -5,7 +5,7 @@ import jwt, {
   TokenExpiredError,
 } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { adminUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 

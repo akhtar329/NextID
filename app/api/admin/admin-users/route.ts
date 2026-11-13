@@ -2,7 +2,7 @@
 // app/api/admin/admin-users/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { adminUsers, adminRoles } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import bcrypt from "bcryptjs";

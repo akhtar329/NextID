@@ -1,7 +1,7 @@
 // app/lib/seo.ts
 
 import type { Metadata } from "next";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cacheLife, cacheTag } from 'next/cache';

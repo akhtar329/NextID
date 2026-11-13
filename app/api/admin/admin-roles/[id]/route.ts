@@ -2,7 +2,7 @@
 // app/api/admin/admin-roles/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { adminRoles } from "@/db/schema";
 import { eq } from "drizzle-orm";
 

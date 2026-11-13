@@ -1,6 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { eq, and } from "drizzle-orm";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { posts } from "@/db/schema";
 import type { CachedPostType } from "@/lib/post-cache";
 

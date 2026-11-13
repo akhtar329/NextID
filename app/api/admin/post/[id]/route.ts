@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePostCache } from "@/lib/post-cache";

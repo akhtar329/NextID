@@ -1,6 +1,6 @@
 // app/api/admin/dashboard/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { posts, adminUsers, adminRoles } from "@/db/schema";
 import { sql, desc, eq } from "drizzle-orm";
 import { cookies } from "next/headers";

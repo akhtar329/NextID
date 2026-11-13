@@ -1,6 +1,6 @@
 // repositories/sidebar/sidebar.repository.ts
 
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { posts } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import type { Post, PostType } from "@/types/post";

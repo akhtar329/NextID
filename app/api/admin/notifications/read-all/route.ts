@@ -1,7 +1,7 @@
 // app/api/admin/notifications/read-all/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db/db";
+import { getDb } from "@/db/db";";
 import { notifications } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import jwt from "jsonwebtoken";
