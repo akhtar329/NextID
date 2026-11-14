@@ -1,3 +1,6 @@
+  
+
+
 
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -8,7 +11,12 @@
     "nodejs_compat"
   ],
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    }
   },
   "assets": {
     "directory": ".open-next/assets",
@@ -18,6 +26,8 @@
     {
       "binding": "HYPERDRIVE",
       "id": "2a6f0a1d597745f7b550465d8d21d0cc"
-    }
+    },
+
   ]
+  
 }

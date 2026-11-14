@@ -1,4 +1,4 @@
-// app/institute/layout.tsx
+// app/users/owner/institute/layout.tsx
 
 "use client";
 
