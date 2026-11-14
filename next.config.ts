@@ -1,8 +1,7 @@
-
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // cacheComponents: true,  // <-- Cloudflare Workers par hang karta hai, is liye hataya
 
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
@@ -152,6 +151,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   experimental: {
+    useCache: true,  // <-- yeh add kiya, cacheComponents ki jagah
     optimizePackageImports: [
       "lucide-react",
       "react-icons",
