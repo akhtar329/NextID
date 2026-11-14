@@ -1,7 +1,3 @@
-  
-
-
-
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nextid",
@@ -26,8 +22,32 @@
     {
       "binding": "HYPERDRIVE",
       "id": "2a6f0a1d597745f7b550465d8d21d0cc"
-    },
-
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "nextid-cache"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEXT_CACHE_DO_QUEUE",
+        "class_name": "DOQueueHandler"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DOQueueHandler"]
+    }
+  ],
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "nextid"
+    }
   ]
-  
 }
